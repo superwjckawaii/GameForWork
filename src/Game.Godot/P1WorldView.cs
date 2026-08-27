@@ -2,6 +2,7 @@ using GameForWork.Core.P1;
 using GameForWork.Core.P1.World;
 using GameForWork.Core.P2;
 using GameForWork.Core.P3;
+using GameForWork.Core.P4;
 using Godot;
 
 namespace GameForWork.GodotClient;
@@ -163,6 +164,12 @@ public partial class P1WorldView : Control
             ? 0
             : Math.Clamp((float)elapsed / timeline.DurationMilliseconds, 0, 1);
         bool hero = observed?.Hero ?? true;
+        if (timeline?.SpatialFrames is { Count: > 0 })
+        {
+            DrawSpatialBattle(bounds, observed!, timeline, elapsed, sceneProgress, hero);
+            return;
+        }
+
         float attackCycle = (float)(_visualClock * (hero ? 2.2 : 1.9) % 1.0);
         float bob = MathF.Sin((float)_visualClock * 5) * 1.8f;
         Vector2 actor = bounds.Position + new Vector2(bounds.Size.X * 0.36f, bounds.Size.Y * 0.64f + bob);
@@ -241,6 +248,187 @@ public partial class P1WorldView : Control
             _visualElapsedMilliseconds = elapsed;
         }
     }
+
+    private void DrawSpatialBattle(
+        Rect2 bounds,
+        ObservedScene observed,
+        P3SceneTimeline timeline,
+        long elapsed,
+        float sceneProgress,
+        bool hero)
+    {
+        IReadOnlyList<P4SpatialFrame> frames = timeline.SpatialFrames!;
+        P4SpatialFrame current = frames.TakeWhile(frame => frame.AtMilliseconds <= elapsed).LastOrDefault() ?? frames[0];
+        P4SpatialFrame next = frames.FirstOrDefault(frame => frame.AtMilliseconds > elapsed) ?? current;
+        float interpolation = next.AtMilliseconds == current.AtMilliseconds
+            ? 0
+            : Math.Clamp((elapsed - current.AtMilliseconds) / (float)(next.AtMilliseconds - current.AtMilliseconds), 0, 1);
+
+        Rect2 field = new(bounds.Position + new Vector2(18, 68), bounds.Size - new Vector2(36, 102));
+        DrawRect(field, new Color(0.03f, 0.05f, 0.08f, 0.34f), true);
+        for (int column = 0; column <= P3SceneTimeline.LogicalWidth; column++)
+        {
+            float x = field.Position.X + field.Size.X * column / P3SceneTimeline.LogicalWidth;
+            DrawLine(new Vector2(x, field.Position.Y), new Vector2(x, field.End.Y), new Color(0.33f, 0.38f, 0.44f, 0.17f), 1);
+        }
+        for (int row = 0; row <= P3SceneTimeline.LogicalHeight; row++)
+        {
+            float y = field.Position.Y + field.Size.Y * row / P3SceneTimeline.LogicalHeight;
+            DrawLine(new Vector2(field.Position.X, y), new Vector2(field.End.X, y), new Color(0.33f, 0.38f, 0.44f, 0.12f), 1);
+        }
+
+        Vector2 actor = MapPoint(field, Lerp(current.HeroPosition, next.HeroPosition, interpolation));
+        IReadOnlyDictionary<string, P4EnemyFrame> nextEnemies = next.Enemies.ToDictionary(enemy => enemy.EntityId, StringComparer.Ordinal);
+        var positions = new Dictionary<string, Vector2>(StringComparer.Ordinal) { ["hero"] = actor };
+        foreach (P4EnemyFrame enemy in current.Enemies)
+        {
+            P4Point position = nextEnemies.TryGetValue(enemy.EntityId, out P4EnemyFrame? future)
+                ? Lerp(enemy.Position, future.Position, interpolation)
+                : enemy.Position;
+            positions[enemy.EntityId] = MapPoint(field, position);
+        }
+
+        IReadOnlyList<P3SceneEvent> recent = timeline.Events
+            .Where(item => item.AtMilliseconds <= elapsed && item.AtMilliseconds >= elapsed - 900)
+            .ToArray();
+        DrawSpatialSkills(field, actor, positions, recent, elapsed);
+
+        foreach (P4EnemyFrame enemy in current.Enemies.Where(enemy => enemy.Life > 0))
+        {
+            Vector2 position = positions[enemy.EntityId];
+            float radius = enemy.Boss ? 12 : enemy.Elite ? 9 : 7;
+            DrawShadow(position + new Vector2(0, 5), radius + 2);
+            DrawSpatialEnemy(position, enemy, radius, enemy.EntityId == current.HeroTargetId);
+            DrawBar(new Rect2(position + new Vector2(-16, 10), new Vector2(32, 4)),
+                enemy.MaximumLife <= 0 ? 0 : (float)enemy.Life / enemy.MaximumLife,
+                enemy.Boss ? new Color("cf4055") : new Color("8d2739"));
+        }
+
+        DrawShadow(actor + new Vector2(0, 6), 10);
+        DrawActor(actor, hero ? new Color("6da9c0") : new Color("a885bd"), hero, (float)(_visualClock * 2.3 % 1));
+        DrawBar(new Rect2(actor + new Vector2(-30, 21), new Vector2(60, 5)),
+            current.HeroMaximumLife <= 0 ? 0 : (float)current.HeroLife / current.HeroMaximumLife, new Color("a73737"));
+        DrawBar(new Rect2(actor + new Vector2(-30, 28), new Vector2(60, 4)),
+            current.HeroMaximumMana <= 0 ? 0 : (float)current.HeroMana / current.HeroMaximumMana, new Color("356db4"));
+        if (current.HeroMaximumShield > 0)
+        {
+            DrawBar(new Rect2(actor + new Vector2(-30, 34), new Vector2(60, 3)),
+                (float)current.HeroShield / current.HeroMaximumShield, new Color("76c7d9"));
+        }
+
+        DrawSpatialNumbers(field, positions, recent, elapsed);
+        DrawBar(new Rect2(bounds.Position + new Vector2(16, 35), new Vector2(bounds.Size.X - 32, 7)), sceneProgress, new Color("bb8442"));
+        DrawCaption(bounds, observed.Title, new Color("e5d7be"));
+        int alive = current.Enemies.Count(enemy => enemy.Life > 0);
+        string target = current.Enemies.FirstOrDefault(enemy => enemy.EntityId == current.HeroTargetId)?.DisplayName ?? "移动接敌";
+        DrawString(ThemeDB.FallbackFont, bounds.Position + new Vector2(16, 59),
+            $"节点 {Math.Max(1, current.NodeIndex)}/{timeline.NodeCount} · 敌人 {alive}/{current.Enemies.Count} · 目标 {target} · {sceneProgress * 100:0.0}%",
+            HorizontalAlignment.Left, -1, 13, new Color("c6bca9"));
+    }
+
+    private void DrawSpatialEnemy(Vector2 position, P4EnemyFrame enemy, float radius, bool targeted)
+    {
+        Color color = enemy.Role switch
+        {
+            P4UnitRole.Melee => new Color("91434b"),
+            P4UnitRole.Ranged => new Color("7b5b45"),
+            P4UnitRole.Caster => new Color("665194"),
+            P4UnitRole.Charger => new Color("a16438"),
+            P4UnitRole.Summoner => new Color("48705d"),
+            _ => new Color("b03345"),
+        };
+        DrawCircle(position, radius, color);
+        if (enemy.Role is P4UnitRole.Ranged or P4UnitRole.Caster)
+        {
+            DrawArc(position, radius + 3, 0, MathF.Tau, 12, color.Lightened(0.35f), 2);
+        }
+        if (enemy.Elite || enemy.Boss)
+        {
+            DrawArc(position, radius + 4, 0, MathF.Tau, 16, new Color("e2b85d"), enemy.Boss ? 3 : 2);
+        }
+        if (targeted)
+        {
+            DrawArc(position, radius + 8, 0, MathF.Tau, 20, new Color(1, 0.85f, 0.35f, 0.9f), 2);
+        }
+    }
+
+    private void DrawSpatialSkills(
+        Rect2 field,
+        Vector2 actor,
+        IReadOnlyDictionary<string, Vector2> positions,
+        IEnumerable<P3SceneEvent> recent,
+        long elapsed)
+    {
+        foreach (P3SceneEvent item in recent)
+        {
+            float age = Math.Clamp((elapsed - item.AtMilliseconds) / 900f, 0, 1);
+            string[] ids = item.Detail.Split('|');
+            Vector2 target = ids.Length > 1 && positions.TryGetValue(ids[1], out Vector2 live)
+                ? live
+                : MapPoint(field, new P4Point(item.Position.X * 1_000, item.Position.Y * 1_000));
+            Vector2 source = ids.Length > 0 && positions.TryGetValue(ids[0], out Vector2 origin) ? origin : actor;
+            if (item.Kind == P3SceneEventKind.WarCry)
+            {
+                DrawArc(actor, 14 + age * 38, 0, MathF.Tau, 24, new Color(0.95f, 0.62f, 0.2f, 1 - age), 3);
+            }
+            else if (item.Kind == P3SceneEventKind.EarthCleave)
+            {
+                DrawArc(actor, 20 + age * 48, -2.7f, -0.25f, 22, new Color(0.83f, 0.55f, 0.24f, 1 - age), 5);
+            }
+            else if (item.Kind is P3SceneEventKind.SpiritBlade or P3SceneEventKind.Chain)
+            {
+                DrawLine(source, target, new Color(0.43f, 0.86f, 0.92f, 1 - age * 0.8f), item.Kind == P3SceneEventKind.Chain ? 2 : 4);
+                DrawCircle(source.Lerp(target, age), 4, new Color(0.75f, 0.96f, 1, 1 - age * 0.5f));
+            }
+            else if (item.Kind == P3SceneEventKind.HeavyStrike)
+            {
+                DrawArc(target, 8 + age * 20, -1.8f, 0.8f, 12, new Color(1, 0.78f, 0.34f, 1 - age), 4);
+            }
+        }
+    }
+
+    private void DrawSpatialNumbers(
+        Rect2 field,
+        IReadOnlyDictionary<string, Vector2> positions,
+        IEnumerable<P3SceneEvent> recent,
+        long elapsed)
+    {
+        var merged = recent.Where(item => item.Value > 0 && item.Kind is
+                P3SceneEventKind.HeavyStrike or P3SceneEventKind.EarthCleave or P3SceneEventKind.SpiritBlade or
+                P3SceneEventKind.Chain or P3SceneEventKind.EnemyAttack or P3SceneEventKind.Bleed)
+            .GroupBy(item =>
+            {
+                string[] parts = item.Detail.Split('|');
+                string target = parts.Length > 1 ? parts[1] : item.Position.ToString();
+                return $"{target}|{item.AtMilliseconds / 180}|{(item.Kind == P3SceneEventKind.EnemyAttack ? "hero" : "enemy")}";
+            })
+            .Select(group => (Event: group.OrderByDescending(item => item.AtMilliseconds).First(), Value: group.Sum(item => item.Value)))
+            .OrderBy(entry => entry.Event.AtMilliseconds)
+            .ToArray();
+        int lane = 0;
+        foreach ((P3SceneEvent item, int value) in merged)
+        {
+            float age = Math.Clamp((elapsed - item.AtMilliseconds) / 900f, 0, 1);
+            string[] ids = item.Detail.Split('|');
+            bool heroDamage = item.Kind == P3SceneEventKind.EnemyAttack ||
+                              item.Kind == P3SceneEventKind.Bleed && ids.Length > 1 && ids[1] == "hero";
+            string targetId = heroDamage ? "hero" : ids.Length > 1 ? ids[1] : string.Empty;
+            Vector2 origin = positions.TryGetValue(targetId, out Vector2 live)
+                ? live
+                : MapPoint(field, new P4Point(item.Position.X * 1_000, item.Position.Y * 1_000));
+            Vector2 position = origin + new Vector2((lane++ % 3 - 1) * 12, -18 - age * 30);
+            DrawString(ThemeDB.FallbackFont, position, value.ToString(), HorizontalAlignment.Center, 42, 14,
+                heroDamage ? new Color(1, 0.35f, 0.3f, 1 - age * 0.7f) : new Color(1, 0.82f, 0.35f, 1 - age * 0.7f));
+        }
+    }
+
+    private static Vector2 MapPoint(Rect2 field, P4Point point) => new(
+        field.Position.X + field.Size.X * Math.Clamp(point.XRaw, 0, 12_000) / 12_000f,
+        field.Position.Y + field.Size.Y * Math.Clamp(point.YRaw, 0, 24_000) / 24_000f);
+
+    private static P4Point Lerp(P4Point from, P4Point to, float weight) => new(
+        (int)MathF.Round(Mathf.Lerp(from.XRaw, to.XRaw, weight)),
+        (int)MathF.Round(Mathf.Lerp(from.YRaw, to.YRaw, weight)));
 
     private ObservedScene? Observe()
     {
