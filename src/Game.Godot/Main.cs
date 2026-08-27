@@ -74,7 +74,7 @@ public partial class Main : Node
             _windowController?.Restore();
         }
 
-        _windowController?.TickSnapping();
+        _windowController?.TickSnapping(delta);
         UpdateWindowModeInterface();
         if (!_battlePaused && !_state.IsFinished)
         {
@@ -143,15 +143,36 @@ public partial class Main : Node
         opacity.ValueChanged += value => _windowController?.SetOpacity((int)value);
         _standardToolbar.AddChild(opacity);
         _standardToolbar.AddChild(new Label { Text = "透明度" });
+        var snapToggle = new CheckButton
+        {
+            Text = "边缘吸附",
+            ButtonPressed = _settingsStore?.Load().SnapEnabled ?? true,
+            TooltipText = "关闭后窗口不会自动吸附到屏幕边缘",
+        };
+        snapToggle.Toggled += enabled => _windowController?.SetSnapEnabled(enabled);
+        _standardToolbar.AddChild(snapToggle);
 
-        _miniToolbar = new HBoxContainer { Visible = false };
+        _miniToolbar = new HBoxContainer
+        {
+            Visible = false,
+            Alignment = BoxContainer.AlignmentMode.Center,
+        };
+        _miniToolbar.AddThemeConstantOverride("separation", 2);
         root.AddChild(_miniToolbar);
-        AddButton(_miniToolbar, "展开", ToggleWindowMode);
-        AddButton(_miniToolbar, "暂停", TogglePause);
-        AddButton(_miniToolbar, "托盘", () => _windowController?.HideToTray());
+        AddMiniButton(_miniToolbar, "展开", "恢复标准窗口", 52, ToggleWindowMode);
+        AddMiniButton(_miniToolbar, "暂停", "暂停或继续战斗", 52, TogglePause);
+        AddMiniButton(_miniToolbar, "托盘", "隐藏到系统托盘", 52, () => _windowController?.HideToTray());
         AddDragButton(_miniToolbar);
-        AddButton(_miniToolbar, "关闭", OnCloseRequested);
-        var miniOpacity = new HSlider { MinValue = 70, MaxValue = 100, Step = 5, Value = initialOpacity, CustomMinimumSize = new Vector2(65, 0) };
+        AddMiniButton(_miniToolbar, "×", "关闭", 36, OnCloseRequested);
+        var miniOpacity = new HSlider
+        {
+            MinValue = 70,
+            MaxValue = 100,
+            Step = 5,
+            Value = initialOpacity,
+            TooltipText = "窗口透明度 70%～100%",
+            CustomMinimumSize = new Vector2(62, 28),
+        };
         miniOpacity.ValueChanged += value => _windowController?.SetOpacity((int)value);
         _miniToolbar.AddChild(miniOpacity);
 
@@ -202,15 +223,49 @@ public partial class Main : Node
         parent.AddChild(button);
     }
 
-    private static void AddDragButton(Container parent)
+    private static void AddMiniButton(
+        Container parent,
+        string text,
+        string tooltip,
+        float minimumWidth,
+        Action action)
     {
-        var button = new Button { Text = "拖动" };
+        var button = new Button
+        {
+            Text = text,
+            TooltipText = tooltip,
+            CustomMinimumSize = new Vector2(minimumWidth, 30),
+        };
+        button.AddThemeFontSizeOverride("font_size", 13);
+        button.Pressed += action;
+        parent.AddChild(button);
+    }
+
+    private void AddDragButton(Container parent)
+    {
+        bool dragging = false;
+        var button = new Button
+        {
+            Text = "拖",
+            TooltipText = "拖动小窗",
+            CustomMinimumSize = new Vector2(42, 30),
+        };
+        button.AddThemeFontSizeOverride("font_size", 13);
+        button.ButtonDown += () => dragging = true;
+        button.ButtonUp += () => dragging = false;
         button.GuiInput += inputEvent =>
         {
-            if (inputEvent is InputEventMouseButton { ButtonIndex: MouseButton.Left, Pressed: true })
+            if (!dragging || !Input.IsMouseButtonPressed(MouseButton.Left) ||
+                inputEvent is not InputEventMouseMotion motion)
             {
-                DisplayServer.WindowStartDrag();
+                return;
             }
+
+            float scale = Math.Max(1f, DisplayServer.ScreenGetScale(DisplayServer.WindowGetCurrentScreen()));
+            var physicalDelta = new Vector2I(
+                (int)Math.Round(motion.Relative.X * scale),
+                (int)Math.Round(motion.Relative.Y * scale));
+            DisplayServer.WindowSetPosition(DisplayServer.WindowGetPosition() + physicalDelta);
         };
         parent.AddChild(button);
     }
@@ -285,8 +340,7 @@ public partial class Main : Node
         _sidePanel.Visible = !mini;
         _testHarness.Visible = !mini;
         _arena.CustomMinimumSize = mini ? Vector2.Zero : new Vector2(440, 360);
-        Vector2 mouse = GetViewport().GetMousePosition();
-        _miniToolbar.Visible = mini && mouse.Y <= 72;
+        _miniToolbar.Visible = mini;
     }
 
     private void RunOfflineBenchmark()

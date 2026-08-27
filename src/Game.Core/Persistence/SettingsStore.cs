@@ -5,6 +5,7 @@ namespace GameForWork.Core.Persistence;
 public sealed record GameSettings
 {
     public bool AlwaysOnTop { get; init; } = true;
+    public bool SnapEnabled { get; init; } = true;
     public int OpacityPercent { get; init; } = 100;
     public bool? CloseToTray { get; init; }
     public int StandardX { get; init; } = -1;

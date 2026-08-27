@@ -25,6 +25,8 @@ public sealed class WindowController : IDisposable
     private GameSettings _settings;
     private Vector2I _standardPosition;
     private Vector2I _lastObservedPosition;
+    private double _stationarySeconds;
+    private bool _snapAppliedForCurrentPosition;
     private int _statusIndicatorId = -1;
     private Rid _trayMenu;
 
@@ -48,6 +50,7 @@ public sealed class WindowController : IDisposable
 
     public bool IsMini { get; private set; }
     public bool IsHiddenToTray { get; private set; }
+    public bool SnapEnabled => _settings.SnapEnabled;
 
     public void Initialize()
     {
@@ -128,6 +131,14 @@ public sealed class WindowController : IDisposable
         _settingsStore.Save(_settings);
     }
 
+    public void SetSnapEnabled(bool enabled)
+    {
+        _settings = _settings with { SnapEnabled = enabled };
+        _snapAppliedForCurrentPosition = false;
+        _stationarySeconds = 0;
+        _settingsStore.Save(_settings);
+    }
+
     public void SetTrayStatus(TrayStatus status)
     {
         if (_statusIndicatorId < 0)
@@ -147,7 +158,7 @@ public sealed class WindowController : IDisposable
         DisplayServer.StatusIndicatorSetTooltip(_statusIndicatorId, $"GameForWork P0 - {status}");
     }
 
-    public void TickSnapping()
+    public void TickSnapping(double delta)
     {
         if (DisplayServer.GetName() == "headless" || IsHiddenToTray)
         {
@@ -155,22 +166,55 @@ public sealed class WindowController : IDisposable
         }
 
         Vector2I position = DisplayServer.WindowGetPosition();
-        if (position == _lastObservedPosition)
+        if (!SnapEnabled)
+        {
+            _lastObservedPosition = position;
+            if (!IsMini)
+            {
+                _standardPosition = position;
+            }
+
+            return;
+        }
+
+        if (position != _lastObservedPosition)
+        {
+            _lastObservedPosition = position;
+            _stationarySeconds = 0;
+            _snapAppliedForCurrentPosition = false;
+            if (!IsMini)
+            {
+                _standardPosition = position;
+            }
+
+            return;
+        }
+
+        if (_snapAppliedForCurrentPosition)
+        {
+            return;
+        }
+
+        _stationarySeconds += delta;
+        if (_stationarySeconds < 0.18)
         {
             return;
         }
 
         Rect2I usable = DisplayServer.ScreenGetUsableRect(DisplayServer.WindowGetCurrentScreen());
+        Vector2I decoratedPosition = DisplayServer.WindowGetPositionWithDecorations();
+        Vector2I decorationOffset = position - decoratedPosition;
         Vector2I size = DisplayServer.WindowGetSizeWithDecorations();
-        int x = Snap(position.X, usable.Position.X, usable.End.X - size.X);
-        int y = Snap(position.Y, usable.Position.Y, usable.End.Y - size.Y);
-        var snapped = new Vector2I(x, y);
+        int x = Snap(decoratedPosition.X, usable.Position.X, usable.End.X - size.X);
+        int y = Snap(decoratedPosition.Y, usable.Position.Y, usable.End.Y - size.Y);
+        Vector2I snapped = new Vector2I(x, y) + decorationOffset;
         if (snapped != position)
         {
             DisplayServer.WindowSetPosition(snapped);
+            _lastObservedPosition = snapped;
         }
 
-        _lastObservedPosition = snapped;
+        _snapAppliedForCurrentPosition = true;
         if (!IsMini)
         {
             _standardPosition = snapped;
@@ -207,6 +251,7 @@ public sealed class WindowController : IDisposable
         }
 
         IsMini = true;
+        _window.ContentScaleSize = MiniSize;
         DisplayServer.WindowSetFlag(DisplayServer.WindowFlags.Borderless, true);
         DisplayServer.WindowSetFlag(DisplayServer.WindowFlags.ResizeDisabled, true);
         DisplayServer.WindowSetSize(MiniSize);
@@ -216,6 +261,7 @@ public sealed class WindowController : IDisposable
     private void EnterStandard()
     {
         IsMini = false;
+        _window.ContentScaleSize = StandardSize;
         DisplayServer.WindowSetFlag(DisplayServer.WindowFlags.Borderless, false);
         DisplayServer.WindowSetFlag(DisplayServer.WindowFlags.ResizeDisabled, false);
         DisplayServer.WindowSetSize(StandardSize);
@@ -228,11 +274,14 @@ public sealed class WindowController : IDisposable
         Rect2I usable = DisplayServer.ScreenGetUsableRect(DisplayServer.WindowGetCurrentScreen());
         Vector2I size = DisplayServer.WindowGetSizeWithDecorations();
         Vector2I position = DisplayServer.WindowGetPosition();
+        Vector2I decoratedPosition = DisplayServer.WindowGetPositionWithDecorations();
+        Vector2I decorationOffset = position - decoratedPosition;
         int maxX = Math.Max(usable.Position.X, usable.End.X - size.X);
         int maxY = Math.Max(usable.Position.Y, usable.End.Y - size.Y);
-        DisplayServer.WindowSetPosition(new Vector2I(
-            Math.Clamp(position.X, usable.Position.X, maxX),
-            Math.Clamp(position.Y, usable.Position.Y, maxY)));
+        var visibleDecoratedPosition = new Vector2I(
+            Math.Clamp(decoratedPosition.X, usable.Position.X, maxX),
+            Math.Clamp(decoratedPosition.Y, usable.Position.Y, maxY));
+        DisplayServer.WindowSetPosition(visibleDecoratedPosition + decorationOffset);
     }
 
     private void CreateTray()
@@ -275,8 +324,7 @@ public sealed class WindowController : IDisposable
             return;
         }
 
-        long handleValue = unchecked((long)DisplayServer.WindowGetNativeHandle(DisplayServer.HandleType.WindowHandle));
-        var handle = new IntPtr(handleValue);
+        IntPtr handle = GetNativeWindowHandle();
         nint style = GetWindowLongPtr(handle, GwlExStyle);
         _ = SetWindowLongPtr(handle, GwlExStyle, style | WsExLayered);
         _ = SetLayeredWindowAttributes(handle, 0, checked((byte)(255 * percent / 100)), LwaAlpha);
@@ -285,6 +333,12 @@ public sealed class WindowController : IDisposable
     private const int GwlExStyle = -20;
     private const nint WsExLayered = 0x00080000;
     private const uint LwaAlpha = 0x00000002;
+
+    private static IntPtr GetNativeWindowHandle()
+    {
+        long handleValue = unchecked((long)DisplayServer.WindowGetNativeHandle(DisplayServer.HandleType.WindowHandle));
+        return new IntPtr(handleValue);
+    }
 
     [DllImport("user32.dll", EntryPoint = "GetWindowLongPtrW", SetLastError = true)]
     private static extern nint GetWindowLongPtr(IntPtr window, int index);

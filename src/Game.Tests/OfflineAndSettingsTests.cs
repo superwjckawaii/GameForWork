@@ -57,7 +57,13 @@ public sealed class OfflineAndSettingsTests(ITestOutputHelper output)
         try
         {
             var store = new SettingsStore(path);
-            var expected = new GameSettings { AlwaysOnTop = false, OpacityPercent = 75, CloseToTray = true };
+            var expected = new GameSettings
+            {
+                AlwaysOnTop = false,
+                SnapEnabled = false,
+                OpacityPercent = 75,
+                CloseToTray = true,
+            };
             store.Save(expected);
             Assert.Equal(expected, store.Load());
         }
