@@ -28,6 +28,7 @@ public sealed class P1TeamExpeditionState
     public int MapsCompleted { get; private set; }
     public int MapsFailed { get; private set; }
     public P1MapRunResult? LastRun { get; private set; }
+    public ExpeditionBackpack Backpack { get; } = new();
     public P1MapItem? ActiveMap { get; private set; }
     public MapRoute ActiveRoute { get; private set; }
     public long RemainingMapTimeMilliseconds { get; private set; }
@@ -105,6 +106,7 @@ public sealed class P1TeamExpeditionState
         MapsFailed = snapshot.MapsFailed;
         IsStopped = snapshot.IsStopped;
         StopReason = snapshot.StopReason;
+        Backpack.Replace(snapshot.BackpackItems ?? []);
         if (snapshot.ActiveMap is not null)
         {
             StartMap(snapshot.ActiveMap, snapshot.ActiveRoute, snapshot.RemainingMapTimeMilliseconds);
@@ -310,6 +312,7 @@ public sealed class P1WorldSimulator(IP1MapAttemptResolver attemptResolver)
         }
 
         P1MapRewards rewards = P1MapRewardGenerator.Generate(expedition.Map, expedition.Route, seed ^ 0x9e3779b97f4a7c15UL);
+        expedition.Team.Backpack.Replace(rewards.Equipment);
         state.Economy.AddRewards(rewards.Stackables);
         state.MapInventory.AddRange(rewards.Maps);
         LootProcessingResult processed = LootProcessor.Process(
@@ -339,7 +342,12 @@ public sealed class P1WorldSimulator(IP1MapAttemptResolver attemptResolver)
             builder.Append('|').Append(team.Kind).Append(':').Append(team.MapsCompleted).Append(':')
                 .Append(team.MapsFailed).Append(':').Append(team.Queue.Count).Append(':')
                 .Append(team.Progression.Level).Append(':').Append(team.IsStopped).Append(':')
-                .Append(team.ActiveMap?.InstanceId).Append(':').Append(team.RemainingMapTimeMilliseconds);
+                .Append(team.ActiveMap?.InstanceId).Append(':').Append(team.RemainingMapTimeMilliseconds).Append(':')
+                .Append(team.Backpack.Count);
+            foreach (ItemInstance item in team.Backpack.Items)
+            {
+                builder.Append(':').Append(item.InstanceId);
+            }
         }
 
         return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(builder.ToString())));

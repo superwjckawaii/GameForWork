@@ -61,6 +61,6 @@ if ($Launch) {
         $guiGodot = $godotBinary
     }
 
-    Write-Host '[verify] Launching the P0 client.'
+    Write-Host '[verify] Launching the P1 client.'
     Start-Process -FilePath $guiGodot -ArgumentList @('--path', $godotProject)
 }

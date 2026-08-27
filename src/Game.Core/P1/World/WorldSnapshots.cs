@@ -32,7 +32,8 @@ public sealed record P1TeamExpeditionSnapshot(
     int MapsFailed,
     P1MapItem? ActiveMap,
     MapRoute ActiveRoute,
-    long RemainingMapTimeMilliseconds);
+    long RemainingMapTimeMilliseconds,
+    IReadOnlyList<ItemInstance>? BackpackItems = null);
 
 public sealed record P1WorldSnapshot(
     TownEconomySnapshot Economy,
@@ -122,5 +123,6 @@ public static class P1WorldSnapshots
         team.MapsFailed,
         team.ActiveMap,
         team.ActiveRoute,
-        team.RemainingMapTimeMilliseconds);
+        team.RemainingMapTimeMilliseconds,
+        team.Backpack.Items.ToArray());
 }

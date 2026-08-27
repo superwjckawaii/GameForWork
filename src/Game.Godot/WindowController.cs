@@ -172,7 +172,7 @@ public sealed class WindowController : IDisposable
             _ => throw new ArgumentOutOfRangeException(nameof(status)),
         };
         DisplayServer.StatusIndicatorSetIcon(_statusIndicatorId, CreateSolidIcon(color));
-        DisplayServer.StatusIndicatorSetTooltip(_statusIndicatorId, $"GameForWork P1A - {status}");
+        DisplayServer.StatusIndicatorSetTooltip(_statusIndicatorId, $"GameForWork P1B - {status}");
     }
 
     public void TickSnapping(double delta)
@@ -330,7 +330,7 @@ public sealed class WindowController : IDisposable
         NativeMenu.AddItem(_trayMenu, "退出", Callable.From(_quit));
         _statusIndicatorId = DisplayServer.CreateStatusIndicator(
             texture,
-            "GameForWork P1A",
+            "GameForWork P1B",
             Callable.From<int, Vector2I>((_, _) => Restore()));
         DisplayServer.StatusIndicatorSetMenu(_statusIndicatorId, _trayMenu);
     }

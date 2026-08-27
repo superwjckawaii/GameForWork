@@ -11,6 +11,8 @@ namespace GameForWork.GodotClient;
 public partial class Main : Node
 {
     private const ulong DefaultSeed = 20_260_827;
+    private const double SimulationStepSeconds = 0.05;
+    private const long SimulationStepMilliseconds = 50;
     private static readonly JsonSerializerOptions SaveJsonOptions = new() { WriteIndented = false };
     private SingleInstanceCoordinator? _singleInstance;
     private WindowController? _windowController;
@@ -36,6 +38,7 @@ public partial class Main : Node
 
     public override void _Ready()
     {
+        Engine.MaxFps = 60;
         _singleInstance = new SingleInstanceCoordinator();
         if (!_singleInstance.IsPrimary)
         {
@@ -75,7 +78,6 @@ public partial class Main : Node
 
     public override void _Process(double delta)
     {
-        _dashboard?.Tick(delta);
         if (Interlocked.Exchange(ref _restoreRequested, 0) == 1)
         {
             _windowController?.Restore();
@@ -83,25 +85,29 @@ public partial class Main : Node
 
         _windowController?.TickSnapping(delta);
         UpdateWindowModeInterface();
+        Engine.MaxFps = _windowController?.IsHiddenToTray == true
+            ? 5
+            : _windowController?.IsMini == true && !DisplayServer.WindowIsFocused() ? 30 : 60;
         if (_session is null)
         {
+            _dashboard?.Tick(delta);
             return;
         }
 
         _simulationAccumulator += delta;
         _autoSaveAccumulator += delta;
-        while (_simulationAccumulator >= 1.0)
+        while (_simulationAccumulator >= SimulationStepSeconds)
         {
-            _simulationAccumulator -= 1.0;
+            _simulationAccumulator -= SimulationStepSeconds;
             try
             {
                 if (_battlePaused)
                 {
-                    _session.AdvanceTownOnly(1_000);
+                    _session.AdvanceTownOnly(SimulationStepMilliseconds);
                 }
                 else
                 {
-                    _session.Advance(1_000);
+                    _session.Advance(SimulationStepMilliseconds);
                 }
             }
             catch (Exception exception)
@@ -111,6 +117,8 @@ public partial class Main : Node
                 break;
             }
         }
+
+        _dashboard?.Tick(delta);
 
         if (_autoSaveAccumulator >= 10.0)
         {
@@ -210,7 +218,7 @@ public partial class Main : Node
 
         _noticeLabel = new Label
         {
-            Text = "P1A 功能切片 · 当前使用占位表现",
+            Text = "P1B 精细像素表现 · 20 Hz 确定性模拟 / 60 FPS 画面",
             AutowrapMode = TextServer.AutowrapMode.WordSmart,
         };
         root.AddChild(_noticeLabel);
@@ -220,8 +228,8 @@ public partial class Main : Node
 
         _testHarness = new HFlowContainer();
         root.AddChild(_testHarness);
-        AddButton(_testHarness, "P1A: 模拟48h", RunOfflineBenchmark);
-        AddButton(_testHarness, "P1A: 备份", CreateBackup);
+        AddButton(_testHarness, "P1: 模拟48h", RunOfflineBenchmark);
+        AddButton(_testHarness, "P1: 备份", CreateBackup);
         AddButton(_testHarness, "打开日志", OpenLogs);
         AddButton(_testHarness, "复制日志路径", CopyLogPath);
         AddButton(_testHarness, "重置关闭询问", ResetCloseChoice);
@@ -229,12 +237,25 @@ public partial class Main : Node
         _closeDialog = new ConfirmationDialog
         {
             Title = "关闭 GameForWork",
-            DialogText = "退出程序，还是缩到托盘继续挂机？",
+            DialogText = string.Empty,
             OkButtonText = "退出",
             CancelButtonText = "缩到托盘",
+            MinSize = new Vector2I(460, 200),
         };
+        var closeContent = new VBoxContainer
+        {
+            Position = new Vector2(20, 20),
+            Size = new Vector2(420, 100),
+        };
+        closeContent.AddThemeConstantOverride("separation", 14);
+        closeContent.AddChild(new Label
+        {
+            Text = "要退出程序，还是缩到托盘继续挂机？",
+            AutowrapMode = TextServer.AutowrapMode.WordSmart,
+        });
         _rememberCloseChoice = new CheckBox { Text = "记住本次选择" };
-        _closeDialog.AddChild(_rememberCloseChoice);
+        closeContent.AddChild(_rememberCloseChoice);
+        _closeDialog.AddChild(closeContent);
         _closeDialog.Confirmed += () => CompleteCloseChoice(closeToTray: false);
         _closeDialog.Canceled += () => CompleteCloseChoice(closeToTray: true);
         AddChild(_closeDialog);
@@ -311,7 +332,7 @@ public partial class Main : Node
             watch.Stop();
             SaveP1State(showNotice: false);
             ShowNotice(
-                $"48h P1A 结算完成：成功 {result.TotalMapsCompleted}，失败 {result.TotalMapsFailed}，" +
+                $"48h P1 结算完成：成功 {result.TotalMapsCompleted}，失败 {result.TotalMapsFailed}，" +
                 $"耗时 {watch.ElapsedMilliseconds} ms，哈希 {result.FinalHash[..12]}…");
         }
         catch (Exception exception)
@@ -326,7 +347,7 @@ public partial class Main : Node
         {
             if (showNotice)
             {
-                ShowNotice("尚未创建角色，没有可保存的 P1A 状态。");
+                ShowNotice("尚未创建角色，没有可保存的 P1 状态。");
             }
 
             return;
@@ -337,7 +358,7 @@ public partial class Main : Node
             _saveRepository.SaveP1SessionJson(JsonSerializer.Serialize(_session.Capture(), SaveJsonOptions));
             if (showNotice)
             {
-                ShowNotice($"P1A 状态已保存（Schema {_saveRepository.GetSchemaVersion()}）。");
+                ShowNotice($"P1 状态已保存（Schema {_saveRepository.GetSchemaVersion()}）。");
             }
         }
         catch (Exception exception)
@@ -358,7 +379,7 @@ public partial class Main : Node
                 ? null
                 : P1GameSession.Restore(
                     JsonSerializer.Deserialize<P1GameSessionSnapshot>(json, SaveJsonOptions) ??
-                    throw new InvalidDataException("P1A save JSON was empty."));
+                    throw new InvalidDataException("P1 save JSON was empty."));
             SettleOfflineOnOpen();
         }
         catch (Exception exception)
@@ -461,7 +482,7 @@ public partial class Main : Node
         }
 
         _rememberCloseChoice!.ButtonPressed = false;
-        _closeDialog!.PopupCentered();
+        _closeDialog!.PopupCentered(new Vector2I(460, 200));
     }
 
     private void CompleteCloseChoice(bool closeToTray)

@@ -220,6 +220,25 @@ public sealed class P1WorldTests
         Assert.Equal(2, state.Hero.MapsCompleted);
         Assert.Equal(2, state.Mercenaries.MapsCompleted);
         Assert.Equal(1, second.SuppliesProduced);
+        Assert.NotEmpty(state.Hero.Backpack.Items);
+        Assert.NotEmpty(state.Mercenaries.Backpack.Items);
+    }
+
+    [Fact]
+    public void ExpeditionBackpacksSurviveWorldSnapshotRoundTrip()
+    {
+        P1WorldState state = WorldWithInitialMaps();
+        var simulator = new P1WorldSimulator(new SucceedOnAttemptResolver(1));
+        simulator.Simulate(state, 90_000, 17);
+
+        P1WorldState restored = P1WorldSnapshots.Restore(P1WorldSnapshots.Capture(state));
+
+        Assert.Equal(
+            state.Hero.Backpack.Items.Select(item => item.InstanceId),
+            restored.Hero.Backpack.Items.Select(item => item.InstanceId));
+        Assert.Equal(
+            state.Mercenaries.Backpack.Items.Select(item => item.InstanceId),
+            restored.Mercenaries.Backpack.Items.Select(item => item.InstanceId));
     }
 
     [Fact]

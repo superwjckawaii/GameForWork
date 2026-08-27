@@ -227,4 +227,17 @@ public sealed class ExpeditionBackpack
         _items.Clear();
         return items;
     }
+
+    public void Replace(IEnumerable<ItemInstance> items)
+    {
+        ArgumentNullException.ThrowIfNull(items);
+        ItemInstance[] replacement = items.ToArray();
+        if (replacement.Length > Capacity)
+        {
+            throw new InvalidDataException("Expedition backpack snapshot exceeds its capacity.");
+        }
+
+        _items.Clear();
+        _items.AddRange(replacement);
+    }
 }

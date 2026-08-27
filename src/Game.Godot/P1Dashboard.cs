@@ -25,8 +25,11 @@ public partial class P1Dashboard : VBoxContainer
     private Label? _storageStatus;
     private RichTextLabel? _report;
     private P1WorldView? _worldView;
-    private OptionButton? _passiveNodes;
-    private OptionButton? _storageItems;
+    private P1PassiveTreeView? _passiveTree;
+    private Label? _selectedPassive;
+    private P1ItemGrid? _storageGrid;
+    private P1ItemGrid? _heroBackpackGrid;
+    private P1ItemGrid? _mercenaryBackpackGrid;
     private OptionButton? _equipmentSlots;
     private readonly Dictionary<SkillSupport, CheckButton> _supportToggles = [];
     private CheckButton? _debugSpeed;
@@ -80,7 +83,7 @@ public partial class P1Dashboard : VBoxContainer
     public void Tick(double delta)
     {
         _refreshAccumulator += delta;
-        if (_refreshAccumulator >= 0.5)
+        if (_refreshAccumulator >= 0.2)
         {
             _refreshAccumulator = 0;
             Refresh();
@@ -133,7 +136,7 @@ public partial class P1Dashboard : VBoxContainer
         var title = new Label { Text = "建立门扉契约 · 创建主角", HorizontalAlignment = HorizontalAlignment.Center };
         title.AddThemeFontSizeOverride("font_size", 24);
         card.AddChild(title);
-        card.AddChild(new Label { Text = "P1A 使用组合式占位外观；P1B 验收后替换为精细像素素材。" });
+        card.AddChild(new Label { Text = "P1B 精细像素角色支持肤色、发型与装备组合。" });
         var name = new LineEdit { PlaceholderText = "角色名（2～16 字）", Text = "铁誓者" };
         card.AddChild(name);
         OptionButton gender = AddOptions(card, "性别", ["女性", "男性", "中性"]);
@@ -142,7 +145,7 @@ public partial class P1Dashboard : VBoxContainer
         OptionButton ascendancy = AddOptions(card, "进阶", ["铁誓者", "破阵者"]);
         card.AddChild(new Label
         {
-            Text = "铁誓者：稳定的双手武器与防御起点。\n破阵者：P1A 开放身份选择，专属分支将在后续内容扩展。",
+            Text = "铁誓者：稳定的双手武器与防御起点。\n破阵者：P1 开放身份选择，专属分支将在后续内容扩展。",
             AutowrapMode = TextServer.AutowrapMode.WordSmart,
         });
         AddButton(card, "确认创建并进入军锋镇", () =>
@@ -188,7 +191,8 @@ public partial class P1Dashboard : VBoxContainer
         {
             Session = _session,
             Mode = P1ViewMode.Town,
-            CustomMinimumSize = new Vector2(0, 180),
+            CustomMinimumSize = new Vector2(768, 432),
+            SizeFlagsHorizontal = SizeFlags.ShrinkCenter,
             SizeFlagsVertical = SizeFlags.ExpandFill,
         };
         page.AddChild(_worldView);
@@ -256,15 +260,23 @@ public partial class P1Dashboard : VBoxContainer
         });
 
         page.AddChild(new HSeparator());
+        page.AddChild(new Label { Text = "共享被动天赋树（悬浮查看说明，点击选择节点）" });
+        _passiveTree = new P1PassiveTreeView();
+        _passiveTree.NodeSelected += stableId =>
+        {
+            PassiveNodeDefinition node = P1PassiveTree.Get(stableId);
+            _selectedPassive!.Text = $"已选择：{node.DisplayName} · {string.Join("；", node.Effects.Select(P1UiText.PassiveEffect))}";
+        };
+        page.AddChild(_passiveTree);
         var passiveRow = new HBoxContainer();
         page.AddChild(passiveRow);
-        _passiveNodes = new OptionButton { SizeFlagsHorizontal = SizeFlags.ExpandFill };
-        foreach (PassiveNodeDefinition node in P1PassiveTree.Nodes)
+        _selectedPassive = new Label
         {
-            _passiveNodes.AddItem($"{node.DisplayName} · {node.Kind}");
-        }
-
-        passiveRow.AddChild(_passiveNodes);
+            Text = "点击图中的天赋节点后进行分配或退还",
+            SizeFlagsHorizontal = SizeFlags.ExpandFill,
+            AutowrapMode = TextServer.AutowrapMode.WordSmart,
+        };
+        passiveRow.AddChild(_selectedPassive);
         AddButton(passiveRow, "分配", AllocateSelectedPassive);
         AddButton(passiveRow, "退还", RefundSelectedPassive);
         AddButton(passiveRow, "完整重置", () =>
@@ -282,10 +294,30 @@ public partial class P1Dashboard : VBoxContainer
         VBoxContainer page = Page("仓库 · 过滤 · 工坊");
         var equipRow = new HBoxContainer();
         page.AddChild(equipRow);
-        _storageItems = new OptionButton { SizeFlagsHorizontal = SizeFlags.ExpandFill };
-        equipRow.AddChild(_storageItems);
+        equipRow.AddChild(new Label { Text = "点击仓库格选择装备" });
         _equipmentSlots = AddOptions(equipRow, "槽位", ["主手", "胸甲", "头盔", "左戒", "右戒", "药剂1"]);
         AddButton(equipRow, "装备选中物品", EquipSelectedStorageItem);
+
+        var inventories = new HBoxContainer();
+        inventories.AddThemeConstantOverride("separation", 18);
+        page.AddChild(inventories);
+        var backpackColumn = new VBoxContainer();
+        inventories.AddChild(backpackColumn);
+        backpackColumn.AddChild(new Label { Text = "主角远征背包 · 最近结算 20 格" });
+        _heroBackpackGrid = new P1ItemGrid();
+        _heroBackpackGrid.Configure(5, ExpeditionBackpack.Capacity, 34);
+        backpackColumn.AddChild(_heroBackpackGrid);
+        backpackColumn.AddChild(new Label { Text = "佣兵远征背包 · 最近结算 20 格" });
+        _mercenaryBackpackGrid = new P1ItemGrid();
+        _mercenaryBackpackGrid.Configure(5, ExpeditionBackpack.Capacity, 34);
+        backpackColumn.AddChild(_mercenaryBackpackGrid);
+
+        var storageColumn = new VBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
+        inventories.AddChild(storageColumn);
+        storageColumn.AddChild(new Label { Text = "军锋镇装备仓库 · 100 格（悬浮查看完整装备信息）" });
+        _storageGrid = new P1ItemGrid();
+        _storageGrid.Configure(10, EquipmentStorage.InitialCapacity, 34);
+        storageColumn.AddChild(_storageGrid);
         var workshop = new HFlowContainer();
         page.AddChild(workshop);
         AddButton(workshop, "工坊：50 金币 + 10 铁屑制作物理前缀", () =>
@@ -396,7 +428,13 @@ public partial class P1Dashboard : VBoxContainer
 
     private void AllocateSelectedPassive()
     {
-        PassiveNodeDefinition node = P1PassiveTree.Nodes.ElementAt(_passiveNodes!.Selected);
+        if (_passiveTree?.SelectedStableId is not string stableId)
+        {
+            Changed("请先在天赋图中选择节点。");
+            return;
+        }
+
+        PassiveNodeDefinition node = P1PassiveTree.Get(stableId);
         Changed(RequireSession().TryAllocatePassive(node.StableId)
             ? $"已分配：{node.DisplayName}"
             : "无法分配：检查前置节点与可用点数。");
@@ -404,7 +442,13 @@ public partial class P1Dashboard : VBoxContainer
 
     private void RefundSelectedPassive()
     {
-        PassiveNodeDefinition node = P1PassiveTree.Nodes.ElementAt(_passiveNodes!.Selected);
+        if (_passiveTree?.SelectedStableId is not string stableId)
+        {
+            Changed("请先在天赋图中选择节点。");
+            return;
+        }
+
+        PassiveNodeDefinition node = P1PassiveTree.Get(stableId);
         Changed(RequireSession().TryRefundPassive(node.StableId)
             ? $"已退还：{node.DisplayName}"
             : "无法退还：节点未分配、存在后续节点或灰烬不足。");
@@ -421,7 +465,8 @@ public partial class P1Dashboard : VBoxContainer
             EquipmentSlot.RingRight,
             EquipmentSlot.Flask1,
         ];
-        bool equipped = RequireSession().TryEquipFromStorage(_storageItems!.Selected, slots[_equipmentSlots!.Selected]);
+        int selected = _storageGrid?.SelectedIndex ?? -1;
+        bool equipped = RequireSession().TryEquipFromStorage(selected, slots[_equipmentSlots!.Selected]);
         Changed(equipped ? "装备已更换，技能容量与面板已刷新。" : "该物品不能装备到目标槽位。");
     }
 
@@ -447,6 +492,7 @@ public partial class P1Dashboard : VBoxContainer
 
         _worldView!.Session = _session;
         _worldView.QueueRedraw();
+        _passiveTree?.SetState(_session.Passives.Allocated, _session.World.Hero.Progression.EarnedPassivePoints);
         foreach ((SkillSupport support, CheckButton toggle) in _supportToggles)
         {
             toggle.SetPressedNoSignal(_session.HeavyStrikeSupports.HasFlag(support));
@@ -472,33 +518,14 @@ public partial class P1Dashboard : VBoxContainer
         _storageStatus!.Text =
             $"装备仓库 {_session.World.Storage.Count}/{_session.World.Storage.Capacity} · 地图独立库存 {_session.World.MapInventory.Count}\n" +
             $"默认：传奇/稀有保留，魔法出售，基础分解；现有过滤规则 {_session.World.Filter.Rules.Count} 条。";
-        RefreshStorageOptions();
+        _storageGrid?.SetItems(_session.World.Storage.Items);
+        _heroBackpackGrid?.SetItems(_session.World.Hero.Backpack.Items);
+        _mercenaryBackpackGrid?.SetItems(_session.World.Mercenaries.Backpack.Items);
         RefreshReport();
         _miniStatus!.Text =
             $"{_session.Player.Name} Lv.{_session.World.Hero.Progression.Level}  " +
             $"主角[{CompactTeam(_session.World.Hero)}]  佣兵[{CompactTeam(_session.World.Mercenaries)}]\n" +
             $"补给 {economy.ExpeditionSupplies} · 金币 {economy.Gold} · 图 {_session.World.MapInventory.Count} · {_session.SimulationSpeed}×";
-    }
-
-    private void RefreshStorageOptions()
-    {
-        int previous = _storageItems!.Selected;
-        _storageItems.Clear();
-        foreach (ItemInstance item in _session!.World.Storage.Items)
-        {
-            _storageItems.AddItem($"{item.Rarity} · {item.Base.DisplayName} · ilvl {item.ItemLevel}");
-        }
-
-        if (_storageItems.ItemCount == 0)
-        {
-            _storageItems.AddItem("仓库为空");
-            _storageItems.Disabled = true;
-        }
-        else
-        {
-            _storageItems.Disabled = false;
-            _storageItems.Select(Math.Clamp(previous, 0, _storageItems.ItemCount - 1));
-        }
     }
 
     private void RefreshReport()
