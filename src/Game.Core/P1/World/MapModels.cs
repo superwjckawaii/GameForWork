@@ -1,4 +1,5 @@
 using GameForWork.Core.P1.Combat;
+using GameForWork.Core.P1.Items;
 using GameForWork.Core.Simulation;
 
 namespace GameForWork.Core.P1.World;
@@ -98,6 +99,23 @@ public sealed class P1MapQueue
     }
 
     public bool TryDequeue(out P1MapItem? map) => _maps.TryDequeue(out map);
+
+    public void Restore(IEnumerable<P1MapItem> maps)
+    {
+        ArgumentNullException.ThrowIfNull(maps);
+        if (_maps.Count != 0)
+        {
+            throw new InvalidOperationException("Only an empty map queue can be restored.");
+        }
+
+        foreach (P1MapItem map in maps)
+        {
+            if (!TryEnqueue(map))
+            {
+                throw new InvalidDataException("Map queue snapshot exceeds capacity.");
+            }
+        }
+    }
 }
 
 public sealed record P1TeamBuild(
@@ -112,7 +130,13 @@ public sealed record P1TeamBuild(
     bool EchoNotableAllocated = false,
     bool DeepWoundAllocated = false,
     bool FasterBleedingAllocated = false,
-    string AiSummary = "自动接敌，优先战吼后重击");
+    string AiSummary = "自动接敌，优先战吼后重击",
+    LifeFlaskDefinition? LifeFlask = null,
+    int IncreasedLifeFlaskEffectBasisPoints = 0,
+    int LifeFlaskUseThresholdBasisPoints = 5_000,
+    int AddedPhysicalDamage = 0,
+    SkillUseProfile? HeavyStrikeProfile = null,
+    LegendaryRule? WeaponLegendaryRule = null);
 
 public sealed record MapNodeResult(
     int NodeIndex,
@@ -120,7 +144,8 @@ public sealed record MapNodeResult(
     bool Elite,
     P1BattleOutcome Outcome,
     int Ticks,
-    string FinalHash);
+    string FinalHash,
+    IReadOnlyList<P1CombatEvent>? Events = null);
 
 public sealed record MapAttemptResult(
     bool Succeeded,
@@ -167,7 +192,14 @@ public sealed class P1MapAttemptResolver : IP1MapAttemptResolver
                 team.UseWarCry,
                 team.EchoNotableAllocated,
                 team.DeepWoundAllocated,
-                team.FasterBleedingAllocated);
+                team.FasterBleedingAllocated,
+                MaximumTicks: 2_400,
+                LifeFlask: team.LifeFlask,
+                IncreasedLifeFlaskEffectBasisPoints: team.IncreasedLifeFlaskEffectBasisPoints,
+                LifeFlaskUseThresholdBasisPoints: team.LifeFlaskUseThresholdBasisPoints,
+                AddedPhysicalDamage: team.AddedPhysicalDamage,
+                HeavyStrikeProfile: team.HeavyStrikeProfile,
+                WeaponLegendaryRule: team.WeaponLegendaryRule);
             ulong encounterSeed = ((ulong)random.NextUInt() << 32) | random.NextUInt();
             P1EncounterResult result = new P1EncounterRunner().Run(encounter, encounterSeed);
             nodes.Add(new MapNodeResult(
@@ -176,7 +208,8 @@ public sealed class P1MapAttemptResolver : IP1MapAttemptResolver
                 elite,
                 result.Outcome,
                 result.Ticks,
-                result.FinalHash));
+                result.FinalHash,
+                result.Events));
             if (result.Outcome != P1BattleOutcome.HeroVictory)
             {
                 return new MapAttemptResult(false, nodes, $"node_{nodeIndex + 1}_{result.Outcome}");

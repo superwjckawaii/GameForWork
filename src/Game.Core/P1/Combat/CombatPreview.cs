@@ -20,24 +20,28 @@ public static class CombatPreviewRules
         int accuracy,
         int targetEvasion,
         int targetArmor,
-        int representativeIncomingPhysicalHit)
+        int representativeIncomingPhysicalHit,
+        int addedPhysicalDamage = 0,
+        int increasedDamageBasisPoints = 0,
+        int increasedCriticalChanceBasisPoints = 0,
+        int increasedBleedChanceBasisPoints = 0)
     {
         ArgumentNullException.ThrowIfNull(character);
         ArgumentNullException.ThrowIfNull(weapon);
         ArgumentNullException.ThrowIfNull(heavyStrike);
 
-        int averageWeaponDamage = checked((weapon.MinimumPhysicalDamage + weapon.MaximumPhysicalDamage) / 2);
+        int minimumDamage = checked(weapon.MinimumPhysicalDamage + addedPhysicalDamage);
+        int maximumDamage = checked(weapon.MaximumPhysicalDamage + addedPhysicalDamage);
+        int averageWeaponDamage = checked((minimumDamage + maximumDamage) / 2);
         int physiqueIncrease = character.AttackDamageIncreaseFromPhysique().Value;
-        int averageHit = checked((int)((long)averageWeaponDamage * (10_000 + physiqueIncrease) / 10_000));
         var hitTrace = new FormulaTraceBuilder();
         hitTrace.Add(
             "武器平均物理伤害",
-            $"({weapon.MinimumPhysicalDamage} + {weapon.MaximumPhysicalDamage}) / 2",
+            $"({minimumDamage} + {maximumDamage}) / 2",
             averageWeaponDamage);
-        hitTrace.Add(
-            "体魄攻击伤害增加",
-            $"{averageWeaponDamage} × (10000 + {physiqueIncrease}) / 10000",
-            averageHit);
+        int combinedIncrease = checked(physiqueIncrease + increasedDamageBasisPoints);
+        int averageHit = checked((int)((long)averageWeaponDamage * (10_000 + combinedIncrease) / 10_000));
+        hitTrace.Add("伤害增加总和", $"{averageWeaponDamage} × (10000 + {combinedIncrease}) / 10000", averageHit);
         foreach (int multiplier in heavyStrike.MoreDamageMultipliersBasisPoints)
         {
             averageHit = checked((int)((long)averageHit * multiplier / 10_000));
@@ -50,10 +54,17 @@ public static class CombatPreviewRules
 
         int attacksPerSecondMilli = checked(20_000 / heavyStrike.AttackIntervalTicks);
         CalculatedValue hitChance = DamageRules.HitChance(accuracy, targetEvasion, false);
-        int criticalChance = Math.Clamp(weapon.CriticalChanceBasisPoints, 0, 10_000);
+        int criticalChance = Math.Clamp(
+            checked((int)((long)weapon.CriticalChanceBasisPoints * (10_000 + increasedCriticalChanceBasisPoints) / 10_000)),
+            0,
+            10_000);
+        int bleedChance = Math.Clamp(
+            checked(heavyStrike.BleedChanceBasisPoints + increasedBleedChanceBasisPoints),
+            0,
+            10_000);
         int expectedBleedPerSecond = checked((int)(
             (long)averageHit * 7_000 / 10_000 *
-            heavyStrike.BleedChanceBasisPoints / 10_000 *
+            bleedChance / 10_000 *
             hitChance.Value / 10_000 *
             attacksPerSecondMilli / 1_000 / 5));
 
@@ -79,8 +90,8 @@ public static class CombatPreviewRules
                 "有效生命",
                 $"({maximumLife} + {maximumShield}) × 10000 / {damageTakenBasisPoints}",
                 effectiveLife),
-            DamageRules.ArmorReduction(targetArmor, weapon.MinimumPhysicalDamage),
-            DamageRules.ArmorReduction(targetArmor, weapon.MaximumPhysicalDamage),
+            DamageRules.ArmorReduction(targetArmor, minimumDamage),
+            DamageRules.ArmorReduction(targetArmor, maximumDamage),
             character.ShieldRecoveryPerSecond());
     }
 }

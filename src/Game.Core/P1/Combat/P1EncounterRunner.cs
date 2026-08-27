@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
+using GameForWork.Core.P1.Items;
 using GameForWork.Core.Simulation;
 
 namespace GameForWork.Core.P1.Combat;
@@ -25,6 +26,8 @@ public enum P1CombatEventKind
     BossSummonedWorkers,
     BossHazardCreated,
     CorpseExplosion,
+    LifeFlaskUsed,
+    LegendaryAftershock,
     BattleEnded,
 }
 
@@ -47,7 +50,13 @@ public sealed record P1EncounterRequest(
     bool EchoNotableAllocated = false,
     bool DeepWoundAllocated = false,
     bool FasterBleedingAllocated = false,
-    int MaximumTicks = 2_400);
+    int MaximumTicks = 2_400,
+    LifeFlaskDefinition? LifeFlask = null,
+    int IncreasedLifeFlaskEffectBasisPoints = 0,
+    int LifeFlaskUseThresholdBasisPoints = 5_000,
+    int AddedPhysicalDamage = 0,
+    SkillUseProfile? HeavyStrikeProfile = null,
+    LegendaryRule? WeaponLegendaryRule = null);
 
 public sealed record P1EncounterResult(
     ulong Seed,
@@ -68,10 +77,11 @@ public sealed class P1EncounterRunner
         Validate(request);
         var random = new Pcg32(seed);
         var heroResources = new ResourceState(request.Hero);
-        SkillUseProfile heavyStrike = SkillRules.BuildHeavyStrike(
-            request.HeavyStrike,
-            request.HeroWeapon,
-            heroResources.MaximumLife);
+        LifeFlaskState? lifeFlask = request.LifeFlask is null ? null : new LifeFlaskState(request.LifeFlask);
+        SkillUseProfile heavyStrike = request.HeavyStrikeProfile ?? SkillRules.BuildHeavyStrike(
+                request.HeavyStrike,
+                request.HeroWeapon,
+                heroResources.MaximumLife);
         var warCry = new WarCryState { EchoNotableAllocated = request.EchoNotableAllocated };
         var enemyBleeds = new BleedCollection(request.DeepWoundAllocated, request.FasterBleedingAllocated);
         var heroBleeds = new BleedCollection();
@@ -87,6 +97,20 @@ public sealed class P1EncounterRunner
         {
             heroResources.AdvanceRegenerationTick(tick);
             warCry.AdvanceTick();
+
+            if (lifeFlask is not null && heroResources.IsAlive &&
+                (long)heroResources.Life * 10_000 <=
+                (long)heroResources.MaximumLife * request.LifeFlaskUseThresholdBasisPoints)
+            {
+                int recovered = lifeFlask.TryUse(
+                    heroResources.MaximumLife - heroResources.Life,
+                    request.IncreasedLifeFlaskEffectBasisPoints);
+                if (recovered > 0)
+                {
+                    heroResources.HealLife(recovered);
+                    events.Add(new P1CombatEvent(tick, P1CombatEventKind.LifeFlaskUsed, recovered));
+                }
+            }
 
             int enemyBleedDamage = enemyBleeds.AdvanceTick(tick);
             if (enemyBleedDamage > 0 && enemyLife > 0)
@@ -140,6 +164,8 @@ public sealed class P1EncounterRunner
                         request.Enemy.Evasion,
                         request.Enemy.Armor,
                         IncreasedDamageBasisPoints: request.HeroIncreasedDamageBasisPoints,
+                        AddedMinimumPhysicalDamage: request.AddedPhysicalDamage,
+                        AddedMaximumPhysicalDamage: request.AddedPhysicalDamage,
                         IncreasedCriticalChanceBasisPoints: request.HeroIncreasedCriticalChanceBasisPoints,
                         IncreasedBleedChanceBasisPoints: request.HeroIncreasedBleedChanceBasisPoints,
                         WarCry: warCry);
@@ -152,6 +178,19 @@ public sealed class P1EncounterRunner
                         {
                             enemyLife = Math.Max(0, enemyLife - damage.FinalPhysicalDamage);
                             events.Add(new P1CombatEvent(tick, P1CombatEventKind.HeavyStrikeHit, damage.FinalPhysicalDamage));
+                            int aftershockDamage = P1LegendaryRules.CalculateAftershockDamage(
+                                damage.FinalPhysicalDamage,
+                                request.WeaponLegendaryRule);
+                            if (aftershockDamage > 0 && enemyLife > 0)
+                            {
+                                enemyLife = Math.Max(0, enemyLife - aftershockDamage);
+                                events.Add(new P1CombatEvent(
+                                    tick,
+                                    P1CombatEventKind.LegendaryAftershock,
+                                    aftershockDamage,
+                                    "target_behind"));
+                            }
+
                             if (damage.AppliedBleed && enemyLife > 0)
                             {
                                 enemyBleeds.Apply(1, damage.BleedTotalDamage, tick, damage.BleedDurationTicks);
@@ -309,7 +348,8 @@ public sealed class P1EncounterRunner
 
     private static void Validate(P1EncounterRequest request)
     {
-        if (request.MaximumTicks <= 0 || request.HeavyStrike.SkillId != P1SkillIds.HeavyStrike)
+        if (request.MaximumTicks <= 0 || request.HeavyStrike.SkillId != P1SkillIds.HeavyStrike ||
+            request.LifeFlaskUseThresholdBasisPoints is < 0 or > 10_000)
         {
             throw new ArgumentOutOfRangeException(nameof(request), "Encounter request is invalid.");
         }

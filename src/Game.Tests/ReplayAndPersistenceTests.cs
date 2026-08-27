@@ -63,8 +63,31 @@ public sealed class ReplayAndPersistenceTests
                 Assert.Equal(payload, repository.LoadLatestSnapshot());
                 Assert.True(repository.TryCommitOfflineSession("interval-1", 1, 2, 3, "{}"));
                 Assert.False(repository.TryCommitOfflineSession("interval-1", 1, 2, 3, "{}"));
+                Assert.Equal(2, repository.GetSchemaVersion());
                 Assert.True(SaveRepository.CheckIntegrity(repository.DatabasePath));
             }
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void P1SessionJsonUsesSchemaTwoSingletonState()
+    {
+        string root = CreateTemporaryDirectory();
+        try
+        {
+            using var repository = new SaveRepository(root, 1);
+            repository.Initialize();
+            Assert.Null(repository.LoadP1SessionJson());
+
+            repository.SaveP1SessionJson("{\"version\":1}");
+            repository.SaveP1SessionJson("{\"version\":2}");
+
+            Assert.Equal("{\"version\":2}", repository.LoadP1SessionJson());
+            Assert.Equal(2, repository.GetSchemaVersion());
         }
         finally
         {

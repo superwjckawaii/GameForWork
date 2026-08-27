@@ -61,6 +61,21 @@ public sealed class EquipmentLoadout
         return item;
     }
 
+    public static EquipmentLoadout Restore(IEnumerable<KeyValuePair<EquipmentSlot, ItemInstance>> items)
+    {
+        ArgumentNullException.ThrowIfNull(items);
+        var result = new EquipmentLoadout();
+        foreach ((EquipmentSlot slot, ItemInstance item) in items)
+        {
+            if (!result.TryEquip(slot, item))
+            {
+                throw new InvalidDataException($"Item {item.InstanceId} cannot be restored to {slot}.");
+            }
+        }
+
+        return result;
+    }
+
     public EquipmentSummary CalculateSummary()
     {
         ItemInstance[] equipped = _items.Values.ToArray();

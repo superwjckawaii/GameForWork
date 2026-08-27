@@ -15,6 +15,7 @@ public enum TrayStatus
 public sealed class WindowController : IDisposable
 {
     private static readonly Vector2I StandardSize = new(960, 640);
+    private static readonly Vector2I LargeSize = new(1920, 1280);
     private static readonly Vector2I MiniSize = new(384, 216);
     private const int SnapDistance = 12;
     private readonly Window _window;
@@ -49,8 +50,12 @@ public sealed class WindowController : IDisposable
     }
 
     public bool IsMini { get; private set; }
+    public bool IsLarge { get; private set; }
     public bool IsHiddenToTray { get; private set; }
     public bool SnapEnabled => _settings.SnapEnabled;
+    public bool CanUseLarge => DisplayServer.GetName() != "headless" &&
+        DisplayServer.ScreenGetUsableRect(DisplayServer.WindowGetCurrentScreen()).Size.X >= LargeSize.X &&
+        DisplayServer.ScreenGetUsableRect(DisplayServer.WindowGetCurrentScreen()).Size.Y >= LargeSize.Y;
 
     public void Initialize()
     {
@@ -84,6 +89,18 @@ public sealed class WindowController : IDisposable
         else
         {
             EnterMini();
+        }
+    }
+
+    public void ToggleLarge()
+    {
+        if (IsLarge)
+        {
+            EnterStandard();
+        }
+        else if (CanUseLarge)
+        {
+            EnterLarge();
         }
     }
 
@@ -155,7 +172,7 @@ public sealed class WindowController : IDisposable
             _ => throw new ArgumentOutOfRangeException(nameof(status)),
         };
         DisplayServer.StatusIndicatorSetIcon(_statusIndicatorId, CreateSolidIcon(color));
-        DisplayServer.StatusIndicatorSetTooltip(_statusIndicatorId, $"GameForWork P0 - {status}");
+        DisplayServer.StatusIndicatorSetTooltip(_statusIndicatorId, $"GameForWork P1A - {status}");
     }
 
     public void TickSnapping(double delta)
@@ -251,6 +268,7 @@ public sealed class WindowController : IDisposable
         }
 
         IsMini = true;
+        IsLarge = false;
         _window.ContentScaleSize = MiniSize;
         DisplayServer.WindowSetFlag(DisplayServer.WindowFlags.Borderless, true);
         DisplayServer.WindowSetFlag(DisplayServer.WindowFlags.ResizeDisabled, true);
@@ -261,11 +279,28 @@ public sealed class WindowController : IDisposable
     private void EnterStandard()
     {
         IsMini = false;
+        IsLarge = false;
         _window.ContentScaleSize = StandardSize;
         DisplayServer.WindowSetFlag(DisplayServer.WindowFlags.Borderless, false);
         DisplayServer.WindowSetFlag(DisplayServer.WindowFlags.ResizeDisabled, false);
         DisplayServer.WindowSetSize(StandardSize);
         DisplayServer.WindowSetPosition(_standardPosition);
+        EnsureVisible();
+    }
+
+    private void EnterLarge()
+    {
+        if (!CanUseLarge)
+        {
+            return;
+        }
+
+        IsMini = false;
+        IsLarge = true;
+        _window.ContentScaleSize = StandardSize;
+        DisplayServer.WindowSetFlag(DisplayServer.WindowFlags.Borderless, false);
+        DisplayServer.WindowSetFlag(DisplayServer.WindowFlags.ResizeDisabled, true);
+        DisplayServer.WindowSetSize(LargeSize);
         EnsureVisible();
     }
 
@@ -295,7 +330,7 @@ public sealed class WindowController : IDisposable
         NativeMenu.AddItem(_trayMenu, "退出", Callable.From(_quit));
         _statusIndicatorId = DisplayServer.CreateStatusIndicator(
             texture,
-            "GameForWork P0",
+            "GameForWork P1A",
             Callable.From<int, Vector2I>((_, _) => Restore()));
         DisplayServer.StatusIndicatorSetMenu(_statusIndicatorId, _trayMenu);
     }

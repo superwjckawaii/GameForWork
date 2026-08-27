@@ -115,6 +115,38 @@ public sealed class SaveRepository : IDisposable
             : throw new InvalidDataException("Save metadata does not contain a last-observed timestamp.");
     }
 
+    public int GetSchemaVersion()
+    {
+        using SqliteCommand command = RequireConnection().CreateCommand();
+        command.CommandText = "SELECT schema_version FROM save_meta WHERE id = 1;";
+        return Convert.ToInt32(command.ExecuteScalar(), System.Globalization.CultureInfo.InvariantCulture);
+    }
+
+    public string? LoadP1SessionJson()
+    {
+        using SqliteCommand command = RequireConnection().CreateCommand();
+        command.CommandText = "SELECT state_json FROM p1_state WHERE id = 1;";
+        return command.ExecuteScalar() as string;
+    }
+
+    public void SaveP1SessionJson(string stateJson)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(stateJson);
+        long now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        using SqliteTransaction transaction = RequireConnection().BeginTransaction();
+        using SqliteCommand command = RequireConnection().CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = """
+            INSERT INTO p1_state(id, updated_utc_ms, state_json) VALUES (1, $now, $json)
+            ON CONFLICT(id) DO UPDATE SET updated_utc_ms = excluded.updated_utc_ms, state_json = excluded.state_json;
+            UPDATE save_meta SET last_observed_utc_ms = $now WHERE id = 1;
+            """;
+        command.Parameters.AddWithValue("$now", now);
+        command.Parameters.AddWithValue("$json", stateJson);
+        command.ExecuteNonQuery();
+        transaction.Commit();
+    }
+
     public string CreateBackup(bool manual = false)
     {
         if (!File.Exists(_databasePath))
@@ -326,9 +358,43 @@ public sealed class SaveRepository : IDisposable
                 battles INTEGER NOT NULL,
                 result_json TEXT NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS characters(
+                stable_id TEXT PRIMARY KEY,
+                kind INTEGER NOT NULL,
+                name TEXT NOT NULL,
+                state_json TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS equipped_items(
+                character_id TEXT NOT NULL REFERENCES characters(stable_id) ON DELETE CASCADE,
+                slot INTEGER NOT NULL,
+                instance_id TEXT NOT NULL,
+                item_json TEXT NOT NULL,
+                PRIMARY KEY(character_id, slot)
+            );
+            CREATE TABLE IF NOT EXISTS storage_items(
+                instance_id TEXT PRIMARY KEY,
+                item_json TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS town_state(
+                id INTEGER PRIMARY KEY CHECK(id = 1),
+                state_json TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS map_queues(
+                team INTEGER NOT NULL,
+                ordinal INTEGER NOT NULL,
+                map_json TEXT NOT NULL,
+                PRIMARY KEY(team, ordinal)
+            );
+            CREATE TABLE IF NOT EXISTS p1_state(
+                id INTEGER PRIMARY KEY CHECK(id = 1),
+                updated_utc_ms INTEGER NOT NULL,
+                state_json TEXT NOT NULL
+            );
             INSERT OR IGNORE INTO schema_migrations(version, applied_utc_ms) VALUES (1, $now);
+            INSERT OR IGNORE INTO schema_migrations(version, applied_utc_ms) VALUES (2, $now);
             INSERT OR IGNORE INTO save_meta(id, schema_version, created_utc_ms, last_observed_utc_ms)
-            VALUES (1, 1, $now, $now);
+            VALUES (1, 2, $now, $now);
+            UPDATE save_meta SET schema_version = 2 WHERE id = 1 AND schema_version < 2;
             """;
         command.Parameters.AddWithValue("$now", DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
         command.ExecuteNonQuery();

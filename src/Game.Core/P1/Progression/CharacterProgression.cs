@@ -54,6 +54,22 @@ public sealed class CharacterProgression
         return true;
     }
 
+    public void Restore(int level, int experience, int earnedPassivePoints, bool firstBossPassivePointClaimed)
+    {
+        if (level is < 1 or > MaximumLevel ||
+            experience < CumulativeExperienceForLevel(level) ||
+            experience > TotalExperienceToCap ||
+            earnedPassivePoints is < 0 or > 10)
+        {
+            throw new InvalidDataException("Character progression snapshot is invalid.");
+        }
+
+        Level = level;
+        Experience = experience;
+        EarnedPassivePoints = earnedPassivePoints;
+        FirstBossPassivePointClaimed = firstBossPassivePointClaimed;
+    }
+
     public static int RequiredExperience(int fromLevel)
     {
         if (fromLevel is < 1 or >= MaximumLevel)

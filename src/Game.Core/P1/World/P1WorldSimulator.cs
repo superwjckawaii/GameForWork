@@ -19,7 +19,7 @@ public sealed class P1TeamExpeditionState
     }
 
     public ExpeditionTeamKind Kind { get; }
-    public P1TeamBuild Build { get; }
+    public P1TeamBuild Build { get; private set; }
     public ExpeditionPolicy Policy { get; set; }
     public P1MapQueue Queue { get; } = new();
     public CharacterProgression Progression { get; } = new();
@@ -79,18 +79,55 @@ public sealed class P1TeamExpeditionState
         IsStopped = true;
         StopReason = reason;
     }
+
+    public void UpdateBuild(P1TeamBuild build)
+    {
+        ArgumentNullException.ThrowIfNull(build);
+        Build = build;
+    }
+
+    public void Restore(P1TeamExpeditionSnapshot snapshot)
+    {
+        ArgumentNullException.ThrowIfNull(snapshot);
+        if (snapshot.Kind != Kind || snapshot.MapsCompleted < 0 || snapshot.MapsFailed < 0)
+        {
+            throw new InvalidDataException("Team expedition snapshot is invalid.");
+        }
+
+        Policy = snapshot.Policy;
+        Queue.Restore(snapshot.Queue);
+        Progression.Restore(
+            snapshot.Level,
+            snapshot.Experience,
+            snapshot.EarnedPassivePoints,
+            snapshot.FirstBossPassivePointClaimed);
+        MapsCompleted = snapshot.MapsCompleted;
+        MapsFailed = snapshot.MapsFailed;
+        IsStopped = snapshot.IsStopped;
+        StopReason = snapshot.StopReason;
+        if (snapshot.ActiveMap is not null)
+        {
+            StartMap(snapshot.ActiveMap, snapshot.ActiveRoute, snapshot.RemainingMapTimeMilliseconds);
+        }
+    }
 }
 
 public sealed class P1WorldState
 {
-    public P1WorldState(P1TeamBuild hero, P1TeamBuild mercenaries)
+    public P1WorldState(
+        P1TeamBuild hero,
+        P1TeamBuild mercenaries,
+        TownEconomyState? economy = null,
+        EquipmentStorage? storage = null)
     {
         Hero = new P1TeamExpeditionState(ExpeditionTeamKind.Hero, hero);
         Mercenaries = new P1TeamExpeditionState(ExpeditionTeamKind.Mercenaries, mercenaries);
+        Economy = economy ?? new TownEconomyState();
+        Storage = storage ?? new EquipmentStorage();
     }
 
-    public TownEconomyState Economy { get; } = new();
-    public EquipmentStorage Storage { get; } = new();
+    public TownEconomyState Economy { get; }
+    public EquipmentStorage Storage { get; }
     public LootFilter Filter { get; } = new();
     public TeleporterState Teleporter { get; } = new();
     public List<P1MapItem> MapInventory { get; } = [];
@@ -148,7 +185,6 @@ public sealed class P1WorldSimulator(IP1MapAttemptResolver attemptResolver)
         int initialFailed = state.Teams.Sum(team => team.MapsFailed);
         var active = new Dictionary<ExpeditionTeamKind, ActiveExpedition>();
         long now = 0;
-        int sequence = 0;
         int suppliesProduced = 0;
         foreach (P1TeamExpeditionState team in state.Teams.Where(team => team.ActiveMap is not null))
         {
@@ -190,7 +226,7 @@ public sealed class P1WorldSimulator(IP1MapAttemptResolver attemptResolver)
             foreach (ActiveExpedition expedition in completed)
             {
                 active.Remove(expedition.Team.Kind);
-                ResolveExpedition(state, expedition, unchecked(seed + (ulong)sequence++));
+                ResolveExpedition(state, expedition, DeriveExpeditionSeed(seed, expedition));
             }
 
             if (now < effective)
@@ -307,6 +343,14 @@ public sealed class P1WorldSimulator(IP1MapAttemptResolver attemptResolver)
         }
 
         return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(builder.ToString())));
+    }
+
+    private static ulong DeriveExpeditionSeed(ulong seed, ActiveExpedition expedition)
+    {
+        string identity = $"{seed}|{expedition.Team.Kind}|{expedition.Map.InstanceId}|" +
+            $"{expedition.Map.AreaLevel}|{expedition.Route}";
+        byte[] hash = SHA256.HashData(Encoding.UTF8.GetBytes(identity));
+        return BitConverter.ToUInt64(hash, 0);
     }
 
     private sealed record ActiveExpedition(

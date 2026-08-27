@@ -1,10 +1,43 @@
 using GameForWork.Core.P1.Combat;
+using GameForWork.Core.P1.Items;
 using GameForWork.Core.Simulation;
 
 namespace GameForWork.Tests;
 
 public sealed class P1CombatRulesTests
 {
+    [Fact]
+    public void LegendaryHeavyStrikeUsesSlowerProfileAndCreatesAftershockEvent()
+    {
+        var weapon = new WeaponProfile("legendary-test", 100, 100, 1_000, 0);
+        SkillUseProfile profile = SkillRules.BuildHeavyStrike(
+            new SkillConfiguration(P1SkillIds.HeavyStrike, SkillSupport.None),
+            weapon,
+            500);
+        profile = P1LegendaryRules.ApplyToHeavyStrike(profile, P1Legendary.EchoingOathbreakerRule);
+        var request = new P1EncounterRequest(
+            new CharacterSheet(
+                10,
+                new CharacterAttributes(100, 100, 100, 100),
+                new DefensiveEquipment(500, 100, 100),
+                FlatMaximumLife: 500),
+            weapon,
+            new SkillConfiguration(P1SkillIds.HeavyStrike, SkillSupport.None),
+            EnemyRules.Scale(P1Enemies.AbyssWarden, 1),
+            HeroFlatAccuracy: 1_000,
+            UseWarCry: false,
+            MaximumTicks: 1_000,
+            HeavyStrikeProfile: profile,
+            WeaponLegendaryRule: P1Legendary.EchoingOathbreakerRule);
+
+        P1EncounterResult result = new P1EncounterRunner().Run(request, 42);
+
+        Assert.Equal(P1BattleOutcome.HeroVictory, result.Outcome);
+        Assert.Contains(result.Events, item => item.Kind == P1CombatEventKind.LegendaryAftershock);
+        Assert.True(profile.AttackIntervalTicks > SkillRules.BuildHeavyStrike(
+            new SkillConfiguration(P1SkillIds.HeavyStrike, SkillSupport.None), weapon, 500).AttackIntervalTicks);
+    }
+
     [Fact]
     public void IronOathStartingResourcesMatchSpecification()
     {

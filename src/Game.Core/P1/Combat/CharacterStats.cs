@@ -181,6 +181,14 @@ public sealed class ResourceState
         Life = Math.Max(0, Life - (amount - shieldDamage));
     }
 
+    public int HealLife(int amount)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(amount);
+        int previous = Life;
+        Life = Math.Min(MaximumLife, checked(Life + amount));
+        return Life - previous;
+    }
+
     public void AdvanceRegenerationTick(int tick)
     {
         const int ticksPerSecond = 20;

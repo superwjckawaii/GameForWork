@@ -117,6 +117,14 @@ public sealed class EquipmentStorage
 
         return true;
     }
+
+    public void RestoreDiscoveries(IEnumerable<string> bases, IEnumerable<string> legendaryRules)
+    {
+        ArgumentNullException.ThrowIfNull(bases);
+        ArgumentNullException.ThrowIfNull(legendaryRules);
+        _discoveredBases.UnionWith(bases);
+        _discoveredLegendaryRules.UnionWith(legendaryRules);
+    }
 }
 
 public sealed record StorageUpgradeState(int Level, int Capacity);

@@ -1,8 +1,8 @@
-using System.Diagnostics;
 using System.Text.Json;
-using GameForWork.Core.Combat;
 using GameForWork.Core.Diagnostics;
 using GameForWork.Core.Offline;
+using GameForWork.Core.P1;
+using GameForWork.Core.P1.World;
 using GameForWork.Core.Persistence;
 using Godot;
 
@@ -11,32 +11,28 @@ namespace GameForWork.GodotClient;
 public partial class Main : Node
 {
     private const ulong DefaultSeed = 20_260_827;
-    private readonly BattleEngine _engine = new();
-    private readonly List<BattleCommand> _commands = [];
-    private readonly List<BattleEvent> _events = [];
+    private static readonly JsonSerializerOptions SaveJsonOptions = new() { WriteIndented = false };
     private SingleInstanceCoordinator? _singleInstance;
     private WindowController? _windowController;
     private JsonLineLogger? _logger;
     private SaveRepository? _saveRepository;
     private SettingsStore? _settingsStore;
-    private string _savesRoot = string.Empty;
-    private int _activeSlot = 1;
-    private BattleState _state = P0BattleFactory.Create(DefaultSeed);
-    private ArenaView? _arena;
-    private Label? _status;
-    private RichTextLabel? _eventLog;
-    private Label? _pauseLabel;
+    private P1GameSession? _session;
+    private P1Dashboard? _dashboard;
+    private HFlowContainer? _standardToolbar;
+    private HBoxContainer? _miniToolbar;
+    private HFlowContainer? _testHarness;
+    private Button? _largeWindowButton;
+    private Label? _noticeLabel;
     private ConfirmationDialog? _closeDialog;
     private CheckBox? _rememberCloseChoice;
-    private HBoxContainer? _standardToolbar;
-    private HBoxContainer? _miniToolbar;
-    private VBoxContainer? _sidePanel;
-    private HFlowContainer? _testHarness;
-    private double _tickAccumulator;
-    private double _nonCombatSeconds;
+    private string _savesRoot = string.Empty;
+    private int _activeSlot = 1;
     private bool _battlePaused;
     private bool _quitting;
     private int _restoreRequested;
+    private double _simulationAccumulator;
+    private double _autoSaveAccumulator;
 
     public override void _Ready()
     {
@@ -53,22 +49,33 @@ public partial class Main : Node
         AppDomain.CurrentDomain.UnhandledException += OnUnhandledException;
         TaskScheduler.UnobservedTaskException += OnUnobservedTaskException;
         _settingsStore = new SettingsStore(Path.Combine(userDirectory, "settings.json"));
-        _logger.Write(GameLogLevel.Information, "p0.start", "application", "P0 application started.");
-
+        _logger.Write(GameLogLevel.Information, "p1a.start", "application", "P1A application started.");
         _savesRoot = Path.Combine(userDirectory, "saves");
         TryInitializeSave(_activeSlot);
         BuildInterface();
+
         GetTree().AutoAcceptQuit = false;
         GetWindow().CloseRequested += OnCloseRequested;
         _windowController = new WindowController(GetWindow(), _settingsStore, TogglePause, OpenLogs, QuitApplication);
         _windowController.Initialize();
+        if (_session is null && _windowController.IsMini)
+        {
+            _windowController.ToggleMode();
+        }
+
+        if (_largeWindowButton is not null)
+        {
+            _largeWindowButton.Visible = _windowController.CanUseLarge;
+        }
+
         _singleInstance.StartListening(() => Interlocked.Exchange(ref _restoreRequested, 1));
-        UpdateInterface();
+        UpdateWindowModeInterface();
+        UpdateTrayState();
     }
 
     public override void _Process(double delta)
     {
-        _nonCombatSeconds += delta;
+        _dashboard?.Tick(delta);
         if (Interlocked.Exchange(ref _restoreRequested, 0) == 1)
         {
             _windowController?.Restore();
@@ -76,18 +83,40 @@ public partial class Main : Node
 
         _windowController?.TickSnapping(delta);
         UpdateWindowModeInterface();
-        if (!_battlePaused && !_state.IsFinished)
+        if (_session is null)
         {
-            _tickAccumulator += delta;
-            const double tickDuration = 1.0 / BattleState.TicksPerSecond;
-            while (_tickAccumulator >= tickDuration && !_state.IsFinished)
+            return;
+        }
+
+        _simulationAccumulator += delta;
+        _autoSaveAccumulator += delta;
+        while (_simulationAccumulator >= 1.0)
+        {
+            _simulationAccumulator -= 1.0;
+            try
             {
-                _tickAccumulator -= tickDuration;
-                StepSimulation();
+                if (_battlePaused)
+                {
+                    _session.AdvanceTownOnly(1_000);
+                }
+                else
+                {
+                    _session.Advance(1_000);
+                }
+            }
+            catch (Exception exception)
+            {
+                ReportError("p1a.tick_failed", "P1A simulation tick failed.", exception);
+                _battlePaused = true;
+                break;
             }
         }
 
-        UpdateInterface();
+        if (_autoSaveAccumulator >= 10.0)
+        {
+            _autoSaveAccumulator = 0;
+            SaveP1State(showNotice: false);
+        }
     }
 
     public override void _UnhandledInput(InputEvent inputEvent)
@@ -108,7 +137,7 @@ public partial class Main : Node
         }
 
         _saveRepository?.Dispose();
-        _logger?.Write(GameLogLevel.Information, "p0.stop", "application", "P0 application stopped.");
+        _logger?.Write(GameLogLevel.Information, "p1a.stop", "application", "P1A application stopped.");
         AppDomain.CurrentDomain.UnhandledException -= OnUnhandledException;
         TaskScheduler.UnobservedTaskException -= OnUnobservedTaskException;
         _logger?.Dispose();
@@ -119,48 +148,51 @@ public partial class Main : Node
     {
         var root = new VBoxContainer();
         root.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
-        root.AddThemeConstantOverride("separation", 8);
+        root.AddThemeConstantOverride("separation", 6);
         AddChild(root);
 
-        _standardToolbar = new HBoxContainer();
+        _standardToolbar = new HFlowContainer();
         root.AddChild(_standardToolbar);
         AddButton(_standardToolbar, "标准/迷你", ToggleWindowMode);
-        AddButton(_standardToolbar, "暂停/继续", TogglePause);
-        AddButton(_standardToolbar, "单步", StepOnce);
-        AddButton(_standardToolbar, "同种子重放", ReplaySameSeed);
-        AddButton(_standardToolbar, "保存", SaveCurrentSnapshot);
-        var slots = new OptionButton { TooltipText = "存档槽" };
-        slots.AddItem("存档 1", 1);
-        slots.AddItem("存档 2", 2);
-        slots.AddItem("存档 3", 3);
+        _largeWindowButton = AddButton(_standardToolbar, "大窗口 1920×1280", ToggleLargeWindow);
+        AddButton(_standardToolbar, "暂停战斗", TogglePause);
+        AddButton(_standardToolbar, "保存", () => SaveP1State(showNotice: true));
+        var slots = new OptionButton { TooltipText = "三个独立存档槽" };
+        for (int slot = 1; slot <= 3; slot++)
+        {
+            slots.AddItem($"存档 {slot}", slot);
+        }
+
         slots.ItemSelected += index => SwitchSaveSlot(slots.GetItemId((int)index));
         _standardToolbar.AddChild(slots);
         AddButton(_standardToolbar, "置顶", () => _windowController?.ToggleAlwaysOnTop());
         AddButton(_standardToolbar, "隐藏到托盘 (Tab)", () => _windowController?.HideToTray());
-
         int initialOpacity = _settingsStore?.Load().OpacityPercent ?? 100;
-        var opacity = new HSlider { MinValue = 70, MaxValue = 100, Step = 5, Value = initialOpacity, CustomMinimumSize = new Vector2(120, 0) };
+        var opacity = new HSlider
+        {
+            MinValue = 70,
+            MaxValue = 100,
+            Step = 5,
+            Value = initialOpacity,
+            CustomMinimumSize = new Vector2(100, 0),
+            TooltipText = "窗口透明度 70%～100%",
+        };
         opacity.ValueChanged += value => _windowController?.SetOpacity((int)value);
         _standardToolbar.AddChild(opacity);
-        _standardToolbar.AddChild(new Label { Text = "透明度" });
         var snapToggle = new CheckButton
         {
             Text = "边缘吸附",
             ButtonPressed = _settingsStore?.Load().SnapEnabled ?? true,
-            TooltipText = "关闭后窗口不会自动吸附到屏幕边缘",
+            TooltipText = "停止拖动后才判断吸附；关闭后可自由拖动",
         };
         snapToggle.Toggled += enabled => _windowController?.SetSnapEnabled(enabled);
         _standardToolbar.AddChild(snapToggle);
 
-        _miniToolbar = new HBoxContainer
-        {
-            Visible = false,
-            Alignment = BoxContainer.AlignmentMode.Center,
-        };
+        _miniToolbar = new HBoxContainer { Visible = false, Alignment = BoxContainer.AlignmentMode.Center };
         _miniToolbar.AddThemeConstantOverride("separation", 2);
         root.AddChild(_miniToolbar);
         AddMiniButton(_miniToolbar, "展开", "恢复标准窗口", 52, ToggleWindowMode);
-        AddMiniButton(_miniToolbar, "暂停", "暂停或继续战斗", 52, TogglePause);
+        AddMiniButton(_miniToolbar, "暂停", "只暂停两队战斗；城镇继续生产", 52, TogglePause);
         AddMiniButton(_miniToolbar, "托盘", "隐藏到系统托盘", 52, () => _windowController?.HideToTray());
         AddDragButton(_miniToolbar);
         AddMiniButton(_miniToolbar, "×", "关闭", 36, OnCloseRequested);
@@ -170,36 +202,28 @@ public partial class Main : Node
             MaxValue = 100,
             Step = 5,
             Value = initialOpacity,
-            TooltipText = "窗口透明度 70%～100%",
+            TooltipText = "透明度",
             CustomMinimumSize = new Vector2(62, 28),
         };
         miniOpacity.ValueChanged += value => _windowController?.SetOpacity((int)value);
         _miniToolbar.AddChild(miniOpacity);
 
-        var content = new HSplitContainer { SizeFlagsVertical = Control.SizeFlags.ExpandFill };
-        root.AddChild(content);
-        _arena = new ArenaView { State = _state, CustomMinimumSize = new Vector2(440, 360), SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
-        content.AddChild(_arena);
-
-        _sidePanel = new VBoxContainer { CustomMinimumSize = new Vector2(330, 0) };
-        content.AddChild(_sidePanel);
-        _pauseLabel = new Label();
-        _sidePanel.AddChild(_pauseLabel);
-        _status = new Label { AutowrapMode = TextServer.AutowrapMode.WordSmart };
-        _sidePanel.AddChild(_status);
-        _sidePanel.AddChild(new Label { Text = "最近 10 条权威事件" });
-        _eventLog = new RichTextLabel { FitContent = false, SizeFlagsVertical = Control.SizeFlags.ExpandFill, ScrollActive = true };
-        _sidePanel.AddChild(_eventLog);
+        _noticeLabel = new Label
+        {
+            Text = "P1A 功能切片 · 当前使用占位表现",
+            AutowrapMode = TextServer.AutowrapMode.WordSmart,
+        };
+        root.AddChild(_noticeLabel);
+        _dashboard = new P1Dashboard();
+        _dashboard.Initialize(_session, CreateCharacter, OnSessionChanged, ShowNotice);
+        root.AddChild(_dashboard);
 
         _testHarness = new HFlowContainer();
         root.AddChild(_testHarness);
-        AddButton(_testHarness, "P0: 模拟48h", RunOfflineBenchmark);
-        AddButton(_testHarness, "P0: 快照/哈希", SaveCurrentSnapshot);
-        AddButton(_testHarness, "P0: 备份", CreateBackup);
-        AddButton(_testHarness, "P0: 损坏TEST存档并恢复", CorruptAndRecoverTestSave);
-        AddButton(_testHarness, "P0: 触发日志错误", TriggerLogError);
+        AddButton(_testHarness, "P1A: 模拟48h", RunOfflineBenchmark);
+        AddButton(_testHarness, "P1A: 备份", CreateBackup);
         AddButton(_testHarness, "打开日志", OpenLogs);
-        AddButton(_testHarness, "复制当前日志路径", CopyLogPath);
+        AddButton(_testHarness, "复制日志路径", CopyLogPath);
         AddButton(_testHarness, "重置关闭询问", ResetCloseChoice);
 
         _closeDialog = new ConfirmationDialog
@@ -216,108 +240,24 @@ public partial class Main : Node
         AddChild(_closeDialog);
     }
 
-    private static void AddButton(Container parent, string text, Action action)
+    private void CreateCharacter(PlayerIdentity identity)
     {
-        var button = new Button { Text = text };
-        button.Pressed += action;
-        parent.AddChild(button);
+        _session = P1GameSession.CreateNew(identity, unchecked(DefaultSeed + (ulong)(_activeSlot - 1)));
+        _dashboard?.SetSession(_session);
+        SaveP1State(showNotice: false);
+        ShowNotice($"{identity.Name} 已与古代门扉建立契约；10 张 T1 地图已分配给两支队伍。");
     }
 
-    private static void AddMiniButton(
-        Container parent,
-        string text,
-        string tooltip,
-        float minimumWidth,
-        Action action)
+    private void OnSessionChanged()
     {
-        var button = new Button
-        {
-            Text = text,
-            TooltipText = tooltip,
-            CustomMinimumSize = new Vector2(minimumWidth, 30),
-        };
-        button.AddThemeFontSizeOverride("font_size", 13);
-        button.Pressed += action;
-        parent.AddChild(button);
-    }
-
-    private void AddDragButton(Container parent)
-    {
-        bool dragging = false;
-        var button = new Button
-        {
-            Text = "拖",
-            TooltipText = "拖动小窗",
-            CustomMinimumSize = new Vector2(42, 30),
-        };
-        button.AddThemeFontSizeOverride("font_size", 13);
-        button.ButtonDown += () => dragging = true;
-        button.ButtonUp += () => dragging = false;
-        button.GuiInput += inputEvent =>
-        {
-            if (!dragging || !Input.IsMouseButtonPressed(MouseButton.Left) ||
-                inputEvent is not InputEventMouseMotion motion)
-            {
-                return;
-            }
-
-            float scale = Math.Max(1f, DisplayServer.ScreenGetScale(DisplayServer.WindowGetCurrentScreen()));
-            var physicalDelta = new Vector2I(
-                (int)Math.Round(motion.Relative.X * scale),
-                (int)Math.Round(motion.Relative.Y * scale));
-            DisplayServer.WindowSetPosition(DisplayServer.WindowGetPosition() + physicalDelta);
-        };
-        parent.AddChild(button);
-    }
-
-    private void StepSimulation()
-    {
-        IReadOnlyList<BattleCommand> tickCommands = _engine.BuildAutomaticCommands(_state);
-        _commands.AddRange(tickCommands);
-        _events.AddRange(_engine.Step(_state, tickCommands));
-        _arena?.QueueRedraw();
-        if (_state.IsFinished)
-        {
-            _logger?.Write(
-                GameLogLevel.Information,
-                "battle.ended",
-                "combat",
-                "P0 battle ended.",
-                new Dictionary<string, object?>
-                {
-                    ["seed"] = _state.Seed,
-                    ["outcome"] = _state.Outcome.ToString(),
-                    ["tick"] = _state.Tick,
-                    ["hash"] = BattleStateCodec.Hash(_state),
-                });
-            UpdateTrayState();
-        }
-    }
-
-    private void StepOnce()
-    {
-        if (!_state.IsFinished)
-        {
-            StepSimulation();
-        }
-    }
-
-    private void ReplaySameSeed()
-    {
-        _state = P0BattleFactory.Create(_state.Seed);
-        _commands.Clear();
-        _events.Clear();
-        _tickAccumulator = 0;
-        if (_arena is not null)
-        {
-            _arena.State = _state;
-            _arena.QueueRedraw();
-        }
+        SaveP1State(showNotice: false);
+        UpdateTrayState();
     }
 
     private void TogglePause()
     {
         _battlePaused = !_battlePaused;
+        ShowNotice(_battlePaused ? "战斗模拟已暂停；城镇生产继续。" : "两支队伍已继续战斗。");
         UpdateTrayState();
     }
 
@@ -327,153 +267,175 @@ public partial class Main : Node
         UpdateWindowModeInterface();
     }
 
+    private void ToggleLargeWindow()
+    {
+        if (_windowController?.CanUseLarge != true)
+        {
+            ShowNotice("当前屏幕可用区域不足 1920×1280，大窗口选项不可用。");
+            return;
+        }
+
+        _windowController.ToggleLarge();
+        UpdateWindowModeInterface();
+    }
+
     private void UpdateWindowModeInterface()
     {
         if (_windowController is null || _standardToolbar is null || _miniToolbar is null ||
-            _sidePanel is null || _testHarness is null || _arena is null)
+            _testHarness is null || _dashboard is null || _noticeLabel is null)
         {
             return;
         }
 
         bool mini = _windowController.IsMini;
         _standardToolbar.Visible = !mini;
-        _sidePanel.Visible = !mini;
-        _testHarness.Visible = !mini;
-        _arena.CustomMinimumSize = mini ? Vector2.Zero : new Vector2(440, 360);
         _miniToolbar.Visible = mini;
+        _testHarness.Visible = !mini;
+        _noticeLabel.Visible = !mini;
+        _dashboard.SetMiniMode(mini);
     }
 
     private void RunOfflineBenchmark()
     {
+        if (_session is null)
+        {
+            ShowNotice("请先创建角色。");
+            return;
+        }
+
         try
         {
             _saveRepository?.CreateBackup();
-            var watch = Stopwatch.StartNew();
-            OfflineResult result = new OfflineSimulator().Simulate(OfflineTime.MaximumMilliseconds, _state.Seed);
+            var watch = System.Diagnostics.Stopwatch.StartNew();
+            P1OfflineResult result = _session.AdvanceOffline(OfflineTime.MaximumMilliseconds);
             watch.Stop();
-            long endUtcMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-            long startUtcMs = endUtcMs - OfflineTime.MaximumMilliseconds;
-            string intervalId = $"p0-test-{_activeSlot}-{endUtcMs}";
-            bool committed = _saveRepository?.TryCommitOfflineSession(
-                intervalId,
-                startUtcMs,
-                endUtcMs,
-                result.TotalBattles,
-                JsonSerializer.Serialize(result)) ?? false;
-            _logger?.Write(
-                GameLogLevel.Information,
-                "offline.benchmark",
-                "offline",
-                "48-hour offline simulation completed.",
-                new Dictionary<string, object?>
-                {
-                    ["elapsed_ms"] = watch.ElapsedMilliseconds,
-                    ["battles"] = result.TotalBattles,
-                    ["last_hash"] = result.LastHash,
-                    ["committed"] = committed,
-                });
-            ShowNotice($"48h 精确模拟完成并提交：{result.TotalBattles} 场，耗时 {watch.ElapsedMilliseconds} ms");
+            SaveP1State(showNotice: false);
+            ShowNotice(
+                $"48h P1A 结算完成：成功 {result.TotalMapsCompleted}，失败 {result.TotalMapsFailed}，" +
+                $"耗时 {watch.ElapsedMilliseconds} ms，哈希 {result.FinalHash[..12]}…");
         }
         catch (Exception exception)
         {
-            ReportError("offline.benchmark_failed", "48-hour offline simulation failed.", exception);
+            ReportError("p1a.offline_benchmark_failed", "P1A offline benchmark failed.", exception);
         }
     }
 
-    private void SaveCurrentSnapshot()
+    private void SaveP1State(bool showNotice)
     {
+        if (_session is null || _saveRepository is null)
+        {
+            if (showNotice)
+            {
+                ShowNotice("尚未创建角色，没有可保存的 P1A 状态。");
+            }
+
+            return;
+        }
+
         try
         {
-            _saveRepository?.SaveSnapshot(_state.Tick, BattleStateCodec.Serialize(_state));
-            ShowNotice($"快照已提交。SHA-256: {BattleStateCodec.Hash(_state)}");
+            _saveRepository.SaveP1SessionJson(JsonSerializer.Serialize(_session.Capture(), SaveJsonOptions));
+            if (showNotice)
+            {
+                ShowNotice($"P1A 状态已保存（Schema {_saveRepository.GetSchemaVersion()}）。");
+            }
         }
         catch (Exception exception)
         {
-            ReportError("save.snapshot_failed", "Snapshot save failed.", exception);
+            ReportError("p1a.save_failed", "P1A state save failed.", exception);
         }
+    }
+
+    private void TryInitializeSave(int slot)
+    {
+        try
+        {
+            _saveRepository = new SaveRepository(_savesRoot, slot);
+            _saveRepository.Initialize();
+            _saveRepository.CreateBackup();
+            string? json = _saveRepository.LoadP1SessionJson();
+            _session = string.IsNullOrWhiteSpace(json)
+                ? null
+                : P1GameSession.Restore(
+                    JsonSerializer.Deserialize<P1GameSessionSnapshot>(json, SaveJsonOptions) ??
+                    throw new InvalidDataException("P1A save JSON was empty."));
+            SettleOfflineOnOpen();
+        }
+        catch (Exception exception)
+        {
+            _saveRepository?.Dispose();
+            _saveRepository = null;
+            _session = null;
+            ReportError("p1a.save_initialize_failed", "Save initialization failed; no replacement save was created.", exception);
+        }
+    }
+
+    private void SettleOfflineOnOpen()
+    {
+        if (_saveRepository is null)
+        {
+            return;
+        }
+
+        long lastObservedUtcMs = _saveRepository.GetLastObservedUtcMs();
+        long nowUtcMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        OfflineElapsed elapsed = OfflineTime.Calculate(lastObservedUtcMs, nowUtcMs);
+        P1OfflineResult? result = _session?.AdvanceOffline(elapsed.EffectiveMilliseconds);
+        string intervalId = $"p1a-startup-{_activeSlot}-{lastObservedUtcMs}-{nowUtcMs}";
+        _saveRepository.TryCommitOfflineSession(
+            intervalId,
+            lastObservedUtcMs,
+            nowUtcMs,
+            result?.TotalMapsCompleted + result?.TotalMapsFailed ?? 0,
+            result is null ? "{}" : JsonSerializer.Serialize(result, SaveJsonOptions));
+        if (_session is not null)
+        {
+            _saveRepository.SaveP1SessionJson(JsonSerializer.Serialize(_session.Capture(), SaveJsonOptions));
+        }
+
+        _logger?.Write(
+            elapsed.ClockMovedBackward ? GameLogLevel.Warning : GameLogLevel.Information,
+            "p1a.offline_startup_settled",
+            "offline",
+            "P1A startup offline interval was committed before presentation.",
+            new Dictionary<string, object?>
+            {
+                ["effective_ms"] = elapsed.EffectiveMilliseconds,
+                ["clock_moved_backward"] = elapsed.ClockMovedBackward,
+                ["clamped"] = elapsed.WasClamped,
+                ["completed_maps"] = result?.TotalMapsCompleted ?? 0,
+                ["failed_maps"] = result?.TotalMapsFailed ?? 0,
+            });
+    }
+
+    private void SwitchSaveSlot(int slot)
+    {
+        if (slot == _activeSlot)
+        {
+            return;
+        }
+
+        SaveP1State(showNotice: false);
+        _saveRepository?.Dispose();
+        _saveRepository = null;
+        _activeSlot = slot;
+        TryInitializeSave(slot);
+        _dashboard?.SetSession(_session);
+        ShowNotice($"已切换到存档槽 {_activeSlot}。");
     }
 
     private void CreateBackup()
     {
         try
         {
+            SaveP1State(showNotice: false);
             string path = _saveRepository?.CreateBackup() ?? "存档未初始化";
-            ShowNotice($"自动备份：{path}");
+            ShowNotice($"备份已创建：{path}");
         }
         catch (Exception exception)
         {
-            ReportError("save.backup_failed", "Backup failed.", exception);
+            ReportError("p1a.backup_failed", "Backup failed.", exception);
         }
-    }
-
-    private void CorruptAndRecoverTestSave()
-    {
-        string root = Path.Combine(ProjectSettings.GlobalizePath("user://"), "test_harness", Guid.NewGuid().ToString("N"));
-        try
-        {
-            string databasePath;
-            using (var testRepository = new SaveRepository(root, 1))
-            {
-                testRepository.Initialize();
-                testRepository.SaveSnapshot(0, BattleStateCodec.Serialize(P0BattleFactory.Create(1)));
-                testRepository.CreateBackup();
-                databasePath = testRepository.DatabasePath;
-            }
-
-            File.WriteAllBytes(databasePath, "intentionally corrupt TEST save"u8.ToArray());
-            using (var recovered = new SaveRepository(root, 1))
-            {
-                recovered.Initialize();
-                if (recovered.LoadLatestSnapshot() is null)
-                {
-                    throw new InvalidDataException("Recovered TEST save has no snapshot.");
-                }
-            }
-
-            ShowNotice("TEST 存档损坏检测、recovery 保留和自动备份恢复均成功。");
-        }
-        catch (Exception exception)
-        {
-            ReportError("save.test_recovery_failed", "TEST save recovery failed.", exception);
-        }
-    }
-
-    private void TriggerLogError()
-    {
-        try
-        {
-            throw new InvalidOperationException("Intentional P0 test error; no game state was changed.");
-        }
-        catch (Exception exception)
-        {
-            ReportError("diagnostics.intentional_error", "Intentional error test.", exception);
-        }
-    }
-
-    private void CopyLogPath()
-    {
-        if (_logger is not null)
-        {
-            DisplayServer.ClipboardSet(_logger.CurrentLogPath);
-            ShowNotice("当前日志路径已复制。");
-        }
-    }
-
-    private void ResetCloseChoice()
-    {
-        if (_settingsStore is null)
-        {
-            return;
-        }
-
-        _settingsStore.Save(_settingsStore.Load() with { CloseToTray = null });
-        ShowNotice("关闭行为已重置；下次点击关闭会重新询问。");
-    }
-
-    private void OpenLogs()
-    {
-        string path = Path.Combine(ProjectSettings.GlobalizePath("user://"), "logs");
-        _ = OS.ShellOpen(path);
     }
 
     private void OnCloseRequested()
@@ -506,8 +468,7 @@ public partial class Main : Node
     {
         if (_rememberCloseChoice!.ButtonPressed && _settingsStore is not null)
         {
-            GameSettings settings = _settingsStore.Load() with { CloseToTray = closeToTray };
-            _settingsStore.Save(settings);
+            _settingsStore.Save(_settingsStore.Load() with { CloseToTray = closeToTray });
         }
 
         if (closeToTray)
@@ -522,148 +483,61 @@ public partial class Main : Node
 
     private void QuitApplication()
     {
-        try
-        {
-            _saveRepository?.SaveSnapshot(_state.Tick, BattleStateCodec.Serialize(_state));
-        }
-        catch (Exception exception)
-        {
-            _logger?.Write(GameLogLevel.Error, "save.exit_failed", "save", "Immediate exit save failed.", exception: exception);
-        }
-
+        SaveP1State(showNotice: false);
         _quitting = true;
         GetTree().Quit();
     }
 
-    private void SwitchSaveSlot(int slot)
+    private void OpenLogs()
     {
-        if (slot == _activeSlot)
+        _ = OS.ShellOpen(Path.Combine(ProjectSettings.GlobalizePath("user://"), "logs"));
+    }
+
+    private void CopyLogPath()
+    {
+        if (_logger is not null)
+        {
+            DisplayServer.ClipboardSet(_logger.CurrentLogPath);
+            ShowNotice("当前日志路径已复制。");
+        }
+    }
+
+    private void ResetCloseChoice()
+    {
+        if (_settingsStore is null)
         {
             return;
         }
 
-        try
-        {
-            _saveRepository?.SaveSnapshot(_state.Tick, BattleStateCodec.Serialize(_state));
-        }
-        catch (Exception exception)
-        {
-            ReportError("save.switch_write_failed", "Current slot could not be saved before switching.", exception);
-            return;
-        }
-
-        _saveRepository?.Dispose();
-        _saveRepository = null;
-        _activeSlot = slot;
-        TryInitializeSave(slot);
-        _commands.Clear();
-        _events.Clear();
-        if (_arena is not null)
-        {
-            _arena.State = _state;
-            _arena.QueueRedraw();
-        }
-
-        ShowNotice($"已切换到存档槽 {_activeSlot}。");
-    }
-
-    private void TryInitializeSave(int slot)
-    {
-        try
-        {
-            _saveRepository = new SaveRepository(_savesRoot, slot);
-            _saveRepository.Initialize();
-            _saveRepository.CreateBackup();
-            byte[]? snapshot = _saveRepository.LoadLatestSnapshot();
-            _state = snapshot is null
-                ? P0BattleFactory.Create(unchecked(DefaultSeed + (ulong)(slot - 1)))
-                : BattleStateCodec.Deserialize(snapshot);
-            SettleOfflineOnOpen();
-        }
-        catch (Exception exception)
-        {
-            _saveRepository?.Dispose();
-            _saveRepository = null;
-            ReportError("save.initialize_failed", "Save initialization failed; no new save was created.", exception);
-        }
-    }
-
-    private void SettleOfflineOnOpen()
-    {
-        if (_saveRepository is null)
-        {
-            return;
-        }
-
-        long lastObservedUtcMs = _saveRepository.GetLastObservedUtcMs();
-        long nowUtcMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-        OfflineElapsed elapsed = OfflineTime.Calculate(lastObservedUtcMs, nowUtcMs);
-        OfflineResult result = new OfflineSimulator().Simulate(elapsed.EffectiveMilliseconds, _state.Seed);
-        string intervalId = $"startup-{_activeSlot}-{lastObservedUtcMs}-{nowUtcMs}";
-        _saveRepository.TryCommitOfflineSession(
-            intervalId,
-            lastObservedUtcMs,
-            nowUtcMs,
-            result.TotalBattles,
-            JsonSerializer.Serialize(result));
-        _logger?.Write(
-            elapsed.ClockMovedBackward ? GameLogLevel.Warning : GameLogLevel.Information,
-            "offline.startup_settled",
-            "offline",
-            "Startup offline interval was committed before presentation.",
-            new Dictionary<string, object?>
-            {
-                ["effective_ms"] = elapsed.EffectiveMilliseconds,
-                ["clock_moved_backward"] = elapsed.ClockMovedBackward,
-                ["clamped"] = elapsed.WasClamped,
-                ["battles"] = result.TotalBattles,
-            });
-    }
-
-    private void ReportError(string eventId, string message, Exception exception)
-    {
-        _logger?.Write(GameLogLevel.Error, eventId, "p0", message, exception: exception);
-        _windowController?.SetTrayStatus(TrayStatus.Stopped);
-        ShowNotice($"错误：{message}\n{exception.Message}");
-    }
-
-    private void ShowNotice(string message)
-    {
-        _events.Add(new BattleEvent(_state.Tick, BattleEventKind.BattleEnded, Detail: message));
-        UpdateInterface();
-    }
-
-    private void UpdateInterface()
-    {
-        if (_status is null || _eventLog is null || _pauseLabel is null)
-        {
-            return;
-        }
-
-        ActorState hero = _state.Actors[1];
-        ActorState enemy = _state.Actors[2];
-        _pauseLabel.Text = $"战斗：{(_battlePaused ? "已暂停" : "运行中")}  | 非战斗计时：{(long)_nonCombatSeconds}s";
-        _status.Text =
-            $"存档槽 {_activeSlot}  Tick {_state.Tick}/{BattleState.MaxTicks}  Seed {_state.Seed}\n" +
-            $"结局：{_state.Outcome}\n" +
-            $"Hero  pos=({hero.XRaw},{hero.YRaw}) hp={hero.Life}/{hero.MaxLife} cd={hero.CooldownRemainingTicks}\n" +
-            $"Enemy pos=({enemy.XRaw},{enemy.YRaw}) hp={enemy.Life}/{enemy.MaxLife} cd={enemy.CooldownRemainingTicks}\n" +
-            $"State SHA-256:\n{BattleStateCodec.Hash(_state)}\n" +
-            $"日志：{_logger?.CurrentLogPath}";
-        _eventLog.Text = string.Join(
-            '\n',
-            _events.TakeLast(10).Select(item =>
-                $"[{item.Tick:000}] {item.Kind} A={item.ActorId} T={item.TargetActorId} V={item.Value} {(item.Success ? "OK" : "")} {item.Detail}"));
+        _settingsStore.Save(_settingsStore.Load() with { CloseToTray = null });
+        ShowNotice("关闭行为已重置；下次点击关闭会重新询问。");
     }
 
     private void UpdateTrayState()
     {
         TrayStatus status = _battlePaused
             ? TrayStatus.Paused
-            : _state.IsFinished
+            : _session?.World.Teams.All(team => team.IsStopped || team.Queue.Count == 0 && team.ActiveMap is null) == true
                 ? TrayStatus.Waiting
                 : TrayStatus.Normal;
         _windowController?.SetTrayStatus(status);
+    }
+
+    private void ReportError(string eventId, string message, Exception exception)
+    {
+        _logger?.Write(GameLogLevel.Error, eventId, "p1a", message, exception: exception);
+        _windowController?.SetTrayStatus(TrayStatus.Stopped);
+        ShowNotice($"错误：{message} {exception.Message}");
+    }
+
+    private void ShowNotice(string message)
+    {
+        if (_noticeLabel is not null)
+        {
+            _noticeLabel.Text = message;
+        }
+
+        _logger?.Write(GameLogLevel.Information, "p1a.notice", "ui", message);
     }
 
     private void OnUnhandledException(object sender, UnhandledExceptionEventArgs eventArgs)
@@ -676,7 +550,62 @@ public partial class Main : Node
 
     private void OnUnobservedTaskException(object? sender, UnobservedTaskExceptionEventArgs eventArgs)
     {
-        _logger?.Write(GameLogLevel.Error, "application.unobserved_task", "application", "Unobserved task exception.", exception: eventArgs.Exception);
+        _logger?.Write(
+            GameLogLevel.Error,
+            "application.unobserved_task",
+            "application",
+            "Unobserved task exception.",
+            exception: eventArgs.Exception);
         eventArgs.SetObserved();
+    }
+
+    private static Button AddButton(Container parent, string text, Action action)
+    {
+        var button = new Button { Text = text };
+        button.Pressed += action;
+        parent.AddChild(button);
+        return button;
+    }
+
+    private static void AddMiniButton(Container parent, string text, string tooltip, float width, Action action)
+    {
+        var button = new Button
+        {
+            Text = text,
+            TooltipText = tooltip,
+            CustomMinimumSize = new Vector2(width, 30),
+        };
+        button.AddThemeFontSizeOverride("font_size", 13);
+        button.Pressed += action;
+        parent.AddChild(button);
+    }
+
+    private static void AddDragButton(Container parent)
+    {
+        bool dragging = false;
+        var button = new Button
+        {
+            Text = "拖",
+            TooltipText = "拖动小窗",
+            CustomMinimumSize = new Vector2(42, 30),
+        };
+        button.AddThemeFontSizeOverride("font_size", 13);
+        button.ButtonDown += () => dragging = true;
+        button.ButtonUp += () => dragging = false;
+        button.GuiInput += inputEvent =>
+        {
+            if (!dragging || !Input.IsMouseButtonPressed(MouseButton.Left) ||
+                inputEvent is not InputEventMouseMotion motion)
+            {
+                return;
+            }
+
+            float scale = Math.Max(1f, DisplayServer.ScreenGetScale(DisplayServer.WindowGetCurrentScreen()));
+            var physicalDelta = new Vector2I(
+                (int)Math.Round(motion.Relative.X * scale),
+                (int)Math.Round(motion.Relative.Y * scale));
+            DisplayServer.WindowSetPosition(DisplayServer.WindowGetPosition() + physicalDelta);
+        };
+        parent.AddChild(button);
     }
 }

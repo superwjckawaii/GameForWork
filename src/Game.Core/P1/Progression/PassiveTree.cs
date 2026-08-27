@@ -154,6 +154,7 @@ public sealed class PassiveTreeAllocation
 
     public PassiveTreeAllocation(int memoryAshes = 5)
     {
+        ArgumentOutOfRangeException.ThrowIfNegative(memoryAshes);
         MemoryAshes = memoryAshes;
     }
 
@@ -206,6 +207,29 @@ public sealed class PassiveTreeAllocation
     {
         ArgumentOutOfRangeException.ThrowIfNegative(amount);
         MemoryAshes = checked(MemoryAshes + amount);
+    }
+
+    public static PassiveTreeAllocation Restore(IEnumerable<string> allocated, int memoryAshes)
+    {
+        ArgumentNullException.ThrowIfNull(allocated);
+        var result = new PassiveTreeAllocation(memoryAshes);
+        string[] nodes = allocated.ToArray();
+        if (nodes.Length > MaximumAllocatedPoints)
+        {
+            throw new InvalidDataException("Passive allocation exceeds the P1 point cap.");
+        }
+
+        foreach (string stableId in nodes)
+        {
+            PassiveNodeDefinition node = P1PassiveTree.Get(stableId);
+            if (node.PrerequisiteId is not null && !result._allocated.Contains(node.PrerequisiteId) ||
+                !result._allocated.Add(stableId))
+            {
+                throw new InvalidDataException("Passive allocation snapshot is not a valid path.");
+            }
+        }
+
+        return result;
     }
 
     public PassiveBuildModifiers CalculateModifiers()

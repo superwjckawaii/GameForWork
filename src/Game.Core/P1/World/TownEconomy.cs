@@ -13,14 +13,22 @@ public sealed class TownEconomyState
         int ironScraps = 0,
         int memoryAshes = 5,
         int wardenMarks = 0,
-        int skillStones = 0)
+        int skillStones = 0,
+        long supplyProductionRemainderMilliseconds = 0)
     {
+        if (expeditionSupplies < 0 || gold < 0 || ironScraps < 0 || memoryAshes < 0 ||
+            wardenMarks < 0 || skillStones < 0 || supplyProductionRemainderMilliseconds is < 0 or >= SupplyProductionIntervalMilliseconds)
+        {
+            throw new ArgumentOutOfRangeException(nameof(expeditionSupplies));
+        }
+
         ExpeditionSupplies = expeditionSupplies;
         Gold = gold;
         IronScraps = ironScraps;
         MemoryAshes = memoryAshes;
         WardenMarks = wardenMarks;
         SkillStones = skillStones;
+        _supplyProductionRemainderMilliseconds = supplyProductionRemainderMilliseconds;
     }
 
     public int ExpeditionSupplies { get; private set; }
@@ -94,6 +102,13 @@ public sealed class TownEconomyState
         WardenMarks -= 10;
         legendary = P1Legendary.Create(10) with { InstanceId = $"pity-echoing-oathbreaker-{WardenMarks}" };
         return true;
+    }
+
+    public int TakeMemoryAshes()
+    {
+        int amount = MemoryAshes;
+        MemoryAshes = 0;
+        return amount;
     }
 }
 
