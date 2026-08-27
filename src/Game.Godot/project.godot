@@ -1,0 +1,32 @@
+; Engine configuration file.
+; Edit through the editor when possible.
+
+config_version=5
+
+[application]
+
+config/name="GameForWork P0"
+run/main_scene="res://Main.tscn"
+config/features=PackedStringArray("4.7", "C#", "GL Compatibility")
+
+[display]
+
+window/size/viewport_width=960
+window/size/viewport_height=640
+window/size/window_width_override=960
+window/size/window_height_override=640
+window/size/resizable=true
+window/size/always_on_top=true
+window/stretch/mode="canvas_items"
+window/dpi/allow_hidpi=true
+
+[rendering]
+
+renderer/rendering_method="gl_compatibility"
+renderer/rendering_method.mobile="gl_compatibility"
+textures/default_filters/use_nearest_mipmap_filter=false
+textures/canvas_textures/default_texture_filter=0
+
+[dotnet]
+
+project/assembly_name="GameForWork"

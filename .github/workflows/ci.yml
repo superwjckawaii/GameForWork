@@ -1,0 +1,52 @@
+name: P0 Gate
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build-test-startup:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          lfs: true
+
+      - name: Set up .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Restore
+        run: dotnet restore GameForWork.sln
+
+      - name: Build Release
+        run: dotnet build GameForWork.sln --no-restore --configuration Release
+
+      - name: Test Release
+        run: dotnet test src/Game.Tests/Game.Tests.csproj --no-build --configuration Release
+
+      - name: Download Godot 4.7.2 Mono
+        shell: pwsh
+        run: |
+          $archive = Join-Path $env:RUNNER_TEMP 'godot.zip'
+          $destination = Join-Path $env:RUNNER_TEMP 'godot'
+          Invoke-WebRequest -Uri 'https://github.com/godotengine/godot/releases/download/4.7.2-stable/Godot_v4.7.2-stable_mono_win64.zip' -OutFile $archive
+          Expand-Archive -LiteralPath $archive -DestinationPath $destination
+          $console = Get-ChildItem -LiteralPath $destination -Recurse -Filter '*_console.exe' | Select-Object -First 1
+          if (-not $console) { throw 'Godot console executable was not found in the archive.' }
+          "GODOT_BIN=$($console.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Godot import
+        shell: pwsh
+        run: |
+          & $env:GODOT_BIN --headless --path src/Game.Godot --editor --quit
+          if ($LASTEXITCODE -ne 0) { throw "Godot import failed: $LASTEXITCODE" }
+
+      - name: Godot startup
+        shell: pwsh
+        run: |
+          & $env:GODOT_BIN --headless --path src/Game.Godot --quit-after 10
+          if ($LASTEXITCODE -ne 0) { throw "Godot startup failed: $LASTEXITCODE" }

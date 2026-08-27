@@ -1,0 +1,28 @@
+# .NET
+**/bin/
+**/obj/
+*.user
+*.suo
+
+# Godot
+src/Game.Godot/.godot/
+src/Game.Godot/export.cfg
+
+# Local verification output
+artifacts/
+TestResults/
+coverage/
+
+# Local settings and runtime data
+local.settings.json
+*.db
+*.db-shm
+*.db-wal
+*.log
+
+# Editors and operating systems
+.idea/
+.vs/
+.vscode/
+Thumbs.db
+Desktop.ini

@@ -1,0 +1,30 @@
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Game.Core", "src\Game.Core\Game.Core.csproj", "{951668F1-6249-4E42-B51B-A266E5F227A9}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Game.Godot", "src\Game.Godot\GameForWork.csproj", "{6D166B48-BB74-4A91-9D63-64DC87BDC256}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Game.Tests", "src\Game.Tests\Game.Tests.csproj", "{B69002A5-CC60-4DC7-A3EB-85364266A357}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{951668F1-6249-4E42-B51B-A266E5F227A9}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{951668F1-6249-4E42-B51B-A266E5F227A9}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{951668F1-6249-4E42-B51B-A266E5F227A9}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{951668F1-6249-4E42-B51B-A266E5F227A9}.Release|Any CPU.Build.0 = Release|Any CPU
+		{6D166B48-BB74-4A91-9D63-64DC87BDC256}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{6D166B48-BB74-4A91-9D63-64DC87BDC256}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{6D166B48-BB74-4A91-9D63-64DC87BDC256}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{6D166B48-BB74-4A91-9D63-64DC87BDC256}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B69002A5-CC60-4DC7-A3EB-85364266A357}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B69002A5-CC60-4DC7-A3EB-85364266A357}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B69002A5-CC60-4DC7-A3EB-85364266A357}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B69002A5-CC60-4DC7-A3EB-85364266A357}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+EndGlobal
