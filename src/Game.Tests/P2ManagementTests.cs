@@ -1,6 +1,7 @@
 using GameForWork.Core.P1;
 using GameForWork.Core.P1.Items;
 using GameForWork.Core.P2;
+using GameForWork.Core.P4;
 
 namespace GameForWork.Tests;
 
@@ -238,6 +239,45 @@ public sealed class P2ManagementTests
         Assert.True(P2Workshop.Preview(weapon, P2WorkshopRecipe.WeaponPhysical).Succeeded);
         Assert.True(P2Workshop.Preview(armor, P2WorkshopRecipe.ReinforceDefense).Succeeded);
         Assert.True(P2Workshop.Preview(amulet, P2WorkshopRecipe.VitalityEtching).Succeeded);
+    }
+
+    [Fact]
+    public void WorkshopCraftsSortingBagAndEquippedItemsInPlaceWithMetals()
+    {
+        P1GameSession session = Session();
+        ItemInstance armor = ItemGenerator.Generate(
+            "core.base.iron_gauntlets", 3, ItemRarity.Basic, 31, "craft-bag");
+        Assert.True(session.Management.TryAddToSortingBag(armor));
+        var commands = new P2ItemCommandService(session);
+
+        P2WorkshopPreview bagCraft = commands.Craft(
+            ItemContainerKind.SortingBag, 0, P2WorkshopRecipe.ReinforceDefense);
+        Assert.True(bagCraft.Succeeded);
+        Assert.Contains(session.Management.SortingBag[0].Affixes, affix => affix.Crafted);
+        Assert.Equal(2, session.World.Economy.MetalAmount(MetalCurrencyKind.WardSteel));
+
+        Assert.True(commands.TryEquip(ItemContainerKind.SortingBag, 0, EquipmentSlot.Gloves).Succeeded);
+        P2WorkshopPreview equippedCraft = commands.Craft(
+            ItemContainerKind.Equipped, (int)EquipmentSlot.Gloves, P2WorkshopRecipe.VitalityEtching);
+        Assert.True(equippedCraft.Succeeded);
+        Assert.Contains(session.HeroEquipment.Items[EquipmentSlot.Gloves].Affixes,
+            affix => affix.Definition.ModifierKind == ItemModifierKind.FlatMaximumLife);
+        Assert.Equal(2, session.World.Economy.MetalAmount(MetalCurrencyKind.VitalSilver));
+    }
+
+    [Fact]
+    public void EquipmentSlotsSwapOnlyWhenBothDirectionsAreLegal()
+    {
+        P1GameSession session = Session();
+        ItemInstance ring = Item("swap-ring");
+        Assert.True(session.World.Storage.TryStore(ring));
+        var commands = new P2ItemCommandService(session);
+        Assert.True(commands.TryEquip(ItemContainerKind.Storage, 0, EquipmentSlot.RingLeft).Succeeded);
+
+        Assert.True(commands.SwapEquipment(EquipmentSlot.RingLeft, EquipmentSlot.RingRight).Succeeded);
+        Assert.Equal("swap-ring", session.HeroEquipment.Items[EquipmentSlot.RingRight].InstanceId);
+        Assert.False(commands.SwapEquipment(EquipmentSlot.RingRight, EquipmentSlot.Helmet).Succeeded);
+        Assert.Equal("swap-ring", session.HeroEquipment.Items[EquipmentSlot.RingRight].InstanceId);
     }
 
     private static ItemInstance Item(string instanceId) => ItemGenerator.Generate(

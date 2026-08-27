@@ -19,6 +19,11 @@ public sealed class P2ItemCommandService(P1GameSession session, P2CharacterKind 
 
     public P2ItemCommandResult TryEquip(ItemContainerKind source, int index, EquipmentSlot slot)
     {
+        if (source == ItemContainerKind.Equipped)
+        {
+            return SwapEquipment((EquipmentSlot)index, slot);
+        }
+
         ItemInstance? candidate = Peek(source, index);
         if (candidate is null)
         {
@@ -37,6 +42,9 @@ public sealed class P2ItemCommandService(P1GameSession session, P2CharacterKind 
         }
 
         ItemInstance? previous = Loadout.Unequip(slot);
+        ItemInstance? displacedOffhand = candidate.Base.Category == ItemCategory.TwoHandWeapon
+            ? Loadout.Unequip(EquipmentSlot.OffHand)
+            : null;
         if (!Loadout.TryEquip(slot, removed))
         {
             if (previous is not null)
@@ -45,6 +53,10 @@ public sealed class P2ItemCommandService(P1GameSession session, P2CharacterKind 
             }
 
             ReturnToSource(source, index, removed);
+            if (displacedOffhand is not null)
+            {
+                Loadout.TryEquip(EquipmentSlot.OffHand, displacedOffhand);
+            }
             return P2ItemCommandResult.Fail("equip_failed", "换装失败，操作已回滚。");
         }
 
@@ -53,9 +65,87 @@ public sealed class P2ItemCommandService(P1GameSession session, P2CharacterKind 
             ReturnDisplaced(source, index, previous);
         }
 
+        if (displacedOffhand is not null)
+        {
+            ReturnDisplaced(source, index, displacedOffhand);
+        }
+
         session.NotifyEquipmentChanged(character);
         session.Management.AddHistory($"已装备 {removed.Base.DisplayName}。 ");
         return P2ItemCommandResult.Ok($"已装备 {removed.Base.DisplayName}。");
+    }
+
+    public P2ItemCommandResult SwapEquipment(EquipmentSlot source, EquipmentSlot target)
+    {
+        if (source == target)
+        {
+            return P2ItemCommandResult.Ok("装备已在目标位置。");
+        }
+
+        ItemInstance? sourceItem = Loadout.Items.GetValueOrDefault(source);
+        if (sourceItem is null)
+        {
+            return P2ItemCommandResult.Fail("item_missing", "来源装备槽为空。");
+        }
+
+        ItemInstance? targetItem = Loadout.Items.GetValueOrDefault(target);
+        if (!EquipmentLoadout.CanEquip(target, sourceItem.Base.Category) ||
+            targetItem is not null && !EquipmentLoadout.CanEquip(source, targetItem.Base.Category))
+        {
+            return P2ItemCommandResult.Fail("slot_mismatch", "这两个装备槽不能交换物品。");
+        }
+
+        Loadout.Unequip(source);
+        Loadout.Unequip(target);
+        bool placedSource = Loadout.TryEquip(target, sourceItem);
+        bool placedTarget = targetItem is null || Loadout.TryEquip(source, targetItem);
+        if (!placedSource || !placedTarget)
+        {
+            Loadout.Unequip(source);
+            Loadout.Unequip(target);
+            Loadout.TryEquip(source, sourceItem);
+            if (targetItem is not null)
+            {
+                Loadout.TryEquip(target, targetItem);
+            }
+            return P2ItemCommandResult.Fail("equip_failed", "交换失败，装备已回滚。");
+        }
+
+        session.NotifyEquipmentChanged(character);
+        session.Management.AddHistory($"已将 {sourceItem.Base.DisplayName} 移至{target}。");
+        return P2ItemCommandResult.Ok("装备槽交换完成。");
+    }
+
+    public P2WorkshopPreview Craft(ItemContainerKind source, int index, P2WorkshopRecipe recipe)
+    {
+        ItemInstance? item = PeekIncludingEquipped(source, index);
+        if (item is null)
+        {
+            return new P2WorkshopPreview(false, "item_missing", null, 0, 0, "物品不存在。");
+        }
+
+        P2WorkshopPreview result = P2Workshop.Craft(session.World.Economy, item, recipe);
+        if (!result.Succeeded)
+        {
+            return result;
+        }
+
+        bool replaced = Replace(source, index, result.Result!);
+        if (!replaced)
+        {
+            if (result.MetalCostKind is GameForWork.Core.P4.MetalCurrencyKind metal)
+            {
+                session.World.Economy.AddMetal(metal, result.MetalCost);
+            }
+            return result with { Succeeded = false, FailureReason = "replace_failed", Summary = "物品位置已变化，制作已回滚。" };
+        }
+
+        if (source == ItemContainerKind.Equipped)
+        {
+            session.NotifyEquipmentChanged(character);
+        }
+        session.Management.AddHistory($"已对 {item.Base.DisplayName} 完成制作：{result.Summary}。");
+        return result;
     }
 
     public P2ItemCommandResult TryUnequip(EquipmentSlot slot)
@@ -368,6 +458,20 @@ public sealed class P2ItemCommandService(P1GameSession session, P2CharacterKind 
         ItemContainerKind.Recovery when index >= 0 && index < session.Management.Recovery.Count =>
             session.Management.Recovery[index],
         _ => null,
+    };
+
+    private ItemInstance? PeekIncludingEquipped(ItemContainerKind source, int index) =>
+        source == ItemContainerKind.Equipped && Enum.IsDefined(typeof(EquipmentSlot), index)
+            ? Loadout.Items.GetValueOrDefault((EquipmentSlot)index)
+            : Peek(source, index);
+
+    private bool Replace(ItemContainerKind source, int index, ItemInstance item) => source switch
+    {
+        ItemContainerKind.Storage => session.World.Storage.TryReplaceAt(index, item),
+        ItemContainerKind.SortingBag => ReplaceSorting(index, item),
+        ItemContainerKind.Equipped when Enum.IsDefined(typeof(EquipmentSlot), index) =>
+            Loadout.TryEquip((EquipmentSlot)index, item),
+        _ => false,
     };
 
     private void RegisterUndo(Func<P2ItemCommandResult> action)

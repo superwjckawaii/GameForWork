@@ -21,6 +21,8 @@ public partial class P1ItemGrid : GridContainer
     public int IndexOffset { get; set; }
     public ItemContainerKind ContainerKind { get; set; }
     public Func<ItemInstance, string>? ExtraTooltip { get; set; }
+    public Func<ItemContainerKind, int, int, bool>? DropValidator { get; set; }
+    public string EmptyLabel { get; set; } = string.Empty;
     public ItemInstance? SelectedItem => _selectedIndex >= 0 && _selectedIndex < _items.Count
         ? _items[_selectedIndex]
         : null;
@@ -50,6 +52,8 @@ public partial class P1ItemGrid : GridContainer
                 CustomMinimumSize = new Vector2(cellSize, cellSize),
                 ToggleMode = true,
                 FocusMode = FocusModeEnum.None,
+                Alignment = HorizontalAlignment.Center,
+                IconAlignment = HorizontalAlignment.Center,
                 TooltipText = $"空格 {index + 1}",
             };
             cell.AddThemeFontSizeOverride("font_size", 13);
@@ -93,6 +97,9 @@ public partial class P1ItemGrid : GridContainer
     public void ReceiveDrop(ItemContainerKind source, int sourceIndex, int targetIndex) =>
         ItemDropped?.Invoke(source, sourceIndex, ToExternalIndex(targetIndex));
 
+    public bool CanReceiveDrop(ItemContainerKind source, int sourceIndex, int targetIndex) =>
+        DropValidator?.Invoke(source, sourceIndex, ToExternalIndex(targetIndex)) ?? true;
+
     public void QuickTransfer(int index) => QuickTransferRequested?.Invoke(ToExternalIndex(index));
 
     private void ApplyCells()
@@ -105,7 +112,8 @@ public partial class P1ItemGrid : GridContainer
             cell.HasItem = occupied;
             cell.Icon = occupied ? IconFor(item!.Base.Category) : null;
             cell.ExpandIcon = occupied && cell.Icon is not null;
-            cell.Text = occupied && cell.Icon is null ? P1UiText.ItemGlyph(item!.Base.Category) : string.Empty;
+            cell.Text = occupied && cell.Icon is null ? P1UiText.ItemGlyph(item!.Base.Category) :
+                occupied ? string.Empty : EmptyLabel;
             string extra = occupied ? ExtraTooltip?.Invoke(item!) ?? string.Empty : string.Empty;
             cell.TooltipText = occupied
                 ? P1UiText.ItemTooltip(item!) + (extra.Length == 0 ? string.Empty : $"\n\n{extra}")

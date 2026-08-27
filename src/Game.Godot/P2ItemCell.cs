@@ -62,14 +62,28 @@ public partial class P2ItemCell : Button
         return Variant.From($"p2-item|{(int)Grid.ContainerKind}|{Grid.ToExternalIndex(CellIndex)}");
     }
 
-    public override bool _CanDropData(Vector2 atPosition, Variant data) =>
-        Grid is not null && TryParse(data, out _, out _);
+    public override bool _CanDropData(Vector2 atPosition, Variant data)
+    {
+        bool valid = Grid is not null && TryParse(data, out ItemContainerKind source, out int index) &&
+                     Grid.CanReceiveDrop(source, index, CellIndex);
+        SelfModulate = valid ? new Color("b7efbd") : new Color("ef9b91");
+        return valid;
+    }
 
     public override void _DropData(Vector2 atPosition, Variant data)
     {
         if (Grid is not null && TryParse(data, out ItemContainerKind source, out int sourceIndex))
         {
+            SelfModulate = Colors.White;
             Grid.ReceiveDrop(source, sourceIndex, CellIndex);
+        }
+    }
+
+    public override void _Notification(int what)
+    {
+        if (what == NotificationDragEnd)
+        {
+            SelfModulate = Colors.White;
         }
     }
 
