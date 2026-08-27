@@ -119,7 +119,7 @@ public sealed class EquipmentLoadout
             weaponItem?.LegendaryRule);
     }
 
-    private static bool CanEquip(EquipmentSlot slot, ItemCategory category) => category switch
+    public static bool CanEquip(EquipmentSlot slot, ItemCategory category) => category switch
     {
         ItemCategory.TwoHandWeapon => slot == EquipmentSlot.MainHand,
         ItemCategory.BodyArmor => slot == EquipmentSlot.Chest,

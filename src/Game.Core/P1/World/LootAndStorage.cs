@@ -15,11 +15,12 @@ public sealed record LootFilterRule(
     ItemRarity? Rarity = null,
     string? BaseStableId = null,
     string? AffixFamilyId = null,
-    int? MinimumAffixValue = null)
+    int? MinimumAffixValue = null,
+    bool Enabled = true)
 {
     public bool Matches(ItemInstance item)
     {
-        if (Rarity is not null && item.Rarity != Rarity ||
+        if (!Enabled || Rarity is not null && item.Rarity != Rarity ||
             BaseStableId is not null && item.Base.StableId != BaseStableId)
         {
             return false;
@@ -144,6 +145,31 @@ public sealed class EquipmentStorage
     }
 
     public int IndexOf(string instanceId) => _items.FindIndex(item => item.InstanceId == instanceId);
+
+    public bool TryInsert(ItemInstance item, int index)
+    {
+        ArgumentNullException.ThrowIfNull(item);
+        if (IsFull)
+        {
+            return false;
+        }
+
+        _items.Insert(Math.Clamp(index, 0, _items.Count), item);
+        RecordDiscovery(item);
+        return true;
+    }
+
+    public bool TryMove(int sourceIndex, int targetIndex)
+    {
+        ItemInstance? item = TakeAt(sourceIndex);
+        if (item is null)
+        {
+            return false;
+        }
+
+        _items.Insert(Math.Clamp(targetIndex, 0, _items.Count), item);
+        return true;
+    }
 
     public void RestoreDiscoveries(IEnumerable<string> bases, IEnumerable<string> legendaryRules)
     {

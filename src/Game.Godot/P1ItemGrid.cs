@@ -1,18 +1,28 @@
 using GameForWork.Core.P1.Items;
+using GameForWork.Core.P2;
 using Godot;
 
 namespace GameForWork.GodotClient;
 
 public partial class P1ItemGrid : GridContainer
 {
-    private readonly List<Button> _cells = [];
-    private IReadOnlyList<ItemInstance> _items = [];
+    private readonly List<P2ItemCell> _cells = [];
+    private IReadOnlyList<ItemInstance?> _items = [];
     private int _selectedIndex = -1;
     private Texture2D? _iconAtlas;
 
     public event Action<int>? ItemSelected;
+    public event Action<int>? ItemActivated;
+    public event Action<int, Vector2>? ItemContextRequested;
+    public event Action<ItemContainerKind, int, int>? ItemDropped;
+    public event Action<int>? QuickTransferRequested;
 
     public int SelectedIndex => _selectedIndex;
+    public ItemContainerKind ContainerKind { get; set; }
+    public Func<ItemInstance, string>? ExtraTooltip { get; set; }
+    public ItemInstance? SelectedItem => _selectedIndex >= 0 && _selectedIndex < _items.Count
+        ? _items[_selectedIndex]
+        : null;
 
     public override void _Ready()
     {
@@ -32,8 +42,10 @@ public partial class P1ItemGrid : GridContainer
         for (int index = 0; index < capacity; index++)
         {
             int captured = index;
-            var cell = new Button
+            var cell = new P2ItemCell
             {
+                Grid = this,
+                CellIndex = index,
                 CustomMinimumSize = new Vector2(cellSize, cellSize),
                 ToggleMode = true,
                 FocusMode = FocusModeEnum.None,
@@ -50,7 +62,7 @@ public partial class P1ItemGrid : GridContainer
 
     public void SetItems(IReadOnlyList<ItemInstance> items)
     {
-        _items = items;
+        _items = items.Cast<ItemInstance?>().ToArray();
         if (_selectedIndex >= items.Count)
         {
             _selectedIndex = -1;
@@ -59,19 +71,44 @@ public partial class P1ItemGrid : GridContainer
         ApplyCells();
     }
 
+    public void SetSlots(IReadOnlyList<ItemInstance?> items)
+    {
+        _items = items;
+        if (_selectedIndex >= items.Count || _selectedIndex >= 0 && items[_selectedIndex] is null)
+        {
+            _selectedIndex = -1;
+        }
+
+        ApplyCells();
+    }
+
+    public void Activate(int index) => ItemActivated?.Invoke(index);
+
+    public void OpenContext(int index, Vector2 screenPosition) => ItemContextRequested?.Invoke(index, screenPosition);
+
+    public void ReceiveDrop(ItemContainerKind source, int sourceIndex, int targetIndex) =>
+        ItemDropped?.Invoke(source, sourceIndex, targetIndex);
+
+    public void QuickTransfer(int index) => QuickTransferRequested?.Invoke(index);
+
     private void ApplyCells()
     {
         for (int index = 0; index < _cells.Count; index++)
         {
-            Button cell = _cells[index];
-            bool occupied = index < _items.Count;
-            cell.Icon = occupied ? IconFor(_items[index].Base.Category) : null;
+            P2ItemCell cell = _cells[index];
+            bool occupied = index < _items.Count && _items[index] is not null;
+            ItemInstance? item = occupied ? _items[index] : null;
+            cell.HasItem = occupied;
+            cell.Icon = occupied ? IconFor(item!.Base.Category) : null;
             cell.ExpandIcon = occupied && cell.Icon is not null;
-            cell.Text = occupied && cell.Icon is null ? P1UiText.ItemGlyph(_items[index].Base.Category) : string.Empty;
-            cell.TooltipText = occupied ? P1UiText.ItemTooltip(_items[index]) : $"空格 {index + 1}";
-            cell.Disabled = !occupied;
+            cell.Text = occupied && cell.Icon is null ? P1UiText.ItemGlyph(item!.Base.Category) : string.Empty;
+            string extra = occupied ? ExtraTooltip?.Invoke(item!) ?? string.Empty : string.Empty;
+            cell.TooltipText = occupied
+                ? P1UiText.ItemTooltip(item!) + (extra.Length == 0 ? string.Empty : $"\n\n{extra}")
+                : $"空格 {index + 1}";
+            cell.Disabled = false;
             cell.SetPressedNoSignal(index == _selectedIndex);
-            Color color = occupied ? P1UiText.RarityColor(_items[index].Rarity) : new Color("71695e");
+            Color color = occupied ? P1UiText.RarityColor(item!.Rarity) : new Color("71695e");
             cell.AddThemeColorOverride("font_color", color);
             cell.AddThemeColorOverride("font_pressed_color", color.Lightened(0.15f));
             cell.AddThemeStyleboxOverride("normal", Frame(new Color("171b22"), color.Darkened(0.32f), 1));

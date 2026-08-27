@@ -20,7 +20,7 @@ public partial class Main : Node
     private SaveRepository? _saveRepository;
     private SettingsStore? _settingsStore;
     private P1GameSession? _session;
-    private P1Dashboard? _dashboard;
+    private P2Dashboard? _dashboard;
     private HFlowContainer? _standardToolbar;
     private HBoxContainer? _miniToolbar;
     private HFlowContainer? _testHarness;
@@ -218,18 +218,18 @@ public partial class Main : Node
 
         _noticeLabel = new Label
         {
-            Text = "P1B 精细像素表现 · 20 Hz 确定性模拟 / 60 FPS 画面",
+            Text = "P2 主线与构筑管理 · 20 Hz 确定性模拟 / 60 FPS 画面",
             AutowrapMode = TextServer.AutowrapMode.WordSmart,
         };
         root.AddChild(_noticeLabel);
-        _dashboard = new P1Dashboard();
+        _dashboard = new P2Dashboard();
         _dashboard.Initialize(_session, CreateCharacter, OnSessionChanged, ShowNotice);
         root.AddChild(_dashboard);
 
         _testHarness = new HFlowContainer();
         root.AddChild(_testHarness);
-        AddButton(_testHarness, "P1: 模拟48h", RunOfflineBenchmark);
-        AddButton(_testHarness, "P1: 备份", CreateBackup);
+        AddButton(_testHarness, "P2: 模拟48h", RunOfflineBenchmark);
+        AddButton(_testHarness, "P2: 备份", CreateBackup);
         AddButton(_testHarness, "打开日志", OpenLogs);
         AddButton(_testHarness, "复制日志路径", CopyLogPath);
         AddButton(_testHarness, "重置关闭询问", ResetCloseChoice);

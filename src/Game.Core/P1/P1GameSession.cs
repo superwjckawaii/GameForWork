@@ -55,16 +55,30 @@ public sealed record PlayerIdentity(
 
 public sealed record EquippedItemSnapshot(EquipmentSlot Slot, ItemInstance Item);
 
+public enum AiRuleMatchMode
+{
+    All,
+    Any,
+}
+
 public sealed record HeroAiConfiguration(
     string Preset,
     bool UseWarCry,
-    int LifeFlaskThresholdBasisPoints)
+    int LifeFlaskThresholdBasisPoints,
+    AiRuleMatchMode MatchMode = AiRuleMatchMode.All,
+    int MinimumEnemyCount = 1,
+    string EnemyRarity = "任意",
+    int MaximumEnemyDistance = 8,
+    bool BossPriority = false,
+    int DangerThreshold = 50)
 {
     public static HeroAiConfiguration Balanced => new("均衡", true, 5_000);
 
     public HeroAiConfiguration Validate()
     {
-        if (string.IsNullOrWhiteSpace(Preset) || LifeFlaskThresholdBasisPoints is < 1_000 or > 9_000)
+        if (string.IsNullOrWhiteSpace(Preset) || LifeFlaskThresholdBasisPoints is < 1_000 or > 9_000 ||
+            MinimumEnemyCount is < 1 or > 20 || MaximumEnemyDistance is < 1 or > 30 ||
+            DangerThreshold is < 0 or > 100 || string.IsNullOrWhiteSpace(EnemyRarity))
         {
             throw new ArgumentOutOfRangeException(nameof(LifeFlaskThresholdBasisPoints));
         }
@@ -86,7 +100,8 @@ public sealed record P1GameSessionSnapshot(
     bool DebugTwentyTimes,
     ulong Seed,
     int SimulationSequence,
-    P2ManagementSnapshot? Management = null);
+    P2ManagementSnapshot? Management = null,
+    IReadOnlyList<EquippedItemSnapshot>? MercenaryEquipment = null);
 
 public sealed class P1GameSession
 {
@@ -99,6 +114,7 @@ public sealed class P1GameSession
         string mercenaryName,
         P1WorldState world,
         EquipmentLoadout heroEquipment,
+        EquipmentLoadout mercenaryEquipment,
         PassiveTreeAllocation passives,
         SkillSupport heavyStrikeSupports,
         HeroAiConfiguration heroAi,
@@ -111,6 +127,7 @@ public sealed class P1GameSession
         MercenaryName = mercenaryName;
         World = world;
         HeroEquipment = heroEquipment;
+        MercenaryEquipment = mercenaryEquipment;
         Passives = passives;
         HeavyStrikeSupports = heavyStrikeSupports;
         HeroAi = heroAi.Validate();
@@ -126,6 +143,7 @@ public sealed class P1GameSession
     public string MercenaryName { get; }
     public P1WorldState World { get; }
     public EquipmentLoadout HeroEquipment { get; }
+    public EquipmentLoadout MercenaryEquipment { get; }
     public PassiveTreeAllocation Passives { get; private set; }
     public SkillSupport HeavyStrikeSupports { get; private set; }
     public HeroAiConfiguration HeroAi { get; private set; }
@@ -163,6 +181,7 @@ public sealed class P1GameSession
             mercenary.Name,
             world,
             equipment,
+            mercenary.Equipment,
             passives,
             SkillSupport.Bleed,
             HeroAiConfiguration.Balanced,
@@ -182,6 +201,11 @@ public sealed class P1GameSession
 
         EquipmentLoadout equipment = EquipmentLoadout.Restore(
             snapshot.HeroEquipment.Select(entry =>
+                new KeyValuePair<EquipmentSlot, ItemInstance>(entry.Slot, entry.Item)));
+        P1MercenaryProfile restoredMercenary = P1MercenaryFactory.GenerateCantor(snapshot.Seed ^ 0xa5a5a5a5UL);
+        EquipmentLoadout mercenaryEquipment = snapshot.MercenaryEquipment is null
+            ? restoredMercenary.Equipment
+            : EquipmentLoadout.Restore(snapshot.MercenaryEquipment.Select(entry =>
                 new KeyValuePair<EquipmentSlot, ItemInstance>(entry.Slot, entry.Item)));
         PassiveTreeAllocation passives = PassiveTreeAllocation.Restore(
             snapshot.AllocatedPassives,
@@ -205,6 +229,7 @@ public sealed class P1GameSession
             snapshot.MercenaryName,
             world,
             equipment,
+            mercenaryEquipment,
             passives,
             snapshot.HeavyStrikeSupports,
             snapshot.HeroAi ?? HeroAiConfiguration.Balanced,
@@ -230,7 +255,8 @@ public sealed class P1GameSession
         DebugTwentyTimes,
         Seed,
         SimulationSequence,
-        Management.Capture());
+        Management.Capture(),
+        MercenaryEquipment.Items.Select(pair => new EquippedItemSnapshot(pair.Key, pair.Value)).ToArray());
 
     public P1OfflineResult Advance(long realElapsedMilliseconds)
     {
@@ -284,6 +310,30 @@ public sealed class P1GameSession
         RefreshHeroBuild();
     }
 
+    public void SyncHeavyStrikeFromSkillStones()
+    {
+        SkillStoneInstance? active = Management.SkillStones.FirstOrDefault(
+            item => item.DefinitionId == "core.skill_stone.heavy_strike");
+        SkillLinkConfiguration? link = active is null
+            ? null
+            : Management.SkillLinks.FirstOrDefault(item => item.ActiveStoneInstanceId == active.InstanceId);
+        SkillSupport supports = SkillSupport.None;
+        foreach (string supportId in link?.SupportStoneInstanceIds ?? [])
+        {
+            string definition = Management.SkillStones.Single(item => item.InstanceId == supportId).DefinitionId;
+            supports |= definition switch
+            {
+                "core.skill_stone.increased_area" => SkillSupport.IncreasedArea,
+                "core.skill_stone.attack_speed" => SkillSupport.AttackSpeed,
+                "core.skill_stone.bleed" => SkillSupport.Bleed,
+                "core.skill_stone.life_cost" => SkillSupport.LifeCost,
+                _ => SkillSupport.None,
+            };
+        }
+
+        SetHeavyStrikeSupports(supports);
+    }
+
     public void SetHeroAi(HeroAiConfiguration configuration)
     {
         HeroAi = configuration.Validate();
@@ -327,18 +377,19 @@ public sealed class P1GameSession
 
     public bool TryEquipFromStorage(int storageIndex, EquipmentSlot slot)
     {
-        if (storageIndex < 0 || storageIndex >= World.Storage.Items.Count)
-        {
-            return false;
-        }
+        return new P2ItemCommandService(this).TryEquip(ItemContainerKind.Storage, storageIndex, slot).Succeeded;
+    }
 
-        bool equipped = HeroEquipment.TryEquip(slot, World.Storage.Items[storageIndex]);
-        if (equipped)
+    public void NotifyEquipmentChanged(P2CharacterKind character = P2CharacterKind.Hero)
+    {
+        if (character == P2CharacterKind.Hero)
         {
             RefreshHeroBuild();
         }
-
-        return equipped;
+        else
+        {
+            RefreshMercenaryBuild();
+        }
     }
 
     public WorkshopResult CraftEquippedWeapon()
@@ -353,6 +404,24 @@ public sealed class P1GameSession
         {
             HeroEquipment.TryEquip(EquipmentSlot.MainHand, result.Item!);
             RefreshHeroBuild();
+        }
+
+        return result;
+    }
+
+    public P2WorkshopPreview CraftStorageItem(int storageIndex, P2WorkshopRecipe recipe)
+    {
+        if (storageIndex < 0 || storageIndex >= World.Storage.Items.Count)
+        {
+            return new P2WorkshopPreview(false, "item_required", null, 0, 0, "请先选择仓库物品。");
+        }
+
+        ItemInstance item = World.Storage.Items[storageIndex];
+        P2WorkshopPreview result = P2Workshop.Craft(World.Economy, item, recipe);
+        if (result.Succeeded)
+        {
+            World.Storage.TryReplaceAt(storageIndex, result.Result!);
+            Management.AddHistory($"工坊完成：{result.Summary}。");
         }
 
         return result;
@@ -403,6 +472,49 @@ public sealed class P1GameSession
         increasedCriticalChanceBasisPoints: _heroBuild.IncreasedCriticalChanceBasisPoints,
         increasedBleedChanceBasisPoints: _heroBuild.IncreasedBleedChanceBasisPoints);
 
+    public P2EquipmentComparison CompareHeroEquipment(ItemInstance candidate, EquipmentSlot slot)
+    {
+        ArgumentNullException.ThrowIfNull(candidate);
+        if (!EquipmentLoadout.CanEquip(slot, candidate.Base.Category))
+        {
+            throw new ArgumentException("Candidate cannot be equipped in the requested slot.", nameof(slot));
+        }
+
+        EquipmentLoadout hypothetical = EquipmentLoadout.Restore(HeroEquipment.Items
+            .Where(pair => pair.Key != slot)
+            .Select(pair => new KeyValuePair<EquipmentSlot, ItemInstance>(pair.Key, pair.Value)));
+        if (!hypothetical.TryEquip(slot, candidate))
+        {
+            throw new InvalidOperationException("Hypothetical equipment could not be assembled.");
+        }
+
+        AssembledCharacterBuild proposed = CharacterBuildAssembler.Assemble(
+            World.Hero.Progression.Level,
+            CharacterAttributes.IronOathStarting,
+            hypothetical,
+            Passives,
+            new SkillConfiguration(P1SkillIds.HeavyStrike, HeavyStrikeSupports));
+        CombatPreview currentPreview = GetCombatPreview();
+        CombatPreview proposedPreview = Preview(proposed);
+        EquipmentSummary current = HeroEquipment.CalculateSummary();
+        EquipmentSummary next = hypothetical.CalculateSummary();
+        SkillCapacityResult capacity = SkillCapacityRules.Validate(
+            [new SkillConfiguration(P1SkillIds.HeavyStrike, HeavyStrikeSupports)], next);
+        return new P2EquipmentComparison(
+            proposed.Sheet.MaximumLife().Value - _heroBuild.Sheet.MaximumLife().Value,
+            proposed.Sheet.MaximumMana().Value - _heroBuild.Sheet.MaximumMana().Value,
+            next.Defense.Armor - current.Defense.Armor,
+            next.Defense.Evasion - current.Defense.Evasion,
+            next.Defense.Shield - current.Defense.Shield,
+            next.CoreSkillCapacity - current.CoreSkillCapacity,
+            next.SupportLinkCapacity - current.SupportLinkCapacity,
+            proposedPreview.AverageHitDamage.Value - currentPreview.AverageHitDamage.Value,
+            proposedPreview.EffectiveLife.Value - currentPreview.EffectiveLife.Value,
+            RequirementsMet: true,
+            DisabledSkillLinks: capacity.IsValid ? 0 : Math.Max(0, capacity.RequiredSupportLinks - capacity.AvailableSupportLinks),
+            slot);
+    }
+
     private static void EquipStarter(EquipmentLoadout equipment, EquipmentSlot slot, string baseId, ulong seed)
     {
         ItemInstance item = ItemGenerator.Generate(baseId, 1, ItemRarity.Basic, seed, $"starter-{slot}");
@@ -425,12 +537,39 @@ public sealed class P1GameSession
         Passives,
         new SkillConfiguration(P1SkillIds.HeavyStrike, HeavyStrikeSupports));
 
+    private static CombatPreview Preview(AssembledCharacterBuild build) => CombatPreviewRules.Calculate(
+        build.Sheet,
+        build.Equipment.Weapon!,
+        build.HeavyStrike,
+        build.Sheet.Accuracy(build.FlatAccuracy).Value,
+        targetEvasion: 20,
+        targetArmor: 25,
+        representativeIncomingPhysicalHit: 10,
+        addedPhysicalDamage: build.AddedPhysicalDamage,
+        increasedDamageBasisPoints: build.IncreasedAttackDamageBasisPoints,
+        increasedCriticalChanceBasisPoints: build.IncreasedCriticalChanceBasisPoints,
+        increasedBleedChanceBasisPoints: build.IncreasedBleedChanceBasisPoints);
+
     private void RefreshHeroTeamBuild() => World.Hero.UpdateBuild(ToTeamBuild(_heroBuild, HeavyStrikeSupports, HeroAi));
+
+    private void RefreshMercenaryBuild()
+    {
+        P1MercenaryProfile generated = P1MercenaryFactory.GenerateCantor(Seed ^ 0xa5a5a5a5UL);
+        var profile = new P1MercenaryProfile(
+            generated.StableId,
+            MercenaryName,
+            generated.Archetype,
+            generated.FinalAttributes,
+            generated.Traits,
+            generated.AutonomousConfiguration,
+            MercenaryEquipment);
+        World.Mercenaries.UpdateBuild(profile.CreateTeamBuild(World.Mercenaries.Progression.Level));
+    }
 
     private static P1TeamBuild ToTeamBuild(
         AssembledCharacterBuild build,
         SkillSupport supports,
-        HeroAiConfiguration ai) => new(
+        HeroAiConfiguration ai) => new P1TeamBuild(
         build.Sheet,
         build.Equipment.Weapon ?? throw new InvalidOperationException("Hero weapon is missing."),
         new SkillConfiguration(P1SkillIds.HeavyStrike, supports),
@@ -451,5 +590,11 @@ public sealed class P1GameSession
         LifeFlaskUseThresholdBasisPoints: ai.LifeFlaskThresholdBasisPoints,
         AddedPhysicalDamage: build.AddedPhysicalDamage,
         HeavyStrikeProfile: build.HeavyStrike,
-        WeaponLegendaryRule: build.Equipment.WeaponLegendaryRule);
+        WeaponLegendaryRule: build.Equipment.WeaponLegendaryRule) with
+        {
+            AiSummary = $"{ai.Preset} · {(ai.MatchMode == AiRuleMatchMode.All ? "全部满足" : "任一满足")}：" +
+                $"敌人≥{ai.MinimumEnemyCount}、稀有度 {ai.EnemyRarity}、距离≤{ai.MaximumEnemyDistance}、" +
+                $"危险度≥{ai.DangerThreshold}{(ai.BossPriority ? "、Boss优先" : string.Empty)}；" +
+                $"生命低于 {ai.LifeFlaskThresholdBasisPoints / 100}% 使用药剂。"
+        };
 }

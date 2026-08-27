@@ -79,6 +79,32 @@ public sealed class TownEconomyState
         IronScraps = checked(IronScraps + ironScraps);
     }
 
+    public bool TrySpendGold(int amount)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(amount);
+        if (Gold < amount)
+        {
+            return false;
+        }
+
+        Gold -= amount;
+        return true;
+    }
+
+    public bool TryPay(int gold, int ironScraps)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(gold);
+        ArgumentOutOfRangeException.ThrowIfNegative(ironScraps);
+        if (Gold < gold || IronScraps < ironScraps)
+        {
+            return false;
+        }
+
+        Gold -= gold;
+        IronScraps -= ironScraps;
+        return true;
+    }
+
     public bool TryPayWorkshopCost()
     {
         if (Gold < P1Workshop.GoldCost || IronScraps < P1Workshop.IronScrapCost)

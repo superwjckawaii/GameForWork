@@ -23,15 +23,15 @@ public enum EquipmentSlot
 
 public enum ItemCategory
 {
-    TwoHandWeapon,
-    BodyArmor,
-    Helmet,
-    Gloves,
-    Boots,
-    Belt,
-    Amulet,
-    Ring,
-    LifeFlask,
+    TwoHandWeapon = 0,
+    BodyArmor = 1,
+    Helmet = 2,
+    Ring = 3,
+    LifeFlask = 4,
+    Gloves = 5,
+    Boots = 6,
+    Belt = 7,
+    Amulet = 8,
 }
 
 public enum ItemRarity

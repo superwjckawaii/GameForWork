@@ -47,6 +47,15 @@ internal static class P1UiText
         }
 
         text.Append(item.IsIdentified ? "已鉴定" : "未鉴定");
+        if (item.IsLocked)
+        {
+            text.Append(" · 🔒 已锁定");
+        }
+
+        if (item.IsCraftingBase)
+        {
+            text.Append(" · ◆ 制作底材");
+        }
         return text.ToString();
     }
 
@@ -90,6 +99,10 @@ internal static class P1UiText
         ItemCategory.TwoHandWeapon => "刃",
         ItemCategory.BodyArmor => "甲",
         ItemCategory.Helmet => "盔",
+        ItemCategory.Gloves => "手",
+        ItemCategory.Boots => "靴",
+        ItemCategory.Belt => "带",
+        ItemCategory.Amulet => "符",
         ItemCategory.Ring => "环",
         ItemCategory.LifeFlask => "药",
         _ => "物",
@@ -156,6 +169,10 @@ internal static class P1UiText
         ItemCategory.TwoHandWeapon => "双手武器",
         ItemCategory.BodyArmor => "胸甲",
         ItemCategory.Helmet => "头盔",
+        ItemCategory.Gloves => "手套",
+        ItemCategory.Boots => "鞋子",
+        ItemCategory.Belt => "腰带",
+        ItemCategory.Amulet => "项链",
         ItemCategory.Ring => "戒指",
         ItemCategory.LifeFlask => "生命药剂",
         _ => category.ToString(),

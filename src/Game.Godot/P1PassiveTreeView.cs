@@ -9,10 +9,13 @@ public partial class P1PassiveTreeView : Control
     private static readonly Color AvailableColor = new("477d79");
     private static readonly Color AllocatedColor = new("c28b3c");
     private static readonly Color SelectedColor = new("f0cf72");
+    private static readonly Color PlannedColor = new("8e78c8");
     private readonly Dictionary<string, Button> _buttons = new(StringComparer.Ordinal);
     private readonly Dictionary<string, Vector2> _centers = new(StringComparer.Ordinal);
     private IReadOnlySet<string> _allocated = new HashSet<string>();
     private int _earnedPoints;
+    private readonly HashSet<string> _planned = new(StringComparer.Ordinal);
+    private string _search = string.Empty;
 
     public event Action<string>? NodeSelected;
 
@@ -35,7 +38,9 @@ public partial class P1PassiveTreeView : Control
         foreach (PassiveNodeDefinition node in P1PassiveTree.Nodes)
         {
             Vector2 from = node.PrerequisiteId is null ? new Vector2(410, 235) : _centers[node.PrerequisiteId];
-            Color color = _allocated.Contains(node.StableId) ? new Color("98713b") : new Color("3b4552");
+            Color color = _allocated.Contains(node.StableId)
+                ? new Color("98713b")
+                : _planned.Contains(node.StableId) ? PlannedColor.Darkened(0.2f) : new Color("3b4552");
             DrawLine(from, _centers[node.StableId], color, _allocated.Contains(node.StableId) ? 4 : 2, true);
         }
 
@@ -49,6 +54,49 @@ public partial class P1PassiveTreeView : Control
     {
         _allocated = allocated;
         _earnedPoints = earnedPoints;
+        foreach (PassiveNodeDefinition node in P1PassiveTree.Nodes)
+        {
+            UpdateNode(node);
+        }
+
+        QueueRedraw();
+    }
+
+    public void SetSearch(string query)
+    {
+        _search = query?.Trim() ?? string.Empty;
+        foreach (PassiveNodeDefinition node in P1PassiveTree.Nodes)
+        {
+            UpdateNode(node);
+        }
+    }
+
+    public bool PlanPathToSelected()
+    {
+        if (SelectedStableId is null)
+        {
+            return false;
+        }
+
+        string? current = SelectedStableId;
+        while (current is not null && !_allocated.Contains(current))
+        {
+            _planned.Add(current);
+            current = P1PassiveTree.Get(current).PrerequisiteId;
+        }
+
+        foreach (PassiveNodeDefinition node in P1PassiveTree.Nodes)
+        {
+            UpdateNode(node);
+        }
+
+        QueueRedraw();
+        return true;
+    }
+
+    public void ClearPlan()
+    {
+        _planned.Clear();
         foreach (PassiveNodeDefinition node in P1PassiveTree.Nodes)
         {
             UpdateNode(node);
@@ -122,7 +170,12 @@ public partial class P1PassiveTreeView : Control
         bool pathOpen = node.PrerequisiteId is null || _allocated.Contains(node.PrerequisiteId);
         bool available = !allocated && pathOpen && _allocated.Count < Math.Min(_earnedPoints, PassiveTreeAllocation.MaximumAllocatedPoints);
         Color background = allocated ? AllocatedColor : available ? AvailableColor : LockedColor;
-        Color border = SelectedStableId == node.StableId ? SelectedColor : background.Lightened(0.28f);
+        bool searchMatch = _search.Length > 0 &&
+            (node.DisplayName.Contains(_search, StringComparison.OrdinalIgnoreCase) ||
+             node.Effects.Any(effect => P1UiText.PassiveEffect(effect).Contains(_search, StringComparison.OrdinalIgnoreCase)));
+        Color border = SelectedStableId == node.StableId || searchMatch
+            ? SelectedColor
+            : _planned.Contains(node.StableId) ? PlannedColor : background.Lightened(0.28f);
         button.TooltipText = P1UiText.PassiveTooltip(node, allocated, available);
         button.AddThemeStyleboxOverride("normal", Style(background, border, 2));
         button.AddThemeStyleboxOverride("hover", Style(background.Lightened(0.13f), SelectedColor, 3));

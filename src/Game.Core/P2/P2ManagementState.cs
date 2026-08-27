@@ -2,6 +2,12 @@ using GameForWork.Core.P1.Items;
 
 namespace GameForWork.Core.P2;
 
+public enum P2CharacterKind
+{
+    Hero,
+    Mercenary,
+}
+
 public enum ItemContainerKind
 {
     SortingBag,
@@ -170,6 +176,30 @@ public sealed class P2ManagementState
 
     public ItemInstance? TakeRecoveryAt(int index) => TakeAt(_recovery, index);
 
+    public bool TryInsertSortingBag(ItemInstance item, int index)
+    {
+        if (_sortingBag.Count >= SortingBagCapacity || Contains(item.InstanceId))
+        {
+            return false;
+        }
+
+        _sortingBag.Insert(Math.Clamp(index, 0, _sortingBag.Count), item);
+        AddHistory($"{item.Base.DisplayName} 已放入整理背包。");
+        return true;
+    }
+
+    public bool TryMoveSortingBag(int sourceIndex, int targetIndex)
+    {
+        ItemInstance? item = TakeAt(_sortingBag, sourceIndex);
+        if (item is null)
+        {
+            return false;
+        }
+
+        _sortingBag.Insert(Math.Clamp(targetIndex, 0, _sortingBag.Count), item);
+        return true;
+    }
+
     public void ReturnToSortingBag(ItemInstance item, int preferredIndex = -1)
     {
         if (_sortingBag.Count >= SortingBagCapacity)
@@ -219,6 +249,73 @@ public sealed class P2ManagementState
         FreeFullRespecAvailable = false;
         AddHistory("已使用迁移赠送的免费完整洗点。");
         return true;
+    }
+
+    public bool TryLinkSupport(string activeStoneInstanceId, string supportStoneInstanceId)
+    {
+        SkillStoneInstance? active = _skillStones.FirstOrDefault(item => item.InstanceId == activeStoneInstanceId);
+        SkillStoneInstance? support = _skillStones.FirstOrDefault(item => item.InstanceId == supportStoneInstanceId);
+        if (active?.Definition.Kind != SkillStoneKind.Active || support?.Definition.Kind != SkillStoneKind.Support)
+        {
+            return false;
+        }
+
+        SkillLinkConfiguration? previous = _skillLinks.FirstOrDefault(link => link.ActiveStoneInstanceId == activeStoneInstanceId);
+        if (previous?.SupportStoneInstanceIds.Contains(supportStoneInstanceId, StringComparer.Ordinal) == true ||
+            previous?.SupportStoneInstanceIds.Count >= 5)
+        {
+            return false;
+        }
+
+        _skillLinks.RemoveAll(link => link.ActiveStoneInstanceId == activeStoneInstanceId);
+        foreach (SkillLinkConfiguration link in _skillLinks.ToArray())
+        {
+            if (link.SupportStoneInstanceIds.Contains(supportStoneInstanceId, StringComparer.Ordinal))
+            {
+                _skillLinks.Remove(link);
+                _skillLinks.Add(link with
+                {
+                    SupportStoneInstanceIds = link.SupportStoneInstanceIds
+                        .Where(id => id != supportStoneInstanceId)
+                        .ToArray(),
+                });
+            }
+        }
+
+        List<string> supports = previous?.SupportStoneInstanceIds.ToList() ?? [];
+        supports.Add(supportStoneInstanceId);
+        _skillLinks.Add(new SkillLinkConfiguration(activeStoneInstanceId, supports, previous?.Priority ?? _skillLinks.Count + 1));
+        AddHistory($"{support.Definition.DisplayName} 已连接到 {active.Definition.DisplayName}。");
+        return true;
+    }
+
+    public bool UnlinkSupport(string activeStoneInstanceId, string supportStoneInstanceId)
+    {
+        SkillLinkConfiguration? link = _skillLinks.FirstOrDefault(item => item.ActiveStoneInstanceId == activeStoneInstanceId);
+        if (link is null || !link.SupportStoneInstanceIds.Contains(supportStoneInstanceId, StringComparer.Ordinal))
+        {
+            return false;
+        }
+
+        _skillLinks.Remove(link);
+        _skillLinks.Add(link with
+        {
+            SupportStoneInstanceIds = link.SupportStoneInstanceIds.Where(id => id != supportStoneInstanceId).ToArray(),
+        });
+        AddHistory("辅助技能石已解除连接。");
+        return true;
+    }
+
+    public void AddSkillExperience(int amount)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(amount);
+        for (int index = 0; index < _skillStones.Count; index++)
+        {
+            SkillStoneInstance stone = _skillStones[index];
+            int total = checked(stone.Experience + amount);
+            int level = Math.Min(20, 1 + total / 1_000);
+            _skillStones[index] = stone with { Level = level, Experience = total };
+        }
     }
 
     public void AddHistory(string message)
