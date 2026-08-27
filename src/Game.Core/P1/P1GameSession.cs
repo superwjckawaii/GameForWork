@@ -106,7 +106,7 @@ public sealed record P1GameSessionSnapshot(
 
 public sealed class P1GameSession
 {
-    public const int CurrentFormatVersion = 5;
+    public const int CurrentFormatVersion = 6;
     private readonly P1WorldSimulator _simulator = new(new P1MapAttemptResolver());
     private AssembledCharacterBuild _heroBuild;
 
@@ -228,7 +228,7 @@ public sealed class P1GameSession
             world.Mercenaries.Progression.MigrateToMinimumLevel(CharacterProgression.MaximumLevel);
         }
 
-        bool legacyMigration = snapshot.FormatVersion < CurrentFormatVersion;
+        bool legacyP1Migration = snapshot.FormatVersion < 5;
         return new P1GameSession(
             snapshot.Player,
             snapshot.MercenaryName,
@@ -238,8 +238,8 @@ public sealed class P1GameSession
             passives,
             snapshot.HeavyStrikeSupports,
             snapshot.HeroAi ?? HeroAiConfiguration.Balanced,
-            P2ManagementState.Restore(snapshot.Management, legacyMigration),
-            P2CampaignState.Restore(legacyMigration ? null : snapshot.Campaign, legacyMigration),
+            P2ManagementState.Restore(snapshot.Management, legacyP1Migration),
+            P2CampaignState.Restore(legacyP1Migration ? null : snapshot.Campaign, legacyP1Migration),
             snapshot.Seed,
             snapshot.SimulationSequence,
             snapshot.DebugTwentyTimes);

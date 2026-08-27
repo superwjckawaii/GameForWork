@@ -1,5 +1,6 @@
 using GameForWork.Core.P1.Combat;
 using GameForWork.Core.P1.Items;
+using GameForWork.Core.P3;
 using GameForWork.Core.Simulation;
 
 namespace GameForWork.Core.P1.World;
@@ -196,7 +197,8 @@ public sealed record P1TeamBuild(
     int LifeFlaskUseThresholdBasisPoints = 5_000,
     int AddedPhysicalDamage = 0,
     SkillUseProfile? HeavyStrikeProfile = null,
-    LegendaryRule? WeaponLegendaryRule = null);
+    LegendaryRule? WeaponLegendaryRule = null,
+    int MovementSpeedBasisPoints = 10_000);
 
 public sealed record MapNodeResult(
     int NodeIndex,
@@ -205,12 +207,16 @@ public sealed record MapNodeResult(
     P1BattleOutcome Outcome,
     int Ticks,
     string FinalHash,
-    IReadOnlyList<P1CombatEvent>? Events = null);
+    IReadOnlyList<P1CombatEvent>? Events = null,
+    int WaveIndex = 1,
+    int GridWidth = P3SceneTimeline.LogicalWidth,
+    int GridHeight = P3SceneTimeline.LogicalHeight);
 
 public sealed record MapAttemptResult(
     bool Succeeded,
     IReadOnlyList<MapNodeResult> Nodes,
-    string FailureReason);
+    string FailureReason,
+    P3SceneTimeline? Timeline = null);
 
 public interface IP1MapAttemptResolver
 {
@@ -229,54 +235,21 @@ public sealed class P1MapAttemptResolver : IP1MapAttemptResolver
             throw new ArgumentOutOfRangeException(nameof(attempt));
         }
 
-        var random = new Pcg32(seed);
-        var nodes = new List<MapNodeResult>(5);
-        for (int nodeIndex = 0; nodeIndex < 5; nodeIndex++)
-        {
-            bool boss = nodeIndex == 4;
-            bool elite = !boss && (nodeIndex == 2 || (route == MapRoute.Abyss && nodeIndex == 3));
-            EnemyProfile enemy = boss
-                ? P1Enemies.AbyssWarden
-                : P1Enemies.NormalEnemies[(int)(random.NextUInt() % (uint)P1Enemies.NormalEnemies.Count)];
-            IReadOnlyList<EliteAffix> affixes = elite ? EnemyRules.RollEliteAffixes(random) : [];
-            ScaledEnemy scaled = EnemyRules.Scale(enemy, map.AreaLevel, affixes, route == MapRoute.Abyss);
-            var encounter = new P1EncounterRequest(
-                team.Sheet,
-                team.Weapon,
-                team.HeavyStrike,
-                scaled,
-                team.FlatAccuracy,
-                team.IncreasedDamageBasisPoints,
-                team.IncreasedCriticalChanceBasisPoints,
-                team.IncreasedBleedChanceBasisPoints,
-                team.UseWarCry,
-                team.EchoNotableAllocated,
-                team.DeepWoundAllocated,
-                team.FasterBleedingAllocated,
-                MaximumTicks: 2_400,
-                LifeFlask: team.LifeFlask,
-                IncreasedLifeFlaskEffectBasisPoints: team.IncreasedLifeFlaskEffectBasisPoints,
-                LifeFlaskUseThresholdBasisPoints: team.LifeFlaskUseThresholdBasisPoints,
-                AddedPhysicalDamage: team.AddedPhysicalDamage,
-                HeavyStrikeProfile: team.HeavyStrikeProfile,
-                WeaponLegendaryRule: team.WeaponLegendaryRule);
-            ulong encounterSeed = ((ulong)random.NextUInt() << 32) | random.NextUInt();
-            P1EncounterResult result = new P1EncounterRunner().Run(encounter, encounterSeed);
-            nodes.Add(new MapNodeResult(
-                nodeIndex + 1,
-                enemy.StableId,
-                elite,
-                result.Outcome,
-                result.Ticks,
-                result.FinalHash,
-                result.Events));
-            if (result.Outcome != P1BattleOutcome.HeroVictory)
-            {
-                return new MapAttemptResult(false, nodes, $"node_{nodeIndex + 1}_{result.Outcome}");
-            }
-        }
-
-        return new MapAttemptResult(true, nodes, string.Empty);
+        P3SceneTimeline timeline = P3SceneTimelineBuilder.BuildMapAttempt(team, map, route, attempt, seed);
+        MapNodeResult[] nodes = timeline.Encounters.Select(segment => new MapNodeResult(
+            segment.NodeIndex,
+            segment.EnemyStableId,
+            segment.Elite,
+            segment.Outcome,
+            segment.Ticks,
+            segment.FinalHash,
+            segment.CombatEvents,
+            segment.WaveIndex)).ToArray();
+        bool succeeded = timeline.Outcome == P1BattleOutcome.HeroVictory;
+        string failure = succeeded || nodes.Length == 0
+            ? string.Empty
+            : $"node_{nodes[^1].NodeIndex}_wave_{nodes[^1].WaveIndex}_{timeline.Outcome}";
+        return new MapAttemptResult(succeeded, nodes, failure, timeline);
     }
 }
 
@@ -287,7 +260,8 @@ public sealed record P1MapRunResult(
     int AttemptsUsed,
     int RescueChancesRemaining,
     IReadOnlyList<MapAttemptResult> Attempts,
-    string FailureReason);
+    string FailureReason,
+    long DurationMilliseconds = 0);
 
 public sealed class P1MapRunner(IP1MapAttemptResolver resolver)
 {
@@ -308,7 +282,8 @@ public sealed class P1MapRunner(IP1MapAttemptResolver resolver)
                     attempt,
                     P1MapItem.TotalAttempts - attempt,
                     attempts,
-                    string.Empty);
+                    string.Empty,
+                    attempts.Sum(item => item.Timeline?.DurationMilliseconds ?? 0));
             }
         }
 
@@ -319,6 +294,7 @@ public sealed class P1MapRunner(IP1MapAttemptResolver resolver)
             P1MapItem.TotalAttempts,
             0,
             attempts,
-            attempts[^1].FailureReason);
+            attempts[^1].FailureReason,
+            attempts.Sum(item => item.Timeline?.DurationMilliseconds ?? 0));
     }
 }

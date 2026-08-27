@@ -2,6 +2,7 @@ using System.Text.Json;
 using GameForWork.Core.P1;
 using GameForWork.Core.P1.World;
 using GameForWork.Core.P2;
+using GameForWork.Core.Offline;
 
 namespace GameForWork.Tests;
 
@@ -28,7 +29,7 @@ public sealed class P2CampaignTests
     {
         P1GameSession session = Session();
 
-        P1OfflineResult result = session.AdvanceOffline(3_600_000);
+        P1OfflineResult result = session.AdvanceOffline(OfflineTime.MaximumMilliseconds);
 
         Assert.True(session.Campaign.Completed);
         Assert.True(session.IsExpeditionUnlocked);
@@ -78,7 +79,7 @@ public sealed class P2CampaignTests
         var commands = new P2MapCommandService(session);
 
         Assert.Equal("expedition_locked", commands.AddToQueue(0, ExpeditionTeamKind.Hero).Code);
-        session.AdvanceOffline(3_600_000);
+        session.AdvanceOffline(OfflineTime.MaximumMilliseconds);
         int inventoryBefore = session.World.MapInventory.Count;
         Assert.True(commands.AddToQueue(0, ExpeditionTeamKind.Hero).Succeeded);
         Assert.Equal(inventoryBefore - 1, session.World.MapInventory.Count);
@@ -108,7 +109,7 @@ public sealed class P2CampaignTests
     private static P1GameSession CompletedSession()
     {
         P1GameSession session = Session();
-        session.AdvanceOffline(3_600_000);
+        session.AdvanceOffline(OfflineTime.MaximumMilliseconds);
         return session;
     }
 

@@ -1,9 +1,11 @@
 using System.Security.Cryptography;
 using System.Text;
 using GameForWork.Core.Offline;
+using GameForWork.Core.P1.Combat;
 using GameForWork.Core.P1.Items;
 using GameForWork.Core.P1.Progression;
 using GameForWork.Core.P1.World;
+using GameForWork.Core.P3;
 
 namespace GameForWork.Core.P2;
 
@@ -98,7 +100,8 @@ public sealed record P2CampaignSnapshot(
     bool Completed,
     IReadOnlyList<string> CompletedNodeIds,
     IReadOnlyList<string> ClaimedRewardNodeIds,
-    IReadOnlyList<string> StoryLog);
+    IReadOnlyList<string> StoryLog,
+    P3SceneTimeline? ActiveTimeline = null);
 
 public sealed record P2CampaignAdvanceResult(
     long EffectiveMilliseconds,
@@ -119,6 +122,7 @@ public sealed class P2CampaignState
     public long CurrentNodeElapsedMilliseconds { get; private set; }
     public bool Defeated { get; private set; }
     public bool Completed { get; private set; }
+    public P3SceneTimeline? ActiveTimeline { get; private set; }
     public IReadOnlySet<string> CompletedNodeIds => _completedNodeIds;
     public IReadOnlySet<string> ClaimedRewardNodeIds => _claimedRewardNodeIds;
     public IReadOnlyList<string> StoryLog => _storyLog;
@@ -159,7 +163,8 @@ public sealed class P2CampaignState
         HashSet<string> validIds = P2CampaignCatalog.Nodes.Select(node => node.StableId).ToHashSet(StringComparer.Ordinal);
         if (snapshot.CurrentNodeIndex < 0 || snapshot.CurrentNodeIndex > P2CampaignCatalog.Nodes.Count ||
             snapshot.CurrentNodeElapsedMilliseconds < 0 ||
-            currentNode is not null && snapshot.CurrentNodeElapsedMilliseconds >= currentNode.DurationMilliseconds ||
+            currentNode is not null && snapshot.CurrentNodeElapsedMilliseconds >=
+                (snapshot.ActiveTimeline?.DurationMilliseconds ?? currentNode.DurationMilliseconds) ||
             snapshot.Completed != (snapshot.CurrentNodeIndex == P2CampaignCatalog.Nodes.Count) ||
             snapshot.Defeated && snapshot.Completed || snapshot.CompletedNodeIds is null ||
             snapshot.ClaimedRewardNodeIds is null || snapshot.StoryLog is null ||
@@ -168,7 +173,10 @@ public sealed class P2CampaignState
             snapshot.ClaimedRewardNodeIds.Any(id => !snapshot.CompletedNodeIds.Contains(id, StringComparer.Ordinal)) ||
             snapshot.CompletedNodeIds.Distinct(StringComparer.Ordinal).Count() != snapshot.CurrentNodeIndex ||
             P2CampaignCatalog.Nodes.Take(snapshot.CurrentNodeIndex)
-                .Any(node => !snapshot.CompletedNodeIds.Contains(node.StableId, StringComparer.Ordinal)))
+                .Any(node => !snapshot.CompletedNodeIds.Contains(node.StableId, StringComparer.Ordinal)) ||
+            snapshot.ActiveTimeline is not null &&
+            (currentNode is null || currentNode.Kind == CampaignNodeKind.StoryEvent ||
+             snapshot.ActiveTimeline.StableId != $"campaign:{currentNode.StableId}"))
         {
             throw new InvalidDataException("Campaign snapshot is invalid.");
         }
@@ -179,6 +187,7 @@ public sealed class P2CampaignState
             CurrentNodeElapsedMilliseconds = snapshot.CurrentNodeElapsedMilliseconds,
             Defeated = snapshot.Defeated,
             Completed = snapshot.Completed,
+            ActiveTimeline = snapshot.ActiveTimeline,
         };
         state._completedNodeIds.UnionWith(snapshot.CompletedNodeIds);
         state._claimedRewardNodeIds.UnionWith(snapshot.ClaimedRewardNodeIds);
@@ -193,7 +202,21 @@ public sealed class P2CampaignState
         Completed,
         _completedNodeIds.Order(StringComparer.Ordinal).ToArray(),
         _claimedRewardNodeIds.Order(StringComparer.Ordinal).ToArray(),
-        _storyLog.ToArray());
+        _storyLog.ToArray(),
+        ActiveTimeline);
+
+    internal void BeginTimeline(P3SceneTimeline timeline)
+    {
+        ArgumentNullException.ThrowIfNull(timeline);
+        CampaignNodeDefinition? currentNode = CurrentNode;
+        if (Completed || currentNode is null || currentNode.Kind == CampaignNodeKind.StoryEvent ||
+            timeline.StableId != $"campaign:{currentNode.StableId}")
+        {
+            throw new InvalidOperationException("The timeline does not match the current campaign node.");
+        }
+
+        ActiveTimeline = timeline;
+    }
 
     public void ResumeAfterDefeat()
     {
@@ -220,6 +243,7 @@ public sealed class P2CampaignState
         AddLog($"完成：第 {node.Act} 幕 · {node.DisplayName}。{node.StoryText}");
         CurrentNodeIndex++;
         CurrentNodeElapsedMilliseconds = 0;
+        ActiveTimeline = null;
         Defeated = false;
         if (CurrentNodeIndex >= P2CampaignCatalog.Nodes.Count)
         {
@@ -237,6 +261,7 @@ public sealed class P2CampaignState
     {
         Defeated = true;
         CurrentNodeElapsedMilliseconds = 0;
+        ActiveTimeline = null;
         AddLog($"主线推进停止：{reason}。请调整构筑后继续。");
     }
 
@@ -279,19 +304,43 @@ public sealed class P2CampaignSimulator
         while (remaining > 0 && !campaign.Completed && !campaign.Defeated)
         {
             CampaignNodeDefinition node = campaign.CurrentNode!;
-            long needed = node.DurationMilliseconds - campaign.CurrentNodeElapsedMilliseconds;
+            long duration;
+            if (node.Kind == CampaignNodeKind.StoryEvent)
+            {
+                duration = node.DurationMilliseconds;
+            }
+            else
+            {
+                if (campaign.ActiveTimeline is null)
+                {
+                    P1TeamBuild currentBuild = world.Hero.Build with
+                    {
+                        Sheet = world.Hero.Build.Sheet with { Level = world.Hero.Progression.Level },
+                    };
+                    world.Hero.UpdateBuild(currentBuild);
+                    campaign.BeginTimeline(P3SceneTimelineBuilder.BuildCampaign(
+                        currentBuild,
+                        node,
+                        DeriveNodeSeed(seed, node)));
+                }
+
+                duration = campaign.ActiveTimeline!.DurationMilliseconds;
+            }
+
+            long needed = duration - campaign.CurrentNodeElapsedMilliseconds;
             long step = Math.Min(remaining, needed);
             campaign.AddElapsed(step);
             suppliesProduced = checked(suppliesProduced + world.Economy.AdvanceProduction(step));
             remaining -= step;
-            if (campaign.CurrentNodeElapsedMilliseconds < node.DurationMilliseconds)
+            if (campaign.CurrentNodeElapsedMilliseconds < duration)
             {
                 break;
             }
 
-            if (node.Kind != CampaignNodeKind.StoryEvent && !CanDefeat(world.Hero.Build, node))
+            if (campaign.ActiveTimeline is not null &&
+                campaign.ActiveTimeline.Outcome != P1BattleOutcome.HeroVictory)
             {
-                campaign.RecordDefeat($"{node.DisplayName} 的危险度超过当前构筑承受能力");
+                campaign.RecordDefeat($"{node.DisplayName} 战斗失败：{campaign.ActiveTimeline.Outcome}");
                 break;
             }
 
@@ -323,8 +372,13 @@ public sealed class P2CampaignSimulator
         ulong seed)
     {
         CampaignNodeDefinition node = P2CampaignCatalog.Get(stableId);
-        if (!campaign.CompletedNodeIds.Contains(stableId) || node.Kind == CampaignNodeKind.StoryEvent ||
-            !CanDefeat(world.Hero.Build, node))
+        if (!campaign.CompletedNodeIds.Contains(stableId) || node.Kind == CampaignNodeKind.StoryEvent)
+        {
+            return false;
+        }
+
+        P3SceneTimeline replay = P3SceneTimelineBuilder.BuildCampaign(world.Hero.Build, node, seed);
+        if (replay.Outcome != P1BattleOutcome.HeroVictory)
         {
             return false;
         }
@@ -341,15 +395,6 @@ public sealed class P2CampaignSimulator
         return true;
     }
 
-    private static bool CanDefeat(P1TeamBuild build, CampaignNodeDefinition node)
-    {
-        int life = build.Sheet.MaximumLife().Value;
-        int averageWeaponDamage = (build.Weapon.MinimumPhysicalDamage + build.Weapon.MaximumPhysicalDamage) / 2;
-        int requiredLife = 90 + (node.Act - 1) * 4 + (node.Kind == CampaignNodeKind.ActBoss ? 5 : 0);
-        int requiredDamage = 3 + node.Act + (node.Kind == CampaignNodeKind.ActBoss ? 1 : 0);
-        return life >= requiredLife && averageWeaponDamage + build.AddedPhysicalDamage >= requiredDamage;
-    }
-
     private static void GrantRewards(
         P2CampaignState campaign,
         P1WorldState world,
@@ -361,6 +406,10 @@ public sealed class P2CampaignSimulator
         int targetLevel = Math.Min(CharacterProgression.MaximumLevel, 1 + absoluteIndex * 2);
         int targetExperience = CharacterProgression.CumulativeExperienceForLevel(targetLevel);
         world.Hero.Progression.AddExperience(Math.Max(0, targetExperience - world.Hero.Progression.Experience));
+        world.Hero.UpdateBuild(world.Hero.Build with
+        {
+            Sheet = world.Hero.Build.Sheet with { Level = world.Hero.Progression.Level },
+        });
         management.AddSkillExperience(60 + node.Act * 10);
         int gold = 4 * node.Act + (node.Kind == CampaignNodeKind.ActBoss ? 12 : 0);
         int scraps = node.Kind is CampaignNodeKind.EliteCombat or CampaignNodeKind.ActBoss ? node.Act : 0;
@@ -412,7 +461,14 @@ public sealed class P2CampaignSimulator
     {
         string source = $"{seed}|{elapsed}|{campaign.CurrentNodeIndex}|{campaign.CurrentNodeElapsedMilliseconds}|" +
             $"{campaign.Defeated}|{campaign.Completed}|{world.Hero.Progression.Level}|{world.Hero.Progression.Experience}|" +
-            $"{world.Storage.Count}|{world.MapInventory.Count}|{world.Economy.Gold}|{world.Economy.IronScraps}";
+            $"{world.Storage.Count}|{world.MapInventory.Count}|{world.Economy.Gold}|{world.Economy.IronScraps}|" +
+            campaign.ActiveTimeline?.FinalHash;
         return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(source)));
+    }
+
+    private static ulong DeriveNodeSeed(ulong seed, CampaignNodeDefinition node)
+    {
+        byte[] hash = SHA256.HashData(Encoding.UTF8.GetBytes($"{seed}|{node.StableId}"));
+        return BitConverter.ToUInt64(hash, 0);
     }
 }

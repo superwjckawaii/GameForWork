@@ -51,7 +51,7 @@ public sealed class P1WorldTests
     }
 
     [Fact]
-    public void FormalMapResolverRunsFiveNodesEndingAtBoss()
+    public void FormalMapResolverRunsAcrossEightGridNodesEndingAtBoss()
     {
         var powerful = new P1TeamBuild(
             new CharacterSheet(
@@ -67,7 +67,10 @@ public sealed class P1WorldTests
             new P1MapItem("formal", 1), MapRoute.Safe, powerful, 1, 42);
 
         Assert.True(result.Succeeded);
-        Assert.Equal(5, result.Nodes.Count);
+        Assert.Equal(8, result.Timeline!.NodeCount);
+        Assert.Equal(8, result.Nodes.Select(node => node.NodeIndex).Distinct().Count());
+        Assert.Equal(12, result.Timeline.GridWidth);
+        Assert.Equal(24, result.Timeline.GridHeight);
         Assert.Equal(P1Enemies.AbyssWarden.StableId, result.Nodes[^1].EnemyStableId);
         Assert.All(result.Nodes, node => Assert.Equal(P1BattleOutcome.HeroVictory, node.Outcome));
     }

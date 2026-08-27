@@ -56,7 +56,10 @@ public sealed record P1EncounterRequest(
     int LifeFlaskUseThresholdBasisPoints = 5_000,
     int AddedPhysicalDamage = 0,
     SkillUseProfile? HeavyStrikeProfile = null,
-    LegendaryRule? WeaponLegendaryRule = null);
+    LegendaryRule? WeaponLegendaryRule = null,
+    int? InitialHeroLife = null,
+    int? InitialHeroMana = null,
+    int? InitialHeroShield = null);
 
 public sealed record P1EncounterResult(
     ulong Seed,
@@ -76,7 +79,11 @@ public sealed class P1EncounterRunner
         ArgumentNullException.ThrowIfNull(request);
         Validate(request);
         var random = new Pcg32(seed);
-        var heroResources = new ResourceState(request.Hero);
+        var heroResources = new ResourceState(
+            request.Hero,
+            request.InitialHeroLife,
+            request.InitialHeroMana,
+            request.InitialHeroShield);
         LifeFlaskState? lifeFlask = request.LifeFlask is null ? null : new LifeFlaskState(request.LifeFlask);
         SkillUseProfile heavyStrike = request.HeavyStrikeProfile ?? SkillRules.BuildHeavyStrike(
                 request.HeavyStrike,

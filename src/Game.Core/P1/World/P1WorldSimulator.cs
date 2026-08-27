@@ -32,12 +32,17 @@ public sealed class P1TeamExpeditionState
     public P1MapRunResult? LastRun { get; private set; }
     public ExpeditionBackpack Backpack { get; } = new();
     public P1MapItem? ActiveMap { get; private set; }
+    public P1MapRunResult? ActiveRun { get; private set; }
     public MapRoute ActiveRoute { get; private set; }
     public long RemainingMapTimeMilliseconds { get; private set; }
     public int ConsecutiveFailures { get; private set; }
     public int MapsRunSincePolicyApplied { get; private set; }
 
-    public void StartMap(P1MapItem map, MapRoute route, long durationMilliseconds)
+    public void StartMap(
+        P1MapItem map,
+        MapRoute route,
+        long durationMilliseconds,
+        P1MapRunResult? plannedRun = null)
     {
         if (ActiveMap is not null || durationMilliseconds <= 0)
         {
@@ -46,6 +51,7 @@ public sealed class P1TeamExpeditionState
 
         ActiveMap = map;
         ActiveRoute = route;
+        ActiveRun = plannedRun;
         ActivePolicySnapshot = Policy;
         MapsRunSincePolicyApplied++;
         RemainingMapTimeMilliseconds = durationMilliseconds;
@@ -65,6 +71,7 @@ public sealed class P1TeamExpeditionState
     {
         ExpeditionPolicy runPolicy = ActivePolicySnapshot ?? Policy;
         ActiveMap = null;
+        ActiveRun = null;
         RemainingMapTimeMilliseconds = 0;
         ActivePolicySnapshot = null;
         LastRun = run;
@@ -179,10 +186,24 @@ public sealed class P1TeamExpeditionState
         MapsRunSincePolicyApplied = snapshot.MapsRunSincePolicyApplied;
         if (snapshot.ActiveMap is not null)
         {
-            StartMap(snapshot.ActiveMap, snapshot.ActiveRoute, snapshot.RemainingMapTimeMilliseconds);
+            StartMap(snapshot.ActiveMap, snapshot.ActiveRoute, snapshot.RemainingMapTimeMilliseconds, snapshot.ActiveRun);
             ActivePolicySnapshot = snapshot.ActivePolicySnapshot ?? Policy;
             MapsRunSincePolicyApplied = snapshot.MapsRunSincePolicyApplied;
         }
+    }
+
+    public void AttachActiveRun(P1MapRunResult run)
+    {
+        ArgumentNullException.ThrowIfNull(run);
+        if (ActiveMap is null || run.Map.InstanceId != ActiveMap.InstanceId)
+        {
+            throw new InvalidOperationException("The planned run does not belong to the active map.");
+        }
+
+        ActiveRun = run;
+        RemainingMapTimeMilliseconds = Math.Min(
+            RemainingMapTimeMilliseconds,
+            Math.Max(50, run.DurationMilliseconds));
     }
 
     private void CommitPendingPolicy()
@@ -259,9 +280,6 @@ public sealed record P1OfflineResult(
 
 public sealed class P1WorldSimulator(IP1MapAttemptResolver attemptResolver)
 {
-    private const long SafeMapDurationMilliseconds = 90_000;
-    private const long AbyssMapDurationMilliseconds = 120_000;
-
     public P1OfflineResult Simulate(P1WorldState state, long elapsedMilliseconds, ulong seed)
     {
         ArgumentNullException.ThrowIfNull(state);
@@ -274,6 +292,14 @@ public sealed class P1WorldSimulator(IP1MapAttemptResolver attemptResolver)
         int suppliesProduced = 0;
         foreach (P1TeamExpeditionState team in state.Teams.Where(team => team.ActiveMap is not null))
         {
+            if (team.ActiveRun is null)
+            {
+                ulong activeSeed = DeriveExpeditionSeed(seed, team, team.ActiveMap!, team.ActiveRoute);
+                P1MapRunResult restoredRun = new P1MapRunner(attemptResolver).Run(
+                    team.ActiveMap!, team.ActiveRoute, team.Build, activeSeed);
+                team.AttachActiveRun(restoredRun);
+            }
+
             active[team.Kind] = new ActiveExpedition(
                 team,
                 team.ActiveMap!,
@@ -283,7 +309,7 @@ public sealed class P1WorldSimulator(IP1MapAttemptResolver attemptResolver)
 
         if (effective > 0)
         {
-            StartReadyTeams(state, active, now);
+            StartReadyTeams(state, active, now, seed);
         }
 
         while (now < effective)
@@ -317,7 +343,7 @@ public sealed class P1WorldSimulator(IP1MapAttemptResolver attemptResolver)
 
             if (now < effective)
             {
-                StartReadyTeams(state, active, now);
+                StartReadyTeams(state, active, now, seed);
             }
             bool noPendingMaps = state.Teams.All(team => team.Queue.Count == 0 || team.IsStopped);
             if (active.Count == 0 && noPendingMaps)
@@ -357,10 +383,11 @@ public sealed class P1WorldSimulator(IP1MapAttemptResolver attemptResolver)
             Hash(state, effective, seed));
     }
 
-    private static void StartReadyTeams(
+    private void StartReadyTeams(
         P1WorldState state,
         IDictionary<ExpeditionTeamKind, ActiveExpedition> active,
-        long now)
+        long now,
+        ulong worldSeed)
     {
         foreach (P1TeamExpeditionState team in state.Teams)
         {
@@ -388,8 +415,14 @@ public sealed class P1WorldSimulator(IP1MapAttemptResolver attemptResolver)
             }
 
             MapRoute route = team.Policy.SelectUnattendedRoute();
-            long duration = route == MapRoute.Safe ? SafeMapDurationMilliseconds : AbyssMapDurationMilliseconds;
-            team.StartMap(map, route, duration);
+            ulong runSeed = DeriveExpeditionSeed(worldSeed, team, map, route);
+            P1MapRunResult plannedRun = new P1MapRunner(attemptResolver).Run(map, route, team.Build, runSeed);
+            // Third-party/test resolvers created before P3 do not provide a scene timeline. Keep their
+            // historical timing contract while production runs always use the authoritative timeline.
+            long duration = plannedRun.DurationMilliseconds > 0
+                ? plannedRun.DurationMilliseconds
+                : route == MapRoute.Abyss ? 120_000 : 90_000;
+            team.StartMap(map, route, duration, plannedRun);
             active[team.Kind] = new ActiveExpedition(team, map, route, checked(now + duration));
         }
     }
@@ -397,11 +430,8 @@ public sealed class P1WorldSimulator(IP1MapAttemptResolver attemptResolver)
     private void ResolveExpedition(P1WorldState state, ActiveExpedition expedition, ulong seed)
     {
         ExpeditionPolicy runPolicy = expedition.Team.ActivePolicySnapshot ?? expedition.Team.Policy;
-        P1MapRunResult run = new P1MapRunner(attemptResolver).Run(
-            expedition.Map,
-            expedition.Route,
-            expedition.Team.Build,
-            seed);
+        P1MapRunResult run = expedition.Team.ActiveRun ?? new P1MapRunner(attemptResolver).Run(
+            expedition.Map, expedition.Route, expedition.Team.Build, seed);
         expedition.Team.RecordRun(run);
         if (!run.Succeeded)
         {
@@ -451,9 +481,15 @@ public sealed class P1WorldSimulator(IP1MapAttemptResolver attemptResolver)
     }
 
     private static ulong DeriveExpeditionSeed(ulong seed, ActiveExpedition expedition)
+        => DeriveExpeditionSeed(seed, expedition.Team, expedition.Map, expedition.Route);
+
+    private static ulong DeriveExpeditionSeed(
+        ulong seed,
+        P1TeamExpeditionState team,
+        P1MapItem map,
+        MapRoute route)
     {
-        string identity = $"{seed}|{expedition.Team.Kind}|{expedition.Map.InstanceId}|" +
-            $"{expedition.Map.AreaLevel}|{expedition.Route}";
+        string identity = $"{seed}|{team.Kind}|{map.InstanceId}|{map.AreaLevel}|{route}";
         byte[] hash = SHA256.HashData(Encoding.UTF8.GetBytes(identity));
         return BitConverter.ToUInt64(hash, 0);
     }

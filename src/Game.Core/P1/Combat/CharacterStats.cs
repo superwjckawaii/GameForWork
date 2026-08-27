@@ -124,15 +124,19 @@ public sealed class ResourceState
     private int _manaRecoveryRemainder;
     private int _shieldRecoveryRemainder;
 
-    public ResourceState(CharacterSheet sheet)
+    public ResourceState(
+        CharacterSheet sheet,
+        int? initialLife = null,
+        int? initialMana = null,
+        int? initialShield = null)
     {
         Sheet = sheet;
         MaximumLife = sheet.MaximumLife().Value;
         MaximumMana = sheet.MaximumMana().Value;
         MaximumShield = sheet.MaximumShield().Value;
-        Life = MaximumLife;
-        Mana = MaximumMana;
-        Shield = MaximumShield;
+        Life = Math.Clamp(initialLife ?? MaximumLife, 0, MaximumLife);
+        Mana = Math.Clamp(initialMana ?? MaximumMana, 0, MaximumMana);
+        Shield = Math.Clamp(initialShield ?? MaximumShield, 0, MaximumShield);
     }
 
     public CharacterSheet Sheet { get; }

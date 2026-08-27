@@ -37,7 +37,8 @@ public sealed record P1TeamExpeditionSnapshot(
     int ConsecutiveFailures = 0,
     int MapsRunSincePolicyApplied = 0,
     ExpeditionPolicy? ActivePolicySnapshot = null,
-    ExpeditionPolicy? PendingPolicy = null);
+    ExpeditionPolicy? PendingPolicy = null,
+    P1MapRunResult? ActiveRun = null);
 
 public sealed record P1WorldSnapshot(
     TownEconomySnapshot Economy,
@@ -132,5 +133,6 @@ public static class P1WorldSnapshots
         team.ConsecutiveFailures,
         team.MapsRunSincePolicyApplied,
         team.ActivePolicySnapshot,
-        team.PendingPolicy);
+        team.PendingPolicy,
+        team.ActiveRun);
 }
