@@ -12,13 +12,23 @@
 - 首发平台：Windows 10/11 x64。
 - 首版不支持 Windows 32 位、Windows ARM、macOS、Linux、移动端或 Web。
 
-用户提供的 Godot 可执行文件目标路径为：
+已验证的 Godot 图形可执行文件路径为：
 
 ```text
-D:\OtherTools\Godot\_v4.7.2-stable\_mono_win64\Godot\_v4.7.2-stable\_mono_win64\Godot\_v4.7.2-stable\_mono_win64.exe
+D:\OtherTools\Godot_v4.7.2-stable_mono_win64\Godot_v4.7.2-stable_mono_win64\Godot_v4.7.2-stable_mono_win64.exe
 ```
 
-2026-08-27 本地只读检查中，该路径及 `D:\OtherTools\Godot` 根目录均不存在，因此目前只记录为目标路径，尚未验证实际 Godot 版本。
+用于命令行和 CI 检查的控制台可执行文件路径为：
+
+```text
+D:\OtherTools\Godot_v4.7.2-stable_mono_win64\Godot_v4.7.2-stable_mono_win64\Godot_v4.7.2-stable_mono_win64_console.exe
+```
+
+2026-08-27 本地执行 `--version` 已验证版本为：
+
+```text
+4.7.2.stable.mono.official.ed1daf0bf
+```
 
 当前已验证的本地依赖：
 
@@ -140,7 +150,17 @@ dlc01.class.example
 - 每个正式版本记录内容版本、存档版本和 Git Commit。
 - PNG、音频和大型美术源文件使用 Git LFS。
 
-## 9. 自动化状态
+## 9. GitHub Actions 自动检查
 
-是否启用 GitHub Actions 尚未确定。在决定前，不创建远端自动化工作流。
+项目确定从首个代码工程开始启用 GitHub Actions。初期只执行：
 
+1. 编译纯 C# 核心与 Godot C# 工程。
+2. 执行 `dotnet test`。
+3. 使用 Godot 控制台版本进行无界面启动检查。
+
+约束：
+
+- 在推送和 Pull Request 时自动执行。
+- 自动检查不修改代码、不发布正式版本。
+- Windows ZIP 导出暂不加入每次推送的默认流程。
+- 工作流随首个可编译工程一起创建，避免当前纯文档仓库产生必然失败的空检查。

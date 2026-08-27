@@ -16,9 +16,8 @@
 
 ## 3. 技术栈
 
-- 用户提供的 Godot 4.7.2 .NET 路径当前不存在，需要在搭建工程前确认实际路径。
-- 确认 Godot 后创建并固定合适的 .NET SDK `global.json`。
-- 是否启用 GitHub Actions 自动运行测试并构建 Windows 包。
+- 已验证 Godot 4.7.2 .NET 实际路径；创建工程时固定合适的 .NET SDK `global.json`。
+- 首个代码工程需要同时创建 GitHub Actions：编译、`dotnet test` 和 Godot 无界面启动检查。
 - SQLite 的具体 C# 驱动与版本。
 - Steam Cloud 等云存档是否接入。
 - 最终性能目标、内存目标、最小硬件要求与耗电指标。
