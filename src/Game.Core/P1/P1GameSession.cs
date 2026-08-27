@@ -3,6 +3,7 @@ using GameForWork.Core.P1.Items;
 using GameForWork.Core.P1.Progression;
 using GameForWork.Core.P1.World;
 using GameForWork.Core.P2;
+using GameForWork.Core.P4;
 
 namespace GameForWork.Core.P1;
 
@@ -106,7 +107,7 @@ public sealed record P1GameSessionSnapshot(
 
 public sealed class P1GameSession
 {
-    public const int CurrentFormatVersion = 6;
+    public const int CurrentFormatVersion = 7;
     private readonly P1WorldSimulator _simulator = new(new P1MapAttemptResolver());
     private AssembledCharacterBuild _heroBuild;
 
@@ -175,7 +176,11 @@ public sealed class P1GameSession
             passives,
             new SkillConfiguration(P1SkillIds.HeavyStrike, SkillSupport.Bleed));
         P1MercenaryProfile mercenary = P1MercenaryFactory.GenerateCantor(seed ^ 0xa5a5a5a5UL);
-        var economy = new TownEconomyState(memoryAshes: 0);
+        var economy = new TownEconomyState(
+            memoryAshes: 0,
+            metalCurrencies: Enum.GetValues<MetalCurrencyKind>().ToDictionary(
+                kind => kind,
+                kind => kind is MetalCurrencyKind.TemperingIron or MetalCurrencyKind.WardSteel or MetalCurrencyKind.VitalSilver ? 3 : 0));
         var world = new P1WorldState(
             ToTeamBuild(build, SkillSupport.Bleed, HeroAiConfiguration.Balanced),
             mercenary.CreateTeamBuild(),
@@ -226,6 +231,12 @@ public sealed class P1GameSession
         {
             world.Hero.Progression.MigrateToMinimumLevel(CharacterProgression.MaximumLevel);
             world.Mercenaries.Progression.MigrateToMinimumLevel(CharacterProgression.MaximumLevel);
+            if (snapshot.FormatVersion < 7)
+            {
+                world.Economy.AddMetal(MetalCurrencyKind.TemperingIron, 3);
+                world.Economy.AddMetal(MetalCurrencyKind.WardSteel, 3);
+                world.Economy.AddMetal(MetalCurrencyKind.VitalSilver, 3);
+            }
         }
 
         bool legacyP1Migration = snapshot.FormatVersion < 5;
@@ -646,7 +657,13 @@ public sealed class P1GameSession
         AddedPhysicalDamage: build.AddedPhysicalDamage,
         HeavyStrikeProfile: build.HeavyStrike,
         WeaponLegendaryRule: build.Equipment.WeaponLegendaryRule,
-        MovementSpeedBasisPoints: checked(10_000 + build.Passives.IncreasedMovementSpeedBasisPoints)) with
+        MovementSpeedBasisPoints: checked(10_000 + build.Passives.IncreasedMovementSpeedBasisPoints),
+        ActiveSkills:
+        [
+            new SkillConfiguration(P1SkillIds.HeavyStrike, supports),
+            new SkillConfiguration(P1SkillIds.EarthCleave, SkillSupport.IncreasedArea),
+            new SkillConfiguration(P1SkillIds.SpiritBlade, SkillSupport.Chain),
+        ]) with
         {
             AiSummary = $"{ai.Preset} · {(ai.MatchMode == AiRuleMatchMode.All ? "全部满足" : "任一满足")}：" +
                 $"敌人≥{ai.MinimumEnemyCount}、稀有度 {ai.EnemyRarity}、距离≤{ai.MaximumEnemyDistance}、" +

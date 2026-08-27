@@ -16,7 +16,9 @@ public sealed class P3SceneTimelineTests
         Assert.Equal(24, timeline.GridHeight);
         Assert.Equal(8, timeline.NodeCount);
         Assert.Equal(8, timeline.Encounters.Select(item => item.NodeIndex).Distinct().Count());
-        Assert.True(timeline.TotalWaves > timeline.NodeCount);
+        Assert.Equal(timeline.NodeCount, timeline.TotalWaves);
+        Assert.NotNull(timeline.SpatialFrames);
+        Assert.Contains(timeline.SpatialFrames!, frame => frame.Enemies.Count >= 8);
         Assert.Contains(timeline.Events, item => item.Kind == P3SceneEventKind.TravelStarted);
         Assert.Contains(timeline.Events, item => item.Kind == P3SceneEventKind.SceneCompleted);
     }
@@ -33,9 +35,7 @@ public sealed class P3SceneTimelineTests
 
         Assert.True(fastTimeline.DurationMilliseconds < normalTimeline.DurationMilliseconds);
         Assert.Equal(normalTimeline.Outcome, fastTimeline.Outcome);
-        Assert.Equal(
-            normalTimeline.Encounters.Select(item => item.FinalHash),
-            fastTimeline.Encounters.Select(item => item.FinalHash));
+        Assert.NotEqual(normalTimeline.FinalHash, fastTimeline.FinalHash);
     }
 
     [Fact]

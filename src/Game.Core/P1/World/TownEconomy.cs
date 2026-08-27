@@ -1,4 +1,5 @@
 using GameForWork.Core.P1.Items;
+using GameForWork.Core.P4;
 
 namespace GameForWork.Core.P1.World;
 
@@ -14,7 +15,8 @@ public sealed class TownEconomyState
         int memoryAshes = 5,
         int wardenMarks = 0,
         int skillStones = 0,
-        long supplyProductionRemainderMilliseconds = 0)
+        long supplyProductionRemainderMilliseconds = 0,
+        IReadOnlyDictionary<MetalCurrencyKind, int>? metalCurrencies = null)
     {
         if (expeditionSupplies < 0 || gold < 0 || ironScraps < 0 || memoryAshes < 0 ||
             wardenMarks < 0 || skillStones < 0 || supplyProductionRemainderMilliseconds is < 0 or >= SupplyProductionIntervalMilliseconds)
@@ -28,8 +30,14 @@ public sealed class TownEconomyState
         MemoryAshes = memoryAshes;
         WardenMarks = wardenMarks;
         SkillStones = skillStones;
+        foreach (MetalCurrencyKind kind in Enum.GetValues<MetalCurrencyKind>())
+        {
+            _metalCurrencies[kind] = Math.Max(0, metalCurrencies?.GetValueOrDefault(kind) ?? 0);
+        }
         _supplyProductionRemainderMilliseconds = supplyProductionRemainderMilliseconds;
     }
+
+    private readonly Dictionary<MetalCurrencyKind, int> _metalCurrencies = [];
 
     public int ExpeditionSupplies { get; private set; }
     public int Gold { get; private set; }
@@ -38,6 +46,27 @@ public sealed class TownEconomyState
     public int WardenMarks { get; private set; }
     public int SkillStones { get; private set; }
     public long SupplyProductionRemainderMilliseconds => _supplyProductionRemainderMilliseconds;
+    public IReadOnlyDictionary<MetalCurrencyKind, int> MetalCurrencies => _metalCurrencies;
+
+    public int MetalAmount(MetalCurrencyKind kind) => _metalCurrencies.GetValueOrDefault(kind);
+
+    public void AddMetal(MetalCurrencyKind kind, int amount)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(amount);
+        _metalCurrencies[kind] = checked(MetalAmount(kind) + amount);
+    }
+
+    public bool TrySpendMetal(MetalCurrencyKind kind, int amount)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(amount);
+        if (MetalAmount(kind) < amount)
+        {
+            return false;
+        }
+
+        _metalCurrencies[kind] -= amount;
+        return true;
+    }
 
     public bool TryConsumeMapSupply()
     {
@@ -69,6 +98,10 @@ public sealed class TownEconomyState
         MemoryAshes = checked(MemoryAshes + rewards.MemoryAshes);
         WardenMarks = checked(WardenMarks + rewards.WardenMarks);
         SkillStones = checked(SkillStones + rewards.SkillStones);
+        foreach (MetalCurrencyStack stack in rewards.Metals ?? [])
+        {
+            AddMetal(stack.Kind, stack.Amount);
+        }
     }
 
     public void AddDispositionProceeds(int gold, int ironScraps)

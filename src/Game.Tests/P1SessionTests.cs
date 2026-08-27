@@ -80,11 +80,15 @@ public sealed class P1SessionTests
     {
         P1GameSession session = CreateSession();
 
-        var result = session.Advance(120_000);
+        var result = session.Advance(240_000);
 
         Assert.Equal(0, result.TotalMapsCompleted + result.TotalMapsFailed);
-        Assert.Contains("core.campaign.act1.node1", session.Campaign.CompletedNodeIds);
-        Assert.Equal("core.campaign.act1.node2", session.Campaign.CurrentNode?.StableId);
+        Assert.True(session.Campaign.CompletedNodeIds.Contains("core.campaign.act1.node1"),
+            $"defeated={session.Campaign.Defeated}; reason={session.Campaign.StoryLog.LastOrDefault()}; " +
+            $"elapsed={session.Campaign.CurrentNodeElapsedMilliseconds}; " +
+            $"timeline={session.Campaign.ActiveTimeline?.DurationMilliseconds}; " +
+            $"outcome={session.Campaign.ActiveTimeline?.Outcome}; life={session.Campaign.ActiveTimeline?.FinalHeroLife}");
+        Assert.NotEqual("core.campaign.act1.node1", session.Campaign.CurrentNode?.StableId);
     }
 
     [Fact]

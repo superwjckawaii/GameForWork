@@ -1,5 +1,6 @@
 using GameForWork.Core.P1.Items;
 using GameForWork.Core.Simulation;
+using GameForWork.Core.P4;
 
 namespace GameForWork.Core.P1.World;
 
@@ -8,7 +9,8 @@ public sealed record MapStackableRewards(
     int IronScraps,
     int MemoryAshes,
     int WardenMarks,
-    int SkillStones);
+    int SkillStones,
+    IReadOnlyList<MetalCurrencyStack>? Metals = null);
 
 public sealed record P1MapRewards(
     int Experience,
@@ -96,11 +98,18 @@ public static class P1MapRewardGenerator
             }
         }
 
+        MetalCurrencyKind commonMetal = (MetalCurrencyKind)Next(random, 3);
+        var metals = new List<MetalCurrencyStack> { new(commonMetal, 1 + Next(random, 2)) };
+        if (random.NextBasisPoints() < 1_000)
+        {
+            metals.Add(new MetalCurrencyStack(MetalCurrencyKind.ChaosGold, 1));
+        }
+
         return new P1MapRewards(
             ExperiencePerMap,
             equipment,
             maps,
-            new MapStackableRewards(gold, scraps, MemoryAshes: 1, WardenMarks: 1, skillStones),
+            new MapStackableRewards(gold, scraps, MemoryAshes: 1, WardenMarks: 1, skillStones, metals),
             legendary);
     }
 

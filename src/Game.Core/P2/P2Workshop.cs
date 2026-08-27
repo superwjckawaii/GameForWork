@@ -1,5 +1,6 @@
 using GameForWork.Core.P1.Items;
 using GameForWork.Core.P1.World;
+using GameForWork.Core.P4;
 
 namespace GameForWork.Core.P2;
 
@@ -16,7 +17,9 @@ public sealed record P2WorkshopPreview(
     ItemInstance? Result,
     int GoldCost,
     int IronScrapCost,
-    string Summary);
+    string Summary,
+    MetalCurrencyKind? MetalCostKind = null,
+    int MetalCost = 0);
 
 public static class P2Workshop
 {
@@ -40,9 +43,17 @@ public static class P2Workshop
     public static P2WorkshopPreview Craft(TownEconomyState economy, ItemInstance item, P2WorkshopRecipe recipe)
     {
         P2WorkshopPreview preview = Preview(item, recipe);
-        if (!preview.Succeeded || !economy.TryPay(preview.GoldCost, preview.IronScrapCost))
+        if (!preview.Succeeded)
         {
-            return preview.Succeeded ? preview with { Succeeded = false, FailureReason = "insufficient_materials" } : preview;
+            return preview;
+        }
+
+        bool paid = preview.MetalCostKind is MetalCurrencyKind metal
+            ? economy.TrySpendMetal(metal, preview.MetalCost)
+            : economy.TryPay(preview.GoldCost, preview.IronScrapCost);
+        if (!paid)
+        {
+            return preview with { Succeeded = false, FailureReason = "insufficient_materials" };
         }
 
         return preview;
@@ -55,7 +66,8 @@ public static class P2Workshop
             return Fail("weapon_required", "物理锻造只适用于双手武器。");
         }
 
-        return AddCrafted(item, ItemModifierKind.IncreasedPhysicalDamageBasisPoints, 2_000, 50, 10, "物理伤害增加 20%");
+        return AddCrafted(item, ItemModifierKind.IncreasedPhysicalDamageBasisPoints, 2_000,
+            MetalCurrencyKind.TemperingIron, 1, "物理伤害增加 20%");
     }
 
     private static P2WorkshopPreview Defense(ItemInstance item)
@@ -67,19 +79,19 @@ public static class P2Workshop
             : ItemModifierKind.None;
         return kind == ItemModifierKind.None
             ? Fail("defense_required", "加固只适用于具有护甲、闪避或护盾的装备。")
-            : AddCrafted(item, kind, 1_500, 35, 8, "基础防御增加 15%");
+            : AddCrafted(item, kind, 1_500, MetalCurrencyKind.WardSteel, 1, "基础防御增加 15%");
     }
 
     private static P2WorkshopPreview Vitality(ItemInstance item) => item.Base.Category == ItemCategory.TwoHandWeapon
         ? Fail("accessory_or_armor_required", "生命刻印不适用于武器。")
-        : AddCrafted(item, ItemModifierKind.FlatMaximumLife, 8, 30, 6, "最大生命 +8");
+        : AddCrafted(item, ItemModifierKind.FlatMaximumLife, 8, MetalCurrencyKind.VitalSilver, 1, "最大生命 +8");
 
     private static P2WorkshopPreview AddCrafted(
         ItemInstance item,
         ItemModifierKind kind,
         int value,
-        int gold,
-        int scraps,
+        MetalCurrencyKind metal,
+        int metalCost,
         string summary)
     {
         AffixRoll[] retained = item.Affixes.Where(affix => !affix.Crafted).ToArray();
@@ -101,7 +113,7 @@ public static class P2Workshop
             0,
             kind);
         ItemInstance result = item with { Affixes = retained.Append(new AffixRoll(definition, value, Crafted: true)).ToArray() };
-        return new P2WorkshopPreview(true, string.Empty, result, gold, scraps, summary);
+        return new P2WorkshopPreview(true, string.Empty, result, 0, 0, summary, metal, metalCost);
     }
 
     private static P2WorkshopPreview Fail(string reason, string summary) =>

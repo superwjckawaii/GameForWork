@@ -35,10 +35,13 @@ public static class P2SkillStones
     {
         new SkillStoneDefinition("core.skill_stone.heavy_strike", "重击", SkillStoneKind.Active),
         new SkillStoneDefinition("core.skill_stone.war_cry", "战吼", SkillStoneKind.Active),
+        new SkillStoneDefinition("core.skill_stone.earth_cleave", "裂地横扫", SkillStoneKind.Active),
+        new SkillStoneDefinition("core.skill_stone.spirit_blade", "幽魂飞刃", SkillStoneKind.Active),
         new SkillStoneDefinition("core.skill_stone.increased_area", "扩大范围", SkillStoneKind.Support, 1),
         new SkillStoneDefinition("core.skill_stone.attack_speed", "攻击速度", SkillStoneKind.Support, 1),
         new SkillStoneDefinition("core.skill_stone.bleed", "流血", SkillStoneKind.Support, 1),
         new SkillStoneDefinition("core.skill_stone.life_cost", "生命消耗", SkillStoneKind.Support, 1),
+        new SkillStoneDefinition("core.skill_stone.chain", "追加连锁", SkillStoneKind.Support, 1),
     }.ToDictionary(item => item.StableId, StringComparer.Ordinal);
 
     public static IReadOnlyCollection<SkillStoneDefinition> All => Catalog.Values.ToArray();
@@ -108,7 +111,12 @@ public sealed class P2ManagementState
 
         string heavyStrike = state._skillStones.Single(item => item.DefinitionId == "core.skill_stone.heavy_strike").InstanceId;
         string bleed = state._skillStones.Single(item => item.DefinitionId == "core.skill_stone.bleed").InstanceId;
+        string earthCleave = state._skillStones.Single(item => item.DefinitionId == "core.skill_stone.earth_cleave").InstanceId;
+        string spiritBlade = state._skillStones.Single(item => item.DefinitionId == "core.skill_stone.spirit_blade").InstanceId;
+        string chain = state._skillStones.Single(item => item.DefinitionId == "core.skill_stone.chain").InstanceId;
         state._skillLinks.Add(new SkillLinkConfiguration(heavyStrike, [bleed], 1));
+        state._skillLinks.Add(new SkillLinkConfiguration(earthCleave, [], 2));
+        state._skillLinks.Add(new SkillLinkConfiguration(spiritBlade, [chain], 3));
         return state;
     }
 
@@ -134,7 +142,32 @@ public sealed class P2ManagementState
             state.AddHistory("旧存档已迁移：获得一次免费完整洗点。");
         }
 
+        foreach (SkillStoneDefinition definition in P2SkillStones.All.Where(definition =>
+                     state._skillStones.All(stone => stone.DefinitionId != definition.StableId)))
+        {
+            state._skillStones.Add(new SkillStoneInstance(
+                $"starter-{definition.StableId[(definition.StableId.LastIndexOf('.') + 1)..]}",
+                definition.StableId));
+        }
+
+        state.EnsureP4SkillLink("core.skill_stone.earth_cleave", 2);
+        state.EnsureP4SkillLink("core.skill_stone.spirit_blade", 3, "core.skill_stone.chain");
+
         return state;
+    }
+
+    private void EnsureP4SkillLink(string activeDefinitionId, int priority, string? supportDefinitionId = null)
+    {
+        SkillStoneInstance active = _skillStones.Single(stone => stone.DefinitionId == activeDefinitionId);
+        if (_skillLinks.Any(link => link.ActiveStoneInstanceId == active.InstanceId))
+        {
+            return;
+        }
+
+        string[] supports = supportDefinitionId is null
+            ? []
+            : [_skillStones.Single(stone => stone.DefinitionId == supportDefinitionId).InstanceId];
+        _skillLinks.Add(new SkillLinkConfiguration(active.InstanceId, supports, priority));
     }
 
     public P2ManagementSnapshot Capture() => new(

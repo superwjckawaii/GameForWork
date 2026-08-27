@@ -10,6 +10,8 @@ public enum SkillTag
     Physical = 1 << 3,
     WarCry = 1 << 4,
     Buff = 1 << 5,
+    Projectile = 1 << 6,
+    Chaining = 1 << 7,
 }
 
 [Flags]
@@ -20,12 +22,15 @@ public enum SkillSupport
     AttackSpeed = 1 << 1,
     Bleed = 1 << 2,
     LifeCost = 1 << 3,
+    Chain = 1 << 4,
 }
 
 public static class P1SkillIds
 {
     public const string HeavyStrike = "core.skill.heavy_strike";
     public const string WarCry = "core.skill.war_cry";
+    public const string EarthCleave = "core.skill.earth_cleave";
+    public const string SpiritBlade = "core.skill.spirit_blade";
 }
 
 public sealed record SkillConfiguration(string SkillId, SkillSupport Supports);
@@ -55,6 +60,22 @@ public static class P1Skills
         RangeRaw: 6_000,
         CastTimeTicks: 10,
         CooldownTicks: 120);
+
+    public static readonly SkillDefinition EarthCleave = new(
+        P1SkillIds.EarthCleave,
+        SkillTag.Attack | SkillTag.Melee | SkillTag.Area | SkillTag.Physical,
+        BaseManaCost: 10,
+        RangeRaw: 2_800,
+        CastTimeTicks: 4,
+        CooldownTicks: 24);
+
+    public static readonly SkillDefinition SpiritBlade = new(
+        P1SkillIds.SpiritBlade,
+        SkillTag.Attack | SkillTag.Projectile | SkillTag.Chaining | SkillTag.Physical,
+        BaseManaCost: 9,
+        RangeRaw: 8_000,
+        CastTimeTicks: 3,
+        CooldownTicks: 20);
 }
 
 public sealed record SkillUseProfile(

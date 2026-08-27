@@ -67,7 +67,7 @@ public sealed class P2ManagementTests
         P2ManagementState restored = P2ManagementState.Restore(state.Capture(), legacyMigration: false);
 
         Assert.True(restored.SortingBag[0].IsLocked);
-        Assert.Equal(6, restored.SkillStones.Count);
+        Assert.Equal(9, restored.SkillStones.Count);
         Assert.Contains("测试记录", restored.OperationHistory);
     }
 
@@ -86,7 +86,7 @@ public sealed class P2ManagementTests
 
         Assert.Equal(60, migrated.World.Hero.Progression.Level);
         Assert.True(migrated.Management.FreeFullRespecAvailable);
-        Assert.Equal(6, migrated.Management.SkillStones.Count);
+        Assert.Equal(9, migrated.Management.SkillStones.Count);
     }
 
     [Fact]

@@ -198,7 +198,8 @@ public sealed record P1TeamBuild(
     int AddedPhysicalDamage = 0,
     SkillUseProfile? HeavyStrikeProfile = null,
     LegendaryRule? WeaponLegendaryRule = null,
-    int MovementSpeedBasisPoints = 10_000);
+    int MovementSpeedBasisPoints = 10_000,
+    IReadOnlyList<SkillConfiguration>? ActiveSkills = null);
 
 public sealed record MapNodeResult(
     int NodeIndex,

@@ -1,4 +1,5 @@
 using GameForWork.Core.P1.Items;
+using GameForWork.Core.P4;
 
 namespace GameForWork.Core.P1.World;
 
@@ -9,7 +10,8 @@ public sealed record TownEconomySnapshot(
     int MemoryAshes,
     int WardenMarks,
     int SkillStones,
-    long SupplyProductionRemainderMilliseconds);
+    long SupplyProductionRemainderMilliseconds,
+    IReadOnlyList<MetalCurrencyStack>? Metals = null);
 
 public sealed record EquipmentStorageSnapshot(
     int Capacity,
@@ -61,7 +63,8 @@ public static class P1WorldSnapshots
             state.Economy.MemoryAshes,
             state.Economy.WardenMarks,
             state.Economy.SkillStones,
-            state.Economy.SupplyProductionRemainderMilliseconds);
+            state.Economy.SupplyProductionRemainderMilliseconds,
+            state.Economy.MetalCurrencies.Select(pair => new MetalCurrencyStack(pair.Key, pair.Value)).ToArray());
         var storage = new EquipmentStorageSnapshot(
             state.Storage.Capacity,
             state.Storage.Items.ToArray(),
@@ -87,7 +90,8 @@ public static class P1WorldSnapshots
             snapshot.Economy.MemoryAshes,
             snapshot.Economy.WardenMarks,
             snapshot.Economy.SkillStones,
-            snapshot.Economy.SupplyProductionRemainderMilliseconds);
+            snapshot.Economy.SupplyProductionRemainderMilliseconds,
+            (snapshot.Economy.Metals ?? []).ToDictionary(item => item.Kind, item => item.Amount));
         var storage = new EquipmentStorage(snapshot.Storage.Capacity);
         foreach (ItemInstance item in snapshot.Storage.Items)
         {

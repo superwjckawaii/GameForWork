@@ -4,6 +4,7 @@ using GameForWork.Core.P1.Combat;
 using GameForWork.Core.P1.World;
 using GameForWork.Core.P2;
 using GameForWork.Core.Simulation;
+using GameForWork.Core.P4;
 
 namespace GameForWork.Core.P3;
 
@@ -22,6 +23,10 @@ public enum P3SceneEventKind
     EnemyDefeated,
     SceneCompleted,
     SceneFailed,
+    UnitMoved,
+    EarthCleave,
+    SpiritBlade,
+    Chain,
 }
 
 public sealed record P3GridPosition(int X, int Y);
@@ -69,7 +74,8 @@ public sealed record P3SceneTimeline(
     int FinalHeroShield,
     IReadOnlyList<P3EncounterSegment> Encounters,
     IReadOnlyList<P3SceneEvent> Events,
-    string FinalHash)
+    string FinalHash,
+    IReadOnlyList<P4SpatialFrame>? SpatialFrames = null)
 {
     public const int LogicalWidth = 12;
     public const int LogicalHeight = 24;
@@ -160,6 +166,7 @@ public static class P3SceneTimelineBuilder
         var random = new Pcg32(seed);
         var events = new List<P3SceneEvent>();
         var encounters = new List<P3EncounterSegment>();
+        var spatialFrames = new List<P4SpatialFrame>();
         long now = 0;
         int totalWaves = 0;
         int maximumLife = build.Sheet.MaximumLife().Value;
@@ -182,84 +189,101 @@ public static class P3SceneTimelineBuilder
 
             bool bossNode = finalBoss && nodeIndex == nodeCount;
             bool eliteNode = !bossNode && (forceElite && nodeIndex % 2 == 0 || nodeIndex == nodeCount - 1);
-            int waves = bossNode ? 2 : eliteNode ? 2 : 1 + nodeIndex % 2;
-            totalWaves += waves;
-            for (int wave = 1; wave <= waves; wave++)
+            bool campaign = stableId.StartsWith("campaign:", StringComparison.Ordinal);
+            int enemyCount = bossNode
+                ? 5 + (int)(random.NextUInt() % 5)
+                : campaign
+                    ? (eliteNode ? 6 : 4) + (int)(random.NextUInt() % 5)
+                    : abyssRoute ? 12 + (int)(random.NextUInt() % 13) : 8 + (int)(random.NextUInt() % 9);
+            totalWaves++;
+            ulong encounterSeed = ((ulong)random.NextUInt() << 32) | random.NextUInt();
+            long start = now;
+            events.Add(Event(now, P3SceneEventKind.WaveStarted, nodeIndex, 1, enemyCount,
+                bossNode ? "boss_group" : eliteNode ? "elite_group" : "group", heroLife, maximumLife,
+                heroMana, maximumMana, heroShield, maximumShield, enemyCount, enemyCount, new(6, 4)));
+            P4NodeCombatResult result = new P4SpatialCombatRunner().Run(new P4NodeCombatRequest(
+                build,
+                nodeIndex,
+                areaLevel,
+                enemyCount,
+                eliteNode,
+                bossNode,
+                abyssRoute,
+                Formation: (int)(random.NextUInt() % 3),
+                InitialHeroLife: heroLife,
+                InitialHeroMana: heroMana,
+                InitialHeroShield: heroShield), encounterSeed);
+            spatialFrames.AddRange(result.Frames.Select(frame => frame with { AtMilliseconds = start + frame.AtMilliseconds }));
+            AppendSpatialEvents(events, result, start, nodeIndex, maximumLife, maximumMana, maximumShield);
+            long duration = checked((long)result.Ticks * TickMilliseconds);
+            now = checked(now + duration);
+            encounters.Add(new P3EncounterSegment(nodeIndex, 1,
+                bossNode ? P1Enemies.AbyssWarden.StableId : "core.enemy.group", eliteNode, bossNode,
+                start, duration, result.Outcome, result.Ticks, result.FinalHash, []));
+            heroLife = result.HeroLife;
+            heroMana = result.HeroMana;
+            heroShield = result.HeroShield;
+            if (result.Outcome != P1BattleOutcome.HeroVictory)
             {
-                bool bossWave = bossNode && wave == waves;
-                EnemyProfile enemy = bossWave
-                    ? P1Enemies.AbyssWarden
-                    : P1Enemies.NormalEnemies[(int)(random.NextUInt() % (uint)P1Enemies.NormalEnemies.Count)];
-                IReadOnlyList<EliteAffix> affixes = eliteNode ? EnemyRules.RollEliteAffixes(random) : [];
-                ScaledEnemy scaled = EnemyRules.Scale(enemy, areaLevel, affixes, abyssRoute);
-                if (!abyssRoute)
-                {
-                    scaled = scaled with
-                    {
-                        Life = Math.Max(1, scaled.Life * 3 / 4),
-                        MinimumPhysicalDamage = Math.Max(1, scaled.MinimumPhysicalDamage * 3 / 4),
-                        MaximumPhysicalDamage = Math.Max(1, scaled.MaximumPhysicalDamage * 3 / 4),
-                    };
-                }
-
-                ulong encounterSeed = ((ulong)random.NextUInt() << 32) | random.NextUInt();
-                var request = new P1EncounterRequest(
-                    build.Sheet,
-                    build.Weapon,
-                    build.HeavyStrike,
-                    scaled,
-                    build.FlatAccuracy,
-                    build.IncreasedDamageBasisPoints,
-                    build.IncreasedCriticalChanceBasisPoints,
-                    build.IncreasedBleedChanceBasisPoints,
-                    build.UseWarCry,
-                    build.EchoNotableAllocated,
-                    build.DeepWoundAllocated,
-                    build.FasterBleedingAllocated,
-                    MaximumTicks: 2_400,
-                    LifeFlask: build.LifeFlask,
-                    IncreasedLifeFlaskEffectBasisPoints: build.IncreasedLifeFlaskEffectBasisPoints,
-                    LifeFlaskUseThresholdBasisPoints: build.LifeFlaskUseThresholdBasisPoints,
-                    AddedPhysicalDamage: build.AddedPhysicalDamage,
-                    HeavyStrikeProfile: build.HeavyStrikeProfile,
-                    WeaponLegendaryRule: build.WeaponLegendaryRule,
-                    InitialHeroLife: heroLife,
-                    InitialHeroMana: heroMana,
-                    InitialHeroShield: heroShield);
-                P1EncounterResult result = new P1EncounterRunner().Run(request, encounterSeed);
-                long start = now;
-                events.Add(Event(now, P3SceneEventKind.WaveStarted, nodeIndex, wave, 0,
-                    bossWave ? "boss" : eliteNode ? "elite" : "normal", heroLife, maximumLife, heroMana,
-                    maximumMana, heroShield, maximumShield, scaled.Life, scaled.Life, new(6, 18)));
-                AppendCombatEvents(events, result.Events, start, nodeIndex, wave, maximumLife, maximumMana,
-                    maximumShield, heroLife, heroMana, heroShield, scaled.Life);
-                long duration = checked((long)result.Ticks * TickMilliseconds);
-                now = checked(now + duration);
-                encounters.Add(new P3EncounterSegment(nodeIndex, wave, enemy.StableId, eliteNode, bossWave,
-                    start, duration, result.Outcome, result.Ticks, result.FinalHash, result.Events));
-                heroLife = result.HeroLife;
-                heroMana = result.HeroMana;
-                heroShield = result.HeroShield;
-                if (result.Outcome != P1BattleOutcome.HeroVictory)
-                {
-                    sceneOutcome = result.Outcome;
-                    events.Add(Event(now, P3SceneEventKind.SceneFailed, nodeIndex, wave, 0,
-                        result.Outcome.ToString(), heroLife, maximumLife, heroMana, maximumMana, heroShield,
-                        maximumShield, result.EnemyLife, scaled.Life, new(6, 18)));
-                    return Finish(stableId, nodeCount, totalWaves, now, sceneOutcome, heroLife, heroMana,
-                        heroShield, encounters, events, seed);
-                }
-
-                events.Add(Event(now, P3SceneEventKind.EnemyDefeated, nodeIndex, wave, 0, enemy.StableId,
-                    heroLife, maximumLife, heroMana, maximumMana, heroShield, maximumShield, 0, scaled.Life,
-                    new(6, 18)));
+                sceneOutcome = result.Outcome;
+                events.Add(Event(now, P3SceneEventKind.SceneFailed, nodeIndex, 1, 0,
+                    result.Outcome.ToString(), heroLife, maximumLife, heroMana, maximumMana, heroShield,
+                    maximumShield, 0, enemyCount, new(6, 18)));
+                return Finish(stableId, nodeCount, totalWaves, now, sceneOutcome, heroLife, heroMana,
+                    heroShield, encounters, events, spatialFrames, seed);
             }
         }
 
         events.Add(Event(now, P3SceneEventKind.SceneCompleted, nodeCount, 0, 0, stableId, heroLife,
             maximumLife, heroMana, maximumMana, heroShield, maximumShield, 0, 0, new(6, 22)));
         return Finish(stableId, nodeCount, totalWaves, now, sceneOutcome, heroLife, heroMana, heroShield,
-            encounters, events, seed);
+            encounters, events, spatialFrames, seed);
+    }
+
+    private static void AppendSpatialEvents(
+        ICollection<P3SceneEvent> target,
+        P4NodeCombatResult result,
+        long start,
+        int nodeIndex,
+        int maximumLife,
+        int maximumMana,
+        int maximumShield)
+    {
+        foreach (P4SpatialEvent item in result.Events)
+        {
+            P3SceneEventKind kind = item.Kind switch
+            {
+                P4SpatialEventKind.HeroMoved or P4SpatialEventKind.EnemyMoved => P3SceneEventKind.UnitMoved,
+                P4SpatialEventKind.WarCry => P3SceneEventKind.WarCry,
+                P4SpatialEventKind.HeavyStrike => P3SceneEventKind.HeavyStrike,
+                P4SpatialEventKind.EarthCleave => P3SceneEventKind.EarthCleave,
+                P4SpatialEventKind.SpiritBladeLaunched or P4SpatialEventKind.SpiritBladeHit => P3SceneEventKind.SpiritBlade,
+                P4SpatialEventKind.ChainHit => P3SceneEventKind.Chain,
+                P4SpatialEventKind.EnemyAttack => P3SceneEventKind.EnemyAttack,
+                P4SpatialEventKind.Bleed => P3SceneEventKind.Bleed,
+                P4SpatialEventKind.Flask => P3SceneEventKind.Flask,
+                P4SpatialEventKind.EnemyDefeated => P3SceneEventKind.EnemyDefeated,
+                _ => P3SceneEventKind.BossPhase,
+            };
+            P4SpatialFrame? frame = result.Frames.TakeWhile(frame => frame.AtMilliseconds <= item.AtMilliseconds).LastOrDefault();
+            P4EnemyFrame? enemy = frame?.Enemies.FirstOrDefault(enemy => enemy.EntityId == item.TargetId);
+            target.Add(Event(
+                start + item.AtMilliseconds,
+                kind,
+                nodeIndex,
+                1,
+                item.Value,
+                $"{item.SourceId}|{item.TargetId}|{item.Detail}",
+                frame?.HeroLife ?? result.HeroLife,
+                maximumLife,
+                frame?.HeroMana ?? result.HeroMana,
+                maximumMana,
+                frame?.HeroShield ?? result.HeroShield,
+                maximumShield,
+                enemy?.Life ?? 0,
+                enemy?.MaximumLife ?? 0,
+                new P3GridPosition(item.TargetPosition.XRaw / 1_000, item.TargetPosition.YRaw / 1_000)));
+        }
     }
 
     private static void AppendCombatEvents(
@@ -348,13 +372,15 @@ public static class P3SceneTimelineBuilder
         int heroShield,
         IReadOnlyList<P3EncounterSegment> encounters,
         IReadOnlyList<P3SceneEvent> events,
+        IReadOnlyList<P4SpatialFrame> spatialFrames,
         ulong seed)
     {
         string source = $"{stableId}|{seed}|{duration}|{outcome}|{heroLife}|{heroMana}|{heroShield}|" +
             string.Join(';', encounters.Select(item => item.FinalHash));
         string hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(source))).ToLowerInvariant();
         return new P3SceneTimeline(stableId, P3SceneTimeline.LogicalWidth, P3SceneTimeline.LogicalHeight,
-            nodeCount, totalWaves, duration, outcome, heroLife, heroMana, heroShield, encounters, events, hash);
+            nodeCount, totalWaves, duration, outcome, heroLife, heroMana, heroShield, encounters, events, hash,
+            spatialFrames);
     }
 
     private static P3SceneEvent Event(
