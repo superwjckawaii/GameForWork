@@ -193,7 +193,7 @@ public sealed class P4SpatialCombatRunner
                 {
                     long distance = P4Point.DistanceSquared(heroPosition, target.Position);
                     P4EnemyUnit[] cleaveTargets = enemies.Where(enemy => enemy.Life > 0 &&
-                        InRange(heroPosition, enemy.Position, CleaveRange)).ToArray();
+                        InCleaveCone(heroPosition, target.Position, enemy.Position)).ToArray();
                     if (tick >= cleaveReadyTick && cleaveTargets.Length >= 2 && hero.TryPayMana(P1Skills.EarthCleave.BaseManaCost))
                     {
                         foreach (P4EnemyUnit enemy in cleaveTargets)
@@ -570,6 +570,23 @@ public sealed class P4SpatialCombatRunner
 
     private static bool InRange(P4Point left, P4Point right, int range) =>
         P4Point.DistanceSquared(left, right) <= (long)range * range;
+
+    private static bool InCleaveCone(P4Point origin, P4Point facingTarget, P4Point candidate)
+    {
+        long candidateDistance = P4Point.DistanceSquared(origin, candidate);
+        if (candidateDistance > (long)CleaveRange * CleaveRange)
+        {
+            return false;
+        }
+
+        long facingX = facingTarget.XRaw - origin.XRaw;
+        long facingY = facingTarget.YRaw - origin.YRaw;
+        long candidateX = candidate.XRaw - origin.XRaw;
+        long candidateY = candidate.YRaw - origin.YRaw;
+        long dot = facingX * candidateX + facingY * candidateY;
+        long facingDistance = facingX * facingX + facingY * facingY;
+        return dot > 0 && 4 * dot * dot >= facingDistance * candidateDistance;
+    }
 
     private static int TravelTicks(P4Point from, P4Point to, int speedPerSecond)
     {
