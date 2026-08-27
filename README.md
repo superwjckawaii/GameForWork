@@ -16,5 +16,5 @@
 ## 文档
 
 - [已确认游戏设计基线](docs/GAME_DESIGN_BASELINE.md)
+- [已确认技术架构](docs/TECHNICAL_ARCHITECTURE.md)
 - [待讨论与开发决策](docs/OPEN_QUESTIONS.md)
-
