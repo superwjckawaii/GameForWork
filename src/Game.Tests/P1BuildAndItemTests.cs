@@ -9,7 +9,7 @@ public sealed class P1BuildAndItemTests
     [Fact]
     public void P3PassiveTreeContainsTenOriginalClustersAndMovementGrowth()
     {
-        Assert.Equal(180, P1PassiveTree.Nodes.Count);
+        Assert.Equal(184, P1PassiveTree.Nodes.Count);
         Assert.Equal(10, P1PassiveTree.Nodes.Select(node => node.Branch).Distinct().Count());
 
         var allocation = new PassiveTreeAllocation();
@@ -50,10 +50,11 @@ public sealed class P1BuildAndItemTests
     [Fact]
     public void PassiveTreeHasP3NodeCounts()
     {
-        Assert.Equal(180, P1PassiveTree.Nodes.Count);
+        Assert.Equal(184, P1PassiveTree.Nodes.Count);
         Assert.Equal(156, P1PassiveTree.Nodes.Count(node => node.Kind == PassiveNodeKind.Small));
         Assert.Equal(16, P1PassiveTree.Nodes.Count(node => node.Kind == PassiveNodeKind.Notable));
         Assert.Equal(8, P1PassiveTree.Nodes.Count(node => node.Kind == PassiveNodeKind.Rule));
+        Assert.Equal(4, P1PassiveTree.Nodes.Count(node => node.Kind == PassiveNodeKind.Mastery));
         Assert.Equal(70, PassiveTreeAllocation.MaximumAllocatedPoints);
     }
 

@@ -79,6 +79,10 @@ internal static class P1UiText
         PassiveEffectKind.Tenacious => "顽强：低生命时强化生存",
         PassiveEffectKind.Echo => "余音：战吼效果产生回响",
         PassiveEffectKind.ChargedHeavyStrike => "蓄势重击：改变重击行为",
+        PassiveEffectKind.HeavyWeaponMastery => "震岳专精：每第五次近战攻击产生伤害回响",
+        PassiveEffectKind.BleedMastery => "孤创专精：强化单一深创的 Boss 压制能力",
+        PassiveEffectKind.DefenseMastery => "钢躯专精：护甲同时强化低生命防线",
+        PassiveEffectKind.WarCryMastery => "震令专精：战吼更快覆盖战场",
         PassiveEffectKind.FlatAccuracy => $"命中值 +{effect.Value}",
         PassiveEffectKind.FlatMaximumLife => $"最大生命 +{effect.Value}",
         PassiveEffectKind.FlatMaximumMana => $"最大法力 +{effect.Value}",
@@ -184,6 +188,7 @@ internal static class P1UiText
     {
         PassiveNodeKind.Small => "小型天赋",
         PassiveNodeKind.Notable => "显著天赋",
+        PassiveNodeKind.Mastery => "集群专精",
         PassiveNodeKind.Rule => "规则天赋",
         _ => kind.ToString(),
     };

@@ -1,4 +1,5 @@
 using GameForWork.Core.P1.Items;
+using GameForWork.Core.P5;
 
 namespace GameForWork.Core.P2;
 
@@ -63,7 +64,8 @@ public sealed record SkillStoneInstance(
 public sealed record SkillLinkConfiguration(
     string ActiveStoneInstanceId,
     IReadOnlyList<string> SupportStoneInstanceIds,
-    int Priority);
+    int Priority,
+    string ChainId = "");
 
 public sealed record BuybackEntry(ItemInstance Item, int SalePrice, long Sequence);
 
@@ -114,9 +116,11 @@ public sealed class P2ManagementState
         string earthCleave = state._skillStones.Single(item => item.DefinitionId == "core.skill_stone.earth_cleave").InstanceId;
         string spiritBlade = state._skillStones.Single(item => item.DefinitionId == "core.skill_stone.spirit_blade").InstanceId;
         string chain = state._skillStones.Single(item => item.DefinitionId == "core.skill_stone.chain").InstanceId;
-        state._skillLinks.Add(new SkillLinkConfiguration(heavyStrike, [bleed], 1));
-        state._skillLinks.Add(new SkillLinkConfiguration(earthCleave, [], 2));
-        state._skillLinks.Add(new SkillLinkConfiguration(spiritBlade, [chain], 3));
+        string warCry = state._skillStones.Single(item => item.DefinitionId == "core.skill_stone.war_cry").InstanceId;
+        state._skillLinks.Add(new SkillLinkConfiguration(heavyStrike, [bleed], 1, P5SkillChainIds.WeaponPrimary));
+        state._skillLinks.Add(new SkillLinkConfiguration(earthCleave, [], 2, P5SkillChainIds.WeaponSecondary));
+        state._skillLinks.Add(new SkillLinkConfiguration(spiritBlade, [chain], 3, P5SkillChainIds.Chest));
+        state._skillLinks.Add(new SkillLinkConfiguration(warCry, [], 4, P5SkillChainIds.HelmetTool));
         return state;
     }
 
@@ -152,6 +156,7 @@ public sealed class P2ManagementState
 
         state.EnsureP4SkillLink("core.skill_stone.earth_cleave", 2);
         state.EnsureP4SkillLink("core.skill_stone.spirit_blade", 3, "core.skill_stone.chain");
+        state.EnsureP4SkillLink("core.skill_stone.war_cry", 4);
 
         return state;
     }
@@ -284,7 +289,7 @@ public sealed class P2ManagementState
         return true;
     }
 
-    public bool TryLinkSupport(string activeStoneInstanceId, string supportStoneInstanceId)
+    public bool TryLinkSupport(string activeStoneInstanceId, string supportStoneInstanceId, int maximumSupports = 5)
     {
         SkillStoneInstance? active = _skillStones.FirstOrDefault(item => item.InstanceId == activeStoneInstanceId);
         SkillStoneInstance? support = _skillStones.FirstOrDefault(item => item.InstanceId == supportStoneInstanceId);
@@ -295,7 +300,7 @@ public sealed class P2ManagementState
 
         SkillLinkConfiguration? previous = _skillLinks.FirstOrDefault(link => link.ActiveStoneInstanceId == activeStoneInstanceId);
         if (previous?.SupportStoneInstanceIds.Contains(supportStoneInstanceId, StringComparer.Ordinal) == true ||
-            previous?.SupportStoneInstanceIds.Count >= 5)
+            maximumSupports is < 0 or > 5 || previous?.SupportStoneInstanceIds.Count >= maximumSupports)
         {
             return false;
         }
@@ -320,6 +325,113 @@ public sealed class P2ManagementState
         _skillLinks.Add(new SkillLinkConfiguration(activeStoneInstanceId, supports, previous?.Priority ?? _skillLinks.Count + 1));
         AddHistory($"{support.Definition.DisplayName} 已连接到 {active.Definition.DisplayName}。");
         return true;
+    }
+
+    public bool TryAssignActiveToChain(
+        string activeStoneInstanceId,
+        string chainId,
+        IReadOnlyList<P5SkillChainDefinition> chains)
+    {
+        SkillStoneInstance? active = _skillStones.FirstOrDefault(item => item.InstanceId == activeStoneInstanceId);
+        P5SkillChainDefinition? chain = chains.FirstOrDefault(item => item.StableId == chainId);
+        if (active is null || chain is null || !P5SkillChainRules.Accepts(chain, active.Definition))
+        {
+            return false;
+        }
+
+        SkillLinkConfiguration? source = _skillLinks.FirstOrDefault(item => item.ActiveStoneInstanceId == activeStoneInstanceId);
+        SkillLinkConfiguration? occupied = _skillLinks.FirstOrDefault(item => item.ChainId == chainId);
+        string previousChain = source?.ChainId ?? string.Empty;
+        if (source is null)
+        {
+            source = new SkillLinkConfiguration(activeStoneInstanceId, [], _skillLinks.Count + 1, chainId);
+            _skillLinks.Add(source);
+        }
+        else
+        {
+            ReplaceLink(source, source with { ChainId = chainId });
+        }
+
+        if (occupied is not null && occupied.ActiveStoneInstanceId != activeStoneInstanceId)
+        {
+            ReplaceLink(occupied, occupied with { ChainId = previousChain });
+        }
+
+        AddHistory($"{active.Definition.DisplayName} 已装入 {chain.DisplayName}。");
+        return true;
+    }
+
+    public bool ReplaceSupports(
+        string activeStoneInstanceId,
+        IReadOnlyList<string> supportStoneInstanceIds,
+        int maximumSupports = 5)
+    {
+        SkillLinkConfiguration? link = _skillLinks.FirstOrDefault(
+            item => item.ActiveStoneInstanceId == activeStoneInstanceId);
+        if (link is null || maximumSupports is < 0 or > 5 || supportStoneInstanceIds.Count > maximumSupports ||
+            supportStoneInstanceIds.Distinct(StringComparer.Ordinal).Count() != supportStoneInstanceIds.Count ||
+            supportStoneInstanceIds.Any(id => _skillStones.FirstOrDefault(stone => stone.InstanceId == id)?.Definition.Kind != SkillStoneKind.Support))
+        {
+            return false;
+        }
+
+        foreach (SkillLinkConfiguration other in _skillLinks.Where(item => item != link).ToArray())
+        {
+            string[] retained = other.SupportStoneInstanceIds
+                .Where(id => !supportStoneInstanceIds.Contains(id, StringComparer.Ordinal))
+                .ToArray();
+            ReplaceLink(other, other with { SupportStoneInstanceIds = retained });
+        }
+
+        ReplaceLink(link, link with { SupportStoneInstanceIds = supportStoneInstanceIds.ToArray() });
+        return true;
+    }
+
+    public int NormalizeSkillChains(IReadOnlyList<P5SkillChainDefinition> chains)
+    {
+        Dictionary<string, string> preferred = new(StringComparer.Ordinal)
+        {
+            ["core.skill_stone.heavy_strike"] = P5SkillChainIds.WeaponPrimary,
+            ["core.skill_stone.earth_cleave"] = P5SkillChainIds.WeaponSecondary,
+            ["core.skill_stone.spirit_blade"] = P5SkillChainIds.Chest,
+            ["core.skill_stone.war_cry"] = P5SkillChainIds.HelmetTool,
+        };
+        HashSet<string> valid = chains.Select(item => item.StableId).ToHashSet(StringComparer.Ordinal);
+        var occupied = new HashSet<string>(StringComparer.Ordinal);
+        int removed = 0;
+        foreach (SkillLinkConfiguration original in _skillLinks.OrderBy(item => item.Priority).ToArray())
+        {
+            SkillStoneInstance active = _skillStones.Single(item => item.InstanceId == original.ActiveStoneInstanceId);
+            string chainId = valid.Contains(original.ChainId) && !occupied.Contains(original.ChainId)
+                ? original.ChainId
+                : preferred.GetValueOrDefault(active.DefinitionId, string.Empty);
+            P5SkillChainDefinition? chain = chains.FirstOrDefault(item => item.StableId == chainId);
+            if (chain is null || occupied.Contains(chainId) || !P5SkillChainRules.Accepts(chain, active.Definition))
+            {
+                chain = chains.FirstOrDefault(candidate => !occupied.Contains(candidate.StableId) &&
+                    P5SkillChainRules.Accepts(candidate, active.Definition));
+                chainId = chain?.StableId ?? string.Empty;
+            }
+
+            if (chain is null)
+            {
+                removed += original.SupportStoneInstanceIds.Count;
+                ReplaceLink(original, original with { ChainId = string.Empty, SupportStoneInstanceIds = [] });
+                continue;
+            }
+
+            occupied.Add(chainId);
+            string[] supports = original.SupportStoneInstanceIds.Take(chain.SupportCapacity).ToArray();
+            removed += original.SupportStoneInstanceIds.Count - supports.Length;
+            ReplaceLink(original, original with { ChainId = chainId, SupportStoneInstanceIds = supports });
+        }
+
+        if (removed > 0)
+        {
+            AddHistory($"装备技能链容量变化：{removed} 个辅助技能石已安全解除连接。");
+        }
+
+        return removed;
     }
 
     public bool UnlinkSupport(string activeStoneInstanceId, string supportStoneInstanceId)
@@ -374,6 +486,15 @@ public sealed class P2ManagementState
         _sortingBag.Any(item => item.InstanceId == instanceId) ||
         _recovery.Any(item => item.InstanceId == instanceId) ||
         _buyback.Any(entry => entry.Item.InstanceId == instanceId);
+
+    private void ReplaceLink(SkillLinkConfiguration previous, SkillLinkConfiguration next)
+    {
+        int index = _skillLinks.IndexOf(previous);
+        if (index >= 0)
+        {
+            _skillLinks[index] = next;
+        }
+    }
 
     private static ItemInstance? TakeAt(List<ItemInstance> items, int index)
     {

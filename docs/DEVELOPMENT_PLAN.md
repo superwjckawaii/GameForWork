@@ -1,4 +1,4 @@
-# GameForWork P0/P1/P2 开发计划
+# GameForWork P0～P5 开发计划
 
 > 状态：已确认  
 > 更新日期：2026-08-27
@@ -203,3 +203,9 @@ P1A 功能闭环通过，P1B 精细像素素材生成、接入和视觉验收完
 ### P2 完成
 
 精简五幕主线、通关解锁远征、正式角色与物品管理、旧档迁移和低密度像素视觉全部达到 [`P2_SPECIFICATION.md`](P2_SPECIFICATION.md) 的验收条件。用户统一验收确认后推送，并在自动检查通过后创建 `v0.2.0-p2` 标签。
+
+### P3～P5 完成
+
+- P3 的完整规则见 [`P3_SPECIFICATION.md`](P3_SPECIFICATION.md)。
+- P4 的空间群战与角色工坊规则见 [`P4_SPECIFICATION.md`](P4_SPECIFICATION.md)。
+- P5 的单页远征、碎片 Boss、装备技能链和天赋交互规则见 [`P5_SPECIFICATION.md`](P5_SPECIFICATION.md)。

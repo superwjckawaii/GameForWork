@@ -3,6 +3,7 @@ using System.Text;
 using GameForWork.Core.Offline;
 using GameForWork.Core.P1.Items;
 using GameForWork.Core.P1.Progression;
+using GameForWork.Core.P5;
 
 namespace GameForWork.Core.P1.World;
 
@@ -67,7 +68,7 @@ public sealed class P1TeamExpeditionState
         RemainingMapTimeMilliseconds = remainingMilliseconds;
     }
 
-    public void RecordRun(P1MapRunResult run)
+    public void RecordRun(P1MapRunResult run, bool countProgression = true)
     {
         ExpeditionPolicy runPolicy = ActivePolicySnapshot ?? Policy;
         ActiveMap = null;
@@ -77,10 +78,13 @@ public sealed class P1TeamExpeditionState
         LastRun = run;
         if (run.Succeeded)
         {
-            MapsCompleted++;
+            if (countProgression)
+            {
+                MapsCompleted++;
+                Progression.AddExperience(P1MapRewardGenerator.ExperiencePerMap);
+                Progression.ClaimFirstBossPassivePoint();
+            }
             ConsecutiveFailures = 0;
-            Progression.AddExperience(P1MapRewardGenerator.ExperiencePerMap);
-            Progression.ClaimFirstBossPassivePoint();
             CommitPendingPolicy();
             return;
         }
@@ -225,16 +229,19 @@ public sealed class P1WorldState
         P1TeamBuild hero,
         P1TeamBuild mercenaries,
         TownEconomyState? economy = null,
-        EquipmentStorage? storage = null)
+        EquipmentStorage? storage = null,
+        P5ExpeditionDirector? expedition = null)
     {
         Hero = new P1TeamExpeditionState(ExpeditionTeamKind.Hero, hero);
         Mercenaries = new P1TeamExpeditionState(ExpeditionTeamKind.Mercenaries, mercenaries);
         Economy = economy ?? new TownEconomyState();
         Storage = storage ?? new EquipmentStorage();
+        Expedition = expedition ?? new P5ExpeditionDirector();
     }
 
     public TownEconomyState Economy { get; }
     public EquipmentStorage Storage { get; }
+    public P5ExpeditionDirector Expedition { get; }
     public LootFilter Filter { get; } = new();
     public TeleporterState Teleporter { get; } = new();
     public List<P1MapItem> MapInventory { get; } = [];
@@ -391,6 +398,7 @@ public sealed class P1WorldSimulator(IP1MapAttemptResolver attemptResolver)
     {
         foreach (P1TeamExpeditionState team in state.Teams)
         {
+            state.Expedition.PrepareNext(state, team);
             if (team.IsStopped || active.ContainsKey(team.Kind) || team.Queue.Count == 0)
             {
                 continue;
@@ -404,7 +412,8 @@ public sealed class P1WorldSimulator(IP1MapAttemptResolver attemptResolver)
                 continue;
             }
 
-            if (!state.Economy.TryConsumeMapSupply())
+            P1MapItem queuedMap = team.Queue.Maps[0];
+            if (!P5ExpeditionDirector.IsPractice(queuedMap) && !state.Economy.TryConsumeMapSupply())
             {
                 continue;
             }
@@ -432,8 +441,15 @@ public sealed class P1WorldSimulator(IP1MapAttemptResolver attemptResolver)
         ExpeditionPolicy runPolicy = expedition.Team.ActivePolicySnapshot ?? expedition.Team.Policy;
         P1MapRunResult run = expedition.Team.ActiveRun ?? new P1MapRunner(attemptResolver).Run(
             expedition.Map, expedition.Route, expedition.Team.Build, seed);
-        expedition.Team.RecordRun(run);
+        bool practice = P5ExpeditionDirector.IsPractice(expedition.Map);
+        expedition.Team.RecordRun(run, countProgression: !practice);
+        state.Expedition.RecordResolved(expedition.Map, run.Succeeded);
         if (!run.Succeeded)
+        {
+            return;
+        }
+
+        if (practice)
         {
             return;
         }
@@ -463,7 +479,10 @@ public sealed class P1WorldSimulator(IP1MapAttemptResolver attemptResolver)
             .Append(state.Economy.IronScraps).Append('|')
             .Append(state.Economy.MemoryAshes).Append('|')
             .Append(state.Economy.WardenMarks).Append('|')
-            .Append(state.Storage.Count).Append('|').Append(state.MapInventory.Count);
+            .Append(state.Storage.Count).Append('|').Append(state.MapInventory.Count).Append('|')
+            .Append(state.Expedition.AbyssWardenFragments).Append('|')
+            .Append(state.Expedition.AbyssWardenTickets).Append('|')
+            .Append(state.Expedition.MapsTowardNextFragment);
         foreach (P1TeamExpeditionState team in state.Teams)
         {
             builder.Append('|').Append(team.Kind).Append(':').Append(team.MapsCompleted).Append(':')

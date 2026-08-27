@@ -18,6 +18,7 @@ public enum PassiveNodeKind
 {
     Small,
     Notable,
+    Mastery,
     Rule,
 }
 
@@ -45,6 +46,10 @@ public enum PassiveEffectKind
     Tenacious,
     Echo,
     ChargedHeavyStrike,
+    HeavyWeaponMastery,
+    BleedMastery,
+    DefenseMastery,
+    WarCryMastery,
 }
 
 public sealed record PassiveEffect(PassiveEffectKind Kind, int Value = 0);
@@ -79,7 +84,11 @@ public sealed record PassiveBuildModifiers(
     bool DeepWound,
     bool Tenacious,
     bool Echo,
-    bool ChargedHeavyStrike);
+    bool ChargedHeavyStrike,
+    bool HeavyWeaponMastery,
+    bool BleedMastery,
+    bool DefenseMastery,
+    bool WarCryMastery);
 
 public static class P1PassiveTree
 {
@@ -105,8 +114,12 @@ public static class P1PassiveTree
         Node("heavy.notable", "重兵训练", PassiveBranch.HeavyWeapon, PassiveNodeKind.Notable, "heavy.5",
             new PassiveEffect(PassiveEffectKind.IncreasedTwoHandDamageBasisPoints, 1_200),
             new PassiveEffect(PassiveEffectKind.IncreasedAttackSpeedBasisPoints, 600)),
+        Node("heavy.mastery", "震岳专精", PassiveBranch.HeavyWeapon, PassiveNodeKind.Mastery, "heavy.notable",
+            new PassiveEffect(PassiveEffectKind.IncreasedTwoHandDamageBasisPoints, 2_500),
+            new PassiveEffect(PassiveEffectKind.HeavyWeaponMastery)),
         Node("heavy.rule", "蓄势重击", PassiveBranch.HeavyWeapon, PassiveNodeKind.Rule, "heavy.notable",
-            new PassiveEffect(PassiveEffectKind.ChargedHeavyStrike)),
+            new PassiveEffect(PassiveEffectKind.ChargedHeavyStrike),
+            new PassiveEffect(PassiveEffectKind.IncreasedTwoHandDamageBasisPoints, 3_000)),
 
         Small("bleed.1", "流血伤害 I", PassiveBranch.Bleed, null, PassiveEffectKind.IncreasedBleedDamageBasisPoints, 1_000),
         Small("bleed.2", "流血伤害 II", PassiveBranch.Bleed, "bleed.1", PassiveEffectKind.IncreasedBleedDamageBasisPoints, 1_000),
@@ -115,8 +128,12 @@ public static class P1PassiveTree
         Small("bleed.5", "持续创伤", PassiveBranch.Bleed, "bleed.4", PassiveEffectKind.IncreasedPhysicalDamageOverTimeBasisPoints, 1_000),
         Node("bleed.notable", "撕裂", PassiveBranch.Bleed, PassiveNodeKind.Notable, "bleed.5",
             new PassiveEffect(PassiveEffectKind.FasterBleeding)),
+        Node("bleed.mastery", "孤创专精", PassiveBranch.Bleed, PassiveNodeKind.Mastery, "bleed.notable",
+            new PassiveEffect(PassiveEffectKind.IncreasedBleedDamageBasisPoints, 3_500),
+            new PassiveEffect(PassiveEffectKind.BleedMastery)),
         Node("bleed.rule", "深创", PassiveBranch.Bleed, PassiveNodeKind.Rule, "bleed.notable",
-            new PassiveEffect(PassiveEffectKind.DeepWound)),
+            new PassiveEffect(PassiveEffectKind.DeepWound),
+            new PassiveEffect(PassiveEffectKind.IncreasedBleedDamageBasisPoints, 4_000)),
 
         Small("defense.1", "生命 I", PassiveBranch.Defense, null, PassiveEffectKind.IncreasedMaximumLifeBasisPoints, 400),
         Small("defense.2", "生命 II", PassiveBranch.Defense, "defense.1", PassiveEffectKind.IncreasedMaximumLifeBasisPoints, 400),
@@ -126,6 +143,10 @@ public static class P1PassiveTree
         Node("defense.notable", "顽强", PassiveBranch.Defense, PassiveNodeKind.Notable, "defense.5",
             new PassiveEffect(PassiveEffectKind.Tenacious),
             new PassiveEffect(PassiveEffectKind.IncreasedLifeFlaskEffectBasisPoints, 2_000)),
+        Node("defense.mastery", "钢躯专精", PassiveBranch.Defense, PassiveNodeKind.Mastery, "defense.notable",
+            new PassiveEffect(PassiveEffectKind.IncreasedMaximumLifeBasisPoints, 1_500),
+            new PassiveEffect(PassiveEffectKind.IncreasedArmorBasisPoints, 3_000),
+            new PassiveEffect(PassiveEffectKind.DefenseMastery)),
 
         Small("warcry.1", "战吼恢复 I", PassiveBranch.WarCry, null, PassiveEffectKind.IncreasedWarCryCooldownRecoveryBasisPoints, 500),
         Small("warcry.2", "战吼恢复 II", PassiveBranch.WarCry, "warcry.1", PassiveEffectKind.IncreasedWarCryCooldownRecoveryBasisPoints, 500),
@@ -134,6 +155,10 @@ public static class P1PassiveTree
         Small("warcry.5", "广域战吼", PassiveBranch.WarCry, "warcry.4", PassiveEffectKind.IncreasedWarCryRangeBasisPoints, 1_000),
         Node("warcry.notable", "余音", PassiveBranch.WarCry, PassiveNodeKind.Notable, "warcry.5",
             new PassiveEffect(PassiveEffectKind.Echo)),
+        Node("warcry.mastery", "震令专精", PassiveBranch.WarCry, PassiveNodeKind.Mastery, "warcry.notable",
+            new PassiveEffect(PassiveEffectKind.IncreasedWarCryCooldownRecoveryBasisPoints, 3_000),
+            new PassiveEffect(PassiveEffectKind.IncreasedWarCryRangeBasisPoints, 3_000),
+            new PassiveEffect(PassiveEffectKind.WarCryMastery)),
         };
 
         ExtendBranch(nodes, PassiveBranch.HeavyWeapon, "heavy", "heavy.rule", 11,
@@ -167,7 +192,12 @@ public static class P1PassiveTree
             PassiveNodeKind kind = index == 18
                 ? PassiveNodeKind.Rule
                 : index is 6 or 12 ? PassiveNodeKind.Notable : PassiveNodeKind.Small;
-            int nodeValue = kind == PassiveNodeKind.Small ? value : value * 2;
+            int nodeValue = kind switch
+            {
+                PassiveNodeKind.Small => value,
+                PassiveNodeKind.Notable => value * 2,
+                _ => value * 5,
+            };
             nodes.Add(Node(id, $"{BranchName(branch)}·{index:00}", branch, kind, previous,
                 new PassiveEffect(effect, nodeValue)));
             previous = id;
@@ -261,8 +291,7 @@ public sealed class PassiveTreeAllocation
 
     public bool TryRefund(string stableId)
     {
-        if (!_allocated.Contains(stableId) || MemoryAshes < 1 ||
-            P1PassiveTree.Nodes.Any(node => node.PrerequisiteId == stableId && _allocated.Contains(node.StableId)))
+        if (!_allocated.Contains(stableId) || MemoryAshes < 1 || !CanRefundWithoutDisconnecting(stableId))
         {
             return false;
         }
@@ -270,6 +299,48 @@ public sealed class PassiveTreeAllocation
         _allocated.Remove(stableId);
         MemoryAshes--;
         return true;
+    }
+
+    public bool CanRefundWithoutDisconnecting(string stableId)
+    {
+        if (!_allocated.Contains(stableId))
+        {
+            return false;
+        }
+
+        HashSet<string> remaining = _allocated.Where(id => id != stableId).ToHashSet(StringComparer.Ordinal);
+        if (remaining.Count == 0)
+        {
+            return true;
+        }
+
+        Dictionary<string, List<string>> edges = remaining.ToDictionary(id => id, _ => new List<string>(), StringComparer.Ordinal);
+        foreach (string id in remaining)
+        {
+            string? prerequisite = P1PassiveTree.Get(id).PrerequisiteId;
+            if (prerequisite is not null && remaining.Contains(prerequisite))
+            {
+                edges[id].Add(prerequisite);
+                edges[prerequisite].Add(id);
+            }
+        }
+
+        var reachable = new HashSet<string>(StringComparer.Ordinal);
+        var pending = new Queue<string>(remaining.Where(id => P1PassiveTree.Get(id).PrerequisiteId is null));
+        while (pending.TryDequeue(out string? current))
+        {
+            if (!reachable.Add(current))
+            {
+                continue;
+            }
+
+            foreach (string neighbor in edges[current])
+            {
+                pending.Enqueue(neighbor);
+            }
+        }
+
+        return reachable.SetEquals(remaining);
     }
 
     public bool TryReset()
@@ -356,6 +427,10 @@ public sealed class PassiveTreeAllocation
             sums[(int)PassiveEffectKind.DeepWound] > 0,
             sums[(int)PassiveEffectKind.Tenacious] > 0,
             sums[(int)PassiveEffectKind.Echo] > 0,
-            sums[(int)PassiveEffectKind.ChargedHeavyStrike] > 0);
+            sums[(int)PassiveEffectKind.ChargedHeavyStrike] > 0,
+            sums[(int)PassiveEffectKind.HeavyWeaponMastery] > 0,
+            sums[(int)PassiveEffectKind.BleedMastery] > 0,
+            sums[(int)PassiveEffectKind.DefenseMastery] > 0,
+            sums[(int)PassiveEffectKind.WarCryMastery] > 0);
     }
 }

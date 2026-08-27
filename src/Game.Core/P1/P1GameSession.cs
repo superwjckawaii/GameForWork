@@ -4,6 +4,7 @@ using GameForWork.Core.P1.Progression;
 using GameForWork.Core.P1.World;
 using GameForWork.Core.P2;
 using GameForWork.Core.P4;
+using GameForWork.Core.P5;
 
 namespace GameForWork.Core.P1;
 
@@ -107,7 +108,7 @@ public sealed record P1GameSessionSnapshot(
 
 public sealed class P1GameSession
 {
-    public const int CurrentFormatVersion = 7;
+    public const int CurrentFormatVersion = 8;
     private readonly P1WorldSimulator _simulator = new(new P1MapAttemptResolver());
     private AssembledCharacterBuild _heroBuild;
 
@@ -139,6 +140,8 @@ public sealed class P1GameSession
         Seed = seed;
         SimulationSequence = simulationSequence;
         DebugTwentyTimes = debugTwentyTimes;
+        Management.NormalizeSkillChains(P5SkillChainRules.Build(HeroEquipment));
+        HeavyStrikeSupports = SupportsFor("core.skill_stone.heavy_strike");
         _heroBuild = AssembleHero();
         RefreshHeroTeamBuild();
     }
@@ -237,9 +240,20 @@ public sealed class P1GameSession
                 world.Economy.AddMetal(MetalCurrencyKind.WardSteel, 3);
                 world.Economy.AddMetal(MetalCurrencyKind.VitalSilver, 3);
             }
+
+            if (snapshot.FormatVersion < 8)
+            {
+                MigrateLegacyDispatch(world, world.Hero);
+                MigrateLegacyDispatch(world, world.Mercenaries);
+            }
         }
 
         bool legacyP1Migration = snapshot.FormatVersion < 5;
+        P2ManagementState management = P2ManagementState.Restore(snapshot.Management, legacyP1Migration);
+        if (snapshot.FormatVersion < 8)
+        {
+            SynchronizeLegacyHeavySupports(management, snapshot.HeavyStrikeSupports);
+        }
         return new P1GameSession(
             snapshot.Player,
             snapshot.MercenaryName,
@@ -249,7 +263,7 @@ public sealed class P1GameSession
             passives,
             snapshot.HeavyStrikeSupports,
             snapshot.HeroAi ?? HeroAiConfiguration.Balanced,
-            P2ManagementState.Restore(snapshot.Management, legacyP1Migration),
+            management,
             P2CampaignState.Restore(legacyP1Migration ? null : snapshot.Campaign, legacyP1Migration),
             snapshot.Seed,
             snapshot.SimulationSequence,
@@ -372,32 +386,82 @@ public sealed class P1GameSession
 
     public void SetHeavyStrikeSupports(SkillSupport supports)
     {
+        SkillStoneInstance active = Management.SkillStones.Single(
+            item => item.DefinitionId == "core.skill_stone.heavy_strike");
+        string[] supportIds = SupportDefinitionIds(supports)
+            .Select(definition => Management.SkillStones.FirstOrDefault(item => item.DefinitionId == definition)?.InstanceId)
+            .Where(id => id is not null)
+            .Cast<string>()
+            .ToArray();
+        P5SkillChainDefinition? chain = GetSkillChains().FirstOrDefault(item =>
+            item.StableId == Management.SkillLinks.First(link => link.ActiveStoneInstanceId == active.InstanceId).ChainId);
+        Management.ReplaceSupports(active.InstanceId, supportIds, chain?.SupportCapacity ?? 5);
         HeavyStrikeSupports = supports;
         RefreshHeroBuild();
     }
 
     public void SyncHeavyStrikeFromSkillStones()
     {
-        SkillStoneInstance? active = Management.SkillStones.FirstOrDefault(
-            item => item.DefinitionId == "core.skill_stone.heavy_strike");
-        SkillLinkConfiguration? link = active is null
-            ? null
-            : Management.SkillLinks.FirstOrDefault(item => item.ActiveStoneInstanceId == active.InstanceId);
-        SkillSupport supports = SkillSupport.None;
-        foreach (string supportId in link?.SupportStoneInstanceIds ?? [])
+        SetHeavyStrikeSupports(SupportsFor("core.skill_stone.heavy_strike"));
+    }
+
+    public IReadOnlyList<P5SkillChainDefinition> GetSkillChains() => P5SkillChainRules.Build(HeroEquipment);
+
+    public bool TryAssignActiveSkill(string activeStoneInstanceId, string chainId)
+    {
+        bool changed = Management.TryAssignActiveToChain(activeStoneInstanceId, chainId, GetSkillChains());
+        if (changed)
         {
-            string definition = Management.SkillStones.Single(item => item.InstanceId == supportId).DefinitionId;
-            supports |= definition switch
-            {
-                "core.skill_stone.increased_area" => SkillSupport.IncreasedArea,
-                "core.skill_stone.attack_speed" => SkillSupport.AttackSpeed,
-                "core.skill_stone.bleed" => SkillSupport.Bleed,
-                "core.skill_stone.life_cost" => SkillSupport.LifeCost,
-                _ => SkillSupport.None,
-            };
+            SyncHeavyStrikeFromSkillStones();
         }
 
-        SetHeavyStrikeSupports(supports);
+        return changed;
+    }
+
+    public bool TryLinkSkillSupport(string activeStoneInstanceId, string supportStoneInstanceId)
+    {
+        SkillLinkConfiguration? link = Management.SkillLinks.FirstOrDefault(
+            item => item.ActiveStoneInstanceId == activeStoneInstanceId);
+        P5SkillChainDefinition? chain = GetSkillChains().FirstOrDefault(item => item.StableId == link?.ChainId);
+        bool changed = chain is not null &&
+            Management.TryLinkSupport(activeStoneInstanceId, supportStoneInstanceId, chain.SupportCapacity);
+        if (changed)
+        {
+            SyncHeavyStrikeFromSkillStones();
+        }
+
+        return changed;
+    }
+
+    public bool UnlinkSkillSupport(string activeStoneInstanceId, string supportStoneInstanceId)
+    {
+        bool changed = Management.UnlinkSupport(activeStoneInstanceId, supportStoneInstanceId);
+        if (changed)
+        {
+            SyncHeavyStrikeFromSkillStones();
+        }
+
+        return changed;
+    }
+
+    public void AssignExpedition(
+        ExpeditionTeamKind teamKind,
+        P5ExpeditionTarget target,
+        P5DispatchMode mode)
+    {
+        P1TeamExpeditionState team = Team(teamKind);
+        ReturnQueuedMaps(team);
+        World.Expedition.Assign(teamKind, target, mode);
+        team.Resume();
+        World.Expedition.PrepareNext(World, team);
+    }
+
+    public void CancelExpedition(ExpeditionTeamKind teamKind)
+    {
+        P1TeamExpeditionState team = Team(teamKind);
+        ReturnQueuedMaps(team);
+        World.Expedition.Cancel(teamKind);
+        team.Stop("manual_stop");
     }
 
     public void SetHeroAi(HeroAiConfiguration configuration)
@@ -450,6 +514,8 @@ public sealed class P1GameSession
     {
         if (character == P2CharacterKind.Hero)
         {
+            Management.NormalizeSkillChains(GetSkillChains());
+            HeavyStrikeSupports = SupportsFor("core.skill_stone.heavy_strike");
             RefreshHeroBuild();
         }
         else
@@ -616,7 +682,8 @@ public sealed class P1GameSession
         increasedCriticalChanceBasisPoints: build.IncreasedCriticalChanceBasisPoints,
         increasedBleedChanceBasisPoints: build.IncreasedBleedChanceBasisPoints);
 
-    private void RefreshHeroTeamBuild() => World.Hero.UpdateBuild(ToTeamBuild(_heroBuild, HeavyStrikeSupports, HeroAi));
+    private void RefreshHeroTeamBuild() => World.Hero.UpdateBuild(
+        ToTeamBuild(_heroBuild, HeavyStrikeSupports, HeroAi, BuildActiveSkills()));
 
     private void RefreshMercenaryBuild()
     {
@@ -635,7 +702,8 @@ public sealed class P1GameSession
     private static P1TeamBuild ToTeamBuild(
         AssembledCharacterBuild build,
         SkillSupport supports,
-        HeroAiConfiguration ai) => new P1TeamBuild(
+        HeroAiConfiguration ai,
+        IReadOnlyList<SkillConfiguration>? activeSkills = null) => new P1TeamBuild(
         build.Sheet,
         build.Equipment.Weapon ?? throw new InvalidOperationException("Hero weapon is missing."),
         new SkillConfiguration(P1SkillIds.HeavyStrike, supports),
@@ -658,7 +726,7 @@ public sealed class P1GameSession
         HeavyStrikeProfile: build.HeavyStrike,
         WeaponLegendaryRule: build.Equipment.WeaponLegendaryRule,
         MovementSpeedBasisPoints: checked(10_000 + build.Passives.IncreasedMovementSpeedBasisPoints),
-        ActiveSkills:
+        ActiveSkills: activeSkills ??
         [
             new SkillConfiguration(P1SkillIds.HeavyStrike, supports),
             new SkillConfiguration(P1SkillIds.EarthCleave, SkillSupport.IncreasedArea),
@@ -670,4 +738,95 @@ public sealed class P1GameSession
                 $"危险度≥{ai.DangerThreshold}{(ai.BossPriority ? "、Boss优先" : string.Empty)}；" +
                 $"生命低于 {ai.LifeFlaskThresholdBasisPoints / 100}% 使用药剂。"
         };
+
+    private IReadOnlyList<SkillConfiguration> BuildActiveSkills() => Management.SkillLinks
+        .Where(link => !string.IsNullOrEmpty(link.ChainId))
+        .OrderBy(link => link.Priority)
+        .Select(link => Management.SkillStones.Single(stone => stone.InstanceId == link.ActiveStoneInstanceId))
+        .Where(stone => stone.DefinitionId != "core.skill_stone.war_cry")
+        .Select(stone => new SkillConfiguration(ToCombatSkillId(stone.DefinitionId), SupportsFor(stone.DefinitionId)))
+        .Where(configuration => !string.IsNullOrEmpty(configuration.SkillId))
+        .Take(3)
+        .ToArray();
+
+    private SkillSupport SupportsFor(string activeDefinitionId)
+    {
+        SkillStoneInstance? active = Management.SkillStones.FirstOrDefault(item => item.DefinitionId == activeDefinitionId);
+        SkillLinkConfiguration? link = active is null
+            ? null
+            : Management.SkillLinks.FirstOrDefault(item => item.ActiveStoneInstanceId == active.InstanceId);
+        SkillSupport supports = SkillSupport.None;
+        foreach (string supportId in link?.SupportStoneInstanceIds ?? [])
+        {
+            string definition = Management.SkillStones.Single(item => item.InstanceId == supportId).DefinitionId;
+            supports |= definition switch
+            {
+                "core.skill_stone.increased_area" => SkillSupport.IncreasedArea,
+                "core.skill_stone.attack_speed" => SkillSupport.AttackSpeed,
+                "core.skill_stone.bleed" => SkillSupport.Bleed,
+                "core.skill_stone.life_cost" => SkillSupport.LifeCost,
+                "core.skill_stone.chain" => SkillSupport.Chain,
+                _ => SkillSupport.None,
+            };
+        }
+
+        return supports;
+    }
+
+    private static string ToCombatSkillId(string definitionId) => definitionId switch
+    {
+        "core.skill_stone.heavy_strike" => P1SkillIds.HeavyStrike,
+        "core.skill_stone.earth_cleave" => P1SkillIds.EarthCleave,
+        "core.skill_stone.spirit_blade" => P1SkillIds.SpiritBlade,
+        _ => string.Empty,
+    };
+
+    private static IEnumerable<string> SupportDefinitionIds(SkillSupport supports)
+    {
+        if (supports.HasFlag(SkillSupport.IncreasedArea)) yield return "core.skill_stone.increased_area";
+        if (supports.HasFlag(SkillSupport.AttackSpeed)) yield return "core.skill_stone.attack_speed";
+        if (supports.HasFlag(SkillSupport.Bleed)) yield return "core.skill_stone.bleed";
+        if (supports.HasFlag(SkillSupport.LifeCost)) yield return "core.skill_stone.life_cost";
+        if (supports.HasFlag(SkillSupport.Chain)) yield return "core.skill_stone.chain";
+    }
+
+    private static void SynchronizeLegacyHeavySupports(P2ManagementState management, SkillSupport supports)
+    {
+        SkillStoneInstance active = management.SkillStones.Single(
+            item => item.DefinitionId == "core.skill_stone.heavy_strike");
+        string[] supportIds = SupportDefinitionIds(supports)
+            .Select(definition => management.SkillStones.FirstOrDefault(item => item.DefinitionId == definition)?.InstanceId)
+            .Where(id => id is not null)
+            .Cast<string>()
+            .ToArray();
+        management.ReplaceSupports(active.InstanceId, supportIds);
+    }
+
+    private P1TeamExpeditionState Team(ExpeditionTeamKind kind) =>
+        kind == ExpeditionTeamKind.Hero ? World.Hero : World.Mercenaries;
+
+    private void ReturnQueuedMaps(P1TeamExpeditionState team)
+    {
+        while (team.Queue.Count > 0)
+        {
+            P1MapItem? map = team.Queue.TakeAt(0);
+            if (map is not null && !P5ExpeditionDirector.IsBoss(map) && !P5ExpeditionDirector.IsPractice(map))
+            {
+                World.MapInventory.Add(map);
+            }
+        }
+    }
+
+    private static void MigrateLegacyDispatch(P1WorldState world, P1TeamExpeditionState team)
+    {
+        if (team.ActiveMap is null && team.Queue.Count == 0)
+        {
+            return;
+        }
+
+        P5ExpeditionTarget target = team.Policy.PreferredRoute == MapRoute.Safe
+            ? P5ExpeditionTarget.SafeMaps
+            : P5ExpeditionTarget.AbyssMaps;
+        world.Expedition.Assign(team.Kind, target, P5DispatchMode.Repeat);
+    }
 }

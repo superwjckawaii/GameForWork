@@ -2,7 +2,7 @@
 
 一款面向 Windows PC 的单机挂机构筑游戏。玩家培养一名可深度构筑的主角、运营建立在古代门扉旁的城镇，并通过消耗地图与远征补给持续探索破碎世界。
 
-项目已完成 P0 与 P1 验收，P2“主线解锁 + 构筑与物品管理”纵向切片已完成本地实现，正在等待统一人工验收。当前版本包含五码 30 节点主线、远征解锁门控、角色/物品统一工作区、技能与天赋图形界面、远征队列和低密度像素美术。
+项目已完成 P0～P5，实现五幕主线、确定性空间群战、单页双队伍远征、地图与 Boss 碎片仓库、装备生成技能链、集群专精、安全的图连通洗点和金属通货工坊。
 
 ## 本地运行与验证
 
@@ -14,7 +14,7 @@
 .\scripts\verify.ps1 -Launch
 ```
 
-验证脚本依次执行依赖恢复、编译、单元测试、Godot 无界面导入和主场景启动检查。若 Godot 不在已约定的本机位置，可通过 `GODOT_BIN` 指定控制台程序完整路径。
+验证脚本依次执行依赖恢复、编译、单元测试、Godot 无界面导入和主场景启动检查。若 .NET SDK 或 Godot 不在已约定的本机位置，可分别通过 `DOTNET_BIN` 或 `GODOT_BIN` 指定可执行程序完整路径。
 
 ## 当前设计支柱
 
@@ -29,9 +29,12 @@
 
 - [已确认游戏设计基线](docs/GAME_DESIGN_BASELINE.md)
 - [已确认技术架构](docs/TECHNICAL_ARCHITECTURE.md)
-- [P0/P1 开发计划与协作流程](docs/DEVELOPMENT_PLAN.md)
+- [P0～P5 开发计划与协作流程](docs/DEVELOPMENT_PLAN.md)
 - [P0 技术实现规格](docs/P0_SPECIFICATION.md)
 - [P1 垂直切片规格](docs/P1_SPECIFICATION.md)
 - [P2 纵向切片规格](docs/P2_SPECIFICATION.md)
 - [P2 实现与验收说明](docs/P2_IMPLEMENTATION.md)
+- [P3 空间场景规格](docs/P3_SPECIFICATION.md)
+- [P4 空间群战与角色工坊规格](docs/P4_SPECIFICATION.md)
+- [P5 异界派遣与构筑交互规格](docs/P5_SPECIFICATION.md)
 - [待讨论与开发决策](docs/OPEN_QUESTIONS.md)

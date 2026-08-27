@@ -23,6 +23,8 @@ public partial class P1PassiveTreeView : Control
     private bool _fitInitialized;
 
     public event Action<string>? NodeSelected;
+    public event Action<string>? NodeAllocateRequested;
+    public event Action<string>? NodeRefundRequested;
 
     public string? SelectedStableId { get; private set; }
 
@@ -171,17 +173,43 @@ public partial class P1PassiveTreeView : Control
                 {
                     PassiveNodeKind.Small => 14,
                     PassiveNodeKind.Notable => 21,
+                    PassiveNodeKind.Mastery => 24,
                     _ => 27,
                 };
                 var button = new Button
                 {
-                    Text = node.Kind == PassiveNodeKind.Small ? string.Empty : node.Kind == PassiveNodeKind.Notable ? "◆" : "律",
+                    Text = node.Kind switch
+                    {
+                        PassiveNodeKind.Small => string.Empty,
+                        PassiveNodeKind.Notable => "◆",
+                        PassiveNodeKind.Mastery => "专",
+                        _ => "律",
+                    },
                     Size = Vector2.One * size,
                     CustomMinimumSize = Vector2.One * size,
                     FocusMode = FocusModeEnum.None,
                 };
                 button.AddThemeFontSizeOverride("font_size", 12);
                 button.Pressed += () => SelectNode(node.StableId);
+                button.GuiInput += inputEvent =>
+                {
+                    if (inputEvent is not InputEventMouseButton { Pressed: true, DoubleClick: true } mouse)
+                    {
+                        return;
+                    }
+
+                    SelectNode(node.StableId);
+                    if (mouse.ButtonIndex == MouseButton.Left)
+                    {
+                        NodeAllocateRequested?.Invoke(node.StableId);
+                    }
+                    else if (mouse.ButtonIndex == MouseButton.Right)
+                    {
+                        NodeRefundRequested?.Invoke(node.StableId);
+                    }
+
+                    button.AcceptEvent();
+                };
                 AddChild(button);
                 _buttons[node.StableId] = button;
                 _worldCenters[node.StableId] = center;

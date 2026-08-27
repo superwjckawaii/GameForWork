@@ -6,6 +6,7 @@ using GameForWork.Core.P1.Progression;
 using GameForWork.Core.P1.World;
 using GameForWork.Core.P2;
 using GameForWork.Core.P4;
+using GameForWork.Core.P5;
 using Godot;
 
 namespace GameForWork.GodotClient;
@@ -21,7 +22,6 @@ public partial class P2Dashboard : VBoxContainer
     private const int ContextCrafting = 7;
     private const int ContextBuyback = 8;
 
-    private readonly Dictionary<SkillSupport, CheckButton> _supportToggles = [];
     private readonly List<BaseButton> _heroOnlyControls = [];
     private P1GameSession? _session;
     private Action<PlayerIdentity>? _createCharacter;
@@ -34,7 +34,6 @@ public partial class P2Dashboard : VBoxContainer
     private Control? _expeditionPage;
     private Label? _miniStatus;
     private Label? _overviewStatus;
-    private Label? _expeditionStatus;
     private Label? _characterStatus;
     private Label? _storageStatus;
     private Label? _selectedPassive;
@@ -56,7 +55,7 @@ public partial class P2Dashboard : VBoxContainer
     private P1ItemGrid? _mercenaryLootGrid;
     private P2LootFilterPanel? _filterPanel;
     private P2SkillStonePanel? _skillStonePanel;
-    private P2MapQueuePanel? _mapQueuePanel;
+    private P5ExpeditionPanel? _expeditionPanel;
     private OptionButton? _characterSelector;
     private PopupMenu? _itemMenu;
     private ConfirmationDialog? _confirmDialog;
@@ -262,20 +261,9 @@ public partial class P2Dashboard : VBoxContainer
     private Control BuildExpeditionPage()
     {
         VBoxContainer page = Page("远征");
-        page.AddChild(new Label { Text = "主角队与佣兵队拥有独立队列；当前地图使用启动时的方针快照。" });
-        _mapQueuePanel = new P2MapQueuePanel();
-        _mapQueuePanel.Initialize(RequireSession, Changed);
-        page.AddChild(_mapQueuePanel);
-        AddTeamPolicyRow(page, ExpeditionTeamKind.Hero, "主角单人队");
-        AddTeamPolicyRow(page, ExpeditionTeamKind.Mercenaries, "佣兵队");
-        var controls = new HFlowContainer();
-        page.AddChild(controls);
-        AddButton(controls, "推进 5 秒", () => AdvanceWorld(5_000));
-        AddButton(controls, "推进一张图时间", () => AdvanceWorld(90_000));
-        AddButton(controls, "模拟离线 48h", () => AdvanceWorld(OfflineTime.MaximumMilliseconds));
-        AddButton(controls, "分配地图库存", () => Changed($"已加入 {RequireSession().EnqueueInventoryMaps()} 张地图。"));
-        _expeditionStatus = new Label { AutowrapMode = TextServer.AutowrapMode.WordSmart };
-        page.AddChild(_expeditionStatus);
+        _expeditionPanel = new P5ExpeditionPanel();
+        _expeditionPanel.Initialize(RequireSession, Changed);
+        page.AddChild(_expeditionPanel);
         return Wrap(page);
     }
 
@@ -418,12 +406,6 @@ public partial class P2Dashboard : VBoxContainer
         _skillStonePanel = new P2SkillStonePanel();
         _skillStonePanel.Initialize(RequireSession, Changed);
         page.AddChild(_skillStonePanel);
-        var supports = new HFlowContainer();
-        page.AddChild(supports);
-        AddSupportToggle(supports, "扩大范围", SkillSupport.IncreasedArea);
-        AddSupportToggle(supports, "攻击速度", SkillSupport.AttackSpeed);
-        AddSupportToggle(supports, "流血", SkillSupport.Bleed);
-        AddSupportToggle(supports, "生命消耗", SkillSupport.LifeCost);
         return page;
     }
 
@@ -439,12 +421,36 @@ public partial class P2Dashboard : VBoxContainer
             PassiveNodeDefinition node = P1PassiveTree.Get(stableId);
             _selectedPassive!.Text = $"已选择：{node.DisplayName} · {string.Join("；", node.Effects.Select(P1UiText.PassiveEffect))}";
         };
+        _passiveTree.NodeAllocateRequested += stableId =>
+        {
+            if (_selectedCharacter != P2CharacterKind.Hero)
+            {
+                Changed("佣兵天赋由自主成长决定，不能手动分配。");
+                return;
+            }
+
+            Changed(RequireSession().TryAllocatePassive(stableId)
+                ? "天赋已分配。"
+                : "节点不可达或可用天赋点不足。");
+        };
+        _passiveTree.NodeRefundRequested += stableId =>
+        {
+            if (_selectedCharacter != P2CharacterKind.Hero)
+            {
+                Changed("佣兵天赋由自主成长决定，不能手动洗点。");
+                return;
+            }
+
+            Changed(RequireSession().TryRefundPassive(stableId)
+                ? "天赋已退还。"
+                : "洗点会切断已分配路径，或记忆灰烬不足。");
+        };
         page.AddChild(_passiveTree);
         var row = new HBoxContainer();
         page.AddChild(row);
         _selectedPassive = new Label
         {
-            Text = "点击图中的天赋节点后进行分配、规划或退还",
+            Text = "单击查看 · 左键双击加点 · 右键双击洗点（不会切断已分配路径）",
             SizeFlagsHorizontal = SizeFlags.ExpandFill,
         };
         row.AddChild(_selectedPassive);
@@ -770,43 +776,6 @@ public partial class P2Dashboard : VBoxContainer
         });
     }
 
-    private void AddSupportToggle(Container parent, string text, SkillSupport support)
-    {
-        var toggle = new CheckButton { Text = text };
-        toggle.Toggled += enabled =>
-        {
-            if (_selectedCharacter != P2CharacterKind.Hero)
-            {
-                return;
-            }
-
-            P1GameSession session = RequireSession();
-            string definitionId = support switch
-            {
-                SkillSupport.IncreasedArea => "core.skill_stone.increased_area",
-                SkillSupport.AttackSpeed => "core.skill_stone.attack_speed",
-                SkillSupport.Bleed => "core.skill_stone.bleed",
-                SkillSupport.LifeCost => "core.skill_stone.life_cost",
-                _ => string.Empty,
-            };
-            SkillStoneInstance active = session.Management.SkillStones.Single(
-                item => item.DefinitionId == "core.skill_stone.heavy_strike");
-            SkillStoneInstance stone = session.Management.SkillStones.Single(item => item.DefinitionId == definitionId);
-            bool changed = enabled
-                ? session.Management.TryLinkSupport(active.InstanceId, stone.InstanceId)
-                : session.Management.UnlinkSupport(active.InstanceId, stone.InstanceId);
-            if (changed)
-            {
-                session.SyncHeavyStrikeFromSkillStones();
-            }
-
-            Changed(changed ? "重击技能石连接已更新。" : "技能石连接没有变化。");
-        };
-        parent.AddChild(toggle);
-        _supportToggles[support] = toggle;
-        _heroOnlyControls.Add(toggle);
-    }
-
     private void AllocateSelectedPassive()
     {
         if (_passiveTree?.SelectedStableId is not string stableId)
@@ -954,9 +923,6 @@ public partial class P2Dashboard : VBoxContainer
             $"补给 {economy.ExpeditionSupplies} · 金币 {economy.Gold} · 铁屑 {economy.IronScraps} · " +
             $"淬刃铁 {economy.MetalAmount(MetalCurrencyKind.TemperingIron)} · 守壁钢 {economy.MetalAmount(MetalCurrencyKind.WardSteel)} · " +
             $"活血银 {economy.MetalAmount(MetalCurrencyKind.VitalSilver)} · 地图 {_session.World.MapInventory.Count}{recoveryWarning}";
-        _expeditionStatus!.Text = TeamText(_session.World.Hero, _session.World) + "\n" +
-            TeamText(_session.World.Mercenaries, _session.World) +
-            $"\n地图库存 {_session.World.MapInventory.Count} · 模拟速度 {_session.SimulationSpeed}×";
 
         EquipmentLoadout selectedLoadout = _selectedCharacter == P2CharacterKind.Hero
             ? _session.HeroEquipment
@@ -988,24 +954,20 @@ public partial class P2Dashboard : VBoxContainer
             control.Disabled = !heroSelected;
         }
 
-        foreach ((SkillSupport support, CheckButton toggle) in _supportToggles)
-        {
-            toggle.SetPressedNoSignal(_session.HeavyStrikeSupports.HasFlag(support));
-        }
-
         _skillSummary!.Text = heroSelected
             ? string.Join("\n", _session.Management.SkillStones.Select(stone =>
                 $"◆ {stone.Definition.DisplayName} · {stone.Definition.Kind} · Lv.{stone.Level} XP {stone.Experience}"))
             : $"佣兵技能、辅助、天赋与 AI 由自主成长生成，玩家不可修改。\n{_session.World.Mercenaries.Build.AiSummary}";
         _activeSkillSummary!.Text = heroSelected
-            ? "主动技能优先级（最多 3 个）\n" + string.Join("\n", _session.Management.SkillLinks
+            ? "装备技能链（前三条攻击链进入战斗栏，工具链独立生效）\n" + string.Join("\n", _session.Management.SkillLinks
                 .OrderBy(link => link.Priority)
                 .Select(link =>
                 {
                     SkillStoneInstance active = _session.Management.SkillStones.Single(stone => stone.InstanceId == link.ActiveStoneInstanceId);
                     string supports = link.SupportStoneInstanceIds.Count == 0 ? "无辅助" : string.Join("、",
                         link.SupportStoneInstanceIds.Select(id => _session.Management.SkillStones.Single(stone => stone.InstanceId == id).Definition.DisplayName));
-                    return $"{link.Priority}. {active.Definition.DisplayName} · {supports}";
+                    P5SkillChainDefinition? chain = _session.GetSkillChains().FirstOrDefault(item => item.StableId == link.ChainId);
+                    return $"{chain?.DisplayName ?? "未装配"}：{active.Definition.DisplayName} · {supports}";
                 }))
             : "佣兵的主动技能优先级由其 AI 自主配置。";
         ItemInstance? craftItem = ItemAt(_craftContainer, _craftIndex);
@@ -1017,7 +979,7 @@ public partial class P2Dashboard : VBoxContainer
         _skillStonePanel?.RefreshState();
         _history!.Text = string.Join('\n', _session.Management.OperationHistory.TakeLast(200).Select(item => $"• {item}"));
         _filterPanel?.RefreshRules();
-        _mapQueuePanel?.RefreshState();
+        _expeditionPanel?.RefreshState();
         _campaignRoute?.RefreshState();
         CampaignNodeDefinition? currentNode = _session.Campaign.CurrentNode;
         long currentNodeDuration = _session.Campaign.ActiveTimeline?.DurationMilliseconds ??
