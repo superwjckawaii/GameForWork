@@ -50,6 +50,40 @@ public static class P1Affixes
             AddExtraLink(result, category, $"{prefix}.extra_link");
         }
 
+        foreach (ItemCategory category in new[] { ItemCategory.Gloves, ItemCategory.Boots })
+        {
+            string prefix = category == ItemCategory.Gloves ? "gloves" : "boots";
+            AddTwoTiers(result, category, $"{prefix}.life", "最大生命", AffixPosition.Prefix,
+                ItemModifierKind.FlatMaximumLife, 4, 8, 9, 14, 1_000);
+            AddTwoTiers(result, category, $"{prefix}.armor", "护甲增加", AffixPosition.Prefix,
+                ItemModifierKind.IncreasedArmorBasisPoints, 800, 1_600, 1_700, 2_800, 900);
+            AddTwoTiers(result, category, $"{prefix}.evasion", "闪避增加", AffixPosition.Prefix,
+                ItemModifierKind.IncreasedEvasionBasisPoints, 800, 1_600, 1_700, 2_800, 900);
+            AddTwoTiers(result, category, $"{prefix}.shield", "护盾增加", AffixPosition.Prefix,
+                ItemModifierKind.IncreasedShieldBasisPoints, 800, 1_600, 1_700, 2_800, 900);
+            AddTwoTiers(result, category, $"{prefix}.accuracy", "命中", AffixPosition.Suffix,
+                ItemModifierKind.FlatAccuracy, 6, 12, 13, 22, 800);
+            AddTwoTiers(result, category, $"{prefix}.physique", "体魄", AffixPosition.Suffix,
+                ItemModifierKind.Physique, 1, 1, 2, 3, 600);
+        }
+
+        foreach (ItemCategory category in new[] { ItemCategory.Belt, ItemCategory.Amulet })
+        {
+            string prefix = category == ItemCategory.Belt ? "belt" : "amulet";
+            AddTwoTiers(result, category, $"{prefix}.life", "最大生命", AffixPosition.Prefix,
+                ItemModifierKind.FlatMaximumLife, 5, 10, 11, 18, 1_000);
+            AddTwoTiers(result, category, $"{prefix}.mana", "最大法力", AffixPosition.Prefix,
+                ItemModifierKind.FlatMaximumMana, 5, 10, 11, 18, 800);
+            AddTwoTiers(result, category, $"{prefix}.physical", "附加物理伤害", AffixPosition.Prefix,
+                ItemModifierKind.AddedPhysicalDamage, 1, 2, 3, 4, 700);
+            AddTwoTiers(result, category, $"{prefix}.physique", "体魄", AffixPosition.Suffix,
+                ItemModifierKind.Physique, 1, 1, 2, 3, 700);
+            AddTwoTiers(result, category, $"{prefix}.spirit", "精神", AffixPosition.Suffix,
+                ItemModifierKind.Spirit, 1, 1, 2, 3, 700);
+            AddTwoTiers(result, category, $"{prefix}.flask", "生命药剂效果", AffixPosition.Suffix,
+                ItemModifierKind.IncreasedLifeFlaskEffectBasisPoints, 400, 800, 900, 1_500, 600);
+        }
+
         AddTwoTiers(result, ItemCategory.Ring, "ring.added_physical", "附加物理伤害", AffixPosition.Prefix,
             ItemModifierKind.AddedPhysicalDamage, 1, 2, 3, 4, 900);
         AddTwoTiers(result, ItemCategory.Ring, "ring.life", "最大生命", AffixPosition.Prefix,

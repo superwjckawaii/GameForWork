@@ -7,15 +7,15 @@ namespace GameForWork.Tests;
 public sealed class P1BuildAndItemTests
 {
     [Fact]
-    public void ExperienceTableReachesLevelTenAndNineLevelPoints()
+    public void ExperienceTableReachesLevelSixtyAndFiftyNineLevelPoints()
     {
         var progression = new CharacterProgression();
 
         ExperienceGainResult result = progression.AddExperience(CharacterProgression.TotalExperienceToCap);
 
-        Assert.Equal(10, progression.Level);
-        Assert.Equal(9, progression.EarnedPassivePoints);
-        Assert.Equal(9, result.PassivePointsGained);
+        Assert.Equal(60, progression.Level);
+        Assert.Equal(59, progression.EarnedPassivePoints);
+        Assert.Equal(59, result.PassivePointsGained);
         Assert.True(result.ReachedLevelCap);
         Assert.Equal(1_140, CharacterProgression.RequiredExperience(9));
         progression.AddExperience(10_000);
@@ -35,11 +35,11 @@ public sealed class P1BuildAndItemTests
     [Fact]
     public void PassiveTreeHasSealedNodeCounts()
     {
-        Assert.Equal(26, P1PassiveTree.Nodes.Count);
-        Assert.Equal(20, P1PassiveTree.Nodes.Count(node => node.Kind == PassiveNodeKind.Small));
+        Assert.Equal(70, P1PassiveTree.Nodes.Count);
+        Assert.Equal(64, P1PassiveTree.Nodes.Count(node => node.Kind == PassiveNodeKind.Small));
         Assert.Equal(4, P1PassiveTree.Nodes.Count(node => node.Kind == PassiveNodeKind.Notable));
         Assert.Equal(2, P1PassiveTree.Nodes.Count(node => node.Kind == PassiveNodeKind.Rule));
-        Assert.Equal(10, PassiveTreeAllocation.MaximumAllocatedPoints);
+        Assert.Equal(70, PassiveTreeAllocation.MaximumAllocatedPoints);
     }
 
     [Fact]

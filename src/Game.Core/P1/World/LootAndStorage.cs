@@ -118,12 +118,48 @@ public sealed class EquipmentStorage
         return true;
     }
 
+    public ItemInstance? TakeAt(int index)
+    {
+        if (index < 0 || index >= _items.Count)
+        {
+            return null;
+        }
+
+        ItemInstance item = _items[index];
+        _items.RemoveAt(index);
+        return item;
+    }
+
+    public bool TryReplaceAt(int index, ItemInstance item)
+    {
+        ArgumentNullException.ThrowIfNull(item);
+        if (index < 0 || index >= _items.Count)
+        {
+            return false;
+        }
+
+        _items[index] = item;
+        RecordDiscovery(item);
+        return true;
+    }
+
+    public int IndexOf(string instanceId) => _items.FindIndex(item => item.InstanceId == instanceId);
+
     public void RestoreDiscoveries(IEnumerable<string> bases, IEnumerable<string> legendaryRules)
     {
         ArgumentNullException.ThrowIfNull(bases);
         ArgumentNullException.ThrowIfNull(legendaryRules);
         _discoveredBases.UnionWith(bases);
         _discoveredLegendaryRules.UnionWith(legendaryRules);
+    }
+
+    private void RecordDiscovery(ItemInstance item)
+    {
+        _discoveredBases.Add(item.Base.StableId);
+        if (item.LegendaryRule is not null)
+        {
+            _discoveredLegendaryRules.Add(item.LegendaryRule.StableId);
+        }
     }
 }
 
@@ -160,7 +196,9 @@ public static class LootProcessor
         foreach (ItemInstance item in items)
         {
             bool firstDiscovery = storage.IsFirstDiscovery(item);
-            LootDisposition disposition = firstDiscovery ? LootDisposition.Keep : filter.Evaluate(item);
+            LootDisposition disposition = firstDiscovery || item.IsLocked
+                ? LootDisposition.Keep
+                : filter.Evaluate(item);
             if (disposition == LootDisposition.Keep)
             {
                 if (!storage.TryStore(item))

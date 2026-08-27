@@ -2,6 +2,7 @@ using GameForWork.Core.P1.Combat;
 using GameForWork.Core.P1.Items;
 using GameForWork.Core.P1.Progression;
 using GameForWork.Core.P1.World;
+using GameForWork.Core.P2;
 
 namespace GameForWork.Core.P1;
 
@@ -84,11 +85,12 @@ public sealed record P1GameSessionSnapshot(
     HeroAiConfiguration? HeroAi,
     bool DebugTwentyTimes,
     ulong Seed,
-    int SimulationSequence);
+    int SimulationSequence,
+    P2ManagementSnapshot? Management = null);
 
 public sealed class P1GameSession
 {
-    public const int CurrentFormatVersion = 3;
+    public const int CurrentFormatVersion = 4;
     private readonly P1WorldSimulator _simulator = new(new P1MapAttemptResolver());
     private AssembledCharacterBuild _heroBuild;
 
@@ -100,6 +102,7 @@ public sealed class P1GameSession
         PassiveTreeAllocation passives,
         SkillSupport heavyStrikeSupports,
         HeroAiConfiguration heroAi,
+        P2ManagementState management,
         ulong seed,
         int simulationSequence,
         bool debugTwentyTimes)
@@ -111,6 +114,7 @@ public sealed class P1GameSession
         Passives = passives;
         HeavyStrikeSupports = heavyStrikeSupports;
         HeroAi = heroAi.Validate();
+        Management = management;
         Seed = seed;
         SimulationSequence = simulationSequence;
         DebugTwentyTimes = debugTwentyTimes;
@@ -125,6 +129,7 @@ public sealed class P1GameSession
     public PassiveTreeAllocation Passives { get; private set; }
     public SkillSupport HeavyStrikeSupports { get; private set; }
     public HeroAiConfiguration HeroAi { get; private set; }
+    public P2ManagementState Management { get; }
     public bool DebugTwentyTimes { get; set; }
     public ulong Seed { get; }
     public int SimulationSequence { get; private set; }
@@ -161,6 +166,7 @@ public sealed class P1GameSession
             passives,
             SkillSupport.Bleed,
             HeroAiConfiguration.Balanced,
+            P2ManagementState.CreateNew(),
             seed,
             simulationSequence: 0,
             debugTwentyTimes: false);
@@ -187,6 +193,13 @@ public sealed class P1GameSession
             world.Mercenaries.UpdateBuild(upgradedMercenary.CreateTeamBuild(world.Mercenaries.Progression.Level));
         }
 
+        if (snapshot.FormatVersion < CurrentFormatVersion)
+        {
+            world.Hero.Progression.MigrateToMinimumLevel(CharacterProgression.MaximumLevel);
+            world.Mercenaries.Progression.MigrateToMinimumLevel(CharacterProgression.MaximumLevel);
+        }
+
+        bool legacyMigration = snapshot.FormatVersion < CurrentFormatVersion;
         return new P1GameSession(
             snapshot.Player,
             snapshot.MercenaryName,
@@ -195,6 +208,7 @@ public sealed class P1GameSession
             passives,
             snapshot.HeavyStrikeSupports,
             snapshot.HeroAi ?? HeroAiConfiguration.Balanced,
+            P2ManagementState.Restore(snapshot.Management, legacyMigration),
             snapshot.Seed,
             snapshot.SimulationSequence,
             snapshot.DebugTwentyTimes);
@@ -215,7 +229,8 @@ public sealed class P1GameSession
         HeroAi,
         DebugTwentyTimes,
         Seed,
-        SimulationSequence);
+        SimulationSequence,
+        Management.Capture());
 
     public P1OfflineResult Advance(long realElapsedMilliseconds)
     {
@@ -299,7 +314,9 @@ public sealed class P1GameSession
 
     public bool TryResetPassives()
     {
-        bool changed = Passives.TryReset();
+        bool changed = Management.FreeFullRespecAvailable
+            ? Passives.ForceReset() && Management.ConsumeFreeFullRespec()
+            : Passives.TryReset();
         if (changed)
         {
             RefreshHeroBuild();

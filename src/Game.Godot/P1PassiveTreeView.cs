@@ -59,25 +59,29 @@ public partial class P1PassiveTreeView : Control
 
     private void BuildNodes()
     {
-        IReadOnlyDictionary<PassiveBranch, Vector2[]> layout = new Dictionary<PassiveBranch, Vector2[]>
+        IReadOnlyDictionary<PassiveBranch, (Vector2 Start, Vector2 End)> layout =
+            new Dictionary<PassiveBranch, (Vector2 Start, Vector2 End)>
         {
-            [PassiveBranch.HeavyWeapon] = [new(355, 205), new(305, 172), new(252, 142), new(199, 112), new(144, 88), new(91, 65), new(45, 44)],
-            [PassiveBranch.Bleed] = [new(355, 265), new(305, 298), new(252, 328), new(199, 358), new(144, 382), new(91, 405), new(45, 426)],
-            [PassiveBranch.Defense] = [new(465, 205), new(515, 172), new(568, 142), new(621, 112), new(676, 88), new(729, 65)],
-            [PassiveBranch.WarCry] = [new(465, 265), new(515, 298), new(568, 328), new(621, 358), new(676, 382), new(729, 405)],
+            [PassiveBranch.HeavyWeapon] = (new(370, 210), new(45, 44)),
+            [PassiveBranch.Bleed] = (new(370, 260), new(45, 426)),
+            [PassiveBranch.Defense] = (new(450, 210), new(775, 44)),
+            [PassiveBranch.WarCry] = (new(450, 260), new(775, 426)),
         };
 
         foreach (IGrouping<PassiveBranch, PassiveNodeDefinition> branch in P1PassiveTree.Nodes.GroupBy(node => node.Branch))
         {
+            PassiveNodeDefinition[] branchNodes = branch.ToArray();
             int index = 0;
-            foreach (PassiveNodeDefinition node in branch)
+            foreach (PassiveNodeDefinition node in branchNodes)
             {
-                Vector2 center = layout[branch.Key][index++];
+                float ratio = branchNodes.Length == 1 ? 0 : (float)index++ / (branchNodes.Length - 1);
+                (Vector2 start, Vector2 end) = layout[branch.Key];
+                Vector2 center = start.Lerp(end, ratio);
                 float size = node.Kind switch
                 {
-                    PassiveNodeKind.Small => 30,
-                    PassiveNodeKind.Notable => 40,
-                    _ => 48,
+                    PassiveNodeKind.Small => 22,
+                    PassiveNodeKind.Notable => 30,
+                    _ => 36,
                 };
                 var button = new Button
                 {

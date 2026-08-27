@@ -85,8 +85,10 @@ public static class P1PassiveTree
             ? node
             : throw new KeyNotFoundException($"Unknown passive node: {stableId}");
 
-    private static IReadOnlyList<PassiveNodeDefinition> BuildNodes() =>
-    [
+    private static IReadOnlyList<PassiveNodeDefinition> BuildNodes()
+    {
+        var nodes = new List<PassiveNodeDefinition>
+        {
         Small("heavy.1", "重击伤害", PassiveBranch.HeavyWeapon, null, PassiveEffectKind.IncreasedAttackDamageBasisPoints, 500),
         Small("heavy.2", "稳定握持", PassiveBranch.HeavyWeapon, "heavy.1", PassiveEffectKind.FlatAccuracy, 10),
         Small("heavy.3", "沉重打击", PassiveBranch.HeavyWeapon, "heavy.2", PassiveEffectKind.IncreasedAttackDamageBasisPoints, 500),
@@ -124,7 +126,45 @@ public static class P1PassiveTree
         Small("warcry.5", "广域战吼", PassiveBranch.WarCry, "warcry.4", PassiveEffectKind.IncreasedWarCryRangeBasisPoints, 1_000),
         Node("warcry.notable", "余音", PassiveBranch.WarCry, PassiveNodeKind.Notable, "warcry.5",
             new PassiveEffect(PassiveEffectKind.Echo)),
-    ];
+        };
+
+        ExtendBranch(nodes, PassiveBranch.HeavyWeapon, "heavy", "heavy.rule", 11,
+            PassiveEffectKind.IncreasedTwoHandDamageBasisPoints, 350);
+        ExtendBranch(nodes, PassiveBranch.Bleed, "bleed", "bleed.rule", 11,
+            PassiveEffectKind.IncreasedBleedDamageBasisPoints, 500);
+        ExtendBranch(nodes, PassiveBranch.Defense, "defense", "defense.notable", 11,
+            PassiveEffectKind.IncreasedMaximumLifeBasisPoints, 250);
+        ExtendBranch(nodes, PassiveBranch.WarCry, "warcry", "warcry.notable", 11,
+            PassiveEffectKind.IncreasedWarCryCooldownRecoveryBasisPoints, 300);
+        return nodes;
+    }
+
+    private static void ExtendBranch(
+        ICollection<PassiveNodeDefinition> nodes,
+        PassiveBranch branch,
+        string prefix,
+        string prerequisite,
+        int count,
+        PassiveEffectKind effect,
+        int value)
+    {
+        string previous = prerequisite;
+        for (int index = 1; index <= count; index++)
+        {
+            string id = $"{prefix}.path.{index}";
+            nodes.Add(Small(id, $"{BranchName(branch)}进阶 {index}", branch, previous, effect, value));
+            previous = id;
+        }
+    }
+
+    private static string BranchName(PassiveBranch branch) => branch switch
+    {
+        PassiveBranch.HeavyWeapon => "重兵",
+        PassiveBranch.Bleed => "流血",
+        PassiveBranch.Defense => "守御",
+        PassiveBranch.WarCry => "战吼",
+        _ => string.Empty,
+    };
 
     private static PassiveNodeDefinition Small(
         string id,
@@ -148,7 +188,7 @@ public static class P1PassiveTree
 
 public sealed class PassiveTreeAllocation
 {
-    public const int MaximumAllocatedPoints = 10;
+    public const int MaximumAllocatedPoints = 70;
 
     private readonly HashSet<string> _allocated = new(StringComparer.Ordinal);
 
@@ -203,6 +243,17 @@ public sealed class PassiveTreeAllocation
         return true;
     }
 
+    public bool ForceReset()
+    {
+        if (_allocated.Count == 0)
+        {
+            return false;
+        }
+
+        _allocated.Clear();
+        return true;
+    }
+
     public void AddMemoryAshes(int amount)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(amount);
@@ -216,7 +267,7 @@ public sealed class PassiveTreeAllocation
         string[] nodes = allocated.ToArray();
         if (nodes.Length > MaximumAllocatedPoints)
         {
-            throw new InvalidDataException("Passive allocation exceeds the P1 point cap.");
+            throw new InvalidDataException("Passive allocation exceeds the supported point cap.");
         }
 
         foreach (string stableId in nodes)

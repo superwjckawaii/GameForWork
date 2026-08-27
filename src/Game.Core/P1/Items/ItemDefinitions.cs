@@ -26,6 +26,10 @@ public enum ItemCategory
     TwoHandWeapon,
     BodyArmor,
     Helmet,
+    Gloves,
+    Boots,
+    Belt,
+    Amulet,
     Ring,
     LifeFlask,
 }
@@ -95,6 +99,19 @@ public static class P1ItemBases
             Evasion: 12, SupportLinkCapacity: 1),
         new("core.base.ash_circlet", "灰纹头冠", ItemCategory.Helmet, EquipmentSlot.Helmet,
             Shield: 10, SupportLinkCapacity: 1),
+        new("core.base.iron_gauntlets", "铁鳞护手", ItemCategory.Gloves, EquipmentSlot.Gloves, Armor: 10),
+        new("core.base.ritual_gloves", "仪式手套", ItemCategory.Gloves, EquipmentSlot.Gloves, Shield: 8),
+        new("core.base.march_boots", "行军铁靴", ItemCategory.Boots, EquipmentSlot.Boots, Armor: 12),
+        new("core.base.shadow_treads", "影行短靴", ItemCategory.Boots, EquipmentSlot.Boots, Evasion: 12),
+        new("core.base.chain_belt", "锁链腰带", ItemCategory.Belt, EquipmentSlot.Belt,
+            ImplicitModifier: ItemModifierKind.FlatMaximumLife, ImplicitMinimumValue: 6, ImplicitMaximumValue: 10),
+        new("core.base.ration_belt", "补给腰带", ItemCategory.Belt, EquipmentSlot.Belt,
+            ImplicitModifier: ItemModifierKind.IncreasedLifeFlaskEffectBasisPoints,
+            ImplicitMinimumValue: 500, ImplicitMaximumValue: 800),
+        new("core.base.ember_amulet", "余烬护符", ItemCategory.Amulet, EquipmentSlot.Amulet,
+            ImplicitModifier: ItemModifierKind.Physique, ImplicitMinimumValue: 1, ImplicitMaximumValue: 2),
+        new("core.base.spirit_amulet", "祷灵护符", ItemCategory.Amulet, EquipmentSlot.Amulet,
+            ImplicitModifier: ItemModifierKind.Spirit, ImplicitMinimumValue: 1, ImplicitMaximumValue: 2),
         new("core.base.iron_ring", "铁环", ItemCategory.Ring, EquipmentSlot.RingLeft,
             ImplicitModifier: ItemModifierKind.AddedPhysicalDamage, ImplicitMinimumValue: 1, ImplicitMaximumValue: 2),
         new("core.base.life_ring", "生命戒", ItemCategory.Ring, EquipmentSlot.RingLeft,
@@ -171,7 +188,9 @@ public sealed record ItemInstance(
     IReadOnlyList<AffixRoll> Affixes,
     LegendaryRule? LegendaryRule = null,
     bool IsIdentified = true,
-    int ImplicitValue = 0)
+    int ImplicitValue = 0,
+    bool IsLocked = false,
+    bool IsCraftingBase = false)
 {
     public int PrefixCount => Affixes.Count(affix => affix.Definition.Position == AffixPosition.Prefix);
     public int SuffixCount => Affixes.Count(affix => affix.Definition.Position == AffixPosition.Suffix);
@@ -180,6 +199,10 @@ public sealed record ItemInstance(
         .Select(affix => affix.Value)
         .DefaultIfEmpty()
         .Max();
+
+    public ItemInstance WithLocked(bool locked) => this with { IsLocked = locked };
+
+    public ItemInstance WithCraftingBase(bool marked) => this with { IsCraftingBase = marked };
 }
 
 public static class P1Legendary

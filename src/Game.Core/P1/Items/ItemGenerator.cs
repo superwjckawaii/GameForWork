@@ -17,7 +17,7 @@ public static class ItemGenerator
         }
 
         ItemBaseDefinition itemBase = P1ItemBases.Get(baseStableId);
-        int clampedLevel = Math.Clamp(itemLevel, 1, 10);
+        int clampedLevel = Math.Clamp(itemLevel, 1, 60);
         var random = new Pcg32(seed);
         int implicitValue = RollInclusive(
             random,

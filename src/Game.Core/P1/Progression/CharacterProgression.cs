@@ -9,10 +9,10 @@ public sealed record ExperienceGainResult(
 
 public sealed class CharacterProgression
 {
-    private static readonly int[] ExperienceToNextLevel = [100, 160, 240, 340, 460, 600, 760, 940, 1_140];
+    private static readonly int[] ExperienceToNextLevel = BuildExperienceCurve();
 
-    public const int MaximumLevel = 10;
-    public const int TotalExperienceToCap = 4_740;
+    public const int MaximumLevel = 60;
+    public static readonly int TotalExperienceToCap = ExperienceToNextLevel.Sum();
 
     public int Level { get; private set; } = 1;
     public int Experience { get; private set; }
@@ -59,7 +59,7 @@ public sealed class CharacterProgression
         if (level is < 1 or > MaximumLevel ||
             experience < CumulativeExperienceForLevel(level) ||
             experience > TotalExperienceToCap ||
-            earnedPassivePoints is < 0 or > 10)
+            earnedPassivePoints is < 0 or > MaximumLevel)
         {
             throw new InvalidDataException("Character progression snapshot is invalid.");
         }
@@ -68,6 +68,23 @@ public sealed class CharacterProgression
         Experience = experience;
         EarnedPassivePoints = earnedPassivePoints;
         FirstBossPassivePointClaimed = firstBossPassivePointClaimed;
+    }
+
+    public void MigrateToMinimumLevel(int minimumLevel)
+    {
+        if (minimumLevel is < 1 or > MaximumLevel)
+        {
+            throw new ArgumentOutOfRangeException(nameof(minimumLevel));
+        }
+
+        if (Level >= minimumLevel)
+        {
+            return;
+        }
+
+        Level = minimumLevel;
+        Experience = CumulativeExperienceForLevel(minimumLevel);
+        EarnedPassivePoints = Math.Max(EarnedPassivePoints, minimumLevel - 1 + (FirstBossPassivePointClaimed ? 1 : 0));
     }
 
     public static int RequiredExperience(int fromLevel)
@@ -94,5 +111,19 @@ public sealed class CharacterProgression
         }
 
         return total;
+    }
+
+    private static int[] BuildExperienceCurve()
+    {
+        int[] curve = new int[MaximumLevel - 1];
+        int[] opening = [100, 160, 240, 340, 460, 600, 760, 940, 1_140];
+        Array.Copy(opening, curve, opening.Length);
+        for (int index = opening.Length; index < curve.Length; index++)
+        {
+            int level = index + 1;
+            curve[index] = checked(1_000 + level * level * 12);
+        }
+
+        return curve;
     }
 }
