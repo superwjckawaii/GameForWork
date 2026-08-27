@@ -15,12 +15,14 @@ public sealed class P1TeamExpeditionState
     {
         Kind = kind;
         Build = build;
-        Policy = policy ?? ExpeditionPolicy.Recommended;
+        Policy = (policy ?? ExpeditionPolicy.Recommended).Validate();
     }
 
     public ExpeditionTeamKind Kind { get; }
     public P1TeamBuild Build { get; private set; }
     public ExpeditionPolicy Policy { get; set; }
+    public ExpeditionPolicy? ActivePolicySnapshot { get; private set; }
+    public ExpeditionPolicy? PendingPolicy { get; private set; }
     public P1MapQueue Queue { get; } = new();
     public CharacterProgression Progression { get; } = new();
     public bool IsStopped { get; private set; }
@@ -32,6 +34,8 @@ public sealed class P1TeamExpeditionState
     public P1MapItem? ActiveMap { get; private set; }
     public MapRoute ActiveRoute { get; private set; }
     public long RemainingMapTimeMilliseconds { get; private set; }
+    public int ConsecutiveFailures { get; private set; }
+    public int MapsRunSincePolicyApplied { get; private set; }
 
     public void StartMap(P1MapItem map, MapRoute route, long durationMilliseconds)
     {
@@ -42,6 +46,8 @@ public sealed class P1TeamExpeditionState
 
         ActiveMap = map;
         ActiveRoute = route;
+        ActivePolicySnapshot = Policy;
+        MapsRunSincePolicyApplied++;
         RemainingMapTimeMilliseconds = durationMilliseconds;
     }
 
@@ -57,28 +63,79 @@ public sealed class P1TeamExpeditionState
 
     public void RecordRun(P1MapRunResult run)
     {
+        ExpeditionPolicy runPolicy = ActivePolicySnapshot ?? Policy;
         ActiveMap = null;
         RemainingMapTimeMilliseconds = 0;
+        ActivePolicySnapshot = null;
         LastRun = run;
         if (run.Succeeded)
         {
             MapsCompleted++;
+            ConsecutiveFailures = 0;
             Progression.AddExperience(P1MapRewardGenerator.ExperiencePerMap);
             Progression.ClaimFirstBossPassivePoint();
+            CommitPendingPolicy();
             return;
         }
 
         MapsFailed++;
-        if (Policy.FailureBehavior == QueueFailureBehavior.Stop)
+        ConsecutiveFailures++;
+        if (runPolicy.FailureBehavior == QueueFailureBehavior.Stop)
         {
             Stop("map_failed");
         }
+
+        CommitPendingPolicy();
     }
 
     public void Stop(string reason)
     {
         IsStopped = true;
         StopReason = reason;
+    }
+
+    public void Resume()
+    {
+        IsStopped = false;
+        StopReason = string.Empty;
+    }
+
+    public void ApplyPolicy(ExpeditionPolicy policy)
+    {
+        policy = policy.Validate();
+        if (ActiveMap is null)
+        {
+            Policy = policy;
+            PendingPolicy = null;
+            MapsRunSincePolicyApplied = 0;
+        }
+        else
+        {
+            PendingPolicy = policy;
+        }
+    }
+
+    public string? GetStopCondition(P1WorldState state)
+    {
+        int freeSlots = state.Storage.Capacity - state.Storage.Count;
+        if (Policy.MaximumContinuousMaps > 0 && MapsRunSincePolicyApplied >= Policy.MaximumContinuousMaps)
+        {
+            return "maximum_continuous_maps";
+        }
+
+        if (Policy.ReserveSupplies > 0 && state.Economy.ExpeditionSupplies <= Policy.ReserveSupplies)
+        {
+            return "reserved_supplies";
+        }
+
+        if (Policy.StopAfterConsecutiveFailures > 0 && ConsecutiveFailures >= Policy.StopAfterConsecutiveFailures)
+        {
+            return "consecutive_failures";
+        }
+
+        return Policy.MinimumStorageFreeSlots > 0 && freeSlots < Policy.MinimumStorageFreeSlots
+            ? "minimum_storage_free_slots"
+            : null;
     }
 
     public void UpdateBuild(P1TeamBuild build)
@@ -90,12 +147,23 @@ public sealed class P1TeamExpeditionState
     public void Restore(P1TeamExpeditionSnapshot snapshot)
     {
         ArgumentNullException.ThrowIfNull(snapshot);
-        if (snapshot.Kind != Kind || snapshot.MapsCompleted < 0 || snapshot.MapsFailed < 0)
+        if (snapshot.Kind != Kind || snapshot.MapsCompleted < 0 || snapshot.MapsFailed < 0 ||
+            snapshot.ConsecutiveFailures < 0 || snapshot.MapsRunSincePolicyApplied < 0)
         {
             throw new InvalidDataException("Team expedition snapshot is invalid.");
         }
 
-        Policy = snapshot.Policy;
+        try
+        {
+            Policy = snapshot.Policy.Validate();
+            ActivePolicySnapshot = snapshot.ActivePolicySnapshot?.Validate();
+            PendingPolicy = snapshot.PendingPolicy?.Validate();
+        }
+        catch (ArgumentOutOfRangeException exception)
+        {
+            throw new InvalidDataException("Team expedition policy is invalid.", exception);
+        }
+
         Queue.Restore(snapshot.Queue);
         Progression.Restore(
             snapshot.Level,
@@ -107,10 +175,26 @@ public sealed class P1TeamExpeditionState
         IsStopped = snapshot.IsStopped;
         StopReason = snapshot.StopReason;
         Backpack.Replace(snapshot.BackpackItems ?? []);
+        ConsecutiveFailures = snapshot.ConsecutiveFailures;
+        MapsRunSincePolicyApplied = snapshot.MapsRunSincePolicyApplied;
         if (snapshot.ActiveMap is not null)
         {
             StartMap(snapshot.ActiveMap, snapshot.ActiveRoute, snapshot.RemainingMapTimeMilliseconds);
+            ActivePolicySnapshot = snapshot.ActivePolicySnapshot ?? Policy;
+            MapsRunSincePolicyApplied = snapshot.MapsRunSincePolicyApplied;
         }
+    }
+
+    private void CommitPendingPolicy()
+    {
+        if (PendingPolicy is null)
+        {
+            return;
+        }
+
+        Policy = PendingPolicy;
+        PendingPolicy = null;
+        MapsRunSincePolicyApplied = 0;
     }
 }
 
@@ -280,8 +364,20 @@ public sealed class P1WorldSimulator(IP1MapAttemptResolver attemptResolver)
     {
         foreach (P1TeamExpeditionState team in state.Teams)
         {
-            if (team.IsStopped || active.ContainsKey(team.Kind) || team.Queue.Count == 0 ||
-                !state.Economy.TryConsumeMapSupply())
+            if (team.IsStopped || active.ContainsKey(team.Kind) || team.Queue.Count == 0)
+            {
+                continue;
+            }
+
+
+            string? stopCondition = team.GetStopCondition(state);
+            if (stopCondition is not null)
+            {
+                team.Stop(stopCondition);
+                continue;
+            }
+
+            if (!state.Economy.TryConsumeMapSupply())
             {
                 continue;
             }
@@ -300,6 +396,7 @@ public sealed class P1WorldSimulator(IP1MapAttemptResolver attemptResolver)
 
     private void ResolveExpedition(P1WorldState state, ActiveExpedition expedition, ulong seed)
     {
+        ExpeditionPolicy runPolicy = expedition.Team.ActivePolicySnapshot ?? expedition.Team.Policy;
         P1MapRunResult run = new P1MapRunner(attemptResolver).Run(
             expedition.Map,
             expedition.Route,
@@ -319,7 +416,7 @@ public sealed class P1WorldSimulator(IP1MapAttemptResolver attemptResolver)
             rewards.Equipment,
             state.Storage,
             state.Filter,
-            expedition.Team.Policy.StorageFullBehavior);
+            runPolicy.StorageFullBehavior);
         state.Economy.AddDispositionProceeds(processed.GoldGained, processed.IronScrapsGained);
         if (processed.ExpeditionMustStop)
         {

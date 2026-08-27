@@ -266,7 +266,7 @@ public partial class Main : Node
         _session = P1GameSession.CreateNew(identity, unchecked(DefaultSeed + (ulong)(_activeSlot - 1)));
         _dashboard?.SetSession(_session);
         SaveP1State(showNotice: false);
-        ShowNotice($"{identity.Name} 已与古代门扉建立契约；10 张 T1 地图已分配给两支队伍。");
+        ShowNotice($"{identity.Name} 已与古代门扉建立契约；第一幕“余烬营地”开始自动推进。");
     }
 
     private void OnSessionChanged()

@@ -101,11 +101,12 @@ public sealed record P1GameSessionSnapshot(
     ulong Seed,
     int SimulationSequence,
     P2ManagementSnapshot? Management = null,
-    IReadOnlyList<EquippedItemSnapshot>? MercenaryEquipment = null);
+    IReadOnlyList<EquippedItemSnapshot>? MercenaryEquipment = null,
+    P2CampaignSnapshot? Campaign = null);
 
 public sealed class P1GameSession
 {
-    public const int CurrentFormatVersion = 4;
+    public const int CurrentFormatVersion = 5;
     private readonly P1WorldSimulator _simulator = new(new P1MapAttemptResolver());
     private AssembledCharacterBuild _heroBuild;
 
@@ -119,6 +120,7 @@ public sealed class P1GameSession
         SkillSupport heavyStrikeSupports,
         HeroAiConfiguration heroAi,
         P2ManagementState management,
+        P2CampaignState campaign,
         ulong seed,
         int simulationSequence,
         bool debugTwentyTimes)
@@ -132,6 +134,7 @@ public sealed class P1GameSession
         HeavyStrikeSupports = heavyStrikeSupports;
         HeroAi = heroAi.Validate();
         Management = management;
+        Campaign = campaign;
         Seed = seed;
         SimulationSequence = simulationSequence;
         DebugTwentyTimes = debugTwentyTimes;
@@ -148,6 +151,8 @@ public sealed class P1GameSession
     public SkillSupport HeavyStrikeSupports { get; private set; }
     public HeroAiConfiguration HeroAi { get; private set; }
     public P2ManagementState Management { get; }
+    public P2CampaignState Campaign { get; }
+    public bool IsExpeditionUnlocked => Campaign.Completed;
     public bool DebugTwentyTimes { get; set; }
     public ulong Seed { get; }
     public int SimulationSequence { get; private set; }
@@ -175,7 +180,6 @@ public sealed class P1GameSession
             ToTeamBuild(build, SkillSupport.Bleed, HeroAiConfiguration.Balanced),
             mercenary.CreateTeamBuild(),
             economy);
-        world.AddInitialMaps();
         return new P1GameSession(
             player,
             mercenary.Name,
@@ -186,6 +190,7 @@ public sealed class P1GameSession
             SkillSupport.Bleed,
             HeroAiConfiguration.Balanced,
             P2ManagementState.CreateNew(),
+            P2CampaignState.CreateNew(),
             seed,
             simulationSequence: 0,
             debugTwentyTimes: false);
@@ -234,6 +239,7 @@ public sealed class P1GameSession
             snapshot.HeavyStrikeSupports,
             snapshot.HeroAi ?? HeroAiConfiguration.Balanced,
             P2ManagementState.Restore(snapshot.Management, legacyMigration),
+            P2CampaignState.Restore(legacyMigration ? null : snapshot.Campaign, legacyMigration),
             snapshot.Seed,
             snapshot.SimulationSequence,
             snapshot.DebugTwentyTimes);
@@ -256,7 +262,8 @@ public sealed class P1GameSession
         Seed,
         SimulationSequence,
         Management.Capture(),
-        MercenaryEquipment.Items.Select(pair => new EquippedItemSnapshot(pair.Key, pair.Value)).ToArray());
+        MercenaryEquipment.Items.Select(pair => new EquippedItemSnapshot(pair.Key, pair.Value)).ToArray(),
+        Campaign.Capture());
 
     public P1OfflineResult Advance(long realElapsedMilliseconds)
     {
@@ -288,6 +295,32 @@ public sealed class P1GameSession
 
     private P1OfflineResult AdvanceSimulated(long simulatedMilliseconds)
     {
+        if (!Campaign.Completed)
+        {
+            P2CampaignAdvanceResult campaignResult = new P2CampaignSimulator().Simulate(
+                Campaign,
+                World,
+                Management,
+                simulatedMilliseconds,
+                Seed);
+            SimulationSequence = checked(SimulationSequence + campaignResult.NodesCompleted);
+            RefreshHeroBuild();
+            return new P1OfflineResult(
+                campaignResult.EffectiveMilliseconds,
+                campaignResult.WasClamped,
+                campaignResult.SuppliesProduced,
+                0,
+                0,
+                World.Teams.Select(team => new P1OfflineTeamSummary(
+                    team.Kind,
+                    team.MapsCompleted,
+                    team.MapsFailed,
+                    team.Queue.Count,
+                    team.IsStopped,
+                    team.StopReason)).ToArray(),
+                campaignResult.FinalHash);
+        }
+
         P1OfflineResult result = _simulator.Simulate(
             World,
             simulatedMilliseconds,
@@ -302,6 +335,28 @@ public sealed class P1GameSession
 
         RefreshHeroTeamBuild();
         return result;
+    }
+
+    public void ResumeCampaignAfterDefeat()
+    {
+        Campaign.ResumeAfterDefeat();
+        Management.AddHistory("主线当前节点已准备重新尝试。");
+    }
+
+    public bool ReplayCampaignNode(string stableId)
+    {
+        bool replayed = new P2CampaignSimulator().Replay(
+            Campaign,
+            World,
+            Management,
+            stableId,
+            Seed ^ (ulong)SimulationSequence++);
+        if (replayed)
+        {
+            RefreshHeroBuild();
+        }
+
+        return replayed;
     }
 
     public void SetHeavyStrikeSupports(SkillSupport supports)

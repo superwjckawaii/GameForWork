@@ -39,6 +39,9 @@ public partial class P2Dashboard : VBoxContainer
     private Label? _selectedPassive;
     private Label? _skillSummary;
     private RichTextLabel? _history;
+    private RichTextLabel? _storyLog;
+    private Label? _storyStatus;
+    private P2CampaignRouteView? _campaignRoute;
     private P1WorldView? _worldView;
     private P1PassiveTreeView? _passiveTree;
     private P1ItemGrid? _storageGrid;
@@ -50,6 +53,7 @@ public partial class P2Dashboard : VBoxContainer
     private P1ItemGrid? _mercenaryLootGrid;
     private P2LootFilterPanel? _filterPanel;
     private P2SkillStonePanel? _skillStonePanel;
+    private P2MapQueuePanel? _mapQueuePanel;
     private OptionButton? _characterSelector;
     private PopupMenu? _itemMenu;
     private ConfirmationDialog? _confirmDialog;
@@ -211,14 +215,42 @@ public partial class P2Dashboard : VBoxContainer
         return page;
     }
 
-    private static Control BuildStoryPage()
+    private Control BuildStoryPage()
     {
         VBoxContainer page = Page("主线");
-        page.AddChild(new Label
+        var workspace = new HBoxContainer { SizeFlagsVertical = SizeFlags.ExpandFill };
+        page.AddChild(workspace);
+        _campaignRoute = new P2CampaignRouteView
         {
-            Text = "五幕主线路线将在第三开发批次接入；新档通关前远征入口将完全隐藏。",
-            AutowrapMode = TextServer.AutowrapMode.WordSmart,
+            SizeFlagsHorizontal = SizeFlags.ExpandFill,
+            SizeFlagsVertical = SizeFlags.ExpandFill,
+        };
+        _campaignRoute.Initialize(RequireSession, _ => Refresh());
+        workspace.AddChild(_campaignRoute);
+        var right = new VBoxContainer { CustomMinimumSize = new Vector2(240, 0) };
+        workspace.AddChild(right);
+        _storyStatus = new Label { AutowrapMode = TextServer.AutowrapMode.WordSmart };
+        right.AddChild(_storyStatus);
+        AddButton(right, "继续 / 战败后重试", () =>
+        {
+            RequireSession().ResumeCampaignAfterDefeat();
+            Changed("主线自动推进已继续。");
         });
+        AddButton(right, "重玩选中节点", () =>
+        {
+            string? selected = _campaignRoute.SelectedStableId;
+            Changed(selected is not null && RequireSession().ReplayCampaignNode(selected)
+                ? "节点重玩完成；固定剧情奖励未重复发放。"
+                : "只能重玩已经完成的战斗节点。");
+        });
+        page.AddChild(new Label { Text = "剧情记录" });
+        _storyLog = new RichTextLabel
+        {
+            BbcodeEnabled = true,
+            CustomMinimumSize = new Vector2(0, 130),
+            ScrollActive = true,
+        };
+        page.AddChild(_storyLog);
         return page;
     }
 
@@ -226,6 +258,9 @@ public partial class P2Dashboard : VBoxContainer
     {
         VBoxContainer page = Page("远征");
         page.AddChild(new Label { Text = "主角队与佣兵队拥有独立队列；当前地图使用启动时的方针快照。" });
+        _mapQueuePanel = new P2MapQueuePanel();
+        _mapQueuePanel.Initialize(RequireSession, Changed);
+        page.AddChild(_mapQueuePanel);
         AddTeamPolicyRow(page, ExpeditionTeamKind.Hero, "主角单人队");
         AddTeamPolicyRow(page, ExpeditionTeamKind.Mercenaries, "佣兵队");
         var controls = new HFlowContainer();
@@ -649,15 +684,33 @@ public partial class P2Dashboard : VBoxContainer
         row.AddChild(automatic);
         var stopOnFailure = new CheckButton { Text = "失败后停止" };
         row.AddChild(stopOnFailure);
+        OptionButton storageFull = AddOptions(row, "满仓", ["仅收取堆叠物", "停止远征"]);
+        var maximumMaps = new SpinBox { MinValue = 0, MaxValue = 1_000, Step = 1, Value = 0, Prefix = "最多图数 " };
+        row.AddChild(maximumMaps);
+        var reserve = new SpinBox { MinValue = 0, MaxValue = 100_000, Step = 1, Value = 0, Prefix = "保留补给 " };
+        row.AddChild(reserve);
+        var failures = new SpinBox { MinValue = 0, MaxValue = 100, Step = 1, Value = 0, Prefix = "连败停止 " };
+        row.AddChild(failures);
+        var freeSlots = new SpinBox { MinValue = 0, MaxValue = 100, Step = 1, Value = 0, Prefix = "最少空格 " };
+        row.AddChild(freeSlots);
         AddButton(row, "应用（下一张地图）", () =>
         {
             P1TeamExpeditionState team = Team(kind);
-            team.Policy = new ExpeditionPolicy(
+            team.ApplyPolicy(new ExpeditionPolicy(
                 automatic.ButtonPressed ? RouteSelectionMode.Automatic : RouteSelectionMode.Manual,
                 (MapRoute)route.Selected,
                 stopOnFailure.ButtonPressed ? QueueFailureBehavior.Stop : QueueFailureBehavior.Continue,
-                team.Policy.StorageFullBehavior);
+                storageFull.Selected == 0 ? StorageFullBehavior.AcceptStackablesOnly : StorageFullBehavior.StopExpedition,
+                (int)maximumMaps.Value,
+                (int)reserve.Value,
+                (int)failures.Value,
+                (int)freeSlots.Value));
             Changed($"{label}方针已更新。");
+        });
+        AddButton(row, "继续队列", () =>
+        {
+            Team(kind).Resume();
+            Changed($"{label}已解除停止状态；停止条件会在下一张地图前重新检查。");
         });
     }
 
@@ -836,7 +889,8 @@ public partial class P2Dashboard : VBoxContainer
         _overviewStatus!.Text =
             $"{_session.Player.Name} Lv.{_session.World.Hero.Progression.Level} · 佣兵 {_session.MercenaryName} Lv.{_session.World.Mercenaries.Progression.Level}\n" +
             $"补给 {economy.ExpeditionSupplies} · 金币 {economy.Gold} · 铁屑 {economy.IronScraps} · 地图 {_session.World.MapInventory.Count}{recoveryWarning}";
-        _expeditionStatus!.Text = TeamText(_session.World.Hero) + "\n" + TeamText(_session.World.Mercenaries) +
+        _expeditionStatus!.Text = TeamText(_session.World.Hero, _session.World) + "\n" +
+            TeamText(_session.World.Mercenaries, _session.World) +
             $"\n地图库存 {_session.World.MapInventory.Count} · 模拟速度 {_session.SimulationSpeed}×";
 
         EquipmentLoadout selectedLoadout = _selectedCharacter == P2CharacterKind.Hero
@@ -882,6 +936,18 @@ public partial class P2Dashboard : VBoxContainer
         _skillStonePanel?.RefreshState();
         _history!.Text = string.Join('\n', _session.Management.OperationHistory.TakeLast(200).Select(item => $"• {item}"));
         _filterPanel?.RefreshRules();
+        _mapQueuePanel?.RefreshState();
+        _campaignRoute?.RefreshState();
+        CampaignNodeDefinition? currentNode = _session.Campaign.CurrentNode;
+        _storyStatus!.Text = _session.Campaign.Completed
+            ? "五幕主线已完成\n远征功能已开放。"
+            : $"第 {currentNode!.Act} 幕 · {P2CampaignCatalog.ActNames[currentNode.Act - 1]}\n" +
+              $"当前：{currentNode.DisplayName}（{currentNode.Kind}）\n" +
+              $"进度 {_session.Campaign.CurrentNodeElapsedMilliseconds / 1_000}/{currentNode.DurationMilliseconds / 1_000}s\n" +
+              (_session.Campaign.Defeated ? "⚠ 战败：调整构筑后点击继续。" : "自动推进中；离线时间同样有效。 ");
+        _storyLog!.Text = string.Join('\n', _session.Campaign.StoryLog.TakeLast(60).Select(item => $"• {item}"));
+        int expeditionIndex = _mainTabs!.GetTabIdxFromControl(_expeditionPage!);
+        _mainTabs.SetTabHidden(expeditionIndex, !_session.IsExpeditionUnlocked);
         _miniStatus!.Text =
             $"{_session.Player.Name} Lv.{_session.World.Hero.Progression.Level}  主角[{CompactTeam(_session.World.Hero)}]\n" +
             $"佣兵[{CompactTeam(_session.World.Mercenaries)}] · 补给 {economy.ExpeditionSupplies} · 图 {_session.World.MapInventory.Count}";
@@ -940,11 +1006,53 @@ public partial class P2Dashboard : VBoxContainer
     private P1TeamExpeditionState Team(ExpeditionTeamKind kind) =>
         kind == ExpeditionTeamKind.Hero ? RequireSession().World.Hero : RequireSession().World.Mercenaries;
 
-    private static string TeamText(P1TeamExpeditionState team) =>
+    private static string TeamText(P1TeamExpeditionState team, P1WorldState world) =>
         $"{team.Kind}: 队列 {team.Queue.Count}/10 · 完成 {team.MapsCompleted} · 失败 {team.MapsFailed} · " +
         (team.ActiveMap is null
             ? team.IsStopped ? $"停止：{team.StopReason}" : "等待资源/地图"
-            : $"进行中 {team.ActiveMap.InstanceId}，剩余 {team.RemainingMapTimeMilliseconds / 1_000}s");
+            : $"进行中 {team.ActiveMap.InstanceId}，剩余 {team.RemainingMapTimeMilliseconds / 1_000}s") +
+        $" · 停止条件[图数 {DisplayLimit(team.Policy.MaximumContinuousMaps)} / 补给保留 {DisplayLimit(team.Policy.ReserveSupplies)} / " +
+        $"连败 {DisplayLimit(team.Policy.StopAfterConsecutiveFailures)} / 空格 {DisplayLimit(team.Policy.MinimumStorageFreeSlots)}]" +
+        (team.PendingPolicy is null ? string.Empty : " · 新方针将在下一张地图生效") +
+        $" · 预计最早：{EstimateFirstStop(team, world)}";
+
+    private static string DisplayLimit(int value) => value == 0 ? "关" : value.ToString();
+
+    private static string EstimateFirstStop(P1TeamExpeditionState team, P1WorldState world)
+    {
+        var candidates = new List<(int Maps, string Reason)>();
+        if (team.Policy.MaximumContinuousMaps > 0)
+        {
+            candidates.Add((Math.Max(0, team.Policy.MaximumContinuousMaps - team.MapsRunSincePolicyApplied), "连续图数"));
+        }
+
+        if (team.Policy.ReserveSupplies > 0)
+        {
+            candidates.Add((Math.Max(0, world.Economy.ExpeditionSupplies - team.Policy.ReserveSupplies), "补给保留"));
+        }
+
+        if (team.Policy.StopAfterConsecutiveFailures > 0)
+        {
+            candidates.Add((Math.Max(0, team.Policy.StopAfterConsecutiveFailures - team.ConsecutiveFailures), "连败"));
+        }
+
+        if (team.Policy.MinimumStorageFreeSlots > 0 &&
+            world.Storage.Capacity - world.Storage.Count < team.Policy.MinimumStorageFreeSlots)
+        {
+            candidates.Add((0, "仓库空格"));
+        }
+
+        if (candidates.Count == 0)
+        {
+            return "未启用可估算停止条件";
+        }
+
+        (int maps, string reason) = candidates
+            .OrderBy(item => item.Maps)
+            .ThenBy(item => item.Reason, StringComparer.Ordinal)
+            .First();
+        return $"约 {maps} 张后（{reason}）";
+    }
 
     private static string CompactTeam(P1TeamExpeditionState team) => team.ActiveMap is null
         ? team.IsStopped ? "停止" : $"等待 Q{team.Queue.Count}"

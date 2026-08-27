@@ -38,7 +38,11 @@ public sealed record ExpeditionPolicy(
     RouteSelectionMode RouteSelection,
     MapRoute PreferredRoute,
     QueueFailureBehavior FailureBehavior,
-    StorageFullBehavior StorageFullBehavior)
+    StorageFullBehavior StorageFullBehavior,
+    int MaximumContinuousMaps = 0,
+    int ReserveSupplies = 0,
+    int StopAfterConsecutiveFailures = 0,
+    int MinimumStorageFreeSlots = 0)
 {
     public static ExpeditionPolicy Recommended => new(
         RouteSelectionMode.Automatic,
@@ -57,6 +61,17 @@ public sealed record ExpeditionPolicy(
     }
 
     public MapRoute SelectUnattendedRoute() => PreferredRoute;
+
+    public ExpeditionPolicy Validate()
+    {
+        if (MaximumContinuousMaps is < 0 or > 10_000 || ReserveSupplies is < 0 or > 1_000_000 ||
+            StopAfterConsecutiveFailures is < 0 or > 100 || MinimumStorageFreeSlots is < 0 or > 100_000)
+        {
+            throw new ArgumentOutOfRangeException(nameof(MaximumContinuousMaps));
+        }
+
+        return this;
+    }
 }
 
 public sealed record P1MapItem(string InstanceId, int AreaLevel)
@@ -99,6 +114,51 @@ public sealed class P1MapQueue
     }
 
     public bool TryDequeue(out P1MapItem? map) => _maps.TryDequeue(out map);
+
+    public P1MapItem? TakeAt(int index)
+    {
+        if (index < 0 || index >= _maps.Count)
+        {
+            return null;
+        }
+
+        List<P1MapItem> maps = _maps.ToList();
+        P1MapItem item = maps[index];
+        maps.RemoveAt(index);
+        _maps.Clear();
+        foreach (P1MapItem map in maps)
+        {
+            _maps.Enqueue(map);
+        }
+
+        return item;
+    }
+
+    public bool TryInsert(P1MapItem map, int index)
+    {
+        ArgumentNullException.ThrowIfNull(map);
+        map.Validate();
+        if (_maps.Count >= MaximumCount)
+        {
+            return false;
+        }
+
+        List<P1MapItem> maps = _maps.ToList();
+        maps.Insert(Math.Clamp(index, 0, maps.Count), map);
+        _maps.Clear();
+        foreach (P1MapItem value in maps)
+        {
+            _maps.Enqueue(value);
+        }
+
+        return true;
+    }
+
+    public bool TryMove(int sourceIndex, int targetIndex)
+    {
+        P1MapItem? map = TakeAt(sourceIndex);
+        return map is not null && TryInsert(map, targetIndex);
+    }
 
     public void Restore(IEnumerable<P1MapItem> maps)
     {

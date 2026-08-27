@@ -7,7 +7,7 @@ namespace GameForWork.Tests;
 public sealed class P1SessionTests
 {
     [Fact]
-    public void NewSessionCreatesCharacterMercenaryTownAndTenMaps()
+    public void NewSessionCreatesCharacterMercenaryTownAndLockedExpedition()
     {
         P1GameSession session = CreateSession();
 
@@ -15,8 +15,10 @@ public sealed class P1SessionTests
         Assert.False(string.IsNullOrWhiteSpace(session.MercenaryName));
         Assert.Equal(10, session.World.Economy.ExpeditionSupplies);
         Assert.Equal(5, session.Passives.MemoryAshes);
-        Assert.Equal(5, session.World.Hero.Queue.Count);
-        Assert.Equal(5, session.World.Mercenaries.Queue.Count);
+        Assert.Equal(0, session.World.Hero.Queue.Count);
+        Assert.Equal(0, session.World.Mercenaries.Queue.Count);
+        Assert.False(session.IsExpeditionUnlocked);
+        Assert.Equal("core.campaign.act1.node1", session.Campaign.CurrentNode?.StableId);
         Assert.Equal(2, session.HeroBuild.Equipment.CoreSkillCapacity);
         Assert.Equal(5, session.HeroBuild.Equipment.SupportLinkCapacity);
     }
@@ -60,8 +62,7 @@ public sealed class P1SessionTests
 
         session.Advance(1_000);
 
-        Assert.Equal(70_000, session.World.Hero.RemainingMapTimeMilliseconds);
-        Assert.Equal(70_000, session.World.Mercenaries.RemainingMapTimeMilliseconds);
+        Assert.Equal(20_000, session.Campaign.CurrentNodeElapsedMilliseconds);
     }
 
     [Fact]
@@ -75,15 +76,15 @@ public sealed class P1SessionTests
     }
 
     [Fact]
-    public void StarterBuildCanResolveItsFirstSafeMapCycle()
+    public void StarterBuildCanResolveItsFirstCampaignNode()
     {
         P1GameSession session = CreateSession();
 
-        var result = session.Advance(90_000);
+        var result = session.Advance(120_000);
 
-        Assert.Equal(2, result.TotalMapsCompleted + result.TotalMapsFailed);
-        Assert.True(session.World.Hero.MapsCompleted > 0, "Starter hero should clear the first area-level 1 map.");
-        Assert.True(session.World.Mercenaries.MapsCompleted > 0, "Starter mercenary should clear the first area-level 1 map.");
+        Assert.Equal(0, result.TotalMapsCompleted + result.TotalMapsFailed);
+        Assert.Contains("core.campaign.act1.node1", session.Campaign.CompletedNodeIds);
+        Assert.Equal("core.campaign.act1.node2", session.Campaign.CurrentNode?.StableId);
     }
 
     [Fact]
@@ -112,7 +113,7 @@ public sealed class P1SessionTests
 
         Assert.Equal(1, produced);
         Assert.Equal(11, session.World.Economy.ExpeditionSupplies);
-        Assert.Equal(5, session.World.Hero.Queue.Count);
+        Assert.Equal(0, session.World.Hero.Queue.Count);
         Assert.Null(session.World.Hero.ActiveMap);
     }
 
@@ -124,7 +125,7 @@ public sealed class P1SessionTests
 
         session.AdvanceOffline(1_000);
 
-        Assert.Equal(89_000, session.World.Hero.RemainingMapTimeMilliseconds);
+        Assert.Equal(1_000, session.Campaign.CurrentNodeElapsedMilliseconds);
     }
 
     [Fact]
