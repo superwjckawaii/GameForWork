@@ -6,6 +6,12 @@ public enum PassiveBranch
     Bleed,
     Defense,
     WarCry,
+    Mobility,
+    Critical,
+    Accuracy,
+    Mana,
+    Shield,
+    Flask,
 }
 
 public enum PassiveNodeKind
@@ -33,6 +39,7 @@ public enum PassiveEffectKind
     FlatMaximumMana,
     IncreasedManaRegenerationBasisPoints,
     IncreasedWarCryRangeBasisPoints,
+    IncreasedMovementSpeedBasisPoints,
     FasterBleeding,
     DeepWound,
     Tenacious,
@@ -67,6 +74,7 @@ public sealed record PassiveBuildModifiers(
     int FlatMaximumMana,
     int IncreasedManaRegenerationBasisPoints,
     int IncreasedWarCryRangeBasisPoints,
+    int IncreasedMovementSpeedBasisPoints,
     bool FasterBleeding,
     bool DeepWound,
     bool Tenacious,
@@ -132,11 +140,38 @@ public static class P1PassiveTree
             PassiveEffectKind.IncreasedTwoHandDamageBasisPoints, 350);
         ExtendBranch(nodes, PassiveBranch.Bleed, "bleed", "bleed.rule", 11,
             PassiveEffectKind.IncreasedBleedDamageBasisPoints, 500);
-        ExtendBranch(nodes, PassiveBranch.Defense, "defense", "defense.notable", 11,
+        ExtendBranch(nodes, PassiveBranch.Defense, "defense", "defense.notable", 12,
             PassiveEffectKind.IncreasedMaximumLifeBasisPoints, 250);
-        ExtendBranch(nodes, PassiveBranch.WarCry, "warcry", "warcry.notable", 11,
+        ExtendBranch(nodes, PassiveBranch.WarCry, "warcry", "warcry.notable", 12,
             PassiveEffectKind.IncreasedWarCryCooldownRecoveryBasisPoints, 300);
+        AddCluster(nodes, PassiveBranch.Mobility, "mobility", PassiveEffectKind.IncreasedMovementSpeedBasisPoints, 175);
+        AddCluster(nodes, PassiveBranch.Critical, "critical", PassiveEffectKind.IncreasedAttackDamageBasisPoints, 350);
+        AddCluster(nodes, PassiveBranch.Accuracy, "accuracy", PassiveEffectKind.FlatAccuracy, 8);
+        AddCluster(nodes, PassiveBranch.Mana, "mana", PassiveEffectKind.FlatMaximumMana, 2);
+        AddCluster(nodes, PassiveBranch.Shield, "shield", PassiveEffectKind.IncreasedArmorBasisPoints, 350);
+        AddCluster(nodes, PassiveBranch.Flask, "flask", PassiveEffectKind.IncreasedLifeFlaskEffectBasisPoints, 250);
         return nodes;
+    }
+
+    private static void AddCluster(
+        ICollection<PassiveNodeDefinition> nodes,
+        PassiveBranch branch,
+        string prefix,
+        PassiveEffectKind effect,
+        int value)
+    {
+        string? previous = null;
+        for (int index = 1; index <= 18; index++)
+        {
+            string id = $"{prefix}.{index}";
+            PassiveNodeKind kind = index == 18
+                ? PassiveNodeKind.Rule
+                : index is 6 or 12 ? PassiveNodeKind.Notable : PassiveNodeKind.Small;
+            int nodeValue = kind == PassiveNodeKind.Small ? value : value * 2;
+            nodes.Add(Node(id, $"{BranchName(branch)}·{index:00}", branch, kind, previous,
+                new PassiveEffect(effect, nodeValue)));
+            previous = id;
+        }
     }
 
     private static void ExtendBranch(
@@ -163,6 +198,12 @@ public static class P1PassiveTree
         PassiveBranch.Bleed => "流血",
         PassiveBranch.Defense => "守御",
         PassiveBranch.WarCry => "战吼",
+        PassiveBranch.Mobility => "行路",
+        PassiveBranch.Critical => "暴烈",
+        PassiveBranch.Accuracy => "洞察",
+        PassiveBranch.Mana => "源流",
+        PassiveBranch.Shield => "壁垒",
+        PassiveBranch.Flask => "炼金",
         _ => string.Empty,
     };
 
@@ -310,6 +351,7 @@ public sealed class PassiveTreeAllocation
             sums[(int)PassiveEffectKind.FlatMaximumMana],
             sums[(int)PassiveEffectKind.IncreasedManaRegenerationBasisPoints],
             sums[(int)PassiveEffectKind.IncreasedWarCryRangeBasisPoints],
+            sums[(int)PassiveEffectKind.IncreasedMovementSpeedBasisPoints],
             sums[(int)PassiveEffectKind.FasterBleeding] > 0,
             sums[(int)PassiveEffectKind.DeepWound] > 0,
             sums[(int)PassiveEffectKind.Tenacious] > 0,

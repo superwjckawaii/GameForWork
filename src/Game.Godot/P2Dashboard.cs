@@ -46,7 +46,7 @@ public partial class P2Dashboard : VBoxContainer
     private P1PassiveTreeView? _passiveTree;
     private P1ItemGrid? _storageGrid;
     private P1ItemGrid? _sortingGrid;
-    private P1ItemGrid? _equipmentGrid;
+    private P3EquipmentPaperDoll? _equipmentGrid;
     private P1ItemGrid? _recoveryGrid;
     private P1ItemGrid? _buybackGrid;
     private P1ItemGrid? _heroLootGrid;
@@ -312,7 +312,7 @@ public partial class P2Dashboard : VBoxContainer
         modes.AddChild(BuildSkillMode());
         modes.AddChild(BuildPassiveMode());
         modes.AddChild(BuildAiMode());
-        var equipment = new VBoxContainer { CustomMinimumSize = new Vector2(210, 0) };
+        var equipment = new VBoxContainer { CustomMinimumSize = new Vector2(236, 0) };
         workspace.AddChild(equipment);
         collapseSidebar.Pressed += () =>
         {
@@ -320,7 +320,14 @@ public partial class P2Dashboard : VBoxContainer
             collapseSidebar.Text = equipment.Visible ? "收起装备侧栏" : "展开装备侧栏";
         };
         equipment.AddChild(new Label { Text = "角色装备备栏 · 所有模式常驻" });
-        _equipmentGrid = BuildGrid(ItemContainerKind.Equipped, 3, Enum.GetValues<EquipmentSlot>().Length, 42);
+        _equipmentGrid = new P3EquipmentPaperDoll();
+        _equipmentGrid.ItemActivated += index => ActivateItem(ItemContainerKind.Equipped, index);
+        _equipmentGrid.ItemContextRequested += (index, position) => OpenItemMenu(ItemContainerKind.Equipped, index, position);
+        _equipmentGrid.QuickTransferRequested += index =>
+            Execute(new P2ItemCommandService(RequireSession(), _selectedCharacter)
+                .QuickTransfer(ItemContainerKind.Equipped, index));
+        _equipmentGrid.ItemDropped += (source, sourceIndex, targetIndex) =>
+            HandleDrop(source, sourceIndex, ItemContainerKind.Equipped, targetIndex);
         _equipmentGrid.ExtraTooltip = EquipmentComparisonText;
         equipment.AddChild(_equipmentGrid);
         var details = new Button { Text = "详细属性", ToggleMode = true };

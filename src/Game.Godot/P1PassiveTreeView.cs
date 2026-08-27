@@ -11,11 +11,16 @@ public partial class P1PassiveTreeView : Control
     private static readonly Color SelectedColor = new("f0cf72");
     private static readonly Color PlannedColor = new("8e78c8");
     private readonly Dictionary<string, Button> _buttons = new(StringComparer.Ordinal);
-    private readonly Dictionary<string, Vector2> _centers = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, Vector2> _worldCenters = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, float> _nodeSizes = new(StringComparer.Ordinal);
     private IReadOnlySet<string> _allocated = new HashSet<string>();
     private int _earnedPoints;
     private readonly HashSet<string> _planned = new(StringComparer.Ordinal);
     private string _search = string.Empty;
+    private Vector2 _pan;
+    private float _zoom = 0.55f;
+    private Vector2 _lastSize;
+    private bool _fitInitialized;
 
     public event Action<string>? NodeSelected;
 
@@ -32,22 +37,63 @@ public partial class P1PassiveTreeView : Control
     public override void _Draw()
     {
         DrawRect(new Rect2(Vector2.Zero, Size), new Color("11151d"), true);
-        DrawCircle(new Vector2(410, 235), 28, new Color("242c38"));
-        DrawCircle(new Vector2(410, 235), 28, new Color("b79a62"), false, 3);
-        DrawString(ThemeDB.FallbackFont, new Vector2(392, 240), "起点", HorizontalAlignment.Left, -1, 12, new Color("e8dcc0"));
+        Vector2 origin = ToScreen(new Vector2(600, 450));
+        DrawCircle(origin, 22, new Color("242c38"));
+        DrawCircle(origin, 22, new Color("b79a62"), false, 3);
+        DrawString(ThemeDB.FallbackFont, origin + new Vector2(-14, 5), "起点", HorizontalAlignment.Left, -1, 11, new Color("e8dcc0"));
         foreach (PassiveNodeDefinition node in P1PassiveTree.Nodes)
         {
-            Vector2 from = node.PrerequisiteId is null ? new Vector2(410, 235) : _centers[node.PrerequisiteId];
+            Vector2 from = node.PrerequisiteId is null ? origin : ToScreen(_worldCenters[node.PrerequisiteId]);
             Color color = _allocated.Contains(node.StableId)
                 ? new Color("98713b")
                 : _planned.Contains(node.StableId) ? PlannedColor.Darkened(0.2f) : new Color("3b4552");
-            DrawLine(from, _centers[node.StableId], color, _allocated.Contains(node.StableId) ? 4 : 2, true);
+            DrawLine(from, ToScreen(_worldCenters[node.StableId]), color, _allocated.Contains(node.StableId) ? 3 : 1, true);
         }
 
-        DrawString(ThemeDB.FallbackFont, new Vector2(42, 24), "重兵", HorizontalAlignment.Left, -1, 15, new Color("d0a55a"));
-        DrawString(ThemeDB.FallbackFont, new Vector2(42, 454), "流血", HorizontalAlignment.Left, -1, 15, new Color("c86b62"));
-        DrawString(ThemeDB.FallbackFont, new Vector2(733, 24), "防御", HorizontalAlignment.Left, -1, 15, new Color("7cb1c4"));
-        DrawString(ThemeDB.FallbackFont, new Vector2(733, 454), "战吼", HorizontalAlignment.Left, -1, 15, new Color("ae8bc5"));
+        foreach (PassiveBranch branch in Enum.GetValues<PassiveBranch>())
+        {
+            int index = (int)branch;
+            float angle = -MathF.PI / 2 + index * MathF.Tau / 10;
+            Vector2 labelWorld = new Vector2(600, 450) + new Vector2(MathF.Cos(angle) * 505, MathF.Sin(angle) * 370);
+            DrawString(ThemeDB.FallbackFont, ToScreen(labelWorld), BranchLabel(branch), HorizontalAlignment.Center,
+                70, 13, BranchColor(branch));
+        }
+    }
+
+    public override void _Process(double delta)
+    {
+        if (Size != _lastSize)
+        {
+            _lastSize = Size;
+            if (!_fitInitialized && Size.X > 0 && Size.Y > 0)
+            {
+                _zoom = Math.Clamp(Math.Min(Size.X / 1_250f, Size.Y / 930f), 0.38f, 0.85f);
+                _fitInitialized = true;
+            }
+
+            ApplyLayout();
+        }
+    }
+
+    public override void _GuiInput(InputEvent inputEvent)
+    {
+        if (inputEvent is InputEventMouseButton wheel && wheel.Pressed &&
+            wheel.ButtonIndex is MouseButton.WheelUp or MouseButton.WheelDown)
+        {
+            float oldZoom = _zoom;
+            _zoom = Math.Clamp(_zoom * (wheel.ButtonIndex == MouseButton.WheelUp ? 1.12f : 0.89f), 0.35f, 1.35f);
+            Vector2 center = Size / 2;
+            _pan = wheel.Position - center - (wheel.Position - center - _pan) * (_zoom / oldZoom);
+            ApplyLayout();
+            AcceptEvent();
+        }
+        else if (inputEvent is InputEventMouseMotion motion &&
+                 motion.ButtonMask.HasFlag(MouseButtonMask.Middle))
+        {
+            _pan += motion.Relative;
+            ApplyLayout();
+            AcceptEvent();
+        }
     }
 
     public void SetState(IReadOnlySet<string> allocated, int earnedPoints)
@@ -107,34 +153,29 @@ public partial class P1PassiveTreeView : Control
 
     private void BuildNodes()
     {
-        IReadOnlyDictionary<PassiveBranch, (Vector2 Start, Vector2 End)> layout =
-            new Dictionary<PassiveBranch, (Vector2 Start, Vector2 End)>
-        {
-            [PassiveBranch.HeavyWeapon] = (new(370, 210), new(45, 44)),
-            [PassiveBranch.Bleed] = (new(370, 260), new(45, 426)),
-            [PassiveBranch.Defense] = (new(450, 210), new(775, 44)),
-            [PassiveBranch.WarCry] = (new(450, 260), new(775, 426)),
-        };
-
         foreach (IGrouping<PassiveBranch, PassiveNodeDefinition> branch in P1PassiveTree.Nodes.GroupBy(node => node.Branch))
         {
             PassiveNodeDefinition[] branchNodes = branch.ToArray();
-            int index = 0;
-            foreach (PassiveNodeDefinition node in branchNodes)
+            int branchIndex = (int)branch.Key;
+            float clusterAngle = -MathF.PI / 2 + branchIndex * MathF.Tau / 10;
+            Vector2 cluster = new Vector2(600, 450) +
+                              new Vector2(MathF.Cos(clusterAngle) * 390, MathF.Sin(clusterAngle) * 280);
+            for (int index = 0; index < branchNodes.Length; index++)
             {
-                float ratio = branchNodes.Length == 1 ? 0 : (float)index++ / (branchNodes.Length - 1);
-                (Vector2 start, Vector2 end) = layout[branch.Key];
-                Vector2 center = start.Lerp(end, ratio);
+                PassiveNodeDefinition node = branchNodes[index];
+                int orbitIndex = index / 6;
+                float orbit = 34 + orbitIndex * 31;
+                float angle = clusterAngle + (index % 6) * MathF.Tau / 6 + orbitIndex * 0.22f;
+                Vector2 center = cluster + new Vector2(MathF.Cos(angle), MathF.Sin(angle)) * orbit;
                 float size = node.Kind switch
                 {
-                    PassiveNodeKind.Small => 22,
-                    PassiveNodeKind.Notable => 30,
-                    _ => 36,
+                    PassiveNodeKind.Small => 14,
+                    PassiveNodeKind.Notable => 21,
+                    _ => 27,
                 };
                 var button = new Button
                 {
-                    Text = node.Kind == PassiveNodeKind.Small ? string.Empty : node.Kind == PassiveNodeKind.Notable ? "显" : "律",
-                    Position = center - Vector2.One * size / 2,
+                    Text = node.Kind == PassiveNodeKind.Small ? string.Empty : node.Kind == PassiveNodeKind.Notable ? "◆" : "律",
                     Size = Vector2.One * size,
                     CustomMinimumSize = Vector2.One * size,
                     FocusMode = FocusModeEnum.None,
@@ -143,10 +184,47 @@ public partial class P1PassiveTreeView : Control
                 button.Pressed += () => SelectNode(node.StableId);
                 AddChild(button);
                 _buttons[node.StableId] = button;
-                _centers[node.StableId] = center;
+                _worldCenters[node.StableId] = center;
+                _nodeSizes[node.StableId] = size;
             }
         }
+
+        ApplyLayout();
     }
+
+    private void ApplyLayout()
+    {
+        foreach ((string stableId, Button button) in _buttons)
+        {
+            float size = _nodeSizes[stableId];
+            button.Position = ToScreen(_worldCenters[stableId]) - Vector2.One * size / 2;
+        }
+
+        QueueRedraw();
+    }
+
+    private Vector2 ToScreen(Vector2 world) => Size / 2 + (world - new Vector2(600, 450)) * _zoom + _pan;
+
+    private static string BranchLabel(PassiveBranch branch) => branch switch
+    {
+        PassiveBranch.HeavyWeapon => "重兵",
+        PassiveBranch.Bleed => "流血",
+        PassiveBranch.Defense => "守御",
+        PassiveBranch.WarCry => "战吼",
+        PassiveBranch.Mobility => "行路",
+        PassiveBranch.Critical => "暴烈",
+        PassiveBranch.Accuracy => "洞察",
+        PassiveBranch.Mana => "源流",
+        PassiveBranch.Shield => "壁垒",
+        PassiveBranch.Flask => "炼金",
+        _ => branch.ToString(),
+    };
+
+    private static Color BranchColor(PassiveBranch branch) => new Color[]
+    {
+        new("d0a55a"), new("c86b62"), new("7cb1c4"), new("ae8bc5"), new("77b78b"),
+        new("d17e54"), new("c6c26a"), new("6f8bc6"), new("70b2b6"), new("b58f68"),
+    }[(int)branch];
 
     private void SelectNode(string stableId)
     {

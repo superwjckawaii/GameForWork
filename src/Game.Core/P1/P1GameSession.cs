@@ -645,7 +645,8 @@ public sealed class P1GameSession
         LifeFlaskUseThresholdBasisPoints: ai.LifeFlaskThresholdBasisPoints,
         AddedPhysicalDamage: build.AddedPhysicalDamage,
         HeavyStrikeProfile: build.HeavyStrike,
-        WeaponLegendaryRule: build.Equipment.WeaponLegendaryRule) with
+        WeaponLegendaryRule: build.Equipment.WeaponLegendaryRule,
+        MovementSpeedBasisPoints: checked(10_000 + build.Passives.IncreasedMovementSpeedBasisPoints)) with
         {
             AiSummary = $"{ai.Preset} · {(ai.MatchMode == AiRuleMatchMode.All ? "全部满足" : "任一满足")}：" +
                 $"敌人≥{ai.MinimumEnemyCount}、稀有度 {ai.EnemyRarity}、距离≤{ai.MaximumEnemyDistance}、" +

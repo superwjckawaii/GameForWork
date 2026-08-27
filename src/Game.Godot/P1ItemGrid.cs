@@ -18,6 +18,7 @@ public partial class P1ItemGrid : GridContainer
     public event Action<int>? QuickTransferRequested;
 
     public int SelectedIndex => _selectedIndex;
+    public int IndexOffset { get; set; }
     public ItemContainerKind ContainerKind { get; set; }
     public Func<ItemInstance, string>? ExtraTooltip { get; set; }
     public ItemInstance? SelectedItem => _selectedIndex >= 0 && _selectedIndex < _items.Count
@@ -82,14 +83,17 @@ public partial class P1ItemGrid : GridContainer
         ApplyCells();
     }
 
-    public void Activate(int index) => ItemActivated?.Invoke(index);
+    public int ToExternalIndex(int index) => checked(index + IndexOffset);
 
-    public void OpenContext(int index, Vector2 screenPosition) => ItemContextRequested?.Invoke(index, screenPosition);
+    public void Activate(int index) => ItemActivated?.Invoke(ToExternalIndex(index));
+
+    public void OpenContext(int index, Vector2 screenPosition) =>
+        ItemContextRequested?.Invoke(ToExternalIndex(index), screenPosition);
 
     public void ReceiveDrop(ItemContainerKind source, int sourceIndex, int targetIndex) =>
-        ItemDropped?.Invoke(source, sourceIndex, targetIndex);
+        ItemDropped?.Invoke(source, sourceIndex, ToExternalIndex(targetIndex));
 
-    public void QuickTransfer(int index) => QuickTransferRequested?.Invoke(index);
+    public void QuickTransfer(int index) => QuickTransferRequested?.Invoke(ToExternalIndex(index));
 
     private void ApplyCells()
     {
@@ -109,6 +113,7 @@ public partial class P1ItemGrid : GridContainer
             cell.Disabled = false;
             cell.SetPressedNoSignal(index == _selectedIndex);
             Color color = occupied ? P1UiText.RarityColor(item!.Rarity) : new Color("71695e");
+            cell.TooltipRarityColor = color;
             cell.AddThemeColorOverride("font_color", color);
             cell.AddThemeColorOverride("font_pressed_color", color.Lightened(0.15f));
             cell.AddThemeStyleboxOverride("normal", Frame(new Color("171b22"), color.Darkened(0.32f), 1));
@@ -177,6 +182,6 @@ public partial class P1ItemGrid : GridContainer
             _cells[cellIndex].SetPressedNoSignal(cellIndex == index);
         }
 
-        ItemSelected?.Invoke(index);
+        ItemSelected?.Invoke(ToExternalIndex(index));
     }
 }

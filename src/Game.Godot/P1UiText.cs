@@ -152,6 +152,7 @@ internal static class P1UiText
         PassiveEffectKind.IncreasedWarCryCooldownRecoveryBasisPoints => "战吼冷却恢复增加",
         PassiveEffectKind.IncreasedManaRegenerationBasisPoints => "法力恢复增加",
         PassiveEffectKind.IncreasedWarCryRangeBasisPoints => "战吼范围增加",
+        PassiveEffectKind.IncreasedMovementSpeedBasisPoints => "移动速度增加",
         _ => kind.ToString(),
     };
 
