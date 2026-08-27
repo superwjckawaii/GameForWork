@@ -198,13 +198,13 @@ public partial class P2Dashboard : VBoxContainer
         VBoxContainer page = Page("总览");
         var controls = new HFlowContainer();
         page.AddChild(controls);
-        AddButton(controls, "观察城镇", () => SetView(P1ViewMode.Town));
+        AddButton(controls, "观察当前战斗", () => SetView(P1ViewMode.Active));
         AddButton(controls, "观察主角", () => SetView(P1ViewMode.Hero));
         AddButton(controls, "观察佣兵", () => SetView(P1ViewMode.Mercenaries));
         _worldView = new P1WorldView
         {
             Session = _session,
-            Mode = P1ViewMode.Town,
+            Mode = P1ViewMode.Active,
             CustomMinimumSize = new Vector2(640, 300),
             SizeFlagsHorizontal = SizeFlags.ExpandFill,
             SizeFlagsVertical = SizeFlags.ExpandFill,
@@ -951,11 +951,13 @@ public partial class P2Dashboard : VBoxContainer
         _mapQueuePanel?.RefreshState();
         _campaignRoute?.RefreshState();
         CampaignNodeDefinition? currentNode = _session.Campaign.CurrentNode;
+        long currentNodeDuration = _session.Campaign.ActiveTimeline?.DurationMilliseconds ??
+                                   currentNode?.DurationMilliseconds ?? 0;
         _storyStatus!.Text = _session.Campaign.Completed
             ? "五幕主线已完成\n远征功能已开放。"
             : $"第 {currentNode!.Act} 幕 · {P2CampaignCatalog.ActNames[currentNode.Act - 1]}\n" +
               $"当前：{currentNode.DisplayName}（{currentNode.Kind}）\n" +
-              $"进度 {_session.Campaign.CurrentNodeElapsedMilliseconds / 1_000}/{currentNode.DurationMilliseconds / 1_000}s\n" +
+              $"进度 {_session.Campaign.CurrentNodeElapsedMilliseconds / 1_000}/{currentNodeDuration / 1_000}s\n" +
               (_session.Campaign.Defeated ? "⚠ 战败：调整构筑后点击继续。" : "自动推进中；离线时间同样有效。 ");
         _storyLog!.Text = string.Join('\n', _session.Campaign.StoryLog.TakeLast(60).Select(item => $"• {item}"));
         int expeditionIndex = _mainTabs!.GetTabIdxFromControl(_expeditionPage!);

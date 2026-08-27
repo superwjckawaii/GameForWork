@@ -1,12 +1,14 @@
 using GameForWork.Core.P1;
 using GameForWork.Core.P1.World;
+using GameForWork.Core.P2;
+using GameForWork.Core.P3;
 using Godot;
 
 namespace GameForWork.GodotClient;
 
 public enum P1ViewMode
 {
-    Town,
+    Active,
     Hero,
     Mercenaries,
 }
@@ -16,9 +18,9 @@ public partial class P1WorldView : Control
     private P1GameSession? _session;
     private P1ViewMode _mode;
     private double _visualClock;
-    private double _visualRemainingMilliseconds;
-    private long _lastObservedRemaining = -1;
-    private string? _lastObservedMap;
+    private double _visualElapsedMilliseconds;
+    private long _lastObservedElapsed = -1;
+    private string? _lastObservedScene;
     private Texture2D? _townBackground;
     private Texture2D? _combatBackground;
     private Texture2D? _characterAtlas;
@@ -66,11 +68,9 @@ public partial class P1WorldView : Control
 
         _visualClock += delta;
         SyncObservation();
-        if (_mode != P1ViewMode.Town && _lastObservedMap is not null)
+        if (_lastObservedScene is not null)
         {
-            _visualRemainingMilliseconds = Math.Max(
-                0,
-                _visualRemainingMilliseconds - delta * 1_000 * (_session?.SimulationSpeed ?? 1));
+            _visualElapsedMilliseconds += delta * 1_000 * (_session?.SimulationSpeed ?? 1);
         }
 
         QueueRedraw();
@@ -80,14 +80,7 @@ public partial class P1WorldView : Control
     {
         Rect2 bounds = new(4, 4, Math.Max(100, Size.X - 8), Math.Max(80, Size.Y - 8));
         DrawRect(bounds, new Color("0c1017"), true);
-        if (_mode == P1ViewMode.Town)
-        {
-            DrawTown(bounds);
-        }
-        else
-        {
-            DrawExpedition(bounds, _mode == P1ViewMode.Hero);
-        }
+        DrawActiveBattle(bounds);
 
         DrawRect(bounds, new Color("8b7353"), false, 2);
     }
@@ -126,7 +119,7 @@ public partial class P1WorldView : Control
         DrawCaption(bounds, "军锋镇 · 门扉仍在低鸣", new Color("eed9b4"));
     }
 
-    private void DrawExpedition(Rect2 bounds, bool hero)
+    private void DrawActiveBattle(Rect2 bounds)
     {
         if (_combatBackground is not null)
         {
@@ -158,12 +151,17 @@ public partial class P1WorldView : Control
             }
         }
 
-        P1TeamExpeditionState? team = Team(hero);
-        float duration = team?.ActiveRoute == MapRoute.Abyss ? 120_000f : 90_000f;
-        float mapProgress = team?.ActiveMap is null
+        ObservedScene? observed = Observe();
+        P3SceneTimeline? timeline = observed?.Timeline;
+        long elapsed = timeline is null
             ? 0
-            : 1f - Math.Clamp((float)(_visualRemainingMilliseconds / duration), 0, 1);
-        float attackCycle = (float)(_visualClock * (hero ? 1.8 : 1.5) % 1.0);
+            : Math.Clamp((long)_visualElapsedMilliseconds, 0, timeline.DurationMilliseconds);
+        P3SceneEvent? state = timeline?.StateAt(elapsed);
+        float sceneProgress = timeline is null || timeline.DurationMilliseconds <= 0
+            ? 0
+            : Math.Clamp((float)elapsed / timeline.DurationMilliseconds, 0, 1);
+        bool hero = observed?.Hero ?? true;
+        float attackCycle = (float)(_visualClock * (hero ? 2.2 : 1.9) % 1.0);
         float bob = MathF.Sin((float)_visualClock * 5) * 1.8f;
         Vector2 actor = bounds.Position + new Vector2(bounds.Size.X * 0.36f, bounds.Size.Y * 0.64f + bob);
         Vector2 enemy = bounds.Position + new Vector2(bounds.Size.X * 0.67f, bounds.Size.Y * 0.61f);
@@ -177,50 +175,177 @@ public partial class P1WorldView : Control
         else
         {
             DrawAtlasActor(actor, hero, attackCycle);
-            DrawAtlasEnemy(enemy, mapProgress, attackCycle);
+            DrawAtlasEnemy(enemy, sceneProgress, attackCycle);
         }
 
-        if (team?.ActiveMap is not null && attackCycle is > 0.18f and < 0.38f)
+        IReadOnlyList<P3SceneEvent> recent = timeline?.Events
+            .Where(item => item.AtMilliseconds <= elapsed && item.AtMilliseconds >= elapsed - 1_100)
+            .ToArray() ?? [];
+        if (recent.Any(item => item.Kind == P3SceneEventKind.HeavyStrike))
         {
-            float reach = (attackCycle - 0.18f) / 0.2f;
+            float reach = Math.Clamp(attackCycle * 2, 0, 1);
             Vector2 slashCenter = actor.Lerp(enemy, 0.45f + reach * 0.35f);
             DrawArc(slashCenter, 18 + reach * 18, -1.2f, 1.1f, 14, new Color(0.95f, 0.78f, 0.42f, 1 - reach * 0.4f), 4);
             DrawCircle(enemy + new Vector2(-6, -12), 6 * (1 - reach), new Color("a83838"));
         }
 
-        DrawBar(new Rect2(bounds.Position + new Vector2(16, 35), new Vector2(bounds.Size.X - 32, 7)), mapProgress, new Color("bb8442"));
-        string title = team?.ActiveMap is null
-            ? "等待远征补给或地图"
-            : $"{team.ActiveMap.InstanceId} · 区域 {team.ActiveMap.AreaLevel} · {team.ActiveRoute}";
-        DrawCaption(bounds, title, new Color("e5d7be"));
-        if (team?.ActiveMap is not null)
+        DrawSkillShapes(actor, enemy, recent);
+        DrawFloatingNumbers(enemy, actor, recent, elapsed);
+
+        float heroLife = state is null || state.HeroMaximumLife <= 0
+            ? 1
+            : (float)state.HeroLife / state.HeroMaximumLife;
+        float heroMana = state is null || state.HeroMaximumMana <= 0
+            ? 1
+            : (float)state.HeroMana / state.HeroMaximumMana;
+        float enemyLife = state is null || state.EnemyMaximumLife <= 0
+            ? 0
+            : (float)state.EnemyLife / state.EnemyMaximumLife;
+        DrawBar(new Rect2(actor + new Vector2(-48, 25), new Vector2(96, 7)), heroLife, new Color("a73737"));
+        DrawBar(new Rect2(actor + new Vector2(-48, 35), new Vector2(96, 5)), heroMana, new Color("356db4"));
+        if (state?.HeroMaximumShield > 0)
         {
-            DrawString(ThemeDB.FallbackFont, bounds.Position + new Vector2(16, 58), $"远征进度 {mapProgress * 100:0.0}%", HorizontalAlignment.Left, -1, 12, new Color("c6bca9"));
+            DrawBar(new Rect2(actor + new Vector2(-48, 43), new Vector2(96, 4)),
+                (float)state.HeroShield / state.HeroMaximumShield, new Color("76c7d9"));
+        }
+
+        if (state?.EnemyMaximumLife > 0)
+        {
+            DrawBar(new Rect2(enemy + new Vector2(-54, 25), new Vector2(108, 7)), enemyLife, new Color("8d2739"));
+        }
+
+        DrawBar(new Rect2(bounds.Position + new Vector2(16, 35), new Vector2(bounds.Size.X - 32, 7)), sceneProgress, new Color("bb8442"));
+        string title = observed?.Title ?? "等待主线战斗或远征地图";
+        DrawCaption(bounds, title, new Color("e5d7be"));
+        if (timeline is not null)
+        {
+            string phase = state?.Kind == P3SceneEventKind.TravelStarted
+                ? $"移动中 · {state.Value} 格"
+                : $"节点 {Math.Max(1, state?.NodeIndex ?? 1)}/{timeline.NodeCount} · 波次 {Math.Max(1, state?.WaveIndex ?? 1)}";
+            DrawString(ThemeDB.FallbackFont, bounds.Position + new Vector2(16, 59),
+                $"{phase} · 场景 {sceneProgress * 100:0.0}%", HorizontalAlignment.Left, -1, 13, new Color("c6bca9"));
         }
     }
 
     private void SyncObservation()
     {
-        P1TeamExpeditionState? team = Team(_mode == P1ViewMode.Hero);
-        string? map = team?.ActiveMap?.InstanceId;
-        long remaining = team?.RemainingMapTimeMilliseconds ?? 0;
-        if (map != _lastObservedMap || remaining != _lastObservedRemaining)
+        ObservedScene? observed = Observe();
+        string? scene = observed?.Timeline.StableId;
+        long elapsed = observed?.ElapsedMilliseconds ?? 0;
+        if (scene != _lastObservedScene || elapsed != _lastObservedElapsed)
         {
-            _lastObservedMap = map;
-            _lastObservedRemaining = remaining;
-            _visualRemainingMilliseconds = remaining;
+            _lastObservedScene = scene;
+            _lastObservedElapsed = elapsed;
+            _visualElapsedMilliseconds = elapsed;
         }
     }
 
-    private P1TeamExpeditionState? Team(bool hero) => _session is null
-        ? null
-        : hero ? _session.World.Hero : _session.World.Mercenaries;
+    private ObservedScene? Observe()
+    {
+        if (_session is null)
+        {
+            return null;
+        }
+
+        if (_mode == P1ViewMode.Active && !_session.Campaign.Completed && _session.Campaign.ActiveTimeline is not null)
+        {
+            CampaignNodeDefinition node = _session.Campaign.CurrentNode!;
+            return new ObservedScene(
+                _session.Campaign.ActiveTimeline,
+                _session.Campaign.CurrentNodeElapsedMilliseconds,
+                $"主线 · 第 {node.Act} 幕 · {node.DisplayName}",
+                true);
+        }
+
+        P1TeamExpeditionState preferred = _mode == P1ViewMode.Mercenaries
+            ? _session.World.Mercenaries
+            : _session.World.Hero;
+        ObservedScene? expedition = ObserveExpedition(preferred, preferred.Kind == ExpeditionTeamKind.Hero);
+        if (expedition is not null || _mode != P1ViewMode.Active)
+        {
+            return expedition;
+        }
+
+        return ObserveExpedition(_session.World.Mercenaries, false);
+    }
+
+    private static ObservedScene? ObserveExpedition(P1TeamExpeditionState team, bool hero)
+    {
+        if (team.ActiveMap is null || team.ActiveRun is null)
+        {
+            return null;
+        }
+
+        long elapsed = Math.Max(0, team.ActiveRun.DurationMilliseconds - team.RemainingMapTimeMilliseconds);
+        foreach (MapAttemptResult attempt in team.ActiveRun.Attempts)
+        {
+            if (attempt.Timeline is null)
+            {
+                continue;
+            }
+
+            if (elapsed <= attempt.Timeline.DurationMilliseconds)
+            {
+                return new ObservedScene(attempt.Timeline, elapsed,
+                    $"{(hero ? "主角" : "佣兵")}远征 · 区域 {team.ActiveMap.AreaLevel} · {team.ActiveRoute}", hero);
+            }
+
+            elapsed -= attempt.Timeline.DurationMilliseconds;
+        }
+
+        return null;
+    }
 
     private void ResetObservation()
     {
-        _lastObservedMap = null;
-        _lastObservedRemaining = -1;
+        _lastObservedScene = null;
+        _lastObservedElapsed = -1;
     }
+
+    private void DrawSkillShapes(Vector2 actor, Vector2 enemy, IEnumerable<P3SceneEvent> recent)
+    {
+        foreach (P3SceneEvent item in recent)
+        {
+            float age = Math.Clamp((float)((_visualElapsedMilliseconds - item.AtMilliseconds) / 1_100), 0, 1);
+            if (item.Kind == P3SceneEventKind.WarCry)
+            {
+                DrawArc(actor + new Vector2(0, -12), 18 + age * 42, 0, MathF.Tau, 28,
+                    new Color(0.94f, 0.62f, 0.23f, 0.8f * (1 - age)), 3);
+            }
+            else if (item.Kind == P3SceneEventKind.Aftershock)
+            {
+                DrawArc(enemy, 12 + age * 55, 0, MathF.Tau, 24,
+                    new Color(0.62f, 0.43f, 0.22f, 0.75f * (1 - age)), 5);
+            }
+            else if (item.Kind == P3SceneEventKind.Bleed)
+            {
+                for (int index = 0; index < 4; index++)
+                {
+                    DrawCircle(enemy + new Vector2(index * 6 - 9, -28 + age * 24 + index * 2), 2,
+                        new Color(0.72f, 0.08f, 0.12f, 1 - age));
+                }
+            }
+        }
+    }
+
+    private void DrawFloatingNumbers(Vector2 enemy, Vector2 actor, IEnumerable<P3SceneEvent> recent, long elapsed)
+    {
+        int lane = 0;
+        foreach (P3SceneEvent item in recent.Where(item => item.Value > 0 && item.Kind is
+                     P3SceneEventKind.HeavyStrike or P3SceneEventKind.Aftershock or
+                     P3SceneEventKind.EnemyAttack or P3SceneEventKind.Bleed))
+        {
+            float age = Math.Clamp((elapsed - item.AtMilliseconds) / 1_100f, 0, 1);
+            bool hurtsHero = item.Kind == P3SceneEventKind.EnemyAttack ||
+                             item.Kind == P3SceneEventKind.Bleed && item.Detail == "hero";
+            Vector2 origin = hurtsHero ? actor : enemy;
+            Vector2 position = origin + new Vector2((lane++ % 3 - 1) * 18, -45 - age * 35);
+            DrawString(ThemeDB.FallbackFont, position, item.Value.ToString(), HorizontalAlignment.Center, 54, 16,
+                hurtsHero ? new Color(1, 0.35f, 0.3f, 1 - age * 0.65f) : new Color(1, 0.82f, 0.35f, 1 - age * 0.65f));
+        }
+    }
+
+    private sealed record ObservedScene(P3SceneTimeline Timeline, long ElapsedMilliseconds, string Title, bool Hero);
 
     private static Texture2D? LoadOptional(string path) => ResourceLoader.Exists(path)
         ? GD.Load<Texture2D>(path)

@@ -184,13 +184,13 @@ public partial class P1Dashboard : VBoxContainer
         VBoxContainer page = Page("军锋镇");
         var buttons = new HBoxContainer();
         page.AddChild(buttons);
-        AddButton(buttons, "观察城镇", () => SetView(P1ViewMode.Town));
+        AddButton(buttons, "观察当前战斗", () => SetView(P1ViewMode.Active));
         AddButton(buttons, "观察主角", () => SetView(P1ViewMode.Hero));
         AddButton(buttons, "观察佣兵", () => SetView(P1ViewMode.Mercenaries));
         _worldView = new P1WorldView
         {
             Session = _session,
-            Mode = P1ViewMode.Town,
+            Mode = P1ViewMode.Active,
             CustomMinimumSize = new Vector2(768, 432),
             SizeFlagsHorizontal = SizeFlags.ShrinkCenter,
             SizeFlagsVertical = SizeFlags.ExpandFill,
