@@ -139,10 +139,10 @@ public sealed class P1EncounterRunner
                         request.Hero.Accuracy(request.HeroFlatAccuracy).Value,
                         request.Enemy.Evasion,
                         request.Enemy.Armor,
-                        request.HeroIncreasedDamageBasisPoints,
-                        request.HeroIncreasedCriticalChanceBasisPoints,
-                        request.HeroIncreasedBleedChanceBasisPoints,
-                        warCry);
+                        IncreasedDamageBasisPoints: request.HeroIncreasedDamageBasisPoints,
+                        IncreasedCriticalChanceBasisPoints: request.HeroIncreasedCriticalChanceBasisPoints,
+                        IncreasedBleedChanceBasisPoints: request.HeroIncreasedBleedChanceBasisPoints,
+                        WarCry: warCry);
                     HeavyStrikeResult strike = HeavyStrikeRules.Resolve(strikeRequest, random, tick);
                     if (strike.CastSucceeded)
                     {

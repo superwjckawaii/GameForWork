@@ -1,4 +1,5 @@
 using GameForWork.Core.Simulation;
+using GameForWork.Core.P1.Progression;
 
 namespace GameForWork.Core.P1.Combat;
 
@@ -10,9 +11,12 @@ public sealed record HeavyStrikeRequest(
     int TargetEvasion,
     int TargetArmor,
     int IncreasedDamageBasisPoints = 0,
+    int AddedMinimumPhysicalDamage = 0,
+    int AddedMaximumPhysicalDamage = 0,
     int IncreasedCriticalChanceBasisPoints = 0,
     int IncreasedBleedChanceBasisPoints = 0,
-    WarCryState? WarCry = null);
+    WarCryState? WarCry = null,
+    ChargedHeavyStrikeState? ChargedHeavyStrike = null);
 
 public sealed record HeavyStrikeResult(bool CastSucceeded, string FailureReason, DamageResult? Damage);
 
@@ -38,11 +42,18 @@ public static class HeavyStrikeRules
             multipliers.Add(request.WarCry.ConsumeHeavyStrikeMultiplier(tick));
         }
 
+        if (request.ChargedHeavyStrike is not null)
+        {
+            multipliers.Add(request.ChargedHeavyStrike.ConsumeForHeavyStrike(tick));
+        }
+
         int criticalChance = checked((int)((long)request.Weapon.CriticalChanceBasisPoints *
             (10_000 + request.IncreasedCriticalChanceBasisPoints) / 10_000));
         int physiqueIncrease = request.AttackerResources.Sheet.AttackDamageIncreaseFromPhysique().Value;
         var damageRequest = new DamageRequest(
             request.Weapon,
+            AddedMinimumPhysicalDamage: request.AddedMinimumPhysicalDamage,
+            AddedMaximumPhysicalDamage: request.AddedMaximumPhysicalDamage,
             IncreasedDamageBasisPoints: checked(request.IncreasedDamageBasisPoints + physiqueIncrease),
             MoreDamageMultipliersBasisPoints: multipliers,
             CriticalChanceBasisPoints: criticalChance,
