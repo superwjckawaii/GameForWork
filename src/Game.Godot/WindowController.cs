@@ -30,6 +30,7 @@ public sealed class WindowController : IDisposable
     private bool _snapAppliedForCurrentPosition;
     private int _statusIndicatorId = -1;
     private Rid _trayMenu;
+    private bool _globalHotkeyWasPressed;
 
     public WindowController(
         Window window,
@@ -156,6 +157,13 @@ public sealed class WindowController : IDisposable
         _settingsStore.Save(_settings);
     }
 
+    public void SetGlobalHotkeyEnabled(bool enabled)
+    {
+        _settings = _settings with { GlobalHotkeyEnabled = enabled };
+        _globalHotkeyWasPressed = false;
+        _settingsStore.Save(_settings);
+    }
+
     public void SetTrayStatus(TrayStatus status)
     {
         if (_statusIndicatorId < 0)
@@ -177,6 +185,7 @@ public sealed class WindowController : IDisposable
 
     public void TickSnapping(double delta)
     {
+        TickGlobalHotkey();
         if (DisplayServer.GetName() == "headless" || IsHiddenToTray)
         {
             return;
@@ -238,6 +247,29 @@ public sealed class WindowController : IDisposable
         }
     }
 
+    private void TickGlobalHotkey()
+    {
+        if (!_settings.GlobalHotkeyEnabled || !OperatingSystem.IsWindows() || DisplayServer.GetName() == "headless")
+        {
+            return;
+        }
+
+        bool pressed = IsKeyDown(VkControl) && IsKeyDown(VkMenu) && IsKeyDown(VkH);
+        if (pressed && !_globalHotkeyWasPressed)
+        {
+            if (IsHiddenToTray)
+            {
+                Restore();
+            }
+            else
+            {
+                HideToTray();
+            }
+        }
+
+        _globalHotkeyWasPressed = pressed;
+    }
+
     public void Dispose()
     {
         if (!IsMini && !IsHiddenToTray && DisplayServer.GetName() != "headless")
@@ -281,7 +313,7 @@ public sealed class WindowController : IDisposable
         IsMini = false;
         IsLarge = false;
         _window.ContentScaleSize = StandardSize;
-        DisplayServer.WindowSetFlag(DisplayServer.WindowFlags.Borderless, false);
+        DisplayServer.WindowSetFlag(DisplayServer.WindowFlags.Borderless, true);
         DisplayServer.WindowSetFlag(DisplayServer.WindowFlags.ResizeDisabled, false);
         DisplayServer.WindowSetSize(StandardSize);
         DisplayServer.WindowSetPosition(_standardPosition);
@@ -298,7 +330,7 @@ public sealed class WindowController : IDisposable
         IsMini = false;
         IsLarge = true;
         _window.ContentScaleSize = StandardSize;
-        DisplayServer.WindowSetFlag(DisplayServer.WindowFlags.Borderless, false);
+        DisplayServer.WindowSetFlag(DisplayServer.WindowFlags.Borderless, true);
         DisplayServer.WindowSetFlag(DisplayServer.WindowFlags.ResizeDisabled, true);
         DisplayServer.WindowSetSize(LargeSize);
         EnsureVisible();
@@ -368,6 +400,11 @@ public sealed class WindowController : IDisposable
     private const int GwlExStyle = -20;
     private const nint WsExLayered = 0x00080000;
     private const uint LwaAlpha = 0x00000002;
+    private const int VkControl = 0x11;
+    private const int VkMenu = 0x12;
+    private const int VkH = 0x48;
+
+    private static bool IsKeyDown(int key) => (GetAsyncKeyState(key) & 0x8000) != 0;
 
     private static IntPtr GetNativeWindowHandle()
     {
@@ -384,4 +421,7 @@ public sealed class WindowController : IDisposable
     [DllImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool SetLayeredWindowAttributes(IntPtr window, uint colorKey, byte alpha, uint flags);
+
+    [DllImport("user32.dll")]
+    private static extern short GetAsyncKeyState(int virtualKey);
 }

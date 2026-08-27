@@ -292,6 +292,8 @@ public partial class P2Dashboard : VBoxContainer
             TooltipText = "收起常驻装备备栏，为技能、天赋和仓库腾出空间",
         };
         header.AddChild(collapseSidebar);
+        AddButton(header, "撤销移动", () => Execute(
+            new P2ItemCommandService(RequireSession(), _selectedCharacter).UndoLastMovement()));
         _characterStatus = new Label
         {
             SizeFlagsHorizontal = SizeFlags.ExpandFill,
@@ -807,7 +809,8 @@ public partial class P2Dashboard : VBoxContainer
             return;
         }
 
-        P2WorkshopPreview preview = P2Workshop.Preview(RequireSession().World.Storage.Items[index], recipe);
+        ItemInstance currentItem = RequireSession().World.Storage.Items[index];
+        P2WorkshopPreview preview = P2Workshop.Preview(currentItem, recipe);
         if (!preview.Succeeded)
         {
             Changed($"制作失败：{preview.Summary}");
@@ -815,7 +818,10 @@ public partial class P2Dashboard : VBoxContainer
         }
 
         _confirmDialog!.DialogText =
-            $"{preview.Summary}\n消耗：{preview.GoldCost} 金币、{preview.IronScrapCost} 铁屑\n确认对 {RequireSession().World.Storage.Items[index].Base.DisplayName} 执行？";
+            $"{preview.Summary}\n消耗：{preview.GoldCost} 金币、{preview.IronScrapCost} 铁屑\n\n" +
+            $"制作前：{currentItem.Affixes.Count} 条词缀\n" +
+            $"制作后：{preview.Result!.Affixes.Count} 条词缀（新增 {preview.Summary}）\n\n" +
+            $"确认对 {currentItem.Base.DisplayName} 执行？";
         _pendingConfirmation = () =>
         {
             P2WorkshopPreview result = RequireSession().CraftStorageItem(index, recipe);

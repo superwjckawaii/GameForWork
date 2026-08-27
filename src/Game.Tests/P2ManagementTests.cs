@@ -125,6 +125,20 @@ public sealed class P2ManagementTests
     }
 
     [Fact]
+    public void OrdinaryItemMovementCanBeUndoneWithinTheSession()
+    {
+        P1GameSession session = Session();
+        Assert.True(session.Management.TryAddToSortingBag(Item("undo-a")));
+        Assert.True(session.Management.TryAddToSortingBag(Item("undo-b")));
+        var commands = new P2ItemCommandService(session);
+
+        Assert.True(commands.Move(ItemContainerKind.SortingBag, 0, ItemContainerKind.SortingBag, 1).Succeeded);
+        Assert.Equal(["undo-b", "undo-a"], session.Management.SortingBag.Select(item => item.InstanceId));
+        Assert.True(commands.UndoLastMovement().Succeeded);
+        Assert.Equal(["undo-a", "undo-b"], session.Management.SortingBag.Select(item => item.InstanceId));
+    }
+
+    [Fact]
     public void RareDismantleRequiresExplicitConfirmation()
     {
         P1GameSession session = Session();

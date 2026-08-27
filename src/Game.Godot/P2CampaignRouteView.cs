@@ -10,7 +10,7 @@ public partial class P2CampaignRouteView : VBoxContainer
     private Func<P1GameSession>? _session;
     private Action<string>? _selected;
     private string? _selectedId;
-    private Texture2D? _actAtlas;
+    private readonly Texture2D?[] _actTextures = new Texture2D?[5];
 
     public string? SelectedStableId => _selectedId;
 
@@ -18,8 +18,20 @@ public partial class P2CampaignRouteView : VBoxContainer
     {
         _session = session;
         _selected = selected;
-        const string atlasPath = "res://assets/p2/campaign/five-act-grid.png";
-        _actAtlas = ResourceLoader.Exists(atlasPath) ? GD.Load<Texture2D>(atlasPath) : null;
+        string[] actPaths =
+        [
+            "res://assets/p3/campaign/act-1-ash-camp.png",
+            "res://assets/p3/campaign/act-2-frost-town.png",
+            "res://assets/p3/campaign/act-3-drowned-crypt.png",
+            "res://assets/p3/campaign/act-4-crimson-foundry.png",
+            "res://assets/p3/campaign/act-5-void-citadel.png",
+        ];
+        for (int index = 0; index < actPaths.Length; index++)
+        {
+            _actTextures[index] = ResourceLoader.Exists(actPaths[index])
+                ? GD.Load<Texture2D>(actPaths[index])
+                : null;
+        }
         for (int act = 1; act <= 5; act++)
         {
             var row = new HBoxContainer();
@@ -67,20 +79,7 @@ public partial class P2CampaignRouteView : VBoxContainer
 
     private Texture2D? ActTexture(int act)
     {
-        if (_actAtlas is null)
-        {
-            return null;
-        }
-
-        float[] starts = [17, 426, 829, 1_236, 1_639];
-        float scaleX = _actAtlas.GetWidth() / 2_172f;
-        float scaleY = _actAtlas.GetHeight() / 724f;
-        return new AtlasTexture
-        {
-            Atlas = _actAtlas,
-            Region = new Rect2(starts[act - 1] * scaleX, 136 * scaleY, 392 * scaleX, 412 * scaleY),
-            FilterClip = true,
-        };
+        return act is >= 1 and <= 5 ? _actTextures[act - 1] : null;
     }
 
     public void RefreshState()

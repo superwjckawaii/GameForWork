@@ -24,6 +24,7 @@ public partial class P1WorldView : Control
     private Texture2D? _townBackground;
     private Texture2D? _combatBackground;
     private Texture2D? _characterAtlas;
+    private Texture2D? _mercenaryTexture;
 
     public P1GameSession? Session
     {
@@ -57,6 +58,7 @@ public partial class P1WorldView : Control
         _townBackground = LoadOptional("res://assets/p2/town/military-town.png");
         _combatBackground = LoadOptional("res://assets/p2/combat/gate-ruins.png");
         _characterAtlas = LoadOptional("res://assets/p2/characters/p2-character-grid.png");
+        _mercenaryTexture = LoadOptional("res://assets/p3/characters/rune-mercenary.png");
     }
 
     public override void _Process(double delta)
@@ -384,6 +386,15 @@ public partial class P1WorldView : Control
 
     private void DrawAtlasActor(Vector2 position, bool hero, float attackCycle)
     {
+        if (!hero && _mercenaryTexture is not null)
+        {
+            float height = 116;
+            float width = height * _mercenaryTexture.GetWidth() / _mercenaryTexture.GetHeight();
+            DrawTextureRect(_mercenaryTexture,
+                new Rect2(position + new Vector2(-width / 2, -height), new Vector2(width, height)), false);
+            return;
+        }
+
         int column = hero && _session is not null
             ? ((int)_session.Player.Gender + (int)_session.Player.SkinTone + (int)_session.Player.HairStyle) % 4
             : 0;

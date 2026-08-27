@@ -22,6 +22,8 @@ public partial class Main : Node
     private P1GameSession? _session;
     private P2Dashboard? _dashboard;
     private HFlowContainer? _standardToolbar;
+    private P3PixelTitleBar? _pixelTitleBar;
+    private P3ToastOverlay? _toast;
     private VBoxContainer? _interfaceRoot;
     private HBoxContainer? _miniToolbar;
     private HFlowContainer? _testHarness;
@@ -163,6 +165,18 @@ public partial class Main : Node
         _interfaceRoot = root;
         AddChild(root);
 
+        _toast = new P3ToastOverlay();
+        AddChild(_toast);
+
+        _pixelTitleBar = new P3PixelTitleBar();
+        _pixelTitleBar.Initialize(
+            ToggleLargeWindow,
+            () => _windowController?.ToggleAlwaysOnTop(),
+            () => GetWindow().Mode = Window.ModeEnum.Minimized,
+            () => _windowController?.HideToTray(),
+            OnCloseRequested);
+        root.AddChild(_pixelTitleBar);
+
         _standardToolbar = new HFlowContainer();
         root.AddChild(_standardToolbar);
         AddButton(_standardToolbar, "标准/迷你", ToggleWindowMode);
@@ -199,6 +213,14 @@ public partial class Main : Node
         };
         snapToggle.Toggled += enabled => _windowController?.SetSnapEnabled(enabled);
         _standardToolbar.AddChild(snapToggle);
+        var globalHotkey = new CheckButton
+        {
+            Text = "全局 Ctrl+Alt+H",
+            ButtonPressed = _settingsStore?.Load().GlobalHotkeyEnabled ?? false,
+            TooltipText = "默认关闭；开启后可在其他程序中隐藏或恢复本窗口",
+        };
+        globalHotkey.Toggled += enabled => _windowController?.SetGlobalHotkeyEnabled(enabled);
+        _standardToolbar.AddChild(globalHotkey);
         var fontScale = new OptionButton { TooltipText = "界面字体缩放；迷你窗口操作栏保持固定字号" };
         for (int percent = 100; percent <= 150; percent += 10)
         {
@@ -348,6 +370,10 @@ public partial class Main : Node
         }
 
         bool mini = _windowController.IsMini;
+        if (_pixelTitleBar is not null)
+        {
+            _pixelTitleBar.Visible = !mini;
+        }
         _standardToolbar.Visible = !mini;
         _miniToolbar.Visible = mini;
         _testHarness.Visible = !mini;
@@ -596,6 +622,8 @@ public partial class Main : Node
         {
             _noticeLabel.Text = message;
         }
+
+        _toast?.ShowMessage(message);
 
         _logger?.Write(GameLogLevel.Information, "p1a.notice", "ui", message);
     }

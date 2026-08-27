@@ -1,5 +1,6 @@
 using GameForWork.Core.P1;
 using GameForWork.Core.P1.Items;
+using System.Runtime.CompilerServices;
 
 namespace GameForWork.Core.P2;
 
@@ -11,6 +12,7 @@ public sealed record P2ItemCommandResult(bool Succeeded, string Code, string Mes
 
 public sealed class P2ItemCommandService(P1GameSession session, P2CharacterKind character = P2CharacterKind.Hero)
 {
+    private static readonly ConditionalWeakTable<P1GameSession, UndoState> UndoStates = new();
     private EquipmentLoadout Loadout => character == P2CharacterKind.Hero
         ? session.HeroEquipment
         : session.MercenaryEquipment;
@@ -144,9 +146,14 @@ public sealed class P2ItemCommandService(P1GameSession session, P2CharacterKind 
                 ItemContainerKind.SortingBag => session.Management.TryMoveSortingBag(sourceIndex, targetIndex),
                 _ => false,
             };
-            return reordered
-                ? P2ItemCommandResult.Ok("物品顺序已调整。")
-                : P2ItemCommandResult.Fail("reorder_failed", "该容器不能调整顺序。");
+            if (!reordered)
+            {
+                return P2ItemCommandResult.Fail("reorder_failed", "该容器不能调整顺序。");
+            }
+
+            RegisterUndo(() => new P2ItemCommandService(session, character)
+                .Move(source, targetIndex, source, sourceIndex));
+            return P2ItemCommandResult.Ok("物品顺序已调整，可撤销。");
         }
 
         if (target is not (ItemContainerKind.Storage or ItemContainerKind.SortingBag))
@@ -169,7 +176,32 @@ public sealed class P2ItemCommandService(P1GameSession session, P2CharacterKind 
             return P2ItemCommandResult.Fail("target_full", "目标容器已满，操作已回滚。");
         }
 
-        return P2ItemCommandResult.Ok($"已移动 {item.Base.DisplayName}。");
+        RegisterUndo(() => new P2ItemCommandService(session, character)
+            .Move(target, targetIndex, source, sourceIndex));
+        return P2ItemCommandResult.Ok($"已移动 {item.Base.DisplayName}，可撤销。");
+    }
+
+    public P2ItemCommandResult UndoLastMovement()
+    {
+        UndoState state = UndoStates.GetOrCreateValue(session);
+        if (state.Actions.Count == 0)
+        {
+            return P2ItemCommandResult.Fail("nothing_to_undo", "没有可撤销的物品移动。");
+        }
+
+        Func<P2ItemCommandResult> action = state.Actions.Pop();
+        state.Applying = true;
+        try
+        {
+            P2ItemCommandResult result = action();
+            return result.Succeeded
+                ? P2ItemCommandResult.Ok("已撤销上一次物品移动。")
+                : P2ItemCommandResult.Fail("undo_invalid", $"无法撤销：{result.Message}");
+        }
+        finally
+        {
+            state.Applying = false;
+        }
     }
 
     public P2ItemCommandResult ToggleLock(ItemContainerKind source, int index, EquipmentSlot? slot = null)
@@ -338,6 +370,21 @@ public sealed class P2ItemCommandService(P1GameSession session, P2CharacterKind 
         _ => null,
     };
 
+    private void RegisterUndo(Func<P2ItemCommandResult> action)
+    {
+        UndoState state = UndoStates.GetOrCreateValue(session);
+        if (state.Applying)
+        {
+            return;
+        }
+
+        state.Actions.Push(action);
+        if (state.Actions.Count > 12)
+        {
+            state.Actions = new Stack<Func<P2ItemCommandResult>>(state.Actions.Take(12).Reverse());
+        }
+    }
+
     private ItemInstance? Take(ItemContainerKind source, int index) => source switch
     {
         ItemContainerKind.Storage => session.World.Storage.TakeAt(index),
@@ -402,5 +449,11 @@ public sealed class P2ItemCommandService(P1GameSession session, P2CharacterKind 
 
         session.Management.AddToRecovery(item, "状态更新");
         return true;
+    }
+
+    private sealed class UndoState
+    {
+        public Stack<Func<P2ItemCommandResult>> Actions { get; set; } = new();
+        public bool Applying { get; set; }
     }
 }
