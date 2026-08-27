@@ -1,7 +1,7 @@
-# GameForWork P0～P5 开发计划
+# GameForWork P0～P6 开发计划
 
 > 状态：已确认  
-> 更新日期：2026-08-27
+> 更新日期：2026-08-28
 
 ## 1. 团队与协作方式
 
@@ -209,3 +209,7 @@ P1A 功能闭环通过，P1B 精细像素素材生成、接入和视觉验收完
 - P3 的完整规则见 [`P3_SPECIFICATION.md`](P3_SPECIFICATION.md)。
 - P4 的空间群战与角色工坊规则见 [`P4_SPECIFICATION.md`](P4_SPECIFICATION.md)。
 - P5 的单页远征、碎片 Boss、装备技能链和天赋交互规则见 [`P5_SPECIFICATION.md`](P5_SPECIFICATION.md)。
+
+### P6 已确认
+
+P6 的装备实例孔组、技能石唯一位置、标签兼容、AI 执行、技能经验、三套方案、连接锻造、金属制作、构筑摘要、掉落过滤和战斗报告规则见 [`P6_SPECIFICATION.md`](P6_SPECIFICATION.md)。P6 明确不制作构筑训练场。
