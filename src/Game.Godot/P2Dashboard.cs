@@ -285,6 +285,13 @@ public partial class P2Dashboard : VBoxContainer
             _selectedCharacter = (P2CharacterKind)index;
             Refresh();
         };
+        var collapseSidebar = new Button
+        {
+            Text = "收起装备侧栏",
+            FocusMode = FocusModeEnum.None,
+            TooltipText = "收起常驻装备备栏，为技能、天赋和仓库腾出空间",
+        };
+        header.AddChild(collapseSidebar);
         _characterStatus = new Label
         {
             SizeFlagsHorizontal = SizeFlags.ExpandFill,
@@ -307,6 +314,11 @@ public partial class P2Dashboard : VBoxContainer
         modes.AddChild(BuildAiMode());
         var equipment = new VBoxContainer { CustomMinimumSize = new Vector2(210, 0) };
         workspace.AddChild(equipment);
+        collapseSidebar.Pressed += () =>
+        {
+            equipment.Visible = !equipment.Visible;
+            collapseSidebar.Text = equipment.Visible ? "收起装备侧栏" : "展开装备侧栏";
+        };
         equipment.AddChild(new Label { Text = "角色装备备栏 · 所有模式常驻" });
         _equipmentGrid = BuildGrid(ItemContainerKind.Equipped, 3, Enum.GetValues<EquipmentSlot>().Length, 42);
         _equipmentGrid.ExtraTooltip = EquipmentComparisonText;

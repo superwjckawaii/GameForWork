@@ -7,10 +7,18 @@ namespace GameForWork.GodotClient;
 
 public partial class P2MapQueuePanel : VBoxContainer
 {
+    private const int MoveInventory = 1;
+    private const int MoveHero = 2;
+    private const int MoveMercenaries = 3;
+    private const int MoveUp = 4;
+    private const int MoveDown = 5;
     private Func<P1GameSession>? _session;
     private Action<string>? _changed;
     private OptionButton? _selectedTeam;
     private HBoxContainer? _columns;
+    private PopupMenu? _contextMenu;
+    private P2MapContainerKind _contextSource;
+    private int _contextIndex = -1;
     private string _signature = string.Empty;
 
     public void Initialize(Func<P1GameSession> session, Action<string> changed)
@@ -27,6 +35,9 @@ public partial class P2MapQueuePanel : VBoxContainer
         _columns = new HBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
         _columns.AddThemeConstantOverride("separation", 12);
         AddChild(_columns);
+        _contextMenu = new PopupMenu();
+        _contextMenu.IdPressed += OnContextAction;
+        AddChild(_contextMenu);
     }
 
     public void RefreshState()
@@ -65,6 +76,24 @@ public partial class P2MapQueuePanel : VBoxContainer
         RefreshState();
     }
 
+    public void OpenContext(P2MapContainerKind source, int sourceIndex, Vector2 screenPosition)
+    {
+        _contextSource = source;
+        _contextIndex = sourceIndex;
+        _contextMenu!.Clear();
+        _contextMenu.AddItem("移入地图仓库", MoveInventory);
+        _contextMenu.AddItem("移入主角队列", MoveHero);
+        _contextMenu.AddItem("移入佣兵队列", MoveMercenaries);
+        _contextMenu.AddSeparator();
+        _contextMenu.AddItem("上移一格", MoveUp);
+        _contextMenu.AddItem("下移一格", MoveDown);
+        _contextMenu.SetItemDisabled(_contextMenu.GetItemIndex(MoveInventory), source == P2MapContainerKind.Inventory);
+        _contextMenu.SetItemDisabled(_contextMenu.GetItemIndex(MoveHero), source == P2MapContainerKind.HeroQueue);
+        _contextMenu.SetItemDisabled(_contextMenu.GetItemIndex(MoveMercenaries), source == P2MapContainerKind.MercenaryQueue);
+        _contextMenu.Position = new Vector2I((int)screenPosition.X, (int)screenPosition.Y);
+        _contextMenu.Popup();
+    }
+
     private void AddColumn(string title, P2MapContainerKind kind, IReadOnlyList<P1MapItem> maps)
     {
         var column = new P2MapDropColumn
@@ -85,7 +114,7 @@ public partial class P2MapQueuePanel : VBoxContainer
                 ContainerKind = kind,
                 SourceIndex = index,
                 Text = $"{index + 1}. {map.InstanceId} · T{map.AreaLevel}",
-                TooltipText = "左键选择 · 双击加入当前队伍 · 拖拽精确排序",
+                TooltipText = "左键选择 · 双击加入当前队伍 · 拖拽精确排序 · 右键操作",
                 Alignment = HorizontalAlignment.Left,
             };
             cell.ItemDoubleClicked += () =>
@@ -105,6 +134,24 @@ public partial class P2MapQueuePanel : VBoxContainer
         }
 
         _columns!.AddChild(column);
+    }
+
+    private void OnContextAction(long id)
+    {
+        P2MapContainerKind target = id switch
+        {
+            MoveInventory => P2MapContainerKind.Inventory,
+            MoveHero => P2MapContainerKind.HeroQueue,
+            MoveMercenaries => P2MapContainerKind.MercenaryQueue,
+            _ => _contextSource,
+        };
+        int targetIndex = id switch
+        {
+            MoveUp => Math.Max(0, _contextIndex - 1),
+            MoveDown => _contextIndex + 1,
+            _ => int.MaxValue,
+        };
+        ReceiveDrop(_contextSource, _contextIndex, target, targetIndex);
     }
 }
 
@@ -132,6 +179,15 @@ public partial class P2MapCell : Button
             })
         {
             ItemDoubleClicked?.Invoke();
+            AcceptEvent();
+        }
+        else if (inputEvent is InputEventMouseButton
+        {
+            Pressed: true,
+            ButtonIndex: MouseButton.Right,
+        } mouse)
+        {
+            Panel?.OpenContext(ContainerKind, SourceIndex, GetScreenPosition() + mouse.Position);
             AcceptEvent();
         }
     }

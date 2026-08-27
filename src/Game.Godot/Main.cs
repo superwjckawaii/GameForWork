@@ -22,6 +22,7 @@ public partial class Main : Node
     private P1GameSession? _session;
     private P2Dashboard? _dashboard;
     private HFlowContainer? _standardToolbar;
+    private VBoxContainer? _interfaceRoot;
     private HBoxContainer? _miniToolbar;
     private HFlowContainer? _testHarness;
     private Button? _largeWindowButton;
@@ -157,6 +158,9 @@ public partial class Main : Node
         var root = new VBoxContainer();
         root.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
         root.AddThemeConstantOverride("separation", 6);
+        int initialFontScale = Math.Clamp(_settingsStore?.Load().FontScalePercent ?? 100, 100, 150);
+        root.Theme = P2ThemeFactory.Create(initialFontScale);
+        _interfaceRoot = root;
         AddChild(root);
 
         _standardToolbar = new HFlowContainer();
@@ -195,6 +199,18 @@ public partial class Main : Node
         };
         snapToggle.Toggled += enabled => _windowController?.SetSnapEnabled(enabled);
         _standardToolbar.AddChild(snapToggle);
+        var fontScale = new OptionButton { TooltipText = "界面字体缩放；迷你窗口操作栏保持固定字号" };
+        for (int percent = 100; percent <= 150; percent += 10)
+        {
+            fontScale.AddItem($"字 {percent}%", percent);
+            if (percent == initialFontScale)
+            {
+                fontScale.Select(fontScale.ItemCount - 1);
+            }
+        }
+
+        fontScale.ItemSelected += index => SetFontScale(fontScale.GetItemId((int)index));
+        _standardToolbar.AddChild(fontScale);
 
         _miniToolbar = new HBoxContainer { Visible = false, Alignment = BoxContainer.AlignmentMode.Center };
         _miniToolbar.AddThemeConstantOverride("separation", 2);
@@ -241,6 +257,7 @@ public partial class Main : Node
             OkButtonText = "退出",
             CancelButtonText = "缩到托盘",
             MinSize = new Vector2I(460, 200),
+            Theme = P2ThemeFactory.Create(initialFontScale),
         };
         var closeContent = new VBoxContainer
         {
@@ -259,6 +276,28 @@ public partial class Main : Node
         _closeDialog.Confirmed += () => CompleteCloseChoice(closeToTray: false);
         _closeDialog.Canceled += () => CompleteCloseChoice(closeToTray: true);
         AddChild(_closeDialog);
+    }
+
+    private void SetFontScale(int percent)
+    {
+        int clamped = Math.Clamp(percent, 100, 150);
+        if (_interfaceRoot is not null)
+        {
+            _interfaceRoot.Theme = P2ThemeFactory.Create(clamped);
+        }
+
+        if (_closeDialog is not null)
+        {
+            _closeDialog.Theme = P2ThemeFactory.Create(clamped);
+        }
+
+        if (_settingsStore is not null)
+        {
+            GameSettings settings = _settingsStore.Load();
+            _settingsStore.Save(settings with { FontScalePercent = clamped });
+        }
+
+        ShowNotice($"界面字体缩放：{clamped}%");
     }
 
     private void CreateCharacter(PlayerIdentity identity)

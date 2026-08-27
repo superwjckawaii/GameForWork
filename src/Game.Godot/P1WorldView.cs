@@ -52,9 +52,9 @@ public partial class P1WorldView : Control
     public override void _Ready()
     {
         MouseFilter = MouseFilterEnum.Ignore;
-        _townBackground = LoadOptional("res://assets/p1b/town/frostgate-town.png");
-        _combatBackground = LoadOptional("res://assets/p1b/combat/abyss-floor.png");
-        _characterAtlas = LoadOptional("res://assets/p1b/characters/p1-character-atlas.png");
+        _townBackground = LoadOptional("res://assets/p2/town/military-town.png");
+        _combatBackground = LoadOptional("res://assets/p2/combat/gate-ruins.png");
+        _characterAtlas = LoadOptional("res://assets/p2/characters/p2-character-grid.png");
     }
 
     public override void _Process(double delta)
@@ -263,30 +263,35 @@ public partial class P1WorldView : Control
             ? ((int)_session.Player.Gender + (int)_session.Player.SkinTone + (int)_session.Player.HairStyle) % 4
             : 0;
         float lean = attackCycle is > 0.18f and < 0.38f ? 6 : 0;
-        Rect2 source = hero
-            ? column switch
-            {
-                0 => new Rect2(55, 0, 280, 330),
-                1 => new Rect2(390, 0, 325, 330),
-                2 => new Rect2(780, 0, 270, 330),
-                _ => new Rect2(1_125, 0, 275, 330),
-            }
-            : new Rect2(0, 325, 275, 350);
+        Rect2 source = AtlasCell(hero ? column : 4, 0);
         DrawAtlasSprite(position + new Vector2(lean, 0), source, new Vector2(92, 112));
     }
 
     private void DrawAtlasEnemy(Vector2 position, float mapProgress, float attackCycle)
     {
         float recoil = attackCycle is > 0.25f and < 0.45f ? 4 : 0;
-        (Rect2 source, Vector2 maximumSize) = mapProgress switch
+        (int column, Vector2 maximumSize) = mapProgress switch
         {
-            < 0.25f => (new Rect2(285, 330, 265, 345), new Vector2(88, 112)),
-            < 0.5f => (new Rect2(545, 350, 340, 285), new Vector2(116, 94)),
-            < 0.72f => (new Rect2(885, 325, 270, 350), new Vector2(88, 112)),
-            < 0.82f => (new Rect2(1_135, 300, 321, 390), new Vector2(102, 122)),
-            _ => (new Rect2(0, 620, 560, 472), new Vector2(148, 152)),
+            < 0.25f => (0, new Vector2(88, 112)),
+            < 0.5f => (1, new Vector2(116, 94)),
+            < 0.72f => (2, new Vector2(88, 112)),
+            < 0.82f => (3, new Vector2(102, 122)),
+            _ => (4, new Vector2(148, 152)),
         };
-        DrawAtlasSprite(position + new Vector2(recoil, 0), source, maximumSize);
+        DrawAtlasSprite(position + new Vector2(recoil, 0), AtlasCell(column, 1), maximumSize);
+    }
+
+    private Rect2 AtlasCell(int column, int row)
+    {
+        float[] starts = row == 0
+            ? [0, 280, 575, 850, 1_190]
+            : [0, 275, 595, 855, 1_145];
+        float[] widths = row == 0
+            ? [270, 270, 275, 335, 346]
+            : [265, 310, 250, 280, 391];
+        float scaleX = _characterAtlas!.GetWidth() / 1_536f;
+        float height = _characterAtlas.GetHeight() / 2f;
+        return new Rect2(starts[column] * scaleX, row * height, widths[column] * scaleX, height);
     }
 
     private void DrawAtlasSprite(Vector2 feetPosition, Rect2 source, Vector2 maximumSize)

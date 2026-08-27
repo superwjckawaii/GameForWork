@@ -7,6 +7,7 @@ public sealed record GameSettings
     public bool AlwaysOnTop { get; init; } = true;
     public bool SnapEnabled { get; init; } = true;
     public int OpacityPercent { get; init; } = 100;
+    public int FontScalePercent { get; init; } = 100;
     public bool? CloseToTray { get; init; }
     public int StandardX { get; init; } = -1;
     public int StandardY { get; init; } = -1;

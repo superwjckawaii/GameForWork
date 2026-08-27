@@ -10,6 +10,7 @@ public partial class P2CampaignRouteView : VBoxContainer
     private Func<P1GameSession>? _session;
     private Action<string>? _selected;
     private string? _selectedId;
+    private Texture2D? _actAtlas;
 
     public string? SelectedStableId => _selectedId;
 
@@ -17,13 +18,29 @@ public partial class P2CampaignRouteView : VBoxContainer
     {
         _session = session;
         _selected = selected;
+        const string atlasPath = "res://assets/p2/campaign/five-act-grid.png";
+        _actAtlas = ResourceLoader.Exists(atlasPath) ? GD.Load<Texture2D>(atlasPath) : null;
         for (int act = 1; act <= 5; act++)
         {
             var row = new HBoxContainer();
+            row.AddThemeConstantOverride("separation", 6);
+            Texture2D? actTexture = ActTexture(act);
+            if (actTexture is not null)
+            {
+                row.AddChild(new TextureRect
+                {
+                    Texture = actTexture,
+                    CustomMinimumSize = new Vector2(78, 42),
+                    ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,
+                    StretchMode = TextureRect.StretchModeEnum.KeepAspectCovered,
+                    MouseFilter = MouseFilterEnum.Ignore,
+                });
+            }
+
             row.AddChild(new Label
             {
                 Text = $"{act}. {P2CampaignCatalog.ActNames[act - 1]}",
-                CustomMinimumSize = new Vector2(110, 0),
+                CustomMinimumSize = new Vector2(106, 0),
             });
             foreach (CampaignNodeDefinition node in P2CampaignCatalog.Nodes.Where(node => node.Act == act))
             {
@@ -46,6 +63,24 @@ public partial class P2CampaignRouteView : VBoxContainer
 
             AddChild(row);
         }
+    }
+
+    private Texture2D? ActTexture(int act)
+    {
+        if (_actAtlas is null)
+        {
+            return null;
+        }
+
+        float[] starts = [17, 426, 829, 1_236, 1_639];
+        float scaleX = _actAtlas.GetWidth() / 2_172f;
+        float scaleY = _actAtlas.GetHeight() / 724f;
+        return new AtlasTexture
+        {
+            Atlas = _actAtlas,
+            Region = new Rect2(starts[act - 1] * scaleX, 136 * scaleY, 392 * scaleX, 412 * scaleY),
+            FilterClip = true,
+        };
     }
 
     public void RefreshState()

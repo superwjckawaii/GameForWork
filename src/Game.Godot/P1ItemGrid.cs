@@ -26,7 +26,7 @@ public partial class P1ItemGrid : GridContainer
 
     public override void _Ready()
     {
-        const string path = "res://assets/p1b/ui/item-atlas.png";
+        const string path = "res://assets/p2/ui/p2-item-grid.png";
         if (ResourceLoader.Exists(path))
         {
             _iconAtlas = GD.Load<Texture2D>(path);
@@ -139,20 +139,28 @@ public partial class P1ItemGrid : GridContainer
             return null;
         }
 
-        int column = category switch
+        (int column, int row) = category switch
         {
-            ItemCategory.TwoHandWeapon => 0,
-            ItemCategory.BodyArmor => 1,
-            ItemCategory.Helmet => 2,
-            ItemCategory.Ring => 3,
-            ItemCategory.LifeFlask => 4,
-            _ => 0,
+            ItemCategory.TwoHandWeapon => (0, 0),
+            ItemCategory.BodyArmor => (1, 0),
+            ItemCategory.Helmet => (2, 0),
+            ItemCategory.Ring => (3, 0),
+            ItemCategory.LifeFlask => (4, 0),
+            ItemCategory.Gloves => (5, 0),
+            ItemCategory.Boots => (6, 0),
+            ItemCategory.Belt => (7, 0),
+            ItemCategory.Amulet => (0, 1),
+            _ => (0, 0),
         };
-        float width = _iconAtlas.GetWidth() / 5f;
+        float height = _iconAtlas.GetHeight() / 2f;
+        float[] starts = [32, 280, 580, 850, 1_120, 1_360, 1_630, 1_880];
+        float[] widths = [236, 280, 240, 220, 220, 265, 240, 270];
+        float scaleX = _iconAtlas.GetWidth() / 2_172f;
         return new AtlasTexture
         {
             Atlas = _iconAtlas,
-            Region = new Rect2(width * column, 0, width, _iconAtlas.GetHeight()),
+            Region = new Rect2(starts[column] * scaleX, height * row, widths[column] * scaleX, height),
+            FilterClip = true,
         };
     }
 
