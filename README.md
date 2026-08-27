@@ -19,4 +19,5 @@
 - [已确认技术架构](docs/TECHNICAL_ARCHITECTURE.md)
 - [P0/P1 开发计划与协作流程](docs/DEVELOPMENT_PLAN.md)
 - [P0 技术实现规格](docs/P0_SPECIFICATION.md)
+- [P1 垂直切片规格](docs/P1_SPECIFICATION.md)
 - [待讨论与开发决策](docs/OPEN_QUESTIONS.md)
