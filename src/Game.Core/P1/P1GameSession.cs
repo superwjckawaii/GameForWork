@@ -299,7 +299,7 @@ public sealed class P1GameSession
         long simulated = realElapsedMilliseconds > maximum / SimulationSpeed
             ? maximum
             : realElapsedMilliseconds * SimulationSpeed;
-        return AdvanceSimulated(simulated);
+        return AdvanceSimulated(simulated, offline: false);
     }
 
     public P1OfflineResult AdvanceOffline(long elapsedMilliseconds)
@@ -307,7 +307,7 @@ public sealed class P1GameSession
         ArgumentOutOfRangeException.ThrowIfNegative(elapsedMilliseconds);
         return AdvanceSimulated(Math.Min(
             elapsedMilliseconds,
-            GameForWork.Core.Offline.OfflineTime.MaximumMilliseconds));
+            GameForWork.Core.Offline.OfflineTime.MaximumMilliseconds), offline: true);
     }
 
     public int AdvanceTownOnly(long realElapsedMilliseconds)
@@ -320,7 +320,7 @@ public sealed class P1GameSession
         return World.Economy.AdvanceProduction(simulated);
     }
 
-    private P1OfflineResult AdvanceSimulated(long simulatedMilliseconds)
+    private P1OfflineResult AdvanceSimulated(long simulatedMilliseconds, bool offline)
     {
         if (!Campaign.Completed)
         {
@@ -329,7 +329,8 @@ public sealed class P1GameSession
                 World,
                 Management,
                 simulatedMilliseconds,
-                Seed);
+                Seed,
+                offline);
             SimulationSequence = checked(SimulationSequence + campaignResult.NodesCompleted);
             RefreshHeroBuild();
             return new P1OfflineResult(
@@ -352,7 +353,8 @@ public sealed class P1GameSession
         P1OfflineResult result = _simulator.Simulate(
             World,
             simulatedMilliseconds,
-            Seed);
+            Seed,
+            offline);
         SimulationSequence = checked(
             SimulationSequence + result.TotalMapsCompleted + result.TotalMapsFailed);
         int ashes = World.Economy.TakeMemoryAshes();

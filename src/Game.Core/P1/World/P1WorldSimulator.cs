@@ -4,6 +4,7 @@ using GameForWork.Core.Offline;
 using GameForWork.Core.P1.Items;
 using GameForWork.Core.P1.Progression;
 using GameForWork.Core.P5;
+using GameForWork.Core.P6;
 
 namespace GameForWork.Core.P1.World;
 
@@ -287,7 +288,7 @@ public sealed record P1OfflineResult(
 
 public sealed class P1WorldSimulator(IP1MapAttemptResolver attemptResolver)
 {
-    public P1OfflineResult Simulate(P1WorldState state, long elapsedMilliseconds, ulong seed)
+    public P1OfflineResult Simulate(P1WorldState state, long elapsedMilliseconds, ulong seed, bool offline = false)
     {
         ArgumentNullException.ThrowIfNull(state);
         ArgumentNullException.ThrowIfNull(attemptResolver);
@@ -345,7 +346,7 @@ public sealed class P1WorldSimulator(IP1MapAttemptResolver attemptResolver)
             foreach (ActiveExpedition expedition in completed)
             {
                 active.Remove(expedition.Team.Kind);
-                ResolveExpedition(state, expedition, DeriveExpeditionSeed(seed, expedition));
+                ResolveExpedition(state, expedition, DeriveExpeditionSeed(seed, expedition), offline);
             }
 
             if (now < effective)
@@ -436,11 +437,19 @@ public sealed class P1WorldSimulator(IP1MapAttemptResolver attemptResolver)
         }
     }
 
-    private void ResolveExpedition(P1WorldState state, ActiveExpedition expedition, ulong seed)
+    private void ResolveExpedition(P1WorldState state, ActiveExpedition expedition, ulong seed, bool offline)
     {
         ExpeditionPolicy runPolicy = expedition.Team.ActivePolicySnapshot ?? expedition.Team.Policy;
         P1MapRunResult run = expedition.Team.ActiveRun ?? new P1MapRunner(attemptResolver).Run(
             expedition.Map, expedition.Route, expedition.Team.Build, seed);
+        foreach ((MapAttemptResult attempt, int index) in run.Attempts.Select((attempt, index) => (attempt, index)))
+        {
+            if (attempt.Timeline is not null)
+            {
+                state.Expedition.AddCombatReport(P6CombatReportBuilder.Build(attempt.Timeline,
+                    $"{expedition.Team.Kind} · T{expedition.Map.AreaLevel} {expedition.Route} · 尝试 {index + 1}", offline));
+            }
+        }
         bool practice = P5ExpeditionDirector.IsPractice(expedition.Map);
         expedition.Team.RecordRun(run, countProgression: !practice);
         state.Expedition.RecordResolved(expedition.Map, run.Succeeded);

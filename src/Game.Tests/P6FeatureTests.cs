@@ -5,6 +5,8 @@ using GameForWork.Core.P2;
 using GameForWork.Core.P1.Combat;
 using GameForWork.Core.P1.World;
 using GameForWork.Core.P4;
+using GameForWork.Core.P3;
+using GameForWork.Core.P5;
 
 namespace GameForWork.Tests;
 
@@ -242,6 +244,29 @@ public sealed class P6FeatureTests
         Assert.NotEqual("无", summary.MainSkill);
         Assert.InRange(summary.MainSkillLinks, 1, 6);
         Assert.Contains("估算假设", summary.Assumptions);
+    }
+
+    [Fact]
+    public void CombatReportUsesAuthoritativeTimelineAndPersistsLatestFifty()
+    {
+        P1GameSession session = CreateSession();
+        CampaignNodeDefinition node = P2CampaignCatalog.Nodes.First(item => item.Kind == CampaignNodeKind.NormalCombat);
+        P3SceneTimeline timeline = P3SceneTimelineBuilder.BuildCampaign(session.World.Hero.Build, node, 630);
+        P6CombatReport report = P6CombatReportBuilder.Build(timeline, "测试战斗", offline: true);
+        var director = new P5ExpeditionDirector();
+        for (int index = 0; index < 55; index++)
+        {
+            director.AddCombatReport(report with { StableId = $"report-{index}" });
+        }
+        P5ExpeditionDirector restored = P5ExpeditionDirector.Restore(director.Capture());
+
+        Assert.True(report.DamageDealt > 0);
+        Assert.NotEmpty(report.Skills);
+        Assert.True(report.Offline);
+        Assert.NotEmpty(report.LastFiveSeconds);
+        Assert.Equal(50, restored.Reports.Count);
+        Assert.Equal("report-5", restored.Reports[0].StableId);
+        Assert.Equal("report-54", restored.Reports[^1].StableId);
     }
 
     private static P1TeamBuild AiBuild(SkillAiRule rule) => new(

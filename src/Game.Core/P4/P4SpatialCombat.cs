@@ -37,6 +37,7 @@ public enum P4SpatialEventKind
     SeismicCharge,
     BloodTideSpin,
     BannerActivated,
+    SkillFailed,
 }
 
 public readonly record struct P4Point(int XRaw, int YRaw)
@@ -176,6 +177,7 @@ public sealed class P4SpatialCombatRunner
         P6ResolvedSkill? spin = Resolve(skills, P1SkillIds.BloodTideSpin, hero.MaximumLife);
         P6ResolvedSkill? banner = Resolve(skills, P1SkillIds.IronOathBanner, hero.MaximumLife);
         P6ResolvedSkill? warCrySkill = Resolve(skills, P1SkillIds.WarCry, hero.MaximumLife);
+        P6ResolvedSkill? heavyResolved = Resolve(skills, P1SkillIds.HeavyStrike, hero.MaximumLife);
         if (warCrySkill is not null)
         {
             warCry.ManaCost = warCrySkill.ManaCost;
@@ -231,6 +233,20 @@ public sealed class P4SpatialCombatRunner
                     .Where(candidate => candidate is not null && AiMatches(skills[candidate], request, hero, target, enemies, distance))
                     .OrderBy(candidate => skills[candidate!].Priority)
                     .FirstOrDefault();
+
+                if (chosen is null)
+                {
+                    P6ResolvedSkill? blocked = new[] { charge, spin, cleave, blade, heavyResolved }
+                        .Where(skill => skill is not null && distance <= (long)skill.RangeRaw * skill.RangeRaw && !CanPay(hero, skill))
+                        .OrderBy(skill => skills[skill!.SkillId].Priority)
+                        .FirstOrDefault();
+                    if (blocked is not null && AiMatches(skills[blocked.SkillId], request, hero, target, enemies, distance))
+                    {
+                        string resource = blocked.LifeCost > 0 ? "life" : "mana";
+                        events.Add(Event(tick, P4SpatialEventKind.SkillFailed, "hero", target.EntityId, 0,
+                            heroPosition, target.Position, $"{blocked.SkillId}|{resource}"));
+                    }
+                }
 
                 if (chosen == P1SkillIds.WarCry && warCry.TryActivate(hero, tick))
                 {
@@ -507,13 +523,29 @@ public sealed class P4SpatialCombatRunner
             enemy.BleedPulses = Math.Max(enemy.BleedPulses, 5);
         }
 
+        string hitDetail = damage.Critical ? "critical" : damage.Hit ? "hit" : "miss";
+        SkillSupport supports = SupportsFor(request.Build, kind);
         events.Add(Event(tick, kind, "hero", enemy.EntityId, value, source, enemy.Position,
-            damage.Critical ? "critical" : damage.Hit ? "hit" : "miss"));
+            $"{hitDetail}|supports:{(int)supports}"));
         if (enemy.Life == 0)
         {
             events.Add(Event(tick, P4SpatialEventKind.EnemyDefeated, "hero", enemy.EntityId, 0,
                 source, enemy.Position, enemy.Profile.StableId));
         }
+    }
+
+    private static SkillSupport SupportsFor(P1TeamBuild build, P4SpatialEventKind kind)
+    {
+        string skillId = kind switch
+        {
+            P4SpatialEventKind.HeavyStrike => P1SkillIds.HeavyStrike,
+            P4SpatialEventKind.EarthCleave => P1SkillIds.EarthCleave,
+            P4SpatialEventKind.SpiritBladeHit or P4SpatialEventKind.ChainHit => P1SkillIds.SpiritBlade,
+            P4SpatialEventKind.SeismicCharge => P1SkillIds.SeismicCharge,
+            P4SpatialEventKind.BloodTideSpin => P1SkillIds.BloodTideSpin,
+            _ => string.Empty,
+        };
+        return (build.ActiveSkills ?? [build.HeavyStrike]).FirstOrDefault(skill => skill.SkillId == skillId)?.Supports ?? SkillSupport.None;
     }
 
     private static void ResolveProjectiles(

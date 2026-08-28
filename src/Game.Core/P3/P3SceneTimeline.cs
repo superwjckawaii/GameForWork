@@ -30,6 +30,7 @@ public enum P3SceneEventKind
     SeismicCharge,
     BloodTideSpin,
     Banner,
+    SkillFailed,
 }
 
 public sealed record P3GridPosition(int X, int Y);
@@ -265,6 +266,7 @@ public static class P3SceneTimelineBuilder
                 P4SpatialEventKind.SeismicCharge => P3SceneEventKind.SeismicCharge,
                 P4SpatialEventKind.BloodTideSpin => P3SceneEventKind.BloodTideSpin,
                 P4SpatialEventKind.BannerActivated => P3SceneEventKind.Banner,
+                P4SpatialEventKind.SkillFailed => P3SceneEventKind.SkillFailed,
                 P4SpatialEventKind.EnemyAttack => P3SceneEventKind.EnemyAttack,
                 P4SpatialEventKind.Bleed => P3SceneEventKind.Bleed,
                 P4SpatialEventKind.Flask => P3SceneEventKind.Flask,

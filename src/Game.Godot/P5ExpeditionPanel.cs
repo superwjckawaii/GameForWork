@@ -1,6 +1,7 @@
 using GameForWork.Core.P1;
 using GameForWork.Core.P1.World;
 using GameForWork.Core.P5;
+using GameForWork.Core.P6;
 using Godot;
 
 namespace GameForWork.GodotClient;
@@ -12,6 +13,7 @@ public partial class P5ExpeditionPanel : VBoxContainer
     private Action<string>? _changed;
     private Label? _resources;
     private VBoxContainer? _mapInventory;
+    private VBoxContainer? _reports;
     private string _signature = string.Empty;
 
     public void Initialize(Func<P1GameSession> session, Action<string> changed)
@@ -45,11 +47,21 @@ public partial class P5ExpeditionPanel : VBoxContainer
         };
         dispatches.AddChild(help);
         body.AddChild(dispatches);
+
+        var reportToggle = new Button { Text = "展开最近 50 次战斗报告", ToggleMode = true };
+        AddChild(reportToggle);
+        _reports = new VBoxContainer { Visible = false };
+        AddChild(_reports);
+        reportToggle.Toggled += expanded =>
+        {
+            _reports.Visible = expanded;
+            reportToggle.Text = expanded ? "收起战斗报告" : "展开最近 50 次战斗报告";
+        };
     }
 
     public void RefreshState()
     {
-        if (_session is null || _resources is null || _mapInventory is null)
+        if (_session is null || _resources is null || _mapInventory is null || _reports is null)
         {
             return;
         }
@@ -59,7 +71,8 @@ public partial class P5ExpeditionPanel : VBoxContainer
             $"{session.World.Expedition.AbyssWardenTickets}|{session.World.Expedition.MapsTowardNextFragment}|" +
             string.Join(',', session.World.MapInventory.OrderBy(map => map.InstanceId).Select(map => $"{map.InstanceId}:{map.AreaLevel}")) + "|" +
             string.Join('|', session.World.Teams.Select(TeamSignature)) + "|" +
-            string.Join('|', session.World.Expedition.Dispatches.Values.OrderBy(item => item.Team));
+            string.Join('|', session.World.Expedition.Dispatches.Values.OrderBy(item => item.Team)) + "|" +
+            string.Join('|', session.World.Expedition.Reports.Select(report => report.StableId));
         if (signature == _signature)
         {
             return;
@@ -91,6 +104,37 @@ public partial class P5ExpeditionPanel : VBoxContainer
                    $"深渊监守者碎片 {session.World.Expedition.AbyssWardenFragments}/{P5ExpeditionDirector.FragmentsPerTicket}\n" +
                    $"完整门票 ×{session.World.Expedition.AbyssWardenTickets}",
         });
+
+        Clear(_reports);
+        foreach (P6CombatReport report in session.World.Expedition.Reports.Reverse())
+        {
+            var card = new VBoxContainer();
+            card.AddChild(new Label
+            {
+                Text = $"{report.Context} · {report.Outcome} · {report.DurationMilliseconds / 1_000.0:0.0}s" +
+                       (report.Offline ? " · 离线" : string.Empty),
+            });
+            string skills = report.Skills.Count == 0 ? "无有效输出" : string.Join(" · ", report.Skills.Take(6)
+                .Select(skill => $"{skill.Skill} {skill.Damage}({skill.DamageBasisPoints / 100.0:0.#}%)/{skill.Uses}次"));
+            string sources = report.DamageSources.Count == 0 ? "无承伤" : string.Join(" · ", report.DamageSources.Take(4)
+                .Select(source => $"{source.Source} {source.Damage}({source.DamageBasisPoints / 100.0:0.#}%)"));
+            string supports = report.Supports.Count == 0 ? "无可归因辅助触发" : string.Join(" · ", report.Supports.Take(6)
+                .Select(support => $"{support.Support} {support.Triggers}次/贡献约{support.EstimatedDamageContribution:+#;-#;0}"));
+            card.AddChild(new Label
+            {
+                Text = $"输出 {report.DamageDealt}：{skills}\n辅助：{supports}\n承伤 {report.DamageTaken}：{sources}\n" +
+                       $"战吼覆盖 {report.WarCryCoverageBasisPoints / 100.0:0.#}% · 战旗覆盖 {report.BannerCoverageBasisPoints / 100.0:0.#}% · " +
+                       $"护盾覆盖 {report.ShieldCoverageBasisPoints / 100.0:0.#}% · 药剂 {report.FlaskUses}次/+{report.FlaskRecovery} · 资源失败 {report.ResourceFailureCount}" +
+                       (string.IsNullOrEmpty(report.TimeoutReason) ? string.Empty : $"\n超时归因：{report.TimeoutReason}") +
+                       $"\n最后 5 秒：{string.Join("；", report.LastFiveSeconds.TakeLast(12))}",
+                AutowrapMode = TextServer.AutowrapMode.WordSmart,
+            });
+            _reports.AddChild(Frame(card));
+        }
+        if (session.World.Expedition.Reports.Count == 0)
+        {
+            _reports.AddChild(new Label { Text = "尚无战斗报告；完成主线战斗或远征后自动生成。" });
+        }
 
         foreach ((ExpeditionTeamKind kind, TeamControls controls) in _teams)
         {

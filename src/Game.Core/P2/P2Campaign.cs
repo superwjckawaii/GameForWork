@@ -6,6 +6,7 @@ using GameForWork.Core.P1.Items;
 using GameForWork.Core.P1.Progression;
 using GameForWork.Core.P1.World;
 using GameForWork.Core.P3;
+using GameForWork.Core.P6;
 
 namespace GameForWork.Core.P2;
 
@@ -292,7 +293,8 @@ public sealed class P2CampaignSimulator
         P1WorldState world,
         P2ManagementState management,
         long elapsedMilliseconds,
-        ulong seed)
+        ulong seed,
+        bool offline = false)
     {
         ArgumentNullException.ThrowIfNull(campaign);
         ArgumentNullException.ThrowIfNull(world);
@@ -340,8 +342,16 @@ public sealed class P2CampaignSimulator
             if (campaign.ActiveTimeline is not null &&
                 campaign.ActiveTimeline.Outcome != P1BattleOutcome.HeroVictory)
             {
+                world.Expedition.AddCombatReport(P6CombatReportBuilder.Build(
+                    campaign.ActiveTimeline, $"主线 · {node.DisplayName}", offline));
                 campaign.RecordDefeat($"{node.DisplayName} 战斗失败：{campaign.ActiveTimeline.Outcome}");
                 break;
+            }
+
+            if (campaign.ActiveTimeline is not null)
+            {
+                world.Expedition.AddCombatReport(P6CombatReportBuilder.Build(
+                    campaign.ActiveTimeline, $"主线 · {node.DisplayName}", offline));
             }
 
             GrantRewards(campaign, world, management, node, seed);
@@ -378,6 +388,7 @@ public sealed class P2CampaignSimulator
         }
 
         P3SceneTimeline replay = P3SceneTimelineBuilder.BuildCampaign(world.Hero.Build, node, seed);
+        world.Expedition.AddCombatReport(P6CombatReportBuilder.Build(replay, $"主线重放 · {node.DisplayName}"));
         if (replay.Outcome != P1BattleOutcome.HeroVictory)
         {
             return false;

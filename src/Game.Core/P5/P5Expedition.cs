@@ -1,4 +1,5 @@
 using GameForWork.Core.P1.World;
+using GameForWork.Core.P6;
 
 namespace GameForWork.Core.P5;
 
@@ -31,7 +32,8 @@ public sealed record P5ExpeditionSnapshot(
     int AbyssWardenTickets,
     int MapsTowardNextFragment,
     int BossSequence,
-    IReadOnlyList<P5TeamDispatchSnapshot> Teams);
+    IReadOnlyList<P5TeamDispatchSnapshot> Teams,
+    IReadOnlyList<P6CombatReport>? Reports = null);
 
 public sealed class P5ExpeditionDirector
 {
@@ -40,12 +42,14 @@ public sealed class P5ExpeditionDirector
     private const string BossPrefix = "p5-abyss-warden-";
     private const string PracticePrefix = "p5-practice-abyss-warden-";
     private readonly Dictionary<ExpeditionTeamKind, P5TeamDispatchSnapshot> _dispatches = [];
+    private readonly List<P6CombatReport> _reports = [];
 
     public int AbyssWardenFragments { get; private set; }
     public int AbyssWardenTickets { get; private set; }
     public int MapsTowardNextFragment { get; private set; }
     public int BossSequence { get; private set; }
     public IReadOnlyDictionary<ExpeditionTeamKind, P5TeamDispatchSnapshot> Dispatches => _dispatches;
+    public IReadOnlyList<P6CombatReport> Reports => _reports;
 
     public P5TeamDispatchSnapshot? Get(ExpeditionTeamKind team) => _dispatches.GetValueOrDefault(team);
 
@@ -162,12 +166,20 @@ public sealed class P5ExpeditionDirector
         }
     }
 
+    public void AddCombatReport(P6CombatReport report)
+    {
+        ArgumentNullException.ThrowIfNull(report);
+        _reports.Add(report);
+        if (_reports.Count > 50) _reports.RemoveRange(0, _reports.Count - 50);
+    }
+
     public P5ExpeditionSnapshot Capture() => new(
         AbyssWardenFragments,
         AbyssWardenTickets,
         MapsTowardNextFragment,
         BossSequence,
-        _dispatches.Values.OrderBy(item => item.Team).ToArray());
+        _dispatches.Values.OrderBy(item => item.Team).ToArray(),
+        _reports.ToArray());
 
     public static P5ExpeditionDirector Restore(P5ExpeditionSnapshot? snapshot)
     {
@@ -198,6 +210,12 @@ public sealed class P5ExpeditionDirector
 
             result._dispatches.Add(team.Team, team);
         }
+
+        if ((snapshot.Reports?.Count ?? 0) > 50)
+        {
+            throw new InvalidDataException("P6 combat report snapshot exceeds capacity.");
+        }
+        result._reports.AddRange(snapshot.Reports ?? []);
 
         return result;
     }

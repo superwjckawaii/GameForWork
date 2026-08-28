@@ -29,7 +29,7 @@ public partial class P2SkillStonePanel : VBoxContainer
         var columns = new HBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
         columns.AddThemeConstantOverride("separation", 10);
         AddChild(columns);
-        VBoxContainer left = Column(columns, "未安装技能石", 205);
+        VBoxContainer left = Column(columns, "未安装技能石", 140);
         _search = new LineEdit { PlaceholderText = "搜索名称" };
         _search.TextChanged += _ => Invalidate();
         left.AddChild(_search);
@@ -54,10 +54,10 @@ public partial class P2SkillStonePanel : VBoxContainer
         left.AddChild(inventoryScroll);
         _inventory = new VBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
         inventoryScroll.AddChild(_inventory);
-        VBoxContainer middle = Column(columns, "当前装备孔组", 430);
+        VBoxContainer middle = Column(columns, "当前装备孔组", 310);
         _groups = new VBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
         middle.AddChild(_groups);
-        VBoxContainer right = Column(columns, "技能说明与兼容性", 235);
+        VBoxContainer right = Column(columns, "技能说明与兼容性", 145);
         _details = new Label
         {
             Text = "选择技能石查看实例与最终效果。",

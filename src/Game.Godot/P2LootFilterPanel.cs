@@ -1,6 +1,7 @@
 using GameForWork.Core.P1;
 using GameForWork.Core.P1.Items;
 using GameForWork.Core.P1.World;
+using GameForWork.Core.P2;
 using GameForWork.Core.P6;
 using Godot;
 

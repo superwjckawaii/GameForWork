@@ -423,6 +423,7 @@ public partial class P2Dashboard : VBoxContainer
         _activeSkillSummary = new Label { AutowrapMode = TextServer.AutowrapMode.WordSmart };
         page.AddChild(_activeSkillSummary);
         _skillStonePanel = new P2SkillStonePanel();
+        _skillStonePanel.SizeFlagsVertical = SizeFlags.ExpandFill;
         _skillStonePanel.Initialize(RequireSession, Changed);
         page.AddChild(_skillStonePanel);
         return page;
@@ -1036,19 +1037,21 @@ public partial class P2Dashboard : VBoxContainer
         }
 
         _skillSummary!.Text = heroSelected
-            ? string.Join("\n", _session.Management.SkillStones.Select(stone =>
-                $"◆ {stone.Definition.DisplayName} · {stone.Definition.Kind} · Lv.{stone.Level} XP {stone.Experience}"))
+            ? $"技能石 {_session.Management.SkillStones.Count} · 已安装 {_session.Management.InstalledSkillStoneIds.Count} · " +
+              $"仓库 {_session.Management.UninstalledSkillStones.Count} · 当前方案 {_session.Management.ActiveSkillScheme}"
             : $"佣兵技能、辅助、天赋与 AI 由自主成长生成，玩家不可修改。\n{_session.World.Mercenaries.Build.AiSummary}";
         _activeSkillSummary!.Text = heroSelected
-            ? "装备技能链（前三条攻击链进入战斗栏，工具链独立生效）\n" + string.Join("\n", _session.Management.SkillLinks
+            ? "孔组：" + string.Join(" · ", _session.Management.SkillLinks
                 .OrderBy(link => link.Priority)
                 .Select(link =>
                 {
+                    if (string.IsNullOrEmpty(link.ActiveStoneInstanceId))
+                    {
+                        return $"{_session.GetSkillChains().FirstOrDefault(item => item.StableId == link.ChainId)?.DisplayName ?? "孔组"} 等待主动";
+                    }
                     SkillStoneInstance active = _session.Management.SkillStones.Single(stone => stone.InstanceId == link.ActiveStoneInstanceId);
-                    string supports = link.SupportStoneInstanceIds.Count == 0 ? "无辅助" : string.Join("、",
-                        link.SupportStoneInstanceIds.Select(id => _session.Management.SkillStones.Single(stone => stone.InstanceId == id).Definition.DisplayName));
                     P5SkillChainDefinition? chain = _session.GetSkillChains().FirstOrDefault(item => item.StableId == link.ChainId);
-                    return $"{chain?.DisplayName ?? "未装配"}：{active.Definition.DisplayName} · {supports}";
+                    return $"{chain?.DisplayName ?? "未装配"} {active.Definition.DisplayName}+{link.SupportStoneInstanceIds.Count}";
                 }))
             : "佣兵的主动技能优先级由其 AI 自主配置。";
         ItemInstance? craftItem = ItemAt(_craftContainer, _craftIndex);
