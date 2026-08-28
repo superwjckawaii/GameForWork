@@ -6,7 +6,7 @@ public static class P2ThemeFactory
 {
     public static Theme Create(int fontScalePercent)
     {
-        int fontSize = (int)Math.Round(14 * Math.Clamp(fontScalePercent, 100, 150) / 100d);
+        int fontSize = (int)Math.Round(14 * Math.Clamp(fontScalePercent, 80, 150) / 100d);
         var theme = new Theme { DefaultFontSize = fontSize };
         theme.SetColor("font_color", "Label", new Color("ddd5c7"));
         theme.SetColor("font_color", "Button", new Color("e6dece"));

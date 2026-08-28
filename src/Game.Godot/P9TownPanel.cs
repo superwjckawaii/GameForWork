@@ -4,6 +4,52 @@ using Godot;
 
 namespace GameForWork.GodotClient;
 
+public partial class P11TownMap : Control
+{
+    private const float SourceWidth = 430f;
+    private const float SourceHeight = 242f;
+    private readonly List<(Button Button, Vector2 Normalized)> _hotspots = [];
+
+    public override void _Ready()
+    {
+        CustomMinimumSize = new Vector2(SourceWidth, SourceHeight);
+        SizeFlagsHorizontal = SizeFlags.ExpandFill;
+        ClipContents = true;
+        var background = new TextureRect
+        {
+            Texture = GD.Load<Texture2D>("res://assets/p9/town/p9-town-district.png"),
+            ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,
+            StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered,
+            MouseFilter = MouseFilterEnum.Ignore,
+        };
+        background.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
+        AddChild(background);
+        MoveChild(background, 0);
+        Resized += UpdateLayout;
+        UpdateLayout();
+    }
+
+    public void AddHotspot(Button button, Vector2 logicalPosition)
+    {
+        _hotspots.Add((button, new Vector2(logicalPosition.X / SourceWidth, logicalPosition.Y / SourceHeight)));
+        AddChild(button);
+        UpdateLayout();
+    }
+
+    private void UpdateLayout()
+    {
+        if (Size.X <= 0) return;
+        float desiredHeight = Size.X * SourceHeight / SourceWidth;
+        if (Math.Abs(CustomMinimumSize.Y - desiredHeight) > 1) CustomMinimumSize = new Vector2(SourceWidth, desiredHeight);
+        Vector2 hotspotSize = new(Math.Clamp(Size.X * 116f / SourceWidth, 106, 196), Math.Clamp(Size.Y * 28f / SourceHeight, 28, 48));
+        foreach ((Button button, Vector2 normalized) in _hotspots)
+        {
+            button.Position = new Vector2(normalized.X * Size.X, normalized.Y * Size.Y);
+            button.Size = hotspotSize;
+        }
+    }
+}
+
 public partial class P9TownPanel : VBoxContainer
 {
     private Func<P1GameSession>? _session;
@@ -42,26 +88,17 @@ public partial class P9TownPanel : VBoxContainer
         tabs.AddChild(leftScroll);
         var left = new VBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
         leftScroll.AddChild(left);
-        var townMap = new Control { CustomMinimumSize = new Vector2(430, 242), ClipContents = true };
+        var townMap = new P11TownMap();
         left.AddChild(townMap);
-        var townBackground = new TextureRect
-        {
-            Texture = GD.Load<Texture2D>("res://assets/p9/town/p9-town-district.png"),
-            ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,
-            StretchMode = TextureRect.StretchModeEnum.KeepAspectCovered,
-            MouseFilter = MouseFilterEnum.Ignore,
-        };
-        townBackground.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
-        townMap.AddChild(townBackground);
-        AddTownHotspot(townMap, P9BuildingKind.Tavern, new Vector2(12, 35));
-        AddTownHotspot(townMap, P9BuildingKind.Workshop, new Vector2(137, 20));
-        AddTownHotspot(townMap, P9BuildingKind.Alchemy, new Vector2(288, 30));
-        AddTownHotspot(townMap, P9BuildingKind.Cartography, new Vector2(16, 125));
-        AddTownHotspot(townMap, P9BuildingKind.Storage, new Vector2(306, 128));
-        AddTownHotspot(townMap, P9BuildingKind.Reliquary, new Vector2(82, 184));
-        AddTownHotspot(townMap, P9BuildingKind.Teleporter, new Vector2(232, 184));
+        AddTownHotspot(townMap, P9BuildingKind.Tavern, new Vector2(27, 46));
+        AddTownHotspot(townMap, P9BuildingKind.Workshop, new Vector2(157, 34));
+        AddTownHotspot(townMap, P9BuildingKind.Alchemy, new Vector2(276, 43));
+        AddTownHotspot(townMap, P9BuildingKind.Cartography, new Vector2(1, 122));
+        AddTownHotspot(townMap, P9BuildingKind.Storage, new Vector2(302, 127));
+        AddTownHotspot(townMap, P9BuildingKind.Reliquary, new Vector2(78, 181));
+        AddTownHotspot(townMap, P9BuildingKind.Teleporter, new Vector2(215, 181));
         left.AddChild(new Label { Text = "城区建筑 · 点击升级，施工期间保留旧等级效果" });
-        _buildings = new GridContainer { Columns = 2 };
+        _buildings = new GridContainer { Columns = 4 };
         left.AddChild(_buildings);
         var rightScroll = new ScrollContainer { Name = "酒馆名册", SizeFlagsHorizontal = SizeFlags.ExpandFill, SizeFlagsVertical = SizeFlags.ExpandFill };
         tabs.AddChild(rightScroll);
@@ -118,8 +155,10 @@ public partial class P9TownPanel : VBoxContainer
         foreach (Node child in _buildings!.GetChildren()) child.QueueFree();
         P9BuildingKind[] layout = [P9BuildingKind.Tavern, P9BuildingKind.Workshop, P9BuildingKind.Alchemy,
             P9BuildingKind.Cartography, P9BuildingKind.Storage, P9BuildingKind.Reliquary, P9BuildingKind.Teleporter];
-        foreach (P9BuildingKind kind in layout)
+        for (int layoutIndex = 0; layoutIndex < layout.Length; layoutIndex++)
         {
+            if (layoutIndex == 4) _buildings!.AddChild(new Control { CustomMinimumSize = new Vector2(190, 1), MouseFilter = MouseFilterEnum.Ignore });
+            P9BuildingKind kind = layout[layoutIndex];
             int level = session.Town.Level(kind);
             P9ConstructionSnapshot? job = session.Town.Construction.FirstOrDefault(item => item.Kind == kind);
             P9BuildingUpgradeCost? cost = P9TownState.NextUpgradeCost(level);
@@ -130,7 +169,7 @@ public partial class P9TownPanel : VBoxContainer
             var button = new Button
             {
                 Text = $"{P9TownState.DisplayName(kind)}  Lv.{level}\n{BuildingEffect(kind, level)}\n{state}",
-                CustomMinimumSize = new Vector2(205, 90),
+                CustomMinimumSize = new Vector2(190, 90),
                 Disabled = level >= 4 || job is not null,
                 TooltipText = BuildingTooltip(kind),
             };
@@ -233,13 +272,12 @@ public partial class P9TownPanel : VBoxContainer
         return button;
     }
 
-    private void AddTownHotspot(Control map, P9BuildingKind kind, Vector2 position)
+    private void AddTownHotspot(P11TownMap map, P9BuildingKind kind, Vector2 position)
     {
         var button = new Button
         {
             Text = P9TownState.DisplayName(kind),
             Position = position,
-            Size = new Vector2(116, 28),
             Modulate = new Color(1, 1, 1, 0.88f),
             TooltipText = BuildingTooltip(kind),
         };
@@ -249,7 +287,7 @@ public partial class P9TownPanel : VBoxContainer
             _session().TryUpgradeTownBuilding(kind, out string message);
             _changed?.Invoke(message);
         };
-        map.AddChild(button);
+        map.AddHotspot(button, position);
     }
 
     private TextureRect MercenaryPortrait(P9MercenaryArchetype archetype)

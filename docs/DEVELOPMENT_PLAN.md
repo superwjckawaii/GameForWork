@@ -1,4 +1,4 @@
-# GameForWork P0～P10 开发计划
+# GameForWork P0～P15 开发计划
 
 > 状态：已确认  
 > 更新日期：2026-08-28
@@ -226,3 +226,7 @@ P9 的七座固定建筑、施工队列、城镇方针、酒馆候选与名册�
 ### P10 完成定义
 
 P10 的周期卡顿与布局修复、1,624 节点主天赋树、专精和记忆珠宝、T11～T20、360 节点异界树、四类地图收益路线、灰烬天垒攻坚与铁誓突破树见 [`P10_SPECIFICATION.md`](P10_SPECIFICATION.md)。
+
+### P11～P15 完成定义
+
+首个完整可玩 Demo 的终点、内容目标、测试期存档策略与 P11～P15 阶段依赖见 [`DEMO_ROADMAP.md`](DEMO_ROADMAP.md)。P11、P12 的封版实现规则分别见 [`P11_SPECIFICATION.md`](P11_SPECIFICATION.md) 与 [`P12_SPECIFICATION.md`](P12_SPECIFICATION.md)。

@@ -39,6 +39,31 @@ public sealed class P1TeamExpeditionState
     public long RemainingMapTimeMilliseconds { get; private set; }
     public int ConsecutiveFailures { get; private set; }
     public int MapsRunSincePolicyApplied { get; private set; }
+    public long RouteDecisionRemainingMilliseconds { get; private set; }
+
+    public bool WaitForRouteDecision(P1MapItem map, bool offline)
+    {
+        if (offline || map.SelectedRoute is not null || map.EffectiveRouteCandidates.Count <= 1 ||
+            Policy.RouteDecisionTimeoutSeconds == 0)
+        {
+            RouteDecisionRemainingMilliseconds = 0;
+            return false;
+        }
+        if (RouteDecisionRemainingMilliseconds < 0) return false;
+        if (RouteDecisionRemainingMilliseconds == 0)
+            RouteDecisionRemainingMilliseconds = Policy.RouteDecisionTimeoutSeconds * 1_000L;
+        return true;
+    }
+
+    public void AdvanceRouteDecision(long elapsedMilliseconds, bool offline)
+    {
+        if (offline) RouteDecisionRemainingMilliseconds = -1;
+        else if (RouteDecisionRemainingMilliseconds > 0)
+        {
+            long remaining = Math.Max(0, RouteDecisionRemainingMilliseconds - elapsedMilliseconds);
+            RouteDecisionRemainingMilliseconds = remaining == 0 ? -1 : remaining;
+        }
+    }
 
     public void StartMap(
         P1MapItem map,
@@ -55,6 +80,7 @@ public sealed class P1TeamExpeditionState
         ActiveRoute = route;
         ActiveRun = plannedRun;
         ActivePolicySnapshot = Policy;
+        RouteDecisionRemainingMilliseconds = 0;
         MapsRunSincePolicyApplied++;
         RemainingMapTimeMilliseconds = durationMilliseconds;
     }
@@ -189,6 +215,7 @@ public sealed class P1TeamExpeditionState
         Backpack.Replace(snapshot.BackpackItems ?? []);
         ConsecutiveFailures = snapshot.ConsecutiveFailures;
         MapsRunSincePolicyApplied = snapshot.MapsRunSincePolicyApplied;
+        RouteDecisionRemainingMilliseconds = snapshot.RouteDecisionRemainingMilliseconds;
         if (snapshot.ActiveMap is not null)
         {
             StartMap(snapshot.ActiveMap, snapshot.ActiveRoute, snapshot.RemainingMapTimeMilliseconds, snapshot.ActiveRun);
@@ -249,6 +276,16 @@ public sealed class P1WorldState
     public P1TeamExpeditionState Hero { get; }
     public P1TeamExpeditionState Mercenaries { get; }
     public IReadOnlyList<P1TeamExpeditionState> Teams => [Hero, Mercenaries];
+    public int MaximumUnlockedMapTier { get; private set; } = 16;
+
+    public void UnlockFinalMapTiers() => MaximumUnlockedMapTier = P1MapItem.MaximumAreaLevel;
+
+    internal void RestoreMaximumUnlockedMapTier(int tier)
+    {
+        if (tier is < 16 or > P1MapItem.MaximumAreaLevel)
+            throw new InvalidDataException("Unlocked map tier is invalid.");
+        MaximumUnlockedMapTier = tier;
+    }
 
     public void AddInitialMaps()
     {
@@ -302,6 +339,7 @@ public sealed class P1WorldSimulator(IP1MapAttemptResolver attemptResolver)
         var active = new Dictionary<ExpeditionTeamKind, ActiveExpedition>();
         long now = 0;
         int suppliesProduced = 0;
+        foreach (P1TeamExpeditionState team in state.Teams) team.AdvanceRouteDecision(effective, offline);
         foreach (P1TeamExpeditionState team in state.Teams.Where(team => team.ActiveMap is not null))
         {
             if (team.ActiveRun is null)
@@ -321,7 +359,7 @@ public sealed class P1WorldSimulator(IP1MapAttemptResolver attemptResolver)
 
         if (effective > 0)
         {
-            StartReadyTeams(state, active, now, seed, asyncPreparation);
+            StartReadyTeams(state, active, now, seed, asyncPreparation, offline);
         }
 
         while (now < effective)
@@ -355,7 +393,7 @@ public sealed class P1WorldSimulator(IP1MapAttemptResolver attemptResolver)
 
             if (now < effective)
             {
-                StartReadyTeams(state, active, now, seed, asyncPreparation);
+                StartReadyTeams(state, active, now, seed, asyncPreparation, offline);
             }
             bool noPendingMaps = state.Teams.All(team => team.Queue.Count == 0 || team.IsStopped);
             if (active.Count == 0 && noPendingMaps)
@@ -400,7 +438,8 @@ public sealed class P1WorldSimulator(IP1MapAttemptResolver attemptResolver)
         IDictionary<ExpeditionTeamKind, ActiveExpedition> active,
         long now,
         ulong worldSeed,
-        bool asyncPreparation)
+        bool asyncPreparation,
+        bool offline)
     {
         foreach (P1TeamExpeditionState team in state.Teams)
         {
@@ -418,8 +457,24 @@ public sealed class P1WorldSimulator(IP1MapAttemptResolver attemptResolver)
                 continue;
             }
 
-            P1MapItem queuedMap = team.Queue.Maps[0];
-            MapRoute route = team.Policy.SelectUnattendedRoute();
+            P1MapItem queuedSource = team.Queue.Maps[0];
+            bool enteredAsFormalMap = !string.IsNullOrWhiteSpace(queuedSource.AreaId) && queuedSource.EffectiveRouteCandidates.Count > 0;
+            P1MapItem queuedMap = queuedSource.EnsureFormal(worldSeed);
+            if (queuedMap.AreaLevel > state.MaximumUnlockedMapTier && !P5ExpeditionDirector.IsBoss(queuedMap) &&
+                !P5ExpeditionDirector.IsPractice(queuedMap) && !GameForWork.Core.P10.P10EndgameState.IsCitadel(queuedMap))
+            {
+                team.Stop("tier_locked");
+                continue;
+            }
+            team.Queue.TryReplaceAt(0, queuedMap);
+            if (enteredAsFormalMap && team.WaitForRouteDecision(queuedMap, offline)) continue;
+            MapRoute route = queuedMap.SelectedRoute ?? team.Policy.SelectUnattendedRoute(
+                queuedMap, Math.Clamp(team.Progression.Level, 1, 100), worldSeed);
+            if (queuedMap.AreaLevel > team.Policy.MaximumMapTier || queuedMap.DangerFor(route) > team.Policy.MaximumMapDanger)
+            {
+                team.Stop("map_policy_limit");
+                continue;
+            }
             ulong runSeed = DeriveExpeditionSeed(worldSeed, team, queuedMap, route);
             int buildHash = team.Build.GetHashCode();
             P1MapRunResult plannedRun;
@@ -492,7 +547,8 @@ public sealed class P1WorldSimulator(IP1MapAttemptResolver attemptResolver)
             return;
         }
 
-        P1MapRewards rewards = P1MapRewardGenerator.Generate(expedition.Map, expedition.Route, seed ^ 0x9e3779b97f4a7c15UL);
+        P1MapRewards rewards = P1MapRewardGenerator.Generate(expedition.Map, expedition.Route,
+            seed ^ 0x9e3779b97f4a7c15UL, state.MaximumUnlockedMapTier);
         expedition.Team.Backpack.Replace(rewards.Equipment);
         state.Economy.AddRewards(rewards.Stackables);
         state.MapInventory.AddRange(rewards.Maps);

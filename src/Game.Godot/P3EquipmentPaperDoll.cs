@@ -32,25 +32,25 @@ public partial class P3EquipmentPaperDoll : Control
 
     public override void _Ready()
     {
-        CustomMinimumSize = new Vector2(284, 406);
+        CustomMinimumSize = new Vector2(272, 364);
         MouseFilter = MouseFilterEnum.Stop;
         IReadOnlyDictionary<EquipmentSlot, Vector2> positions = new Dictionary<EquipmentSlot, Vector2>
         {
-            [EquipmentSlot.Helmet] = new(117, 8),
-            [EquipmentSlot.Amulet] = new(226, 170),
-            [EquipmentSlot.MainHand] = new(8, 106),
-            [EquipmentSlot.Chest] = new(117, 94),
-            [EquipmentSlot.OffHand] = new(226, 106),
-            [EquipmentSlot.Gloves] = new(24, 188),
-            [EquipmentSlot.Belt] = new(117, 178),
-            [EquipmentSlot.RingLeft] = new(226, 234),
-            [EquipmentSlot.RingRight] = new(226, 298),
-            [EquipmentSlot.Boots] = new(117, 286),
-            [EquipmentSlot.Flask1] = new(14, 356),
-            [EquipmentSlot.Flask2] = new(64, 356),
-            [EquipmentSlot.Flask3] = new(114, 356),
-            [EquipmentSlot.Flask4] = new(164, 356),
-            [EquipmentSlot.Flask5] = new(214, 356),
+            [EquipmentSlot.Helmet] = new(113, 4),
+            [EquipmentSlot.Amulet] = new(218, 148),
+            [EquipmentSlot.MainHand] = new(6, 92),
+            [EquipmentSlot.Chest] = new(113, 80),
+            [EquipmentSlot.OffHand] = new(218, 92),
+            [EquipmentSlot.Gloves] = new(18, 170),
+            [EquipmentSlot.Belt] = new(113, 162),
+            [EquipmentSlot.RingLeft] = new(218, 204),
+            [EquipmentSlot.RingRight] = new(218, 258),
+            [EquipmentSlot.Boots] = new(113, 258),
+            [EquipmentSlot.Flask1] = new(25, 322),
+            [EquipmentSlot.Flask2] = new(67, 322),
+            [EquipmentSlot.Flask3] = new(109, 322),
+            [EquipmentSlot.Flask4] = new(151, 322),
+            [EquipmentSlot.Flask5] = new(193, 322),
         };
         foreach ((EquipmentSlot slot, Vector2 position) in positions)
         {
@@ -62,7 +62,7 @@ public partial class P3EquipmentPaperDoll : Control
                 ExtraTooltip = _extraTooltip,
                 EmptyLabel = ShortSlotName(slot),
             };
-            grid.Configure(1, 1, slot is >= EquipmentSlot.Flask1 and <= EquipmentSlot.Flask5 ? 42 : 50);
+            grid.Configure(1, 1, slot is >= EquipmentSlot.Flask1 and <= EquipmentSlot.Flask5 ? 38 : 46);
             grid.DropValidator = (source, sourceIndex, targetIndex) =>
                 DropValidator?.Invoke(source, sourceIndex, targetIndex) ?? true;
             grid.ItemSelected += index =>
@@ -84,13 +84,13 @@ public partial class P3EquipmentPaperDoll : Control
     {
         DrawRect(new Rect2(Vector2.Zero, Size), new Color("12161d"), true);
         Color silhouette = new("29313d");
-        DrawCircle(new Vector2(142, 60), 22, silhouette);
-        DrawRect(new Rect2(105, 84, 74, 145), silhouette, true);
-        DrawLine(new Vector2(114, 108), new Vector2(74, 224), silhouette, 24);
-        DrawLine(new Vector2(170, 108), new Vector2(210, 224), silhouette, 24);
-        DrawLine(new Vector2(124, 222), new Vector2(105, 344), silhouette, 26);
-        DrawLine(new Vector2(160, 222), new Vector2(179, 344), silhouette, 26);
-        DrawString(ThemeDB.FallbackFont, new Vector2(106, 350), "药剂腰带", HorizontalAlignment.Center, 72, 11,
+        DrawCircle(new Vector2(136, 54), 20, silhouette);
+        DrawRect(new Rect2(101, 76, 70, 126), silhouette, true);
+        DrawLine(new Vector2(110, 98), new Vector2(72, 208), silhouette, 22);
+        DrawLine(new Vector2(162, 98), new Vector2(200, 208), silhouette, 22);
+        DrawLine(new Vector2(118, 198), new Vector2(101, 304), silhouette, 24);
+        DrawLine(new Vector2(154, 198), new Vector2(171, 304), silhouette, 24);
+        DrawString(ThemeDB.FallbackFont, new Vector2(100, 316), "药剂腰带", HorizontalAlignment.Center, 72, 11,
             new Color("91836c"));
         DrawRect(new Rect2(Vector2.Zero, Size), new Color("665b4c"), false, 2);
     }

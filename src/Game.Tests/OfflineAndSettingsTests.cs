@@ -62,7 +62,7 @@ public sealed class OfflineAndSettingsTests(ITestOutputHelper output)
                 AlwaysOnTop = false,
                 SnapEnabled = false,
                 OpacityPercent = 75,
-                FontScalePercent = 125,
+                FontScalePercent = 80,
                 CloseToTray = true,
             };
             store.Save(expected);

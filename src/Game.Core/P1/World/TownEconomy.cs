@@ -130,6 +130,14 @@ public sealed class TownEconomyState
         return true;
     }
 
+    public bool TrySpendMemoryAshes(int amount)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(amount);
+        if (MemoryAshes < amount) return false;
+        MemoryAshes -= amount;
+        return true;
+    }
+
     public bool TryPay(int gold, int ironScraps)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(gold);

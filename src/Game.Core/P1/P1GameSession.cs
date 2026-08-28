@@ -8,6 +8,7 @@ using GameForWork.Core.P5;
 using GameForWork.Core.P6;
 using GameForWork.Core.P9;
 using GameForWork.Core.P10;
+using GameForWork.Core.P12;
 
 namespace GameForWork.Core.P1;
 
@@ -116,7 +117,7 @@ public sealed record P1GameSessionSnapshot(
 
 public sealed class P1GameSession
 {
-    public const int CurrentFormatVersion = 12;
+    public const int CurrentFormatVersion = 13;
     private readonly P1WorldSimulator _simulator = new(new P1MapAttemptResolver());
     private readonly P2CampaignSimulator _campaignSimulator = new();
     private AssembledCharacterBuild _heroBuild;
@@ -300,6 +301,7 @@ public sealed class P1GameSession
             snapshot.SimulationSequence,
             snapshot.DebugTwentyTimes);
         session.ApplyTownBuildingEffects();
+        if (session.Endgame.FinalBreakthroughCompleted) session.World.UnlockFinalMapTiers();
         session.Journey.Synchronize(session);
         return session;
     }
@@ -815,10 +817,12 @@ public sealed class P1GameSession
         for (int index = World.MapInventory.Count - 1; index >= 0; index--)
         {
             P1TeamExpeditionState team = (moved & 1) == 0 ? World.Hero : World.Mercenaries;
-            if (!team.Queue.TryEnqueue(World.MapInventory[index]))
+            P1MapItem map = World.MapInventory[index].EnsureFormal(Seed ^ (ulong)SimulationSequence ^ (ulong)index);
+            if (map.AreaLevel > World.MaximumUnlockedMapTier) continue;
+            if (!team.Queue.TryEnqueue(map))
             {
                 team = team == World.Hero ? World.Mercenaries : World.Hero;
-                if (!team.Queue.TryEnqueue(World.MapInventory[index]))
+                if (!team.Queue.TryEnqueue(map))
                 {
                     continue;
                 }
@@ -829,6 +833,100 @@ public sealed class P1GameSession
         }
 
         return moved;
+    }
+
+    public bool TrySelectMapRoute(int mapIndex, MapRoute route)
+    {
+        if (mapIndex < 0 || mapIndex >= World.MapInventory.Count) return false;
+        P1MapItem map = World.MapInventory[mapIndex].EnsureFormal(Seed ^ (ulong)mapIndex);
+        if (!map.EffectiveRouteCandidates.Contains(route)) return false;
+        World.MapInventory[mapIndex] = map with { SelectedRoute = route };
+        return true;
+    }
+
+    public P12MapCraftResult CraftMap(int mapIndex, P12MapCraftOperation operation)
+    {
+        if (mapIndex < 0 || mapIndex >= World.MapInventory.Count)
+            return new(false, new P1MapItem("invalid", 1), default, 0, "map_required");
+        ulong seed = Seed ^ (ulong)SimulationSequence++ ^ (ulong)(mapIndex + 1) * 0x9e3779b97f4a7c15UL;
+        P12MapCraftResult result = P12MapCrafting.Apply(World.Economy, World.MapInventory[mapIndex], operation,
+            seed, World.MaximumUnlockedMapTier);
+        if (result.Succeeded) World.MapInventory[mapIndex] = result.Map;
+        return result;
+    }
+
+    public P12MapBatchResult BatchCraftMaps(P12MapBatchRule requestedRule)
+    {
+        P12MapBatchRule rule = requestedRule.Validate();
+        int processed = 0, completed = 0, skipped = 0, spent = 0;
+        bool stopped = false;
+        for (int index = 0; index < World.MapInventory.Count; index++)
+        {
+            P1MapItem map = World.MapInventory[index].EnsureFormal(Seed ^ (ulong)index);
+            int mapSpent = 0;
+            bool failed = false;
+            while (map.Quality < rule.MinimumQuality)
+            {
+                if (!ApplyBatchOperation(index, ref map, P12MapCraftOperation.PolishQuality, rule.MaximumMetalSpendPerMap, ref mapSpent))
+                { failed = true; break; }
+            }
+            if (!failed && map.Rarity < rule.TargetRarity)
+            {
+                P12MapCraftOperation upgrade = rule.TargetRarity == P12MapRarity.Rare
+                    ? P12MapCraftOperation.AlchemicalRare : P12MapCraftOperation.AwakenMagic;
+                if (!ApplyBatchOperation(index, ref map, upgrade, rule.MaximumMetalSpendPerMap, ref mapSpent)) failed = true;
+            }
+            while (!failed && (rule.ExcludedAffixes?.Any(kind => map.EffectiveAffixes.Any(affix => affix.Kind == kind)) ?? false))
+            {
+                if (map.Rarity != P12MapRarity.Rare ||
+                    !ApplyBatchOperation(index, ref map, P12MapCraftOperation.ChaosReroll, rule.MaximumMetalSpendPerMap, ref mapSpent)) failed = true;
+            }
+            if (!failed && rule.Corrupt && !map.IsCorrupted &&
+                !ApplyBatchOperation(index, ref map, P12MapCraftOperation.Corrupt, rule.MaximumMetalSpendPerMap, ref mapSpent)) failed = true;
+
+            processed++; spent += mapSpent;
+            World.MapInventory[index] = map;
+            if (!failed) completed++;
+            else
+            {
+                skipped++;
+                if (rule.FailureBehavior == P12BatchFailureBehavior.Stop) { stopped = true; break; }
+            }
+        }
+        return new(processed, completed, skipped, spent, stopped,
+            $"处理 {processed} 张，完成 {completed} 张，跳过 {skipped} 张，消耗金属 {spent}。" );
+    }
+
+    public void SetExpeditionPolicy(ExpeditionTeamKind kind, ExpeditionPolicy policy) => Team(kind).ApplyPolicy(policy);
+
+    public bool TrySwitchAtlasScheme(int index)
+    {
+        if (index == Endgame.ActiveAtlasSchemeIndex || index is < 0 or > 2 || !World.Economy.TrySpendMemoryAshes(1)) return false;
+        if (Endgame.TrySwitchAtlasScheme(index)) return true;
+        World.Economy.AddRewards(new MapStackableRewards(0, 0, 1, 0, 0));
+        return false;
+    }
+
+    public bool TryRenameAtlasScheme(int index, string name) => Endgame.TryRenameAtlasScheme(index, name);
+
+    public bool RecordFinalBreakthroughTrialVictory()
+    {
+        if (!Endgame.TryCompleteFinalBreakthrough(World.Hero.Progression.Level, trialWon: true)) return false;
+        World.UnlockFinalMapTiers();
+        return true;
+    }
+
+    private bool ApplyBatchOperation(int index, ref P1MapItem map, P12MapCraftOperation operation,
+        int budget, ref int mapSpent)
+    {
+        (_, int cost) = P12MapCrafting.Cost(operation);
+        if (mapSpent + cost > budget) return false;
+        ulong seed = Seed ^ (ulong)SimulationSequence++ ^ (ulong)(index + 1) * 0x517cc1b727220a95UL;
+        P12MapCraftResult result = P12MapCrafting.Apply(World.Economy, map, operation, seed, World.MaximumUnlockedMapTier);
+        if (!result.Succeeded) return false;
+        map = result.Map;
+        mapSpent += result.Cost;
+        return true;
     }
 
     public CombatPreview GetCombatPreview() => CombatPreviewRules.Calculate(

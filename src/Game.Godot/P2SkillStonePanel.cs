@@ -13,6 +13,11 @@ public partial class P2SkillStonePanel : VBoxContainer
     private GridContainer? _inventory;
     private VBoxContainer? _groups;
     private Label? _errors;
+    private HBoxContainer? _wideColumns;
+    private TabContainer? _compactTabs;
+    private VBoxContainer? _inventoryColumn;
+    private VBoxContainer? _groupsColumn;
+    private bool _compact;
     private string _signature = string.Empty;
     private bool _readOnly;
 
@@ -21,23 +26,33 @@ public partial class P2SkillStonePanel : VBoxContainer
         _session = session;
         _changed = changed;
         AddChild(new Label { Text = "技能石背包与装备孔组 · 拖曳装入/换孔 · 右键卸下 · 悬浮查看完整说明", AutowrapMode = TextServer.AutowrapMode.WordSmart });
-        var columns = new HBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
-        columns.AddThemeConstantOverride("separation", 12);
-        AddChild(columns);
-        VBoxContainer left = Column(columns, "技能石背包", 250);
-        var inventoryScroll = new ScrollContainer { CustomMinimumSize = new Vector2(250, 350), SizeFlagsVertical = SizeFlags.ExpandFill };
-        left.AddChild(inventoryScroll);
+        SizeFlagsVertical = SizeFlags.ExpandFill;
+        _wideColumns = new HBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill, SizeFlagsVertical = SizeFlags.ExpandFill };
+        _wideColumns.AddThemeConstantOverride("separation", 12);
+        AddChild(_wideColumns);
+        _compactTabs = new TabContainer { Visible = false, SizeFlagsHorizontal = SizeFlags.ExpandFill, SizeFlagsVertical = SizeFlags.ExpandFill };
+        AddChild(_compactTabs);
+        _inventoryColumn = Column(_wideColumns, "技能石背包", 240);
+        var inventoryScroll = new ScrollContainer { SizeFlagsVertical = SizeFlags.ExpandFill, SizeFlagsHorizontal = SizeFlags.ExpandFill };
+        _inventoryColumn.AddChild(inventoryScroll);
+        var inventoryBody = new VBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
+        inventoryScroll.AddChild(inventoryBody);
         _inventory = new GridContainer { Columns = 5, SizeFlagsHorizontal = SizeFlags.ExpandFill };
         _inventory.AddThemeConstantOverride("h_separation", 4);
         _inventory.AddThemeConstantOverride("v_separation", 4);
-        inventoryScroll.AddChild(_inventory);
-        VBoxContainer right = Column(columns, "当前装备孔组", 390);
-        var groupScroll = new ScrollContainer { CustomMinimumSize = new Vector2(390, 350), SizeFlagsVertical = SizeFlags.ExpandFill };
-        right.AddChild(groupScroll);
+        inventoryBody.AddChild(_inventory);
+        inventoryBody.AddChild(new Control { CustomMinimumSize = new Vector2(0, 12), MouseFilter = MouseFilterEnum.Ignore });
+        _groupsColumn = Column(_wideColumns, "当前装备孔组", 340);
+        var groupScroll = new ScrollContainer { SizeFlagsVertical = SizeFlags.ExpandFill, SizeFlagsHorizontal = SizeFlags.ExpandFill };
+        _groupsColumn.AddChild(groupScroll);
+        var groupBody = new VBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
+        groupScroll.AddChild(groupBody);
         _groups = new VBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
-        groupScroll.AddChild(_groups);
+        groupBody.AddChild(_groups);
+        groupBody.AddChild(new Control { CustomMinimumSize = new Vector2(0, 12), MouseFilter = MouseFilterEnum.Ignore });
         _errors = new Label { AutowrapMode = TextServer.AutowrapMode.WordSmart };
         AddChild(_errors);
+        Resized += QueueResponsiveLayout;
     }
 
     public void SetReadOnly(bool readOnly)
@@ -168,6 +183,37 @@ public partial class P2SkillStonePanel : VBoxContainer
     }
 
     private void Invalidate() { _signature = string.Empty; RefreshState(); }
+
+    private void QueueResponsiveLayout()
+    {
+        bool compact = Size.X > 0 && Size.X < 690;
+        if (compact == _compact) return;
+        _compact = compact;
+        Callable.From(ApplyResponsiveLayout).CallDeferred();
+    }
+
+    private void ApplyResponsiveLayout()
+    {
+        if (_wideColumns is null || _compactTabs is null || _inventoryColumn is null || _groupsColumn is null) return;
+        if (_compact)
+        {
+            _inventoryColumn.Reparent(_compactTabs);
+            _groupsColumn.Reparent(_compactTabs);
+            _inventoryColumn.Name = "技能石背包";
+            _groupsColumn.Name = "装备孔组";
+            _wideColumns.Visible = false;
+            _compactTabs.Visible = true;
+        }
+        else
+        {
+            _inventoryColumn.Reparent(_wideColumns);
+            _groupsColumn.Reparent(_wideColumns);
+            _inventoryColumn.Name = "技能石背包";
+            _groupsColumn.Name = "当前装备孔组";
+            _compactTabs.Visible = false;
+            _wideColumns.Visible = true;
+        }
+    }
 
     private static string?[] LegacySockets(SkillLinkConfiguration? link, int count)
     {

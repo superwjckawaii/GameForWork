@@ -191,7 +191,7 @@ public partial class Main : Node
         var root = new VBoxContainer();
         root.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
         root.AddThemeConstantOverride("separation", 6);
-        int initialFontScale = Math.Clamp(_settingsStore?.Load().FontScalePercent ?? 100, 100, 150);
+        int initialFontScale = Math.Clamp(_settingsStore?.Load().FontScalePercent ?? 100, 80, 150);
         root.Theme = P2ThemeFactory.Create(initialFontScale);
         _interfaceRoot = root;
         AddChild(root);
@@ -254,7 +254,7 @@ public partial class Main : Node
         globalHotkey.Toggled += enabled => _windowController?.SetGlobalHotkeyEnabled(enabled);
         _standardToolbar.AddChild(globalHotkey);
         var fontScale = new OptionButton { TooltipText = "界面字体缩放；迷你窗口操作栏保持固定字号" };
-        for (int percent = 100; percent <= 150; percent += 10)
+        for (int percent = 80; percent <= 150; percent += 10)
         {
             fontScale.AddItem($"字 {percent}%", percent);
             if (percent == initialFontScale)
@@ -348,7 +348,7 @@ public partial class Main : Node
 
     private void SetFontScale(int percent)
     {
-        int clamped = Math.Clamp(percent, 100, 150);
+        int clamped = Math.Clamp(percent, 80, 150);
         if (_interfaceRoot is not null)
         {
             _interfaceRoot.Theme = P2ThemeFactory.Create(clamped);
@@ -553,11 +553,23 @@ public partial class Main : Node
             _saveRepository.Initialize();
             _saveRepository.CreateBackup();
             string? json = _saveRepository.LoadP1SessionJson();
-            _session = string.IsNullOrWhiteSpace(json)
-                ? null
-                : P1GameSession.Restore(
-                    JsonSerializer.Deserialize<P1GameSessionSnapshot>(json, SaveJsonOptions) ??
-                    throw new InvalidDataException("P1 save JSON was empty."));
+            try
+            {
+                _session = string.IsNullOrWhiteSpace(json)
+                    ? null
+                    : P1GameSession.Restore(
+                        JsonSerializer.Deserialize<P1GameSessionSnapshot>(json, SaveJsonOptions) ??
+                        throw new InvalidDataException("P1 save JSON was empty."));
+            }
+            catch (Exception exception) when (exception is JsonException or InvalidDataException or NotSupportedException)
+            {
+                string archived = _saveRepository.ArchiveLegacyAndReset();
+                _session = null;
+                _logger?.Write(GameLogLevel.Warning, "p12.legacy_save_archived", "persistence",
+                    "An incompatible test save was archived and a clean database was created.",
+                    new Dictionary<string, object?> { ["archive"] = archived, ["error"] = exception.Message });
+                ShowNotice("旧测试档与当前结构不兼容，已保留到 recovery/legacy；本槽位将重新开始。");
+            }
             if (!DeveloperFeaturesEnabled && _session is not null) _session.DebugTwentyTimes = false;
             SettleOfflineOnOpen();
         }

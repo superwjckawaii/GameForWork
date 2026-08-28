@@ -70,6 +70,9 @@ public partial class P10EndgamePanel : VBoxContainer
     private Action<string>? _changed;
     private Label? _summary;
     private P10AtlasTreeView? _atlas;
+    private OptionButton? _schemes;
+    private LineEdit? _schemeName;
+    private Button? _breakthrough;
     private string _signature = string.Empty;
 
     public void Initialize(Func<P1GameSession> session, Action<string> changed)
@@ -77,6 +80,20 @@ public partial class P10EndgamePanel : VBoxContainer
         _session = session; _changed = changed;
         _summary = new Label { AutowrapMode = TextServer.AutowrapMode.WordSmart };
         AddChild(_summary);
+        var schemeBar = new HFlowContainer(); AddChild(schemeBar);
+        schemeBar.AddChild(new Label { Text = "异界方案" });
+        _schemes = new OptionButton(); schemeBar.AddChild(_schemes);
+        for (int index = 0; index < 3; index++) _schemes.AddItem($"方案 {index + 1}", index);
+        _schemes.ItemSelected += index =>
+        {
+            if ((int)index == session().Endgame.ActiveAtlasSchemeIndex) return;
+            changed(session().TrySwitchAtlasScheme((int)index) ? "已消耗 1 份记忆灰烬并切换异界方案。" : "记忆灰烬不足，无法切换方案。");
+            Refresh(true);
+        };
+        _schemeName = new LineEdit { PlaceholderText = "方案名", CustomMinimumSize = new Vector2(120, 0), MaxLength = 12 };
+        schemeBar.AddChild(_schemeName);
+        var rename = new Button { Text = "重命名" }; schemeBar.AddChild(rename);
+        rename.Pressed += () => { changed(session().TryRenameAtlasScheme(session().Endgame.ActiveAtlasSchemeIndex, _schemeName.Text) ? "异界方案已重命名。" : "请输入 1–12 个字符。"); Refresh(true); };
         _atlas = new P10AtlasTreeView { SizeFlagsVertical = SizeFlags.ExpandFill };
         _atlas.Initialize(session, changed); AddChild(_atlas);
         var ascendancy = new HFlowContainer(); AddChild(ascendancy);
@@ -89,19 +106,33 @@ public partial class P10EndgamePanel : VBoxContainer
         var boss = new Button { Text = "挑战终局：灰烬天垒", TooltipText = "消耗 1 枚天垒门票；首次击败获得突破点。" };
         boss.Pressed += () => { changed(session().TryChallengeCitadel() ? "灰烬天垒已排入主角远征；胜利后获得突破点。" : "主角队必须空闲，并持有由 8 枚 T11+ 碎片合成的门票。"); Refresh(true); };
         AddChild(boss);
+        _breakthrough = new Button { Text = "门扉突破试炼（P14 正式战斗）", Disabled = true,
+            TooltipText = "P12 已建立门禁与存档状态；达到 100 级后，P14 的试炼胜利将开放 101–120 级和 T17–T20。" };
+        AddChild(_breakthrough);
     }
 
     public void Refresh(bool force = false)
     {
         if (_session is null) return;
         P10EndgameState state = _session().Endgame;
-        string signature = $"{state.EarnedAtlasPoints}:{state.AtlasPassives.Count}:{state.LifeForce}:{state.RedFavor}:{state.BlueFavor}:{state.CitadelFragments}:{state.CitadelTickets}:{state.BreakthroughPoints}:{state.AscendancyPassives.Count}";
+        string signature = $"{state.EarnedAtlasPoints}:{state.AtlasPassives.Count}:{state.LifeForce}:{state.RedFavor}:{state.BlueFavor}:{state.CitadelFragments}:{state.CitadelTickets}:{state.BreakthroughPoints}:{state.AscendancyPassives.Count}:{state.ActiveAtlasSchemeIndex}:{state.FinalBreakthroughCompleted}:{_session().World.Economy.MemoryAshes}";
         if (!force && signature == _signature) return;
         _signature = signature;
-        _summary!.Text = $"T1–T20 首次完成 {state.CompletedTiers.Count}/20 · 异界点 {state.AtlasPassives.Count}/{state.EarnedAtlasPoints} · " +
+        _summary!.Text = $"T1–T16 常规异界 · T17–T20 {(state.FinalBreakthroughCompleted ? "已开放" : "未开放")} · 首次完成 {state.CompletedTiers.Count}/20 · 异界点 {state.AtlasPassives.Count}/{state.EarnedAtlasPoints} · " +
             $"命能 {state.LifeForce} · 赤誓 {state.RedFavor} · 苍誓 {state.BlueFavor}\n" +
             $"天垒碎片 {state.CitadelFragments}/{P10EndgameState.CitadelFragmentsPerTicket} · 门票 {state.CitadelTickets} · " +
-            $"突破点 {state.AscendancyPassives.Count}/{state.BreakthroughPoints} · 每张地图出现 1–3 条收益路线";
+            $"突破点 {state.AscendancyPassives.Count}/{state.BreakthroughPoints} · 记忆灰烬 {_session().World.Economy.MemoryAshes} · 每张地图出现 1–3 条收益路线";
+        if (_schemes is not null)
+        {
+            for (int index = 0; index < 3; index++) _schemes.SetItemText(index, state.AtlasSchemeNames[index]);
+            _schemes.Select(state.ActiveAtlasSchemeIndex);
+        }
+        if (_schemeName is not null) _schemeName.Text = state.AtlasSchemeNames[state.ActiveAtlasSchemeIndex];
+        if (_breakthrough is not null)
+        {
+            _breakthrough.Text = state.FinalBreakthroughCompleted ? "门扉突破已完成" :
+                _session().World.Hero.Progression.Level >= 100 ? "门扉突破试炼（等待 P14 战斗）" : "门扉突破试炼（需要 100 级）";
+        }
         _atlas?.QueueRedraw();
     }
 }

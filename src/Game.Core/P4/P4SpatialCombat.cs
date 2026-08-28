@@ -130,7 +130,11 @@ public sealed record P4NodeCombatRequest(
     int? InitialHeroLife = null,
     int? InitialHeroMana = null,
     int? InitialHeroShield = null,
-    int MaximumTicks = 2_400);
+    int MaximumTicks = 2_400,
+    int EnemyLifeBasisPoints = 10_000,
+    int EnemyDamageBasisPoints = 10_000,
+    int EnemySpeedBasisPoints = 10_000,
+    int PlayerRecoveryBasisPoints = 10_000);
 
 public sealed record P4NodeCombatResult(
     P1BattleOutcome Outcome,
@@ -400,7 +404,7 @@ public sealed class P4SpatialCombatRunner
             IReadOnlyList<EliteAffix> affixes = elite ? EnemyRules.RollEliteAffixes(random) : [];
             ScaledEnemy scaled = EnemyRules.Scale(profile, request.AreaLevel, affixes, request.AbyssRoute);
             int lifeScale = boss ? 10_000 : elite ? 7_000 : 4_500;
-            int life = Math.Max(2, checked(scaled.Life * lifeScale / 10_000));
+            int life = Math.Max(2, checked((int)((long)scaled.Life * lifeScale / 10_000 * request.EnemyLifeBasisPoints / 10_000)));
             P4UnitRole role = boss ? P4UnitRole.Boss : (P4UnitRole)(index % 5);
             P4Point position = SpawnPosition(request.Formation, index, request.EnemyCount, random);
             result.Add(new P4EnemyUnit(
@@ -477,7 +481,7 @@ public sealed class P4SpatialCombatRunner
                     : new P4Point(
                         Math.Clamp(enemy.Position.XRaw + Math.Sign(enemy.Position.XRaw - heroPosition.XRaw) * 700, 350, 11_650),
                         Math.Clamp(enemy.Position.YRaw + Math.Sign(enemy.Position.YRaw - heroPosition.YRaw) * 700, 350, 23_650));
-                int move = Math.Max(1, enemy.Profile.MovementSpeedRawPerSecond / 20);
+                int move = Math.Max(1, checked((int)((long)enemy.Profile.MovementSpeedRawPerSecond * request.EnemySpeedBasisPoints / 10_000 / 20)));
                 if (enemy.Role == P4UnitRole.Charger)
                 {
                     move = move * 3 / 2;
@@ -499,11 +503,12 @@ public sealed class P4SpatialCombatRunner
                 continue;
             }
 
+            int attacksPerSecond = checked((int)((long)enemy.Scaled.AttacksPerSecondMilli * request.EnemySpeedBasisPoints / 10_000));
             var weapon = new WeaponProfile(
                 enemy.Profile.StableId + ".spatial",
-                enemy.Scaled.MinimumPhysicalDamage,
-                enemy.Scaled.MaximumPhysicalDamage,
-                enemy.Scaled.AttacksPerSecondMilli,
+                checked((int)((long)enemy.Scaled.MinimumPhysicalDamage * request.EnemyDamageBasisPoints / 10_000)),
+                checked((int)((long)enemy.Scaled.MaximumPhysicalDamage * request.EnemyDamageBasisPoints / 10_000)),
+                attacksPerSecond,
                 500);
             DamageResult hit = DamageRules.Resolve(new DamageRequest(
                 weapon,
@@ -524,8 +529,7 @@ public sealed class P4SpatialCombatRunner
 
             events.Add(Event(tick, P4SpatialEventKind.EnemyAttack, enemy.EntityId, "hero", damage,
                 enemy.Position, heroPosition, enemy.Role.ToString()));
-            int interval = Math.Max(8, checked((20_000 + enemy.Scaled.AttacksPerSecondMilli - 1) /
-                enemy.Scaled.AttacksPerSecondMilli));
+            int interval = Math.Max(8, checked((20_000 + attacksPerSecond - 1) / attacksPerSecond));
             enemy.NextActionTick = tick + interval;
         }
     }
@@ -677,6 +681,7 @@ public sealed class P4SpatialCombatRunner
         }
 
         int recovered = flask.TryUse(hero.MaximumLife - hero.Life, request.Build.IncreasedLifeFlaskEffectBasisPoints);
+        recovered = checked((int)((long)recovered * request.PlayerRecoveryBasisPoints / 10_000));
         if (recovered > 0)
         {
             hero.HealLife(recovered);
@@ -856,8 +861,10 @@ public sealed class P4SpatialCombatRunner
     {
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(request.Build);
-        if (request.NodeIndex <= 0 || request.AreaLevel is < 1 or > 10 || request.EnemyCount is < 1 or > 24 ||
-            request.MaximumTicks <= 0)
+        if (request.NodeIndex <= 0 || request.AreaLevel is < 1 or > 20 || request.EnemyCount is < 1 or > 48 ||
+            request.MaximumTicks <= 0 || request.EnemyLifeBasisPoints is < 1_000 or > 100_000 ||
+            request.EnemyDamageBasisPoints is < 1_000 or > 100_000 || request.EnemySpeedBasisPoints is < 1_000 or > 50_000 ||
+            request.PlayerRecoveryBasisPoints is < 0 or > 10_000)
         {
             throw new ArgumentOutOfRangeException(nameof(request));
         }

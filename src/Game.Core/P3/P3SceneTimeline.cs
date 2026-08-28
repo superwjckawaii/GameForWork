@@ -5,6 +5,7 @@ using GameForWork.Core.P1.World;
 using GameForWork.Core.P2;
 using GameForWork.Core.Simulation;
 using GameForWork.Core.P4;
+using GameForWork.Core.P12;
 
 namespace GameForWork.Core.P3;
 
@@ -133,15 +134,17 @@ public static class P3SceneTimelineBuilder
     {
         ArgumentNullException.ThrowIfNull(build);
         ArgumentNullException.ThrowIfNull(map);
+        P12MapCombatModifiers modifiers = P12MapCombatModifiers.From(map);
         return Build(
             $"map:{map.InstanceId}:attempt:{attempt}",
             build,
-            route == MapRoute.Abyss ? 10 : 8,
+            route == MapRoute.Abyss ? 10 : route == MapRoute.LifeGarden ? 9 : 8,
             map.AreaLevel,
             forceElite: route == MapRoute.Abyss,
             finalBoss: true,
             abyssRoute: route == MapRoute.Abyss,
-            seed);
+            seed,
+            modifiers);
     }
 
     public static long TravelMilliseconds(int tileDistance, int movementSpeedBasisPoints)
@@ -165,7 +168,8 @@ public static class P3SceneTimelineBuilder
         bool forceElite,
         bool finalBoss,
         bool abyssRoute,
-        ulong seed)
+        ulong seed,
+        P12MapCombatModifiers? mapModifiers = null)
     {
         var random = new Pcg32(seed);
         var events = new List<P3SceneEvent>();
@@ -199,6 +203,8 @@ public static class P3SceneTimelineBuilder
                 : campaign
                     ? (eliteNode ? 6 : 4) + (int)(random.NextUInt() % 5)
                     : abyssRoute ? 12 + (int)(random.NextUInt() % 13) : 8 + (int)(random.NextUInt() % 9);
+            if (mapModifiers is not null)
+                enemyCount = Math.Max(1, checked(enemyCount * mapModifiers.PackSizeBasisPoints / 10_000));
             totalWaves++;
             ulong encounterSeed = ((ulong)random.NextUInt() << 32) | random.NextUInt();
             long start = now;
@@ -210,13 +216,17 @@ public static class P3SceneTimelineBuilder
                 nodeIndex,
                 areaLevel,
                 enemyCount,
-                eliteNode,
+                eliteNode || mapModifiers?.ExtraElites == true,
                 bossNode,
                 abyssRoute,
                 Formation: (int)(random.NextUInt() % 3),
                 InitialHeroLife: heroLife,
                 InitialHeroMana: heroMana,
-                InitialHeroShield: heroShield), encounterSeed);
+                InitialHeroShield: heroShield,
+                EnemyLifeBasisPoints: mapModifiers?.EnemyLifeBasisPoints ?? 10_000,
+                EnemyDamageBasisPoints: mapModifiers?.EnemyDamageBasisPoints ?? 10_000,
+                EnemySpeedBasisPoints: mapModifiers?.EnemySpeedBasisPoints ?? 10_000,
+                PlayerRecoveryBasisPoints: mapModifiers?.PlayerRecoveryBasisPoints ?? 10_000), encounterSeed);
             spatialFrames.AddRange(result.Frames.Select(frame => frame with { AtMilliseconds = start + frame.AtMilliseconds }));
             AppendSpatialEvents(events, result, start, nodeIndex, maximumLife, maximumMana, maximumShield);
             long duration = checked((long)result.Ticks * TickMilliseconds);

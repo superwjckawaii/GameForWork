@@ -1,4 +1,5 @@
 using GameForWork.Core.P1.World;
+using GameForWork.Core.P12;
 
 namespace GameForWork.Core.P10;
 
@@ -74,18 +75,30 @@ public sealed record P10EndgameSnapshot(
     int CitadelTickets,
     bool CitadelDefeated,
     IReadOnlyList<string> AscendancyPassives,
-    int BreakthroughPoints);
+    int BreakthroughPoints,
+    bool FinalBreakthroughCompleted = false,
+    IReadOnlyList<P12AtlasSchemeSnapshot>? AtlasSchemes = null,
+    int ActiveAtlasSchemeIndex = 0);
+
+public sealed record P12AtlasSchemeSnapshot(string Name, IReadOnlyList<string> AllocatedPassives);
 
 public sealed class P10EndgameState
 {
     public const int CitadelFragmentsPerTicket = 8;
     public const string CitadelMapPrefix = "p10-ashen-citadel-";
     private readonly HashSet<int> _completedTiers = [];
-    private readonly HashSet<string> _atlas = new(StringComparer.Ordinal);
+    private readonly List<(string Name, HashSet<string> Nodes)> _atlasSchemes =
+    [
+        ("续航方案", new HashSet<string>(StringComparer.Ordinal)),
+        ("机制方案", new HashSet<string>(StringComparer.Ordinal)),
+        ("攻坚方案", new HashSet<string>(StringComparer.Ordinal)),
+    ];
     private readonly Dictionary<P10MapMechanic, int> _mechanics = Enum.GetValues<P10MapMechanic>().ToDictionary(kind => kind, _ => 0);
     private readonly HashSet<string> _ascendancy = new(StringComparer.Ordinal);
     public IReadOnlySet<int> CompletedTiers => _completedTiers;
-    public IReadOnlySet<string> AtlasPassives => _atlas;
+    public IReadOnlySet<string> AtlasPassives => _atlasSchemes[ActiveAtlasSchemeIndex].Nodes;
+    public IReadOnlyList<string> AtlasSchemeNames => _atlasSchemes.Select(scheme => scheme.Name).ToArray();
+    public int ActiveAtlasSchemeIndex { get; private set; }
     public IReadOnlyDictionary<P10MapMechanic, int> MechanicEncounters => _mechanics;
     public IReadOnlySet<string> AscendancyPassives => _ascendancy;
     public int EarnedAtlasPoints => _completedTiers.Count + (CitadelDefeated ? 5 : 0);
@@ -96,15 +109,23 @@ public sealed class P10EndgameState
     public int CitadelTickets { get; private set; }
     public bool CitadelDefeated { get; private set; }
     public int BreakthroughPoints { get; private set; }
+    public bool FinalBreakthroughCompleted { get; private set; }
 
     public IReadOnlyList<P10MapMechanic> RecordMapCompletion(P1MapItem map, MapRoute route, ulong seed)
     {
         map.Validate();
         _completedTiers.Add(map.AreaLevel);
-        int count = 1 + (int)(seed % 3);
-        P10MapMechanic[] choices = Enum.GetValues<P10MapMechanic>();
-        var result = Enumerable.Range(0, count).Select(i => choices[(int)((seed / (ulong)(i + 1) + (ulong)map.AreaLevel + (ulong)i) % (ulong)choices.Length)])
-            .Distinct().Take(3).ToArray();
+        var selected = new List<P10MapMechanic>(2);
+        if (route == MapRoute.Abyss) selected.Add(P10MapMechanic.Abyss);
+        if (route == MapRoute.LifeGarden) selected.Add(P10MapMechanic.LifeGarden);
+        if (map.Altar == P12MapAltar.RedOath) selected.Add(P10MapMechanic.RedAltar);
+        if (map.Altar == P12MapAltar.BlueOath) selected.Add(P10MapMechanic.BlueAltar);
+        if (selected.Count == 0)
+        {
+            P10MapMechanic[] choices = Enum.GetValues<P10MapMechanic>();
+            selected.Add(choices[(int)((seed + (ulong)map.AreaLevel) % (ulong)choices.Length)]);
+        }
+        P10MapMechanic[] result = selected.Distinct().Take(3).ToArray();
         foreach (P10MapMechanic mechanic in result)
         {
             _mechanics[mechanic]++;
@@ -127,8 +148,30 @@ public sealed class P10EndgameState
     public bool TryAllocateAtlas(string id)
     {
         P10AtlasNode node = P10AtlasTree.Get(id);
-        if (_atlas.Contains(id) || _atlas.Count >= EarnedAtlasPoints || node.PrerequisiteId is not null && !_atlas.Contains(node.PrerequisiteId)) return false;
-        return _atlas.Add(id);
+        HashSet<string> atlas = _atlasSchemes[ActiveAtlasSchemeIndex].Nodes;
+        if (atlas.Contains(id) || atlas.Count >= EarnedAtlasPoints || node.PrerequisiteId is not null && !atlas.Contains(node.PrerequisiteId)) return false;
+        return atlas.Add(id);
+    }
+
+    public bool TryRenameAtlasScheme(int index, string name)
+    {
+        if (index is < 0 or > 2 || string.IsNullOrWhiteSpace(name) || name.Trim().Length > 12) return false;
+        _atlasSchemes[index] = (name.Trim(), _atlasSchemes[index].Nodes);
+        return true;
+    }
+
+    public bool TrySwitchAtlasScheme(int index)
+    {
+        if (index is < 0 or > 2 || index == ActiveAtlasSchemeIndex) return false;
+        ActiveAtlasSchemeIndex = index;
+        return true;
+    }
+
+    public bool TryCompleteFinalBreakthrough(int level, bool trialWon)
+    {
+        if (FinalBreakthroughCompleted || level < 100 || !trialWon) return false;
+        FinalBreakthroughCompleted = true;
+        return true;
     }
 
     public bool TryAllocateAscendancy(string id)
@@ -154,11 +197,14 @@ public sealed class P10EndgameState
 
     public static bool IsCitadel(P1MapItem map) => map.InstanceId.StartsWith(CitadelMapPrefix, StringComparison.Ordinal);
 
-    public int AtlasBonus(P10AtlasTheme theme) => _atlas.Select(P10AtlasTree.Get).Where(node => node.Theme == theme).Sum(node => node.RewardBasisPoints) / 100;
+    public int AtlasBonus(P10AtlasTheme theme) => AtlasPassives.Select(P10AtlasTree.Get).Where(node => node.Theme == theme).Sum(node => node.RewardBasisPoints) / 100;
 
-    public P10EndgameSnapshot Capture() => new(_completedTiers.Order().ToArray(), _atlas.Order().ToArray(),
+    public P10EndgameSnapshot Capture() => new(_completedTiers.Order().ToArray(), AtlasPassives.Order().ToArray(),
         new Dictionary<P10MapMechanic, int>(_mechanics), LifeForce, RedFavor, BlueFavor, CitadelFragments,
-        CitadelTickets, CitadelDefeated, _ascendancy.Order().ToArray(), BreakthroughPoints);
+        CitadelTickets, CitadelDefeated, _ascendancy.Order().ToArray(), BreakthroughPoints,
+        FinalBreakthroughCompleted,
+        _atlasSchemes.Select(scheme => new P12AtlasSchemeSnapshot(scheme.Name, scheme.Nodes.Order().ToArray())).ToArray(),
+        ActiveAtlasSchemeIndex);
 
     public static P10EndgameState Restore(P10EndgameSnapshot? snapshot)
     {
@@ -169,11 +215,21 @@ public sealed class P10EndgameState
             snapshot.BreakthroughPoints is < 0 or > 4 || snapshot.AscendancyPassives.Count > snapshot.BreakthroughPoints)
             throw new InvalidDataException("P10 endgame snapshot is invalid.");
         foreach (int tier in snapshot.CompletedTiers) state._completedTiers.Add(tier);
-        foreach (string id in snapshot.AtlasPassives) { P10AtlasTree.Get(id); state._atlas.Add(id); }
+        IReadOnlyList<P12AtlasSchemeSnapshot> schemes = snapshot.AtlasSchemes ??
+            [new("续航方案", snapshot.AtlasPassives), new("机制方案", []), new("攻坚方案", [])];
+        if (schemes.Count != 3 || snapshot.ActiveAtlasSchemeIndex is < 0 or > 2)
+            throw new InvalidDataException("P12 atlas schemes are invalid.");
+        for (int index = 0; index < 3; index++)
+        {
+            if (!state.TryRenameAtlasScheme(index, schemes[index].Name)) throw new InvalidDataException("P12 atlas scheme name is invalid.");
+            foreach (string id in schemes[index].AllocatedPassives) { P10AtlasTree.Get(id); state._atlasSchemes[index].Nodes.Add(id); }
+        }
+        state.ActiveAtlasSchemeIndex = snapshot.ActiveAtlasSchemeIndex;
         foreach (P10MapMechanic kind in Enum.GetValues<P10MapMechanic>()) state._mechanics[kind] = snapshot.MechanicEncounters.GetValueOrDefault(kind);
         state.LifeForce = snapshot.LifeForce; state.RedFavor = snapshot.RedFavor; state.BlueFavor = snapshot.BlueFavor;
         state.CitadelFragments = snapshot.CitadelFragments; state.CitadelTickets = snapshot.CitadelTickets; state.CitadelDefeated = snapshot.CitadelDefeated;
         state.BreakthroughPoints = snapshot.BreakthroughPoints;
+        state.FinalBreakthroughCompleted = snapshot.FinalBreakthroughCompleted;
         foreach (string id in snapshot.AscendancyPassives) { _ = P10IronOathAscendancy.Nodes.Single(node => node.StableId == id); state._ascendancy.Add(id); }
         return state;
     }

@@ -1,6 +1,7 @@
 using GameForWork.Core.P1.Combat;
 using GameForWork.Core.P1.Items;
 using GameForWork.Core.P3;
+using GameForWork.Core.P12;
 using GameForWork.Core.Simulation;
 
 namespace GameForWork.Core.P1.World;
@@ -15,6 +16,15 @@ public enum MapRoute
 {
     Safe,
     Abyss,
+    LifeGarden,
+}
+
+public enum MapAltarPreference
+{
+    Any,
+    Avoid,
+    RedOath,
+    BlueOath,
 }
 
 public enum RouteSelectionMode
@@ -43,7 +53,14 @@ public sealed record ExpeditionPolicy(
     int MaximumContinuousMaps = 0,
     int ReserveSupplies = 0,
     int StopAfterConsecutiveFailures = 0,
-    int MinimumStorageFreeSlots = 0)
+    int MinimumStorageFreeSlots = 0,
+    IReadOnlyList<MapRoute>? RoutePriority = null,
+    IReadOnlyList<MapRoute>? BlockedRoutes = null,
+    int MaximumMapDanger = 100,
+    MapAltarPreference AltarPreference = MapAltarPreference.Any,
+    bool UseRareFragments = false,
+    int RouteDecisionTimeoutSeconds = 30,
+    int MaximumMapTier = P1MapItem.MaximumAreaLevel)
 {
     public static ExpeditionPolicy Recommended => new(
         RouteSelectionMode.Automatic,
@@ -63,28 +80,92 @@ public sealed record ExpeditionPolicy(
 
     public MapRoute SelectUnattendedRoute() => PreferredRoute;
 
+    public MapRoute SelectUnattendedRoute(P1MapItem map, int survivalScore, ulong seed)
+    {
+        ArgumentNullException.ThrowIfNull(map);
+        P1MapItem formal = map.EnsureFormal(seed);
+        MapRoute[] candidates = formal.EffectiveRouteCandidates
+            .Where(route => !(BlockedRoutes ?? []).Contains(route))
+            .ToArray();
+        if (candidates.Length == 0) candidates = formal.EffectiveRouteCandidates.ToArray();
+        if (candidates.Length == 0) return PreferredRoute;
+
+        MapRoute[] priorities = (RoutePriority is { Count: > 0 } ? RoutePriority : [PreferredRoute])
+            .Distinct().ToArray();
+        foreach (MapRoute priority in priorities)
+        {
+            if (candidates.Contains(priority) && formal.DangerFor(priority) <= MaximumMapDanger)
+                return priority;
+        }
+
+        int routePenalty = survivalScore < formal.DangerRating ? 1 : 0;
+        MapRoute[] withinRisk = candidates.Where(route => formal.DangerFor(route) <= MaximumMapDanger).ToArray();
+        if (withinRisk.Length > 0) candidates = withinRisk;
+        return candidates
+            .OrderBy(route => P12MapRules.RouteDanger(route) * routePenalty)
+            .ThenBy(route => StableRouteTie(seed, formal.InstanceId, route))
+            .First();
+    }
+
     public ExpeditionPolicy Validate()
     {
         if (MaximumContinuousMaps is < 0 or > 10_000 || ReserveSupplies is < 0 or > 1_000_000 ||
-            StopAfterConsecutiveFailures is < 0 or > 100 || MinimumStorageFreeSlots is < 0 or > 100_000)
+            StopAfterConsecutiveFailures is < 0 or > 100 || MinimumStorageFreeSlots is < 0 or > 100_000 ||
+            MaximumMapDanger is < 0 or > 100 || RouteDecisionTimeoutSeconds is < 0 or > 300 ||
+            MaximumMapTier is < P1MapItem.MinimumAreaLevel or > P1MapItem.MaximumAreaLevel ||
+            (RoutePriority?.Any(route => !Enum.IsDefined(route)) ?? false) ||
+            (BlockedRoutes?.Any(route => !Enum.IsDefined(route)) ?? false))
         {
             throw new ArgumentOutOfRangeException(nameof(MaximumContinuousMaps));
         }
 
         return this;
     }
+
+    private static ulong StableRouteTie(ulong seed, string mapId, MapRoute route)
+    {
+        byte[] bytes = System.Security.Cryptography.SHA256.HashData(
+            System.Text.Encoding.UTF8.GetBytes($"{seed}|{mapId}|{route}"));
+        return BitConverter.ToUInt64(bytes, 0);
+    }
 }
 
-public sealed record P1MapItem(string InstanceId, int AreaLevel)
+public sealed record P1MapItem(
+    string InstanceId,
+    int AreaLevel,
+    string AreaId = "",
+    P12MapRarity Rarity = P12MapRarity.Basic,
+    int Quality = 0,
+    IReadOnlyList<P12MapAffix>? Affixes = null,
+    bool IsCorrupted = false,
+    IReadOnlyList<MapRoute>? RouteCandidates = null,
+    MapRoute? SelectedRoute = null,
+    P12MapAltar Altar = P12MapAltar.None,
+    IReadOnlyList<string>? Fragments = null)
 {
     public const int MinimumAreaLevel = 1;
     public const int MaximumAreaLevel = 20;
     public const int RescueChances = 2;
     public const int TotalAttempts = RescueChances + 1;
+    public IReadOnlyList<MapRoute> EffectiveRouteCandidates => RouteCandidates ?? [];
+    public IReadOnlyList<P12MapAffix> EffectiveAffixes => Affixes ?? [];
+    public int DangerRating => Math.Clamp(AreaLevel * 3 + EffectiveAffixes.Sum(affix => affix.Danger) +
+        P12MapRules.RouteDanger(SelectedRoute ?? MapRoute.Safe), 0, 100);
+    public int DangerFor(MapRoute route) => Math.Clamp(AreaLevel * 3 + EffectiveAffixes.Sum(affix => affix.Danger) +
+        P12MapRules.RouteDanger(route), 0, 100);
+    public int ItemQuantityBasisPoints => 10_000 + Quality * 100 + EffectiveAffixes.Sum(affix => affix.QuantityBasisPoints);
+
+    public P1MapItem EnsureFormal(ulong seed = 0) => P12MapRules.EnsureFormal(this, seed);
 
     public P1MapItem Validate()
     {
-        if (string.IsNullOrWhiteSpace(InstanceId) || AreaLevel is < MinimumAreaLevel or > MaximumAreaLevel)
+        if (string.IsNullOrWhiteSpace(InstanceId) || AreaLevel is < MinimumAreaLevel or > MaximumAreaLevel ||
+            Quality is < 0 or > 20 || !Enum.IsDefined(Rarity) || !Enum.IsDefined(Altar) ||
+            EffectiveAffixes.Count > 6 || EffectiveRouteCandidates.Count > 3 ||
+            EffectiveRouteCandidates.Any(route => !Enum.IsDefined(route)) ||
+            EffectiveRouteCandidates.Distinct().Count() != EffectiveRouteCandidates.Count ||
+            SelectedRoute is not null && !EffectiveRouteCandidates.Contains(SelectedRoute.Value) ||
+            (Fragments?.Count ?? 0) > 4)
         {
             throw new ArgumentOutOfRangeException(nameof(AreaLevel), "P1 maps require an ID and area level 1 through 20.");
         }
@@ -159,6 +240,18 @@ public sealed class P1MapQueue
     {
         P1MapItem? map = TakeAt(sourceIndex);
         return map is not null && TryInsert(map, targetIndex);
+    }
+
+    public bool TryReplaceAt(int index, P1MapItem map)
+    {
+        ArgumentNullException.ThrowIfNull(map);
+        map.Validate();
+        if (index < 0 || index >= _maps.Count) return false;
+        List<P1MapItem> maps = _maps.ToList();
+        maps[index] = map;
+        _maps.Clear();
+        foreach (P1MapItem value in maps) _maps.Enqueue(value);
+        return true;
     }
 
     public void Restore(IEnumerable<P1MapItem> maps)

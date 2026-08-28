@@ -26,6 +26,7 @@ public sealed class SaveRepository : IDisposable
     public string DatabasePath => _databasePath;
     public string BackupDirectory => Path.Combine(_slotDirectory, "backups");
     public string RecoveryDirectory => Path.Combine(_slotDirectory, "recovery");
+    public string LegacyRecoveryDirectory => Path.Combine(RecoveryDirectory, "legacy");
     public string TrashDirectory => Path.Combine(_slotDirectory, "trash");
 
     public void Initialize()
@@ -33,6 +34,7 @@ public sealed class SaveRepository : IDisposable
         Directory.CreateDirectory(_slotDirectory);
         Directory.CreateDirectory(BackupDirectory);
         Directory.CreateDirectory(RecoveryDirectory);
+        Directory.CreateDirectory(LegacyRecoveryDirectory);
         Directory.CreateDirectory(TrashDirectory);
         EnsureManifest();
         PurgeExpiredTrash();
@@ -189,6 +191,30 @@ public sealed class SaveRepository : IDisposable
         }
 
         return entry;
+    }
+
+    public string ArchiveLegacyAndReset()
+    {
+        if (_connection is not null)
+        {
+            using SqliteCommand checkpoint = _connection.CreateCommand();
+            checkpoint.CommandText = "PRAGMA wal_checkpoint(TRUNCATE);";
+            checkpoint.ExecuteNonQuery();
+        }
+        _connection?.Dispose();
+        _connection = null;
+        Directory.CreateDirectory(LegacyRecoveryDirectory);
+        string archived = Path.Combine(LegacyRecoveryDirectory,
+            $"legacy_{DateTimeOffset.UtcNow:yyyyMMdd_HHmmss_fff}.db");
+        foreach (string suffix in new[] { string.Empty, "-wal", "-shm" })
+        {
+            string source = _databasePath + suffix;
+            if (File.Exists(source)) File.Move(source, archived + suffix);
+        }
+        TrimDatabaseFamilies(LegacyRecoveryDirectory, "legacy_*.db", RecoveryLimit);
+        OpenConnection();
+        ApplyMigrations();
+        return archived;
     }
 
     public void RestoreFromTrash(string entryDirectory)
@@ -447,10 +473,14 @@ public sealed class SaveRepository : IDisposable
 
     private void TrimRecoveryFiles()
     {
-        string[] databases = Directory.EnumerateFiles(RecoveryDirectory, "corrupt_*.db")
-            .OrderByDescending(File.GetLastWriteTimeUtc)
-            .ToArray();
-        foreach (string database in databases.Skip(RecoveryLimit))
+        TrimDatabaseFamilies(RecoveryDirectory, "corrupt_*.db", RecoveryLimit);
+    }
+
+    private static void TrimDatabaseFamilies(string directory, string pattern, int maximum)
+    {
+        string[] databases = Directory.EnumerateFiles(directory, pattern)
+            .OrderByDescending(File.GetLastWriteTimeUtc).ToArray();
+        foreach (string database in databases.Skip(maximum))
         {
             foreach (string suffix in new[] { string.Empty, "-wal", "-shm" })
             {

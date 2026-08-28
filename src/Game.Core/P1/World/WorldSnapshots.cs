@@ -42,7 +42,8 @@ public sealed record P1TeamExpeditionSnapshot(
     int MapsRunSincePolicyApplied = 0,
     ExpeditionPolicy? ActivePolicySnapshot = null,
     ExpeditionPolicy? PendingPolicy = null,
-    P1MapRunResult? ActiveRun = null);
+    P1MapRunResult? ActiveRun = null,
+    long RouteDecisionRemainingMilliseconds = 0);
 
 public sealed record P1WorldSnapshot(
     TownEconomySnapshot Economy,
@@ -52,7 +53,8 @@ public sealed record P1WorldSnapshot(
     P1TeamExpeditionSnapshot Hero,
     P1TeamExpeditionSnapshot Mercenaries,
     int TeleporterLevel,
-    P5ExpeditionSnapshot? P5Expedition = null);
+    P5ExpeditionSnapshot? P5Expedition = null,
+    int MaximumUnlockedMapTier = 16);
 
 public static class P1WorldSnapshots
 {
@@ -81,7 +83,8 @@ public static class P1WorldSnapshots
             CaptureTeam(state.Hero),
             CaptureTeam(state.Mercenaries),
             state.Teleporter.Level,
-            state.Expedition.Capture());
+            state.Expedition.Capture(),
+            state.MaximumUnlockedMapTier);
     }
 
     public static P1WorldState Restore(P1WorldSnapshot snapshot)
@@ -122,6 +125,7 @@ public static class P1WorldSnapshots
         {
             throw new InvalidDataException("Teleporter snapshot level is invalid.");
         }
+        state.RestoreMaximumUnlockedMapTier(snapshot.MaximumUnlockedMapTier);
 
         return state;
     }
@@ -147,5 +151,6 @@ public static class P1WorldSnapshots
         team.MapsRunSincePolicyApplied,
         team.ActivePolicySnapshot,
         team.PendingPolicy,
-        team.ActiveRun);
+        team.ActiveRun,
+        team.RouteDecisionRemainingMilliseconds);
 }

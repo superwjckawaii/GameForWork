@@ -7,6 +7,7 @@ public enum P5ExpeditionTarget
 {
     SafeMaps,
     AbyssMaps,
+    LifeGardenMaps,
     HighestTierMaps,
     AbyssWarden,
     AbyssWardenPractice,
@@ -102,22 +103,45 @@ public sealed class P5ExpeditionDirector
             BossSequence++;
             map = new P1MapItem(
                 $"{(practice ? PracticePrefix : BossPrefix)}{BossSequence:000000}",
-                10);
+                10).EnsureFormal((ulong)BossSequence);
+            if (!map.EffectiveRouteCandidates.Contains(MapRoute.Abyss))
+                map = map with { RouteCandidates = map.EffectiveRouteCandidates.Append(MapRoute.Abyss).Distinct().Take(3).ToArray() };
+            map = map with { SelectedRoute = MapRoute.Abyss };
             route = MapRoute.Abyss;
             status = practice ? "practice_scheduled" : "boss_scheduled";
         }
         else
         {
-            int inventoryIndex = SelectMapIndex(world.MapInventory, dispatch.Target, dispatch.Mode);
+            HashSet<string> legacyMapIds = world.MapInventory
+                .Where(item => string.IsNullOrWhiteSpace(item.AreaId) || item.EffectiveRouteCandidates.Count == 0)
+                .Select(item => item.InstanceId).ToHashSet(StringComparer.Ordinal);
+            for (int index = 0; index < world.MapInventory.Count; index++)
+                world.MapInventory[index] = world.MapInventory[index].EnsureFormal((ulong)(BossSequence + index + 1));
+            int inventoryIndex = SelectMapIndex(world.MapInventory, dispatch.Target, dispatch.Mode,
+                Math.Min(world.MaximumUnlockedMapTier, team.Policy.MaximumMapTier), team.Policy);
             if (inventoryIndex < 0)
             {
                 Stop(team, dispatch, "maps_exhausted");
                 return false;
             }
 
-            map = world.MapInventory[inventoryIndex];
+            map = world.MapInventory[inventoryIndex].EnsureFormal((ulong)(BossSequence + inventoryIndex + 1));
             world.MapInventory.RemoveAt(inventoryIndex);
-            route = dispatch.Target == P5ExpeditionTarget.SafeMaps ? MapRoute.Safe : MapRoute.Abyss;
+            if (dispatch.Target == P5ExpeditionTarget.HighestTierMaps && legacyMapIds.Contains(map.InstanceId) &&
+                !map.EffectiveRouteCandidates.Contains(MapRoute.Abyss))
+                map = map with { RouteCandidates = map.EffectiveRouteCandidates.Append(MapRoute.Abyss).Distinct().TakeLast(3).ToArray() };
+            MapRoute? requestedRoute = dispatch.Target switch
+            {
+                P5ExpeditionTarget.SafeMaps => MapRoute.Safe,
+                P5ExpeditionTarget.LifeGardenMaps => MapRoute.LifeGarden,
+                P5ExpeditionTarget.AbyssMaps => MapRoute.Abyss,
+                _ => null,
+            };
+            route = requestedRoute ?? map.SelectedRoute ??
+                (dispatch.Target == P5ExpeditionTarget.HighestTierMaps && map.EffectiveRouteCandidates.Contains(MapRoute.Abyss)
+                    ? MapRoute.Abyss
+                    : team.Policy.SelectUnattendedRoute(map, team.Progression.Level, (ulong)BossSequence));
+            if (requestedRoute is not null) map = map with { SelectedRoute = route };
             status = "map_scheduled";
         }
 
@@ -126,12 +150,14 @@ public sealed class P5ExpeditionDirector
             throw new InvalidOperationException("P5 dispatch could not enqueue an empty team queue.");
         }
 
-        team.ApplyPolicy(new ExpeditionPolicy(
-            RouteSelectionMode.Automatic,
-            route,
-            QueueFailureBehavior.Continue,
-            StorageFullBehavior.AcceptStackablesOnly,
-            StopAfterConsecutiveFailures: 3));
+        team.ApplyPolicy(team.Policy with
+        {
+            RouteSelection = RouteSelectionMode.Automatic,
+            PreferredRoute = route,
+            FailureBehavior = QueueFailureBehavior.Continue,
+            StorageFullBehavior = StorageFullBehavior.AcceptStackablesOnly,
+            StopAfterConsecutiveFailures = 3,
+        });
         team.Resume();
         int remainingRuns = dispatch.RemainingRuns == int.MaxValue ? int.MaxValue : dispatch.RemainingRuns - 1;
         _dispatches[team.Kind] = dispatch with
@@ -226,20 +252,66 @@ public sealed class P5ExpeditionDirector
     private static int SelectMapIndex(
         IReadOnlyList<P1MapItem> maps,
         P5ExpeditionTarget target,
-        P5DispatchMode mode)
+        P5DispatchMode mode,
+        int maximumUnlockedTier,
+        ExpeditionPolicy policy)
     {
-        if (maps.Count == 0)
+        int[] eligible = maps.Select((map, index) => (map, index))
+            .Where(pair => pair.map.AreaLevel <= maximumUnlockedTier && MatchesRoute(pair.map, target, policy) &&
+                MatchesRisk(pair.map, target, policy))
+            .Select(pair => pair.index).ToArray();
+        if (eligible.Length == 0)
         {
             return -1;
         }
 
+        IEnumerable<(P1MapItem map, int index)> ranked = eligible.Select(index => (map: maps[index], index))
+            .OrderByDescending(pair => AltarScore(pair.map, policy.AltarPreference));
         return target == P5ExpeditionTarget.HighestTierMaps || mode == P5DispatchMode.HighestAvailable
-            ? maps.Select((map, index) => (map, index))
+            ? eligible.Select(index => (map: maps[index], index))
                 .OrderByDescending(pair => pair.map.AreaLevel)
+                .ThenByDescending(pair => AltarScore(pair.map, policy.AltarPreference))
                 .ThenBy(pair => pair.map.InstanceId, StringComparer.Ordinal)
                 .First().index
-            : 0;
+            : ranked.First().index;
     }
+
+    private static bool MatchesRoute(P1MapItem map, P5ExpeditionTarget target, ExpeditionPolicy policy)
+    {
+        MapRoute? requested = target switch
+        {
+            P5ExpeditionTarget.SafeMaps => MapRoute.Safe,
+            P5ExpeditionTarget.AbyssMaps => MapRoute.Abyss,
+            P5ExpeditionTarget.LifeGardenMaps => MapRoute.LifeGarden,
+            _ => null,
+        };
+        return requested is not null
+            ? map.EffectiveRouteCandidates.Contains(requested.Value)
+            : map.EffectiveRouteCandidates.Any(route => !(policy.BlockedRoutes ?? []).Contains(route));
+    }
+
+    private static bool MatchesRisk(P1MapItem map, P5ExpeditionTarget target, ExpeditionPolicy policy)
+    {
+        MapRoute? requested = target switch
+        {
+            P5ExpeditionTarget.SafeMaps => MapRoute.Safe,
+            P5ExpeditionTarget.AbyssMaps => MapRoute.Abyss,
+            P5ExpeditionTarget.LifeGardenMaps => MapRoute.LifeGarden,
+            _ => null,
+        };
+        return requested is not null
+            ? map.DangerFor(requested.Value) <= policy.MaximumMapDanger
+            : map.EffectiveRouteCandidates.Any(route => !(policy.BlockedRoutes ?? []).Contains(route) &&
+                map.DangerFor(route) <= policy.MaximumMapDanger);
+    }
+
+    private static int AltarScore(P1MapItem map, MapAltarPreference preference) => preference switch
+    {
+        MapAltarPreference.Avoid => map.Altar == GameForWork.Core.P12.P12MapAltar.None ? 2 : 0,
+        MapAltarPreference.RedOath => map.Altar == GameForWork.Core.P12.P12MapAltar.RedOath ? 2 : 0,
+        MapAltarPreference.BlueOath => map.Altar == GameForWork.Core.P12.P12MapAltar.BlueOath ? 2 : 0,
+        _ => 1,
+    };
 
     private void Stop(P1TeamExpeditionState team, P5TeamDispatchSnapshot dispatch, string reason)
     {

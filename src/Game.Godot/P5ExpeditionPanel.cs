@@ -3,6 +3,7 @@ using GameForWork.Core.P1.World;
 using GameForWork.Core.P5;
 using GameForWork.Core.P6;
 using GameForWork.Core.P10;
+using GameForWork.Core.P12;
 using Godot;
 
 namespace GameForWork.GodotClient;
@@ -16,6 +17,8 @@ public partial class P5ExpeditionPanel : VBoxContainer
     private Label? _resources;
     private VBoxContainer? _mapInventory;
     private VBoxContainer? _reports;
+    private Label? _mapDetails;
+    private int _selectedMapIndex = -1;
     private string _mapSignature = string.Empty;
     private string _reportSignature = string.Empty;
     private string _dispatchSignature = string.Empty;
@@ -27,19 +30,54 @@ public partial class P5ExpeditionPanel : VBoxContainer
         _resources = new Label { AutowrapMode = TextServer.AutowrapMode.WordSmart };
         AddChild(_resources);
 
-        var body = new HBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
+        var body = new HBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill, SizeFlagsVertical = SizeFlags.ExpandFill };
         body.AddThemeConstantOverride("separation", 14);
         AddChild(body);
 
         var warehouse = new VBoxContainer
         {
-            CustomMinimumSize = new Vector2(235, 0),
+            CustomMinimumSize = new Vector2(310, 0),
+            SizeFlagsHorizontal = SizeFlags.ExpandFill,
+        };
+        warehouse.AddChild(new Label { Text = "路印仓与制图" });
+        var mapScroll = new ScrollContainer { CustomMinimumSize = new Vector2(0, 230), SizeFlagsVertical = SizeFlags.ExpandFill };
+        _mapInventory = new VBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
+        mapScroll.AddChild(_mapInventory); warehouse.AddChild(mapScroll);
+        _mapDetails = new Label { AutowrapMode = TextServer.AutowrapMode.WordSmart, CustomMinimumSize = new Vector2(0, 116) };
+        warehouse.AddChild(_mapDetails);
+        var craft = new HFlowContainer(); warehouse.AddChild(craft);
+        AddCraftButton(craft, "精磨 +5%", P12MapCraftOperation.PolishQuality);
+        AddCraftButton(craft, "升魔法", P12MapCraftOperation.AwakenMagic);
+        AddCraftButton(craft, "升稀有", P12MapCraftOperation.AlchemicalRare);
+        AddCraftButton(craft, "混沌重铸", P12MapCraftOperation.ChaosReroll);
+        AddCraftButton(craft, "腐化", P12MapCraftOperation.Corrupt);
+        var batchRules = new HFlowContainer(); warehouse.AddChild(batchRules);
+        var batchQuality = new SpinBox { MinValue = 0, MaxValue = 20, Step = 5, Value = 20, Prefix = "品质 " }; batchRules.AddChild(batchQuality);
+        var batchRarity = new OptionButton(); batchRarity.AddItem("升魔法", (int)P12MapRarity.Magic); batchRarity.AddItem("升稀有", (int)P12MapRarity.Rare); batchRarity.Select(1); batchRules.AddChild(batchRarity);
+        var batchExclude = new OptionButton(); batchExclude.AddItem("不排除词缀", -1);
+        foreach (P12MapAffixKind kind in Enum.GetValues<P12MapAffixKind>()) batchExclude.AddItem($"排除 {kind}", (int)kind);
+        batchRules.AddChild(batchExclude);
+        var batchBudget = new SpinBox { MinValue = 1, MaxValue = 30, Value = 8, Prefix = "单图预算 " }; batchRules.AddChild(batchBudget);
+        var batchCorrupt = new CheckBox { Text = "最终腐化" }; batchRules.AddChild(batchCorrupt);
+        var batchFailure = new OptionButton(); batchFailure.AddItem("失败保留继续", (int)P12BatchFailureBehavior.Keep); batchFailure.AddItem("失败跳过", (int)P12BatchFailureBehavior.Skip); batchFailure.AddItem("失败即停", (int)P12BatchFailureBehavior.Stop); batchRules.AddChild(batchFailure);
+        var batch = new Button { Text = "执行批量制图", TooltipText = "材料消耗严格受单图预算限制。" };
+        batch.Pressed += () =>
+        {
+            int excludedId = batchExclude.GetItemId(batchExclude.Selected);
+            P12MapBatchResult result = _session!().BatchCraftMaps(new P12MapBatchRule(
+                (P12MapRarity)batchRarity.GetItemId(batchRarity.Selected), (int)batchQuality.Value,
+                excludedId < 0 ? [] : [(P12MapAffixKind)excludedId], (int)batchBudget.Value,
+                batchCorrupt.ButtonPressed, (P12BatchFailureBehavior)batchFailure.GetItemId(batchFailure.Selected)));
+            _mapSignature = string.Empty; _changed?.Invoke(result.Summary); RefreshState();
+        };
+        warehouse.AddChild(batch);
+        var warehouseScroll = new ScrollContainer
+        {
+            CustomMinimumSize = new Vector2(325, 0),
             SizeFlagsVertical = SizeFlags.ExpandFill,
         };
-        warehouse.AddChild(new Label { Text = "目标仓库" });
-        _mapInventory = new VBoxContainer();
-        warehouse.AddChild(_mapInventory);
-        body.AddChild(Frame(warehouse));
+        warehouseScroll.AddChild(warehouse);
+        body.AddChild(Frame(warehouseScroll));
 
         var dispatches = new VBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
         dispatches.AddChild(BuildTeamCard(ExpeditionTeamKind.Hero, "主角"));
@@ -50,7 +88,13 @@ public partial class P5ExpeditionPanel : VBoxContainer
             AutowrapMode = TextServer.AutowrapMode.WordSmart,
         };
         dispatches.AddChild(help);
-        body.AddChild(dispatches);
+        var dispatchScroll = new ScrollContainer
+        {
+            SizeFlagsHorizontal = SizeFlags.ExpandFill,
+            SizeFlagsVertical = SizeFlags.ExpandFill,
+        };
+        dispatchScroll.AddChild(dispatches);
+        body.AddChild(dispatchScroll);
 
         var reportToggle = new Button { Text = "展开最近 50 次战斗报告", ToggleMode = true };
         AddChild(reportToggle);
@@ -82,15 +126,27 @@ public partial class P5ExpeditionPanel : VBoxContainer
             $"Boss 门票 {session.World.Expedition.AbyssWardenTickets}　远征补给 {session.World.Economy.ExpeditionSupplies}";
         string mapSignature = $"{session.World.Expedition.AbyssWardenFragments}:{session.World.Expedition.AbyssWardenTickets}:" +
             $"{session.World.Expedition.MapsTowardNextFragment}|" +
-            string.Join(',', session.World.MapInventory.OrderBy(map => map.InstanceId).Select(map => $"{map.InstanceId}:{map.AreaLevel}"));
+            string.Join(',', session.World.MapInventory.Select(map => $"{map.InstanceId}:{map.AreaLevel}:{map.Rarity}:{map.Quality}:{map.IsCorrupted}:{map.SelectedRoute}"));
         if (mapSignature != _mapSignature)
         {
             _mapSignature = mapSignature;
             Clear(_mapInventory);
-            for (int tier = P1MapItem.MinimumAreaLevel; tier <= P1MapItem.MaximumAreaLevel; tier++)
+            if (_selectedMapIndex >= session.World.MapInventory.Count) _selectedMapIndex = session.World.MapInventory.Count - 1;
+            foreach ((P1MapItem raw, int index) in session.World.MapInventory.Select((map, index) => (map, index)).Take(40))
             {
-                int count = session.World.MapInventory.Count(map => map.AreaLevel == tier);
-                if (count > 0) _mapInventory.AddChild(new Label { Text = $"T{tier} 地图　×{count}" });
+                P1MapItem map = raw.EnsureFormal(session.Seed ^ (ulong)index);
+                session.World.MapInventory[index] = map;
+                P12MapArea area = P12MapCatalog.Get(map.AreaId);
+                var button = new Button
+                {
+                    Text = $"{RarityMark(map.Rarity)} T{map.AreaLevel} {area.DisplayName}　Q{map.Quality}" + (map.IsCorrupted ? "　腐化" : string.Empty),
+                    Alignment = HorizontalAlignment.Left,
+                    TooltipText = DescribeMap(map),
+                    ButtonPressed = index == _selectedMapIndex,
+                    ToggleMode = true,
+                };
+                button.Pressed += () => { _selectedMapIndex = index; _mapSignature = string.Empty; RefreshState(); };
+                _mapInventory.AddChild(button);
             }
             if (session.World.MapInventory.Count == 0) _mapInventory.AddChild(new Label { Text = "地图仓库为空" });
             _mapInventory.AddChild(new HSeparator());
@@ -100,6 +156,7 @@ public partial class P5ExpeditionPanel : VBoxContainer
                        $"深渊监守者碎片 {session.World.Expedition.AbyssWardenFragments}/{P5ExpeditionDirector.FragmentsPerTicket}\n" +
                        $"完整门票 ×{session.World.Expedition.AbyssWardenTickets}",
             });
+            RefreshMapDetails(session);
         }
 
         string reportSignature = string.Join('|', session.World.Expedition.Reports.Select(report => report.StableId));
@@ -153,6 +210,7 @@ public partial class P5ExpeditionPanel : VBoxContainer
         var target = new OptionButton();
         target.AddItem("安全探索", (int)P5ExpeditionTarget.SafeMaps);
         target.AddItem("裂渊追猎", (int)P5ExpeditionTarget.AbyssMaps);
+        target.AddItem("命能花园", (int)P5ExpeditionTarget.LifeGardenMaps);
         target.AddItem("最高阶推进", (int)P5ExpeditionTarget.HighestTierMaps);
         target.AddItem("深渊监守者", (int)P5ExpeditionTarget.AbyssWarden);
         target.AddItem("Boss 练习", (int)P5ExpeditionTarget.AbyssWardenPractice);
@@ -162,6 +220,13 @@ public partial class P5ExpeditionPanel : VBoxContainer
         mode.AddItem("重复同类", (int)P5DispatchMode.Repeat);
         mode.AddItem("最高阶持续推进", (int)P5DispatchMode.HighestAvailable);
         selectors.AddChild(mode);
+        var danger = new SpinBox { MinValue = 10, MaxValue = 100, Step = 5, Value = 75, TooltipText = "方针允许的最高地图危险度" };
+        danger.Suffix = " 风险"; selectors.AddChild(danger);
+        var maximumTier = new SpinBox { MinValue = 1, MaxValue = 20, Value = 16, Prefix = "最高 T" }; selectors.AddChild(maximumTier);
+        var altar = new OptionButton(); altar.AddItem("祭坛不限", (int)MapAltarPreference.Any); altar.AddItem("避开祭坛", (int)MapAltarPreference.Avoid); altar.AddItem("偏好赤誓", (int)MapAltarPreference.RedOath); altar.AddItem("偏好苍誓", (int)MapAltarPreference.BlueOath); selectors.AddChild(altar);
+        var blockAbyss = new CheckBox { Text = "屏蔽裂渊" }; selectors.AddChild(blockAbyss);
+        var blockGarden = new CheckBox { Text = "屏蔽花园" }; selectors.AddChild(blockGarden);
+        var fragments = new CheckBox { Text = "使用稀有碎片" }; selectors.AddChild(fragments);
         target.ItemSelected += index =>
         {
             P5ExpeditionTarget selected = (P5ExpeditionTarget)target.GetItemId((int)index);
@@ -176,6 +241,21 @@ public partial class P5ExpeditionPanel : VBoxContainer
         {
             P5ExpeditionTarget selectedTarget = (P5ExpeditionTarget)target.GetItemId(target.Selected);
             P5DispatchMode selectedMode = (P5DispatchMode)mode.GetItemId(mode.Selected);
+            P1TeamExpeditionState team = kind == ExpeditionTeamKind.Hero ? _session!().World.Hero : _session!().World.Mercenaries;
+            MapRoute preferred = selectedTarget switch { P5ExpeditionTarget.AbyssMaps => MapRoute.Abyss, P5ExpeditionTarget.LifeGardenMaps => MapRoute.LifeGarden, _ => MapRoute.Safe };
+            var blocked = new List<MapRoute>();
+            if (blockAbyss.ButtonPressed && preferred != MapRoute.Abyss) blocked.Add(MapRoute.Abyss);
+            if (blockGarden.ButtonPressed && preferred != MapRoute.LifeGarden) blocked.Add(MapRoute.LifeGarden);
+            _session!().SetExpeditionPolicy(kind, team.Policy with
+            {
+                PreferredRoute = preferred,
+                RoutePriority = new[] { preferred, MapRoute.Safe, MapRoute.LifeGarden, MapRoute.Abyss }.Distinct().ToArray(),
+                BlockedRoutes = blocked,
+                MaximumMapDanger = (int)danger.Value,
+                MaximumMapTier = (int)maximumTier.Value,
+                AltarPreference = (MapAltarPreference)altar.GetItemId(altar.Selected),
+                UseRareFragments = fragments.ButtonPressed,
+            });
             _session!().AssignExpedition(kind, selectedTarget, selectedMode);
             _mapSignature = string.Empty;
             _changed?.Invoke($"{title}已派往{TargetName(selectedTarget)}。");
@@ -231,6 +311,7 @@ public partial class P5ExpeditionPanel : VBoxContainer
     {
         P5ExpeditionTarget.SafeMaps => "安全探索",
         P5ExpeditionTarget.AbyssMaps => "裂渊追猎",
+        P5ExpeditionTarget.LifeGardenMaps => "命能花园",
         P5ExpeditionTarget.HighestTierMaps => "最高阶推进",
         P5ExpeditionTarget.AbyssWarden => "深渊监守者",
         P5ExpeditionTarget.AbyssWardenPractice => "Boss 练习",
@@ -246,6 +327,8 @@ public partial class P5ExpeditionPanel : VBoxContainer
         "boss_ticket_missing" => "缺少 Boss 门票",
         "consecutive_failures" => "连续失败达到 3 次",
         "storage_full" => "仓库已满",
+        "tier_locked" => "T17–T20 尚未通过门扉突破",
+        "map_policy_limit" => "地图超过本队方针风险或阶级上限",
         "manual_stop" => "玩家手动停止",
         "cancelled" => "玩家取消派遣",
         _ when string.IsNullOrWhiteSpace(reason) => "等待重新派遣",
@@ -279,6 +362,57 @@ public partial class P5ExpeditionPanel : VBoxContainer
             child.QueueFree();
         }
     }
+
+    private void AddCraftButton(Control parent, string text, P12MapCraftOperation operation)
+    {
+        var button = new Button { Text = text };
+        button.Pressed += () =>
+        {
+            if (_selectedMapIndex < 0) { _changed?.Invoke("请先选择一张路印。"); return; }
+            P12MapCraftResult result = _session!().CraftMap(_selectedMapIndex, operation);
+            _mapSignature = string.Empty;
+            _changed?.Invoke(result.Succeeded ? $"制图完成：{text}。" : $"制图失败：{result.Summary}。");
+            RefreshState();
+        };
+        parent.AddChild(button);
+    }
+
+    private void RefreshMapDetails(P1GameSession session)
+    {
+        if (_mapDetails is null) return;
+        if (_selectedMapIndex < 0 || _selectedMapIndex >= session.World.MapInventory.Count)
+        { _mapDetails.Text = "选择路印后可查看词缀、候选收益路线并加工。"; return; }
+        P1MapItem map = session.World.MapInventory[_selectedMapIndex];
+        _mapDetails.Text = DescribeMap(map);
+        var routeBar = new HFlowContainer();
+        _mapInventory!.AddChild(new Label { Text = "选定路线（每图仅一条）：" });
+        _mapInventory.AddChild(routeBar);
+        foreach (MapRoute route in map.EffectiveRouteCandidates)
+        {
+            var button = new Button { Text = RouteName(route), ToggleMode = true, ButtonPressed = map.SelectedRoute == route };
+            button.Pressed += () =>
+            {
+                _session!().TrySelectMapRoute(_selectedMapIndex, route);
+                _mapSignature = string.Empty; _changed?.Invoke($"已选路线：{RouteName(route)}。"); RefreshState();
+            };
+            routeBar.AddChild(button);
+        }
+    }
+
+    private static string DescribeMap(P1MapItem map)
+    {
+        P12MapArea area = P12MapCatalog.Get(map.AreaId);
+        string affixes = map.EffectiveAffixes.Count == 0 ? "无显式词缀" :
+            string.Join("；", map.EffectiveAffixes.Select(affix => $"{affix.DisplayName} {affix.Value}%"));
+        string routes = string.Join(" / ", map.EffectiveRouteCandidates.Select(RouteName));
+        string altar = map.Altar switch { P12MapAltar.RedOath => "赤誓祭坛", P12MapAltar.BlueOath => "苍誓祭坛", _ => "无祭坛" };
+        return $"{area.DisplayName} · {area.Environment} · Boss {area.BossName}\n{RarityMark(map.Rarity)} · 品质 {map.Quality}% · 危险 {map.DangerRating} · 掉落量 {map.ItemQuantityBasisPoints / 100.0:0}%\n{affixes}\n候选 {routes} · {altar}";
+    }
+
+    private static string RarityMark(P12MapRarity rarity) => rarity switch
+    { P12MapRarity.Basic => "普通", P12MapRarity.Magic => "魔法", _ => "稀有" };
+    private static string RouteName(MapRoute route) => route switch
+    { MapRoute.Safe => "安全探索", MapRoute.Abyss => "裂渊追猎", _ => "命能花园" };
 
     private sealed record TeamControls(OptionButton Target, OptionButton Mode, Label Status);
 }

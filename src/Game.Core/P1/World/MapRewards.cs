@@ -40,12 +40,14 @@ public static class P1MapRewardGenerator
         "core.base.life_flask",
     ];
 
-    public static P1MapRewards Generate(P1MapItem completedMap, MapRoute route, ulong seed)
+    public static P1MapRewards Generate(P1MapItem completedMap, MapRoute route, ulong seed, int maximumUnlockedTier = P1MapItem.MaximumAreaLevel)
     {
         ArgumentNullException.ThrowIfNull(completedMap);
         completedMap.Validate();
         var random = new Pcg32(seed);
-        int itemCount = 3 + Next(random, 3) + (route == MapRoute.Safe ? 2 : 0);
+        completedMap = completedMap.EnsureFormal(seed);
+        int quantityBonus = Math.Max(0, completedMap.ItemQuantityBasisPoints - 10_000);
+        int itemCount = 3 + Next(random, 3) + (route == MapRoute.Safe ? 2 : 0) + quantityBonus / 4_000;
         var equipment = new List<ItemInstance>(itemCount + 1);
         for (int index = 0; index < itemCount; index++)
         {
@@ -72,12 +74,12 @@ public static class P1MapRewardGenerator
         var maps = new List<P1MapItem>(2);
         if (random.NextBasisPoints() < 8_500)
         {
-            maps.Add(CreateDroppedMap(completedMap, random, maps.Count));
+            maps.Add(CreateDroppedMap(completedMap, random, maps.Count, maximumUnlockedTier));
         }
 
         if (random.NextBasisPoints() < 1_000)
         {
-            maps.Add(CreateDroppedMap(completedMap, random, maps.Count));
+            maps.Add(CreateDroppedMap(completedMap, random, maps.Count, maximumUnlockedTier));
         }
 
         int gold = 15 + Next(random, 11) + (route == MapRoute.Safe ? 10 : 0);
@@ -98,6 +100,11 @@ public static class P1MapRewardGenerator
                 }
             }
         }
+        else if (route == MapRoute.LifeGarden)
+        {
+            gold += 4;
+            scraps += 2;
+        }
 
         MetalCurrencyKind commonMetal = RollMetal(random, allowDangerous: false);
         var metals = new List<MetalCurrencyStack> { new(commonMetal, 1 + Next(random, 2)) };
@@ -117,12 +124,13 @@ public static class P1MapRewardGenerator
             legendary);
     }
 
-    private static P1MapItem CreateDroppedMap(P1MapItem source, Pcg32 random, int ordinal)
+    private static P1MapItem CreateDroppedMap(P1MapItem source, Pcg32 random, int ordinal, int maximumUnlockedTier)
     {
         int areaLevel = random.NextBasisPoints() < 6_000
-            ? Math.Min(P1MapItem.MaximumAreaLevel, source.AreaLevel + 1)
+            ? Math.Min(maximumUnlockedTier, source.AreaLevel + 1)
             : source.AreaLevel;
-        return new P1MapItem($"map-{source.InstanceId}-{ordinal}-{random.NextUInt():x8}", areaLevel);
+        string id = $"map-{source.InstanceId}-{ordinal}-{random.NextUInt():x8}";
+        return new P1MapItem(id, Math.Min(maximumUnlockedTier, areaLevel)).EnsureFormal(random.NextUInt());
     }
 
     private static ItemRarity RollRarity(Pcg32 random)

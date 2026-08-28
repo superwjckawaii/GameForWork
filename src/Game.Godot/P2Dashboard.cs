@@ -339,9 +339,11 @@ public partial class P2Dashboard : VBoxContainer
             Refresh();
         };
         dispatch.AddChild(_expeditionPanel);
-        _endgamePanel = new P10EndgamePanel { Name = "异界与突破", SizeFlagsVertical = SizeFlags.ExpandFill };
+        var endgameTab = new VBoxContainer { Name = "异界与突破", SizeFlagsVertical = SizeFlags.ExpandFill };
+        var endgameScroll = new ScrollContainer { SizeFlagsVertical = SizeFlags.ExpandFill, SizeFlagsHorizontal = SizeFlags.ExpandFill };
+        _endgamePanel = new P10EndgamePanel { SizeFlagsVertical = SizeFlags.ExpandFill, SizeFlagsHorizontal = SizeFlags.ExpandFill };
         _endgamePanel.Initialize(RequireSession, Changed);
-        tabs.AddChild(_endgamePanel);
+        endgameScroll.AddChild(_endgamePanel); endgameTab.AddChild(endgameScroll); tabs.AddChild(endgameTab);
         return Wrap(page);
     }
 
@@ -402,8 +404,10 @@ public partial class P2Dashboard : VBoxContainer
         };
         var sidebar = new TabContainer { CustomMinimumSize = new Vector2(304, 0), SizeFlagsVertical = SizeFlags.ExpandFill };
         workspace.AddChild(sidebar);
-        var equipment = new VBoxContainer { Name = "装备", SizeFlagsVertical = SizeFlags.ExpandFill };
-        sidebar.AddChild(equipment);
+        var equipmentScroll = new ScrollContainer { Name = "装备", SizeFlagsVertical = SizeFlags.ExpandFill, SizeFlagsHorizontal = SizeFlags.ExpandFill };
+        sidebar.AddChild(equipmentScroll);
+        var equipment = new VBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
+        equipmentScroll.AddChild(equipment);
         _metalMode = BuildMetalMode();
         _metalMode.Name = "金属";
         sidebar.AddChild(_metalMode);
@@ -483,7 +487,7 @@ public partial class P2Dashboard : VBoxContainer
         _craftingStatus = new Label { AutowrapMode = TextServer.AutowrapMode.WordSmart };
         body.AddChild(_craftingStatus);
 
-        var safetyTabs = new TabContainer { CustomMinimumSize = new Vector2(0, 150) };
+        var safetyTabs = new TabContainer { CustomMinimumSize = new Vector2(0, 210) };
         body.AddChild(safetyTabs);
         var recovery = Page("恢复箱");
         recovery.AddChild(new Label { Text = "永久保存，只能取出；非空时总览持续警告。" });

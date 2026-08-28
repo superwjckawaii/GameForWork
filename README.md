@@ -2,7 +2,7 @@
 
 一款面向 Windows PC 的单机挂机构筑游戏。玩家培养一名可深度构筑的主角、运营建立在古代门扉旁的城镇，并通过消耗地图与远征补给持续探索破碎世界。
 
-项目已完成 P0～P10，实现五幕主线、确定性空间群战、装备孔组与技能石、双队伍远征、离线结算和持久化 Demo 主旅程。P10 将异界扩展至 T20，加入 1,624 节点主天赋树、360 节点异界天赋、四类地图收益路线、首个高阶攻坚链与铁誓突破树，并完成主要界面和周期卡顿修复。
+项目已完成 P0～P12，实现五幕主线、确定性空间群战、装备孔组与技能石、双队伍远征、离线结算和持久化 Demo 主旅程。P11 完成八档字体与响应式桌面 UI；P12 将路印升级为包含区域、词缀、品质、腐化和候选路线的正式实体，接入金属加工、批量制图、独立远征方针、T17 门禁和三套异界方案。
 
 ## 本地运行与验证
 
@@ -29,7 +29,8 @@
 
 - [已确认游戏设计基线](docs/GAME_DESIGN_BASELINE.md)
 - [已确认技术架构](docs/TECHNICAL_ARCHITECTURE.md)
-- [P0～P10 开发计划与协作流程](docs/DEVELOPMENT_PLAN.md)
+- [P0～P15 开发计划与协作流程](docs/DEVELOPMENT_PLAN.md)
+- [首个完整可玩 Demo 路线图](docs/DEMO_ROADMAP.md)
 - [P0 技术实现规格](docs/P0_SPECIFICATION.md)
 - [P1 垂直切片规格](docs/P1_SPECIFICATION.md)
 - [P2 纵向切片规格](docs/P2_SPECIFICATION.md)
@@ -42,4 +43,6 @@
 - [P8 Demo 主旅程与首次体验规格](docs/P8_SPECIFICATION.md)
 - [P9 固定城区、佣兵编队与金属仓规格](docs/P9_SPECIFICATION.md)
 - [P10 异界终局、复杂天赋树与性能修复规格](docs/P10_SPECIFICATION.md)
+- [P11 响应式桌面 UI 与交互性能规格](docs/P11_SPECIFICATION.md)
+- [P12 正式地图实体、制作与远征方针规格](docs/P12_SPECIFICATION.md)
 - [待讨论与开发决策](docs/OPEN_QUESTIONS.md)
