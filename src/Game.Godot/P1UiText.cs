@@ -23,9 +23,9 @@ internal static class P1UiText
             text.AppendLine($"护甲 {item.Base.Armor} · 闪避 {item.Base.Evasion} · 护盾 {item.Base.Shield}");
         }
 
-        if (item.Base.CoreSkillCapacity + item.Base.SupportLinkCapacity > 0)
+        if (item.LinkedSocketCount > 0)
         {
-            text.AppendLine($"核心槽 {item.Base.CoreSkillCapacity} · 连接容量 {item.Base.SupportLinkCapacity + item.ExtraSupportLinkCapacity}");
+            text.AppendLine($"连接孔组：{item.LinkedSocketCount} 连");
         }
 
         if (item.Base.ImplicitModifier != ItemModifierKind.None)
@@ -35,8 +35,8 @@ internal static class P1UiText
 
         foreach (AffixRoll affix in item.Affixes)
         {
-            string crafted = affix.Crafted ? "（工匠）" : string.Empty;
-            text.AppendLine($"{PositionName(affix.Definition.Position)} T{affix.Definition.Tier} {affix.Definition.DisplayName}{crafted}：" +
+            string markers = (affix.Crafted ? "（工匠）" : string.Empty) + (item.IsFractured(affix) ? "（破溃）" : string.Empty);
+            text.AppendLine($"{PositionName(affix.Definition.Position)} T{affix.Definition.Tier} {affix.Definition.DisplayName}{markers}：" +
                 Modifier(affix.Definition.ModifierKind, affix.Value));
         }
 

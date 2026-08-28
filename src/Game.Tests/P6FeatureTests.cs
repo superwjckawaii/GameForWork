@@ -1,6 +1,7 @@
 using GameForWork.Core.P1;
 using GameForWork.Core.P1.Items;
 using GameForWork.Core.P6;
+using GameForWork.Core.P2;
 
 namespace GameForWork.Tests;
 
@@ -43,6 +44,36 @@ public sealed class P6FeatureTests
         Assert.Equal(
             first.GetSkillChains().Select(chain => chain.TotalSockets),
             second.GetSkillChains().Select(chain => chain.TotalSockets));
+    }
+
+    [Fact]
+    public void SkillStoneHasOneLocationAndSupportCanWaitForActive()
+    {
+        P1GameSession session = CreateSession();
+        var management = session.Management;
+        var groups = session.GetSkillChains();
+        var target = groups[0];
+        SkillLinkConfiguration? existing = management.SkillLinks.FirstOrDefault(link => link.ChainId == target.StableId);
+        if (existing?.SocketStoneInstanceIds is not null)
+        {
+            for (int index = 0; index < target.TotalSockets; index++)
+            {
+                session.UnsocketSkillStone(target.StableId, index);
+            }
+        }
+        SkillStoneInstance support = management.UninstalledSkillStones.First(stone =>
+            stone.Definition.Kind == SkillStoneKind.Support);
+
+        Assert.True(session.TryPlaceSkillStone(target.StableId, 1, support.InstanceId));
+        SkillLinkConfiguration waiting = management.SkillLinks.Single(link => link.ChainId == target.StableId);
+        Assert.Empty(waiting.ActiveStoneInstanceId);
+        Assert.Contains(support.InstanceId, management.InstalledSkillStoneIds);
+        Assert.DoesNotContain(management.UninstalledSkillStones, stone => stone.InstanceId == support.InstanceId);
+
+        var other = groups[1];
+        Assert.True(session.TryPlaceSkillStone(other.StableId, 1, support.InstanceId));
+        Assert.Equal(1, management.SkillLinks.Sum(link =>
+            (link.SocketStoneInstanceIds ?? []).Count(id => id == support.InstanceId)));
     }
 
     private static P1GameSession CreateSession() => P1GameSession.CreateNew(new PlayerIdentity(

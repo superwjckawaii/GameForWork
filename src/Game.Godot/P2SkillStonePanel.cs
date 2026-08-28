@@ -9,8 +9,10 @@ public partial class P2SkillStonePanel : VBoxContainer
 {
     private Func<P1GameSession>? _session;
     private Action<string>? _changed;
-    private HFlowContainer? _inventory;
-    private VBoxContainer? _links;
+    private VBoxContainer? _inventory;
+    private VBoxContainer? _groups;
+    private Label? _details;
+    private Label? _errors;
     private string _signature = string.Empty;
     private bool _readOnly;
 
@@ -18,20 +20,39 @@ public partial class P2SkillStonePanel : VBoxContainer
     {
         _session = session;
         _changed = changed;
-        AddChild(new Label { Text = "技能石仓库 · 装备生成技能链；主动石放入核心孔，辅助石放入相连孔" });
-        _inventory = new HFlowContainer();
-        AddChild(_inventory);
-        _links = new VBoxContainer();
-        AddChild(_links);
+        AddChild(new Label { Text = "装备实例连接孔组 · 每组最多一个主动技能；技能石只能位于仓库或一个孔位" });
+        var columns = new HBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
+        columns.AddThemeConstantOverride("separation", 10);
+        AddChild(columns);
+        VBoxContainer left = Column(columns, "未安装技能石", 205);
+        var inventoryScroll = new ScrollContainer { CustomMinimumSize = new Vector2(195, 270) };
+        left.AddChild(inventoryScroll);
+        _inventory = new VBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
+        inventoryScroll.AddChild(_inventory);
+        VBoxContainer middle = Column(columns, "当前装备孔组", 430);
+        _groups = new VBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
+        middle.AddChild(_groups);
+        VBoxContainer right = Column(columns, "技能说明与兼容性", 235);
+        _details = new Label
+        {
+            Text = "选择技能石查看实例与最终效果。",
+            AutowrapMode = TextServer.AutowrapMode.WordSmart,
+            SizeFlagsVertical = SizeFlags.ExpandFill,
+        };
+        right.AddChild(_details);
+        var schemes = new HFlowContainer();
+        AddChild(schemes);
+        schemes.AddChild(new Label { Text = "技能方案：" });
+        foreach (string name in new[] { "清图", "Boss", "自定义" })
+        {
+            schemes.AddChild(new Button { Text = name, Disabled = true, TooltipText = "P6 第四批开放方案切换" });
+        }
+        _errors = new Label { AutowrapMode = TextServer.AutowrapMode.WordSmart };
+        AddChild(_errors);
     }
 
     public void SetReadOnly(bool readOnly)
     {
-        if (_readOnly == readOnly)
-        {
-            return;
-        }
-
         _readOnly = readOnly;
         _signature = string.Empty;
         RefreshState();
@@ -39,157 +60,152 @@ public partial class P2SkillStonePanel : VBoxContainer
 
     public void RefreshState()
     {
-        if (_session is null || _inventory is null || _links is null)
-        {
-            return;
-        }
-
+        if (_session is null || _inventory is null || _groups is null || _details is null || _errors is null) return;
         P1GameSession session = _session();
         P2ManagementState management = session.Management;
         IReadOnlyList<P5SkillChainDefinition> chains = session.GetSkillChains();
         string signature = _readOnly + "|" + string.Join('|', management.SkillStones.Select(item =>
             $"{item.InstanceId}:{item.Level}:{item.Experience}")) + "|" + string.Join('|', management.SkillLinks.Select(item =>
-            $"{item.ActiveStoneInstanceId}:{item.ChainId}:{string.Join(',', item.SupportStoneInstanceIds)}")) + "|" +
-            string.Join('|', chains.Select(chain => $"{chain.StableId}:{chain.SupportCapacity}"));
-        if (signature == _signature)
-        {
-            return;
-        }
-
+            $"{item.ChainId}:{string.Join(',', item.SocketStoneInstanceIds ?? [])}")) + "|" +
+            string.Join('|', chains.Select(chain => $"{chain.StableId}:{chain.TotalSockets}"));
+        if (signature == _signature) return;
         _signature = signature;
         Clear(_inventory);
-        Clear(_links);
+        Clear(_groups);
         if (_readOnly)
         {
-            _inventory.AddChild(new Label
-            {
-                Text = "佣兵技能链由装备与自主成长共同生成，玩家只能查看最终结果。",
-                AutowrapMode = TextServer.AutowrapMode.WordSmart,
-            });
+            _inventory.AddChild(new Label { Text = "佣兵技能由装备孔组和自主成长生成；玩家只能查看。", AutowrapMode = TextServer.AutowrapMode.WordSmart });
+            _errors.Text = "佣兵构筑只读";
             return;
         }
 
-        foreach (SkillStoneInstance stone in management.SkillStones)
+        foreach (SkillStoneInstance stone in management.UninstalledSkillStones
+                     .OrderBy(stone => stone.Definition.Kind).ThenBy(stone => stone.Definition.DisplayName, StringComparer.Ordinal))
         {
-            var button = new P2SkillStoneButton
-            {
-                StoneInstanceId = stone.InstanceId,
-                Text = stone.Definition.Kind == SkillStoneKind.Active
-                    ? $"◆ {stone.Definition.DisplayName}"
-                    : $"◇ {stone.Definition.DisplayName}",
-                TooltipText = $"{stone.Definition.Kind} 技能石\n等级 {stone.Level} · 经验 {stone.Experience}\n" +
-                    (stone.Definition.Kind == SkillStoneKind.Active ? "拖到装备生成的核心孔" : "拖到相连辅助孔"),
-                CustomMinimumSize = new Vector2(116, 42),
-            };
+            P2SkillStoneButton button = StoneButton(stone);
+            button.Pressed += () => ShowDetails(stone, installed: false);
             _inventory.AddChild(button);
         }
+        if (management.UninstalledSkillStones.Count == 0)
+        {
+            _inventory.AddChild(new Label { Text = "所有技能石均已安装。", Modulate = new Color("7c8490") });
+        }
 
+        var invalid = new List<string>();
         foreach (P5SkillChainDefinition chain in chains)
         {
             SkillLinkConfiguration? link = management.SkillLinks.FirstOrDefault(item => item.ChainId == chain.StableId);
-            SkillStoneInstance? active = link is null ? null :
-                management.SkillStones.Single(item => item.InstanceId == link.ActiveStoneInstanceId);
-            var zone = new P2SkillLinkZone
+            string?[] sockets = link?.SocketStoneInstanceIds?.Take(chain.TotalSockets).ToArray() ?? LegacySockets(link, chain.TotalSockets);
+            Array.Resize(ref sockets, chain.TotalSockets);
+            var panel = new VBoxContainer();
+            panel.AddThemeStyleboxOverride("panel", Frame());
+            panel.AddChild(new Label { Text = chain.DisplayName, TooltipText = $"来源：{chain.SourceSlot} · 共 {chain.TotalSockets} 个相连孔" });
+            var row = new HBoxContainer();
+            panel.AddChild(row);
+            bool hasActive = false;
+            for (int index = 0; index < chain.TotalSockets; index++)
             {
-                Panel = this,
-                ChainId = chain.StableId,
-                ActiveStoneInstanceId = active?.InstanceId ?? string.Empty,
-                CustomMinimumSize = new Vector2(0, 92),
-            };
-            zone.AddThemeStyleboxOverride("panel", Frame());
-            zone.AddChild(new Label
-            {
-                Text = $"{chain.DisplayName}　◆ {(active?.Definition.DisplayName ?? "空核心孔")}　" +
-                       $"辅助 {link?.SupportStoneInstanceIds.Count ?? 0}/{chain.SupportCapacity}",
-                TooltipText = $"来源：{chain.SourceSlot}\n此链提供 {chain.SupportCapacity} 个相连辅助孔。",
-            });
-            var sockets = new HFlowContainer();
-            zone.AddChild(sockets);
-            foreach (string supportId in link?.SupportStoneInstanceIds ?? [])
-            {
-                SkillStoneInstance support = management.SkillStones.Single(item => item.InstanceId == supportId);
-                var row = new HBoxContainer();
-                row.AddChild(new Label { Text = $"◇ {support.Definition.DisplayName}" });
-                var remove = new Button { Text = "×", TooltipText = "解除连接；技能石返回技能石仓库" };
-                remove.Pressed += () =>
+                int socketIndex = index;
+                SkillStoneInstance? stone = string.IsNullOrEmpty(sockets[index]) ? null :
+                    management.SkillStones.FirstOrDefault(item => item.InstanceId == sockets[index]);
+                hasActive |= stone?.Definition.Kind == SkillStoneKind.Active;
+                var socket = new P6SkillSocketZone
                 {
-                    if (session.UnlinkSkillSupport(active!.InstanceId, support.InstanceId))
-                    {
-                        _changed?.Invoke("辅助技能石已解除连接。");
-                        _signature = string.Empty;
-                        RefreshState();
-                    }
+                    Panel = this, ChainId = chain.StableId, SocketIndex = index,
+                    StoneInstanceId = stone?.InstanceId ?? string.Empty,
+                    Text = stone is null ? "○" : stone.Definition.Kind == SkillStoneKind.Active ? "◆" : "◇",
+                    TooltipText = stone is null ? $"空连接孔 {index + 1}" :
+                        $"{stone.Definition.DisplayName}\n等级 {stone.Level} · XP {stone.Experience}\n拖动可换孔；右键卸下",
+                    CustomMinimumSize = new Vector2(45, 42),
                 };
-                row.AddChild(remove);
-                sockets.AddChild(row);
+                if (stone is not null) socket.Pressed += () => ShowDetails(stone, installed: true);
+                row.AddChild(socket);
+                if (index + 1 < chain.TotalSockets)
+                {
+                    row.AddChild(new Label { Text = "—", VerticalAlignment = VerticalAlignment.Center });
+                }
             }
-
-            for (int index = link?.SupportStoneInstanceIds.Count ?? 0; index < chain.SupportCapacity; index++)
+            if (!hasActive && sockets.Any(id => !string.IsNullOrEmpty(id)))
             {
-                sockets.AddChild(new Label { Text = "◇ 空", Modulate = new Color("7c8490") });
+                panel.AddChild(new Label { Text = "等待主动技能 · 当前整组不产生战斗效果", Modulate = new Color("d39b58") });
+                invalid.Add($"{chain.DisplayName} 等待主动技能");
             }
-
-            _links.AddChild(zone);
+            _groups.AddChild(panel);
         }
+        if (chains.Count == 0)
+        {
+            _groups.AddChild(new Label { Text = "当前装备没有连接孔组。" });
+            invalid.Add("没有提供连接孔的装备");
+        }
+        _errors.Text = invalid.Count == 0 ? "构筑错误：无" : "构筑错误：" + string.Join("；", invalid);
     }
 
-    public void DropOnChain(string chainId, string activeInstanceId, string droppedInstanceId)
+    public void DropOnSocket(string chainId, int socketIndex, string stoneInstanceId)
     {
-        if (_readOnly || _session is null)
-        {
-            return;
-        }
-
-        P1GameSession session = _session();
-        SkillStoneInstance? dropped = session.Management.SkillStones.FirstOrDefault(item => item.InstanceId == droppedInstanceId);
-        if (dropped?.Definition.Kind == SkillStoneKind.Active)
-        {
-            bool assigned = session.TryAssignActiveSkill(droppedInstanceId, chainId);
-            _changed?.Invoke(assigned ? "主动技能石已装入装备技能链。" : "该技能与此核心孔不兼容。");
-            _signature = string.Empty;
-            RefreshState();
-            return;
-        }
-
-        if (dropped?.Definition.Kind != SkillStoneKind.Support || string.IsNullOrEmpty(activeInstanceId))
-        {
-            _changed?.Invoke("请先把主动技能石装入此链的核心孔。");
-            return;
-        }
-
-        bool linked = session.TryLinkSkillSupport(activeInstanceId, droppedInstanceId);
-        _changed?.Invoke(linked ? "辅助技能石已连接。" : "该辅助已经连接或装备提供的连接孔已满。");
+        if (_readOnly || _session is null) return;
+        bool changed = _session().TryPlaceSkillStone(chainId, socketIndex, stoneInstanceId);
+        _changed?.Invoke(changed ? "技能石已装入唯一孔位。" : "该孔位不兼容、同名辅助重复或连接组已有主动技能。");
         _signature = string.Empty;
         RefreshState();
     }
 
+    public void Unsocket(string chainId, int socketIndex)
+    {
+        if (_readOnly || _session is null) return;
+        bool changed = _session().UnsocketSkillStone(chainId, socketIndex);
+        _changed?.Invoke(changed ? "技能石已返回角色仓库。" : "孔位没有变化。");
+        _signature = string.Empty;
+        RefreshState();
+    }
+
+    private void ShowDetails(SkillStoneInstance stone, bool installed)
+    {
+        _details!.Text = $"{stone.Definition.DisplayName}\n{stone.Definition.Kind}技能石\n" +
+            $"等级 {stone.Level}/20 · 经验 {stone.Experience}\n位置：{(installed ? "已安装" : "角色技能石仓库")}\n\n" +
+            $"实例 ID：{stone.InstanceId}\n来源：{(stone.InstanceId.StartsWith("starter-", StringComparison.Ordinal) ? "初始技能" : "战斗掉落")}";
+    }
+
+    private static P2SkillStoneButton StoneButton(SkillStoneInstance stone) => new()
+    {
+        StoneInstanceId = stone.InstanceId,
+        Text = stone.Definition.Kind == SkillStoneKind.Active ? $"◆ {stone.Definition.DisplayName}" : $"◇ {stone.Definition.DisplayName}",
+        TooltipText = $"{stone.Definition.Kind}技能石 · Lv.{stone.Level} · XP {stone.Experience}\n按住 Alt 查看实例详情",
+        CustomMinimumSize = new Vector2(175, 36),
+    };
+
+    private static string?[] LegacySockets(SkillLinkConfiguration? link, int count)
+    {
+        if (link is null) return new string?[count];
+        string?[] result = new string?[] { link.ActiveStoneInstanceId }
+            .Concat(link.SupportStoneInstanceIds.Cast<string?>()).Take(count).ToArray();
+        Array.Resize(ref result, count);
+        return result;
+    }
+
+    private static VBoxContainer Column(Container parent, string title, float minimumWidth)
+    {
+        var column = new VBoxContainer { CustomMinimumSize = new Vector2(minimumWidth, 0), SizeFlagsHorizontal = SizeFlags.ExpandFill };
+        column.AddChild(new Label { Text = title });
+        parent.AddChild(column);
+        return column;
+    }
+
     private static void Clear(Node node)
     {
-        foreach (Node child in node.GetChildren())
-        {
-            child.QueueFree();
-        }
+        foreach (Node child in node.GetChildren()) child.QueueFree();
     }
 
     private static StyleBoxFlat Frame() => new()
     {
-        BgColor = new Color("151a22"),
-        BorderColor = new Color("786747"),
-        BorderWidthLeft = 1,
-        BorderWidthTop = 1,
-        BorderWidthRight = 1,
-        BorderWidthBottom = 1,
-        ContentMarginLeft = 8,
-        ContentMarginTop = 8,
-        ContentMarginRight = 8,
-        ContentMarginBottom = 8,
+        BgColor = new Color("151a22"), BorderColor = new Color("786747"),
+        BorderWidthLeft = 1, BorderWidthTop = 1, BorderWidthRight = 1, BorderWidthBottom = 1,
+        ContentMarginLeft = 8, ContentMarginTop = 6, ContentMarginRight = 8, ContentMarginBottom = 6,
     };
 }
 
 public partial class P2SkillStoneButton : Button
 {
     public string StoneInstanceId { get; set; } = string.Empty;
-
     public override Variant _GetDragData(Vector2 atPosition)
     {
         var preview = new Label { Text = Text };
@@ -198,11 +214,20 @@ public partial class P2SkillStoneButton : Button
     }
 }
 
-public partial class P2SkillLinkZone : VBoxContainer
+public partial class P6SkillSocketZone : Button
 {
     public P2SkillStonePanel? Panel { get; set; }
     public string ChainId { get; set; } = string.Empty;
-    public string ActiveStoneInstanceId { get; set; } = string.Empty;
+    public int SocketIndex { get; set; }
+    public string StoneInstanceId { get; set; } = string.Empty;
+
+    public override Variant _GetDragData(Vector2 atPosition)
+    {
+        if (string.IsNullOrEmpty(StoneInstanceId)) return default;
+        var preview = new Label { Text = Text };
+        SetDragPreview(preview);
+        return Variant.From($"p2-skill|{StoneInstanceId}");
+    }
 
     public override bool _CanDropData(Vector2 atPosition, Variant data) =>
         data.VariantType == Variant.Type.String && data.AsString().StartsWith("p2-skill|", StringComparison.Ordinal);
@@ -210,9 +235,16 @@ public partial class P2SkillLinkZone : VBoxContainer
     public override void _DropData(Vector2 atPosition, Variant data)
     {
         string[] parts = data.AsString().Split('|');
-        if (parts.Length == 2)
+        if (parts.Length == 2) Panel?.DropOnSocket(ChainId, SocketIndex, parts[1]);
+    }
+
+    public override void _GuiInput(InputEvent inputEvent)
+    {
+        if (inputEvent is InputEventMouseButton { Pressed: true, ButtonIndex: MouseButton.Right } &&
+            !string.IsNullOrEmpty(StoneInstanceId))
         {
-            Panel?.DropOnChain(ChainId, ActiveStoneInstanceId, parts[1]);
+            Panel?.Unsocket(ChainId, SocketIndex);
+            AcceptEvent();
         }
     }
 }

@@ -445,6 +445,28 @@ public sealed class P1GameSession
         return changed;
     }
 
+    public bool TryPlaceSkillStone(string chainId, int socketIndex, string stoneInstanceId)
+    {
+        bool changed = Management.TryPlaceStone(chainId, socketIndex, stoneInstanceId, GetSkillChains());
+        if (changed)
+        {
+            HeavyStrikeSupports = SupportsFor("core.skill_stone.heavy_strike");
+            RefreshHeroBuild();
+        }
+        return changed;
+    }
+
+    public bool UnsocketSkillStone(string chainId, int socketIndex)
+    {
+        bool changed = Management.UnsocketStone(chainId, socketIndex, GetSkillChains());
+        if (changed)
+        {
+            HeavyStrikeSupports = SupportsFor("core.skill_stone.heavy_strike");
+            RefreshHeroBuild();
+        }
+        return changed;
+    }
+
     public void AssignExpedition(
         ExpeditionTeamKind teamKind,
         P5ExpeditionTarget target,
@@ -741,7 +763,7 @@ public sealed class P1GameSession
         };
 
     private IReadOnlyList<SkillConfiguration> BuildActiveSkills() => Management.SkillLinks
-        .Where(link => !string.IsNullOrEmpty(link.ChainId))
+        .Where(link => !string.IsNullOrEmpty(link.ChainId) && !string.IsNullOrEmpty(link.ActiveStoneInstanceId))
         .OrderBy(link => link.Priority)
         .Select(link => Management.SkillStones.Single(stone => stone.InstanceId == link.ActiveStoneInstanceId))
         .Where(stone => stone.DefinitionId != "core.skill_stone.war_cry")

@@ -66,7 +66,8 @@ public sealed record SkillLinkConfiguration(
     string ActiveStoneInstanceId,
     IReadOnlyList<string> SupportStoneInstanceIds,
     int Priority,
-    string ChainId = "");
+    string ChainId = "",
+    IReadOnlyList<string?>? SocketStoneInstanceIds = null);
 
 public sealed record BuybackEntry(ItemInstance Item, int SalePrice, long Sequence);
 
@@ -99,6 +100,15 @@ public sealed class P2ManagementState
     public IReadOnlyList<BuybackEntry> Buyback => _buyback;
     public IReadOnlyList<SkillStoneInstance> SkillStones => _skillStones;
     public IReadOnlyList<SkillLinkConfiguration> SkillLinks => _skillLinks;
+    public IReadOnlySet<string> InstalledSkillStoneIds => _skillLinks
+        .Where(link => !string.IsNullOrEmpty(link.ChainId))
+        .SelectMany(link => SocketIds(link))
+        .Where(id => !string.IsNullOrEmpty(id))
+        .Cast<string>()
+        .ToHashSet(StringComparer.Ordinal);
+    public IReadOnlyList<SkillStoneInstance> UninstalledSkillStones => _skillStones
+        .Where(stone => !InstalledSkillStoneIds.Contains(stone.InstanceId))
+        .ToArray();
     public IReadOnlyList<string> OperationHistory => _operationHistory;
     public bool FreeFullRespecAvailable { get; private set; }
 
@@ -323,7 +333,22 @@ public sealed class P2ManagementState
 
         List<string> supports = previous?.SupportStoneInstanceIds.ToList() ?? [];
         supports.Add(supportStoneInstanceId);
-        _skillLinks.Add(new SkillLinkConfiguration(activeStoneInstanceId, supports, previous?.Priority ?? _skillLinks.Count + 1));
+        string?[] sockets = previous?.SocketStoneInstanceIds?.ToArray() ??
+            new string?[] { activeStoneInstanceId }.Concat(supports.Cast<string?>()).ToArray();
+        if (!sockets.Contains(supportStoneInstanceId, StringComparer.Ordinal))
+        {
+            int empty = Array.FindIndex(sockets, string.IsNullOrEmpty);
+            if (empty >= 0)
+            {
+                sockets[empty] = supportStoneInstanceId;
+            }
+            else
+            {
+                sockets = sockets.Append(supportStoneInstanceId).ToArray();
+            }
+        }
+        _skillLinks.Add(new SkillLinkConfiguration(activeStoneInstanceId, supports,
+            previous?.Priority ?? _skillLinks.Count + 1, previous?.ChainId ?? string.Empty, sockets));
         AddHistory($"{support.Definition.DisplayName} 已连接到 {active.Definition.DisplayName}。");
         return true;
     }
@@ -362,6 +387,77 @@ public sealed class P2ManagementState
         return true;
     }
 
+    public bool TryPlaceStone(
+        string chainId,
+        int socketIndex,
+        string stoneInstanceId,
+        IReadOnlyList<P5SkillChainDefinition> chains)
+    {
+        P5SkillChainDefinition? chain = chains.FirstOrDefault(item => item.StableId == chainId);
+        SkillStoneInstance? stone = _skillStones.FirstOrDefault(item => item.InstanceId == stoneInstanceId);
+        if (chain is null || stone is null || socketIndex < 0 || socketIndex >= chain.TotalSockets)
+        {
+            return false;
+        }
+
+        SkillLinkConfiguration? target = _skillLinks.FirstOrDefault(link => link.ChainId == chainId);
+        string?[] targetSockets = target is null
+            ? new string?[chain.TotalSockets]
+            : ResizeSockets(target, chain.TotalSockets);
+        if (stone.Definition.Kind == SkillStoneKind.Active && targetSockets
+                .Where((_, index) => index != socketIndex)
+                .Select(Stone)
+                .Any(other => other?.Definition.Kind == SkillStoneKind.Active))
+        {
+            return false;
+        }
+
+        SkillStoneInstance? active = stone.Definition.Kind == SkillStoneKind.Active
+            ? stone
+            : targetSockets.Select(Stone).FirstOrDefault(item => item?.Definition.Kind == SkillStoneKind.Active);
+        if (stone.Definition.Kind == SkillStoneKind.Support && targetSockets
+                .Where((_, index) => index != socketIndex)
+                .Select(Stone)
+                .Any(other => other?.DefinitionId == stone.DefinitionId))
+        {
+            return false;
+        }
+
+        if (active is not null && stone.Definition.Kind == SkillStoneKind.Support &&
+            !P6SkillCompatibility.Check(active.Definition, stone.Definition).Compatible)
+        {
+            return false;
+        }
+
+        RemoveStoneFromAllGroups(stoneInstanceId);
+        target = _skillLinks.FirstOrDefault(link => link.ChainId == chainId);
+        targetSockets = target is null ? new string?[chain.TotalSockets] : ResizeSockets(target, chain.TotalSockets);
+        targetSockets[socketIndex] = stoneInstanceId;
+        UpsertSocketLink(target, chainId, targetSockets);
+        AddHistory($"{stone.Definition.DisplayName} 已装入 {chain.DisplayName} 第 {socketIndex + 1} 孔。");
+        return true;
+    }
+
+    public bool UnsocketStone(string chainId, int socketIndex, IReadOnlyList<P5SkillChainDefinition> chains)
+    {
+        P5SkillChainDefinition? chain = chains.FirstOrDefault(item => item.StableId == chainId);
+        SkillLinkConfiguration? link = _skillLinks.FirstOrDefault(item => item.ChainId == chainId);
+        if (chain is null || link is null || socketIndex < 0 || socketIndex >= chain.TotalSockets)
+        {
+            return false;
+        }
+
+        string?[] sockets = ResizeSockets(link, chain.TotalSockets);
+        if (string.IsNullOrEmpty(sockets[socketIndex]))
+        {
+            return false;
+        }
+        sockets[socketIndex] = null;
+        UpsertSocketLink(link, chainId, sockets);
+        AddHistory("技能石已卸下并返回角色技能石仓库。");
+        return true;
+    }
+
     public bool ReplaceSupports(
         string activeStoneInstanceId,
         IReadOnlyList<string> supportStoneInstanceIds,
@@ -384,47 +480,74 @@ public sealed class P2ManagementState
             ReplaceLink(other, other with { SupportStoneInstanceIds = retained });
         }
 
-        ReplaceLink(link, link with { SupportStoneInstanceIds = supportStoneInstanceIds.ToArray() });
+        string?[] sockets = link.SocketStoneInstanceIds is null
+            ? new string?[] { link.ActiveStoneInstanceId }.Concat(supportStoneInstanceIds.Cast<string?>()).ToArray()
+            : link.SocketStoneInstanceIds.Select(id =>
+                id == link.ActiveStoneInstanceId || supportStoneInstanceIds.Contains(id ?? string.Empty, StringComparer.Ordinal)
+                    ? id : null).ToArray();
+        foreach (string supportId in supportStoneInstanceIds.Where(id => !sockets.Contains(id, StringComparer.Ordinal)))
+        {
+            int empty = Array.FindIndex(sockets, string.IsNullOrEmpty);
+            if (empty < 0)
+            {
+                break;
+            }
+            sockets[empty] = supportId;
+        }
+        ReplaceLink(link, link with
+        {
+            SupportStoneInstanceIds = supportStoneInstanceIds.ToArray(),
+            SocketStoneInstanceIds = sockets,
+        });
         return true;
     }
 
     public int NormalizeSkillChains(IReadOnlyList<P5SkillChainDefinition> chains)
     {
-        Dictionary<string, string> preferred = new(StringComparer.Ordinal)
-        {
-            ["core.skill_stone.heavy_strike"] = P5SkillChainIds.WeaponPrimary,
-            ["core.skill_stone.earth_cleave"] = P5SkillChainIds.WeaponSecondary,
-            ["core.skill_stone.spirit_blade"] = P5SkillChainIds.Chest,
-            ["core.skill_stone.war_cry"] = P5SkillChainIds.HelmetTool,
-        };
         HashSet<string> valid = chains.Select(item => item.StableId).ToHashSet(StringComparer.Ordinal);
         var occupied = new HashSet<string>(StringComparer.Ordinal);
         int removed = 0;
         foreach (SkillLinkConfiguration original in _skillLinks.OrderBy(item => item.Priority).ToArray())
         {
-            SkillStoneInstance active = _skillStones.Single(item => item.InstanceId == original.ActiveStoneInstanceId);
+            SkillStoneInstance? active = string.IsNullOrEmpty(original.ActiveStoneInstanceId)
+                ? null
+                : _skillStones.FirstOrDefault(item => item.InstanceId == original.ActiveStoneInstanceId);
             string chainId = valid.Contains(original.ChainId) && !occupied.Contains(original.ChainId)
                 ? original.ChainId
-                : preferred.GetValueOrDefault(active.DefinitionId, string.Empty);
+                : string.Empty;
             P5SkillChainDefinition? chain = chains.FirstOrDefault(item => item.StableId == chainId);
-            if (chain is null || occupied.Contains(chainId) || !P5SkillChainRules.Accepts(chain, active.Definition))
+            if (chain is null || occupied.Contains(chainId) || active is not null && !P5SkillChainRules.Accepts(chain, active.Definition))
             {
                 chain = chains.FirstOrDefault(candidate => !occupied.Contains(candidate.StableId) &&
-                    P5SkillChainRules.Accepts(candidate, active.Definition));
+                    (active is null || P5SkillChainRules.Accepts(candidate, active.Definition)));
                 chainId = chain?.StableId ?? string.Empty;
             }
 
             if (chain is null)
             {
-                removed += original.SupportStoneInstanceIds.Count;
-                ReplaceLink(original, original with { ChainId = string.Empty, SupportStoneInstanceIds = [] });
+                removed += SocketIds(original).Count(id => !string.IsNullOrEmpty(id));
+                ReplaceLink(original, original with
+                {
+                    ChainId = string.Empty,
+                    ActiveStoneInstanceId = string.Empty,
+                    SupportStoneInstanceIds = [],
+                    SocketStoneInstanceIds = [],
+                });
                 continue;
             }
 
             occupied.Add(chainId);
-            string[] supports = original.SupportStoneInstanceIds.Take(chain.SupportCapacity).ToArray();
-            removed += original.SupportStoneInstanceIds.Count - supports.Length;
-            ReplaceLink(original, original with { ChainId = chainId, SupportStoneInstanceIds = supports });
+            string?[] previous = SocketIds(original).ToArray();
+            if (original.SocketStoneInstanceIds is null)
+            {
+                previous = new string?[] { original.ActiveStoneInstanceId }
+                    .Concat(original.SupportStoneInstanceIds.Cast<string?>())
+                    .ToArray();
+            }
+            string?[] retained = previous.Take(chain.TotalSockets).ToArray();
+            Array.Resize(ref retained, chain.TotalSockets);
+            removed += previous.Skip(chain.TotalSockets).Count(id => !string.IsNullOrEmpty(id));
+            ReplaceLink(original, BuildLink(original, chainId, retained));
         }
 
         if (removed > 0)
@@ -447,6 +570,7 @@ public sealed class P2ManagementState
         _skillLinks.Add(link with
         {
             SupportStoneInstanceIds = link.SupportStoneInstanceIds.Where(id => id != supportStoneInstanceId).ToArray(),
+            SocketStoneInstanceIds = link.SocketStoneInstanceIds?.Select(id => id == supportStoneInstanceId ? null : id).ToArray(),
         });
         AddHistory("辅助技能石已解除连接。");
         return true;
@@ -494,6 +618,58 @@ public sealed class P2ManagementState
         if (index >= 0)
         {
             _skillLinks[index] = next;
+        }
+    }
+
+    private SkillStoneInstance? Stone(string? instanceId) => string.IsNullOrEmpty(instanceId)
+        ? null
+        : _skillStones.FirstOrDefault(stone => stone.InstanceId == instanceId);
+
+    private static IEnumerable<string?> SocketIds(SkillLinkConfiguration link) =>
+        link.SocketStoneInstanceIds ?? new string?[] { link.ActiveStoneInstanceId }
+            .Concat(link.SupportStoneInstanceIds.Cast<string?>());
+
+    private static string?[] ResizeSockets(SkillLinkConfiguration link, int count)
+    {
+        string?[] result = SocketIds(link).Take(count).ToArray();
+        Array.Resize(ref result, count);
+        return result;
+    }
+
+    private SkillLinkConfiguration BuildLink(SkillLinkConfiguration? previous, string chainId, IReadOnlyList<string?> sockets)
+    {
+        string activeId = sockets.Select(Stone)
+            .FirstOrDefault(stone => stone?.Definition.Kind == SkillStoneKind.Active)?.InstanceId ?? string.Empty;
+        string[] supports = sockets.Select(Stone)
+            .Where(stone => stone?.Definition.Kind == SkillStoneKind.Support)
+            .Select(stone => stone!.InstanceId)
+            .ToArray();
+        return new SkillLinkConfiguration(activeId, supports, previous?.Priority ?? _skillLinks.Count + 1,
+            chainId, sockets.ToArray());
+    }
+
+    private void UpsertSocketLink(SkillLinkConfiguration? previous, string chainId, IReadOnlyList<string?> sockets)
+    {
+        SkillLinkConfiguration next = BuildLink(previous, chainId, sockets);
+        if (previous is null)
+        {
+            _skillLinks.Add(next);
+        }
+        else
+        {
+            ReplaceLink(previous, next);
+        }
+    }
+
+    private void RemoveStoneFromAllGroups(string instanceId)
+    {
+        foreach (SkillLinkConfiguration link in _skillLinks.ToArray())
+        {
+            string?[] sockets = SocketIds(link).Select(id => id == instanceId ? null : id).ToArray();
+            if (!sockets.SequenceEqual(SocketIds(link)))
+            {
+                ReplaceLink(link, BuildLink(link, link.ChainId, sockets));
+            }
         }
     }
 
