@@ -161,7 +161,9 @@ public partial class P2SkillStonePanel : VBoxContainer
     private void ShowDetails(SkillStoneInstance stone, bool installed)
     {
         _details!.Text = $"{stone.Definition.DisplayName}\n{stone.Definition.Kind}技能石\n" +
-            $"等级 {stone.Level}/20 · 经验 {stone.Experience}\n位置：{(installed ? "已安装" : "角色技能石仓库")}\n\n" +
+            $"等级 {stone.Level}/20 · 经验 {stone.Experience}\n位置：{(installed ? "已安装" : "角色技能石仓库")}\n" +
+            $"标签：{(stone.Definition.Kind == SkillStoneKind.Active ? stone.Definition.Tags : stone.Definition.SupportedTags)}\n" +
+            $"{stone.Definition.Description}\n\n" +
             $"实例 ID：{stone.InstanceId}\n来源：{(stone.InstanceId.StartsWith("starter-", StringComparison.Ordinal) ? "初始技能" : "战斗掉落")}";
     }
 

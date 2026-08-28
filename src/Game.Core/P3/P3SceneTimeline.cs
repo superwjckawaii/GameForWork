@@ -27,6 +27,9 @@ public enum P3SceneEventKind
     EarthCleave,
     SpiritBlade,
     Chain,
+    SeismicCharge,
+    BloodTideSpin,
+    Banner,
 }
 
 public sealed record P3GridPosition(int X, int Y);
@@ -259,6 +262,9 @@ public static class P3SceneTimelineBuilder
                 P4SpatialEventKind.EarthCleave => P3SceneEventKind.EarthCleave,
                 P4SpatialEventKind.SpiritBladeLaunched or P4SpatialEventKind.SpiritBladeHit => P3SceneEventKind.SpiritBlade,
                 P4SpatialEventKind.ChainHit => P3SceneEventKind.Chain,
+                P4SpatialEventKind.SeismicCharge => P3SceneEventKind.SeismicCharge,
+                P4SpatialEventKind.BloodTideSpin => P3SceneEventKind.BloodTideSpin,
+                P4SpatialEventKind.BannerActivated => P3SceneEventKind.Banner,
                 P4SpatialEventKind.EnemyAttack => P3SceneEventKind.EnemyAttack,
                 P4SpatialEventKind.Bleed => P3SceneEventKind.Bleed,
                 P4SpatialEventKind.Flask => P3SceneEventKind.Flask,

@@ -4,6 +4,7 @@ using GameForWork.Core.P1.Combat;
 using GameForWork.Core.P1.Items;
 using GameForWork.Core.P1.World;
 using GameForWork.Core.Simulation;
+using GameForWork.Core.P6;
 
 namespace GameForWork.Core.P4;
 
@@ -33,6 +34,9 @@ public enum P4SpatialEventKind
     EnemyDefeated,
     NodeCleared,
     HeroDefeated,
+    SeismicCharge,
+    BloodTideSpin,
+    BannerActivated,
 }
 
 public readonly record struct P4Point(int XRaw, int YRaw)
@@ -163,11 +167,35 @@ public sealed class P4SpatialCombatRunner
             hero.MaximumLife);
         heavyStrike = P1LegendaryRules.ApplyToHeavyStrike(heavyStrike, request.Build.WeaponLegendaryRule);
         var warCry = new WarCryState { EchoNotableAllocated = request.Build.EchoNotableAllocated };
+        Dictionary<string, SkillConfiguration> skills = (request.Build.ActiveSkills ?? [request.Build.HeavyStrike])
+            .GroupBy(skill => skill.SkillId, StringComparer.Ordinal)
+            .ToDictionary(group => group.Key, group => group.First(), StringComparer.Ordinal);
+        P6ResolvedSkill? cleave = Resolve(skills, P1SkillIds.EarthCleave, hero.MaximumLife);
+        P6ResolvedSkill? blade = Resolve(skills, P1SkillIds.SpiritBlade, hero.MaximumLife);
+        P6ResolvedSkill? charge = Resolve(skills, P1SkillIds.SeismicCharge, hero.MaximumLife);
+        P6ResolvedSkill? spin = Resolve(skills, P1SkillIds.BloodTideSpin, hero.MaximumLife);
+        P6ResolvedSkill? banner = Resolve(skills, P1SkillIds.IronOathBanner, hero.MaximumLife);
+        P6ResolvedSkill? warCrySkill = Resolve(skills, P1SkillIds.WarCry, hero.MaximumLife);
+        if (warCrySkill is not null)
+        {
+            warCry.ManaCost = warCrySkill.ManaCost;
+            warCry.CooldownDurationTicks = warCrySkill.CooldownTicks;
+            warCry.EffectMultiplierBasisPoints = skills[P1SkillIds.WarCry].Supports.HasFlag(SkillSupport.UrgentWarCry) ? 8_500 : 10_000;
+        }
         P4Point heroPosition = new(6_000, 22_000);
         string heroTargetId = string.Empty;
         int heroNextActionTick = 0;
         int cleaveReadyTick = 0;
         int bladeReadyTick = 0;
+        int chargeReadyTick = 0;
+        int spinReadyTick = 0;
+        int bannerMultiplier = 10_000;
+        if (banner is not null && hero.TryPayMana(Math.Max(1, hero.MaximumMana * 2_000 / 10_000)))
+        {
+            bannerMultiplier = 11_500;
+            events.Add(Event(0, P4SpatialEventKind.BannerActivated, "hero", "hero", 0,
+                heroPosition, heroPosition, "reservation:20"));
+        }
         int tick;
         CaptureFrame(frames, 0, request.NodeIndex, heroPosition, hero, heroTargetId, enemies);
 
@@ -177,13 +205,13 @@ public sealed class P4SpatialCombatRunner
             warCry.AdvanceTick();
             ResolveFlask(request, flask, hero, heroPosition, tick, events);
             ResolveBleeds(enemies, tick, events);
-            ResolveProjectiles(request, projectiles, enemies, random, tick, events);
+            ResolveProjectiles(request, projectiles, enemies, hero, random, tick, events);
 
             P4EnemyUnit? target = SelectTarget(enemies, heroPosition);
             heroTargetId = target?.EntityId ?? string.Empty;
             if (target is not null && tick >= heroNextActionTick)
             {
-                if (request.Build.UseWarCry && warCry.TryActivate(hero, tick))
+                if (request.Build.UseWarCry && warCrySkill is not null && warCry.TryActivate(hero, tick))
                 {
                     events.Add(Event(tick, P4SpatialEventKind.WarCry, "hero", target.EntityId, 0,
                         heroPosition, target.Position, "area:6000"));
@@ -192,34 +220,72 @@ public sealed class P4SpatialCombatRunner
                 else
                 {
                     long distance = P4Point.DistanceSquared(heroPosition, target.Position);
-                    P4EnemyUnit[] cleaveTargets = enemies.Where(enemy => enemy.Life > 0 &&
-                        InCleaveCone(heroPosition, target.Position, enemy.Position)).ToArray();
-                    if (tick >= cleaveReadyTick && cleaveTargets.Length >= 2 && hero.TryPayMana(P1Skills.EarthCleave.BaseManaCost))
+                    P4EnemyUnit[] cleaveTargets = cleave is null ? [] : enemies.Where(enemy => enemy.Life > 0 &&
+                        InCleaveCone(heroPosition, target.Position, enemy.Position, cleave.RangeRaw)).ToArray();
+                    P4EnemyUnit[] spinTargets = spin is null ? [] : enemies.Where(enemy => enemy.Life > 0 &&
+                        InRange(heroPosition, enemy.Position, spin.RangeRaw)).ToArray();
+                    if (charge is not null && tick >= chargeReadyTick &&
+                        distance > (long)HeavyStrikeRange * HeavyStrikeRange && distance <= (long)charge.RangeRaw * charge.RangeRaw &&
+                        P6CombatSkillRules.TryPay(hero, charge))
+                    {
+                        heroPosition = P4Point.MoveToward(heroPosition, target.Position, Math.Max(1, charge.RangeRaw - 900));
+                        foreach (P4EnemyUnit enemy in enemies.Where(enemy => enemy.Life > 0 && InRange(heroPosition, enemy.Position, 1_800)))
+                        {
+                            int multiplier = SkillMultiplier(charge, enemy, bannerMultiplier);
+                            ApplyHeroHit(request, enemy, random, tick, multiplier, P4SpatialEventKind.SeismicCharge,
+                                heroPosition, events, charge.BleedChanceBasisPoints, hero, charge.LifeLeechBasisPoints);
+                        }
+                        events.Add(Event(tick, P4SpatialEventKind.SeismicCharge, "hero", target.EntityId, 0,
+                            heroPosition, target.Position, "movement"));
+                        chargeReadyTick = tick + charge.CooldownTicks;
+                        heroNextActionTick = tick + charge.CastTimeTicks;
+                    }
+                    else if (spin is not null && tick >= spinReadyTick && spinTargets.Length >= 2 && P6CombatSkillRules.TryPay(hero, spin))
+                    {
+                        foreach (P4EnemyUnit enemy in spinTargets)
+                        {
+                            ApplyHeroHit(request, enemy, random, tick, SkillMultiplier(spin, enemy, bannerMultiplier) * 8_000 / 10_000,
+                                P4SpatialEventKind.BloodTideSpin, heroPosition, events,
+                                checked(3_500 + spin.BleedChanceBasisPoints), hero, spin.LifeLeechBasisPoints);
+                        }
+                        spinReadyTick = tick + spin.CooldownTicks;
+                        heroNextActionTick = tick + spin.CastTimeTicks;
+                    }
+                    else if (cleave is not null && tick >= cleaveReadyTick && cleaveTargets.Length >= 2 && P6CombatSkillRules.TryPay(hero, cleave))
                     {
                         foreach (P4EnemyUnit enemy in cleaveTargets)
                         {
-                            ApplyHeroHit(request, enemy, random, tick, 8_000, P4SpatialEventKind.EarthCleave,
-                                heroPosition, events, request.Build.IncreasedBleedChanceBasisPoints / 2);
+                            ApplyHeroHit(request, enemy, random, tick, SkillMultiplier(cleave, enemy, bannerMultiplier) * 8_000 / 10_000,
+                                P4SpatialEventKind.EarthCleave, heroPosition, events,
+                                checked(request.Build.IncreasedBleedChanceBasisPoints / 2 + cleave.BleedChanceBasisPoints),
+                                hero, cleave.LifeLeechBasisPoints);
                         }
 
-                        cleaveReadyTick = tick + P1Skills.EarthCleave.CooldownTicks;
-                        heroNextActionTick = tick + P1Skills.EarthCleave.CastTimeTicks;
+                        cleaveReadyTick = tick + cleave.CooldownTicks;
+                        heroNextActionTick = tick + cleave.CastTimeTicks;
                     }
-                    else if (tick >= bladeReadyTick && distance <= (long)BladeRange * BladeRange &&
-                             hero.TryPayMana(P1Skills.SpiritBlade.BaseManaCost))
+                    else if (blade is not null && tick >= bladeReadyTick && distance <= (long)blade.RangeRaw * blade.RangeRaw &&
+                             P6CombatSkillRules.TryPay(hero, blade))
                     {
-                        int travelTicks = TravelTicks(heroPosition, target.Position, 10_000);
-                        projectiles.Add(new PendingBlade(tick + travelTicks, target.EntityId, 0, 9_000,
-                            [target.EntityId], heroPosition));
+                        P4EnemyUnit[] projectileTargets = enemies.Where(enemy => enemy.Life > 0)
+                            .OrderBy(enemy => P4Point.DistanceSquared(heroPosition, enemy.Position))
+                            .Take(blade.ProjectileCount).ToArray();
+                        foreach (P4EnemyUnit projectileTarget in projectileTargets)
+                        {
+                            int travelTicks = TravelTicks(heroPosition, projectileTarget.Position, blade.ProjectileSpeedRawPerSecond);
+                            projectiles.Add(new PendingBlade(tick + travelTicks, projectileTarget.EntityId, 0,
+                                SkillMultiplier(blade, projectileTarget, bannerMultiplier) * 9_000 / 10_000,
+                                [projectileTarget.EntityId], heroPosition, blade.MaximumChains, blade.LifeLeechBasisPoints));
+                        }
                         events.Add(Event(tick, P4SpatialEventKind.SpiritBladeLaunched, "hero", target.EntityId, 0,
-                            heroPosition, target.Position, "projectile"));
-                        bladeReadyTick = tick + P1Skills.SpiritBlade.CooldownTicks;
-                        heroNextActionTick = tick + P1Skills.SpiritBlade.CastTimeTicks;
+                            heroPosition, target.Position, $"projectile:{blade.ProjectileCount}"));
+                        bladeReadyTick = tick + blade.CooldownTicks;
+                        heroNextActionTick = tick + blade.CastTimeTicks;
                     }
                     else if (distance <= (long)heavyStrike.RangeRaw * heavyStrike.RangeRaw &&
                              SkillRules.TryPaySkillCost(hero, heavyStrike))
                     {
-                        int warCryMultiplier = warCry.ConsumeHeavyStrikeMultiplier(tick);
+                        int warCryMultiplier = checked(warCry.ConsumeHeavyStrikeMultiplier(tick) * bannerMultiplier / 10_000);
                         ApplyHeroHit(request, target, random, tick, warCryMultiplier,
                             P4SpatialEventKind.HeavyStrike, heroPosition, events,
                             checked(request.Build.IncreasedBleedChanceBasisPoints + heavyStrike.BleedChanceBasisPoints));
@@ -396,7 +462,9 @@ public sealed class P4SpatialCombatRunner
         P4SpatialEventKind kind,
         P4Point source,
         ICollection<P4SpatialEvent> events,
-        int bleedChance)
+        int bleedChance,
+        ResourceState? hero = null,
+        int lifeLeechBasisPoints = 0)
     {
         DamageResult damage = DamageRules.Resolve(new DamageRequest(
             request.Build.Weapon,
@@ -412,6 +480,10 @@ public sealed class P4SpatialCombatRunner
             BleedChanceBasisPoints: bleedChance), random);
         int value = damage.Hit ? damage.FinalPhysicalDamage : 0;
         enemy.Life = Math.Max(0, enemy.Life - value);
+        if (hero is not null && value > 0 && lifeLeechBasisPoints > 0)
+        {
+            hero.HealLife(Math.Max(1, checked(value * lifeLeechBasisPoints / 10_000)));
+        }
         if (damage.AppliedBleed && enemy.Life > 0)
         {
             enemy.BleedRemaining = checked(enemy.BleedRemaining + damage.BleedTotalDamage);
@@ -431,6 +503,7 @@ public sealed class P4SpatialCombatRunner
         P4NodeCombatRequest request,
         IList<PendingBlade> projectiles,
         IList<P4EnemyUnit> enemies,
+        ResourceState hero,
         Pcg32 random,
         int tick,
         ICollection<P4SpatialEvent> events)
@@ -448,10 +521,8 @@ public sealed class P4SpatialCombatRunner
 
             ApplyHeroHit(request, target, random, tick, projectile.Multiplier,
                 projectile.ChainIndex == 0 ? P4SpatialEventKind.SpiritBladeHit : P4SpatialEventKind.ChainHit,
-                projectile.Origin, events, 0);
-            int maximumChains = request.Build.ActiveSkills?.FirstOrDefault(skill => skill.SkillId == P1SkillIds.SpiritBlade)?
-                .Supports.HasFlag(SkillSupport.Chain) == true ? 3 : 2;
-            if (projectile.ChainIndex >= maximumChains)
+                projectile.Origin, events, 0, hero, projectile.LifeLeechBasisPoints);
+            if (projectile.ChainIndex >= projectile.MaximumChains)
             {
                 continue;
             }
@@ -468,7 +539,9 @@ public sealed class P4SpatialCombatRunner
                     projectile.ChainIndex + 1,
                     Math.Max(4_000, projectile.Multiplier - 2_000),
                     hitIds,
-                    target.Position));
+                    target.Position,
+                    projectile.MaximumChains,
+                    projectile.LifeLeechBasisPoints));
             }
         }
     }
@@ -571,10 +644,10 @@ public sealed class P4SpatialCombatRunner
     private static bool InRange(P4Point left, P4Point right, int range) =>
         P4Point.DistanceSquared(left, right) <= (long)range * range;
 
-    private static bool InCleaveCone(P4Point origin, P4Point facingTarget, P4Point candidate)
+    private static bool InCleaveCone(P4Point origin, P4Point facingTarget, P4Point candidate, int range)
     {
         long candidateDistance = P4Point.DistanceSquared(origin, candidate);
-        if (candidateDistance > (long)CleaveRange * CleaveRange)
+        if (candidateDistance > (long)range * range)
         {
             return false;
         }
@@ -593,6 +666,16 @@ public sealed class P4SpatialCombatRunner
         long distance = (long)Math.Sqrt(P4Point.DistanceSquared(from, to));
         return Math.Max(1, checked((int)((distance * 20 + speedPerSecond - 1) / speedPerSecond)));
     }
+
+    private static P6ResolvedSkill? Resolve(
+        IReadOnlyDictionary<string, SkillConfiguration> skills,
+        string skillId,
+        int maximumLife) => skills.TryGetValue(skillId, out SkillConfiguration? configuration)
+        ? P6CombatSkillRules.Resolve(configuration, maximumLife)
+        : null;
+
+    private static int SkillMultiplier(P6ResolvedSkill skill, P4EnemyUnit enemy, int bannerMultiplier) => checked(
+        P6CombatSkillRules.DamageMultiplier(skill, enemy.Life, enemy.MaximumLife) * bannerMultiplier / 10_000);
 
     private static int EnemyRange(P4UnitRole role) => role switch
     {
@@ -662,5 +745,7 @@ public sealed class P4SpatialCombatRunner
         int ChainIndex,
         int Multiplier,
         IReadOnlyList<string> HitIds,
-        P4Point Origin);
+        P4Point Origin,
+        int MaximumChains,
+        int LifeLeechBasisPoints);
 }

@@ -12,6 +12,14 @@ public static class P6SkillCompatibility
         {
             return new P6CompatibilityResult(false, "需要一个主动技能和一个辅助技能。");
         }
+        if ((active.Tags & support.SupportedTags) == 0)
+        {
+            return new P6CompatibilityResult(false, $"{support.DisplayName} 不支持 {active.DisplayName} 的标签。");
+        }
+        if ((active.Tags & support.ExcludedTags) != 0)
+        {
+            return new P6CompatibilityResult(false, $"{support.DisplayName} 排除了该技能标签。");
+        }
         return new P6CompatibilityResult(true, string.Empty);
     }
 }

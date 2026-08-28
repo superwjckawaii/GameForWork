@@ -12,6 +12,9 @@ public enum SkillTag
     Buff = 1 << 5,
     Projectile = 1 << 6,
     Chaining = 1 << 7,
+    Bleed = 1 << 8,
+    Movement = 1 << 9,
+    Reservation = 1 << 10,
 }
 
 [Flags]
@@ -23,6 +26,12 @@ public enum SkillSupport
     Bleed = 1 << 2,
     LifeCost = 1 << 3,
     Chain = 1 << 4,
+    Brutality = 1 << 5,
+    MultipleProjectiles = 1 << 6,
+    FasterProjectiles = 1 << 7,
+    UrgentWarCry = 1 << 8,
+    LifeLeech = 1 << 9,
+    Execution = 1 << 10,
 }
 
 public static class P1SkillIds
@@ -31,6 +40,9 @@ public static class P1SkillIds
     public const string WarCry = "core.skill.war_cry";
     public const string EarthCleave = "core.skill.earth_cleave";
     public const string SpiritBlade = "core.skill.spirit_blade";
+    public const string SeismicCharge = "core.skill.seismic_charge";
+    public const string BloodTideSpin = "core.skill.blood_tide_spin";
+    public const string IronOathBanner = "core.skill.iron_oath_banner";
 }
 
 public sealed record SkillConfiguration(string SkillId, SkillSupport Supports);
@@ -76,6 +88,33 @@ public static class P1Skills
         RangeRaw: 8_000,
         CastTimeTicks: 3,
         CooldownTicks: 20);
+
+    public static readonly SkillDefinition SeismicCharge = new(
+        P1SkillIds.SeismicCharge,
+        SkillTag.Attack | SkillTag.Melee | SkillTag.Area | SkillTag.Physical | SkillTag.Movement,
+        BaseManaCost: 14, RangeRaw: 5_000, CastTimeTicks: 5, CooldownTicks: 80);
+
+    public static readonly SkillDefinition BloodTideSpin = new(
+        P1SkillIds.BloodTideSpin,
+        SkillTag.Attack | SkillTag.Melee | SkillTag.Area | SkillTag.Physical | SkillTag.Bleed,
+        BaseManaCost: 12, RangeRaw: 2_500, CastTimeTicks: 5, CooldownTicks: 18);
+
+    public static readonly SkillDefinition IronOathBanner = new(
+        P1SkillIds.IronOathBanner,
+        SkillTag.Buff | SkillTag.Area | SkillTag.Reservation,
+        BaseManaCost: 0, RangeRaw: 8_000, CastTimeTicks: 4, CooldownTicks: 0);
+
+    public static SkillDefinition Get(string stableId) => stableId switch
+    {
+        P1SkillIds.HeavyStrike => HeavyStrike,
+        P1SkillIds.WarCry => WarCry,
+        P1SkillIds.EarthCleave => EarthCleave,
+        P1SkillIds.SpiritBlade => SpiritBlade,
+        P1SkillIds.SeismicCharge => SeismicCharge,
+        P1SkillIds.BloodTideSpin => BloodTideSpin,
+        P1SkillIds.IronOathBanner => IronOathBanner,
+        _ => throw new KeyNotFoundException($"Unknown skill: {stableId}"),
+    };
 }
 
 public sealed record SkillUseProfile(
@@ -96,15 +135,18 @@ public sealed class WarCryState
     public int EmpoweredHeavyStrikes { get; private set; }
     public int ExpireTick { get; private set; } = -1;
     public bool EchoNotableAllocated { get; set; }
+    public int ManaCost { get; set; } = P1Skills.WarCry.BaseManaCost;
+    public int CooldownDurationTicks { get; set; } = P1Skills.WarCry.CooldownTicks;
+    public int EffectMultiplierBasisPoints { get; set; } = 10_000;
 
     public bool TryActivate(ResourceState resources, int tick)
     {
-        if (CooldownRemainingTicks > 0 || !resources.TryPayMana(P1Skills.WarCry.BaseManaCost))
+        if (CooldownRemainingTicks > 0 || !resources.TryPayMana(ManaCost))
         {
             return false;
         }
 
-        CooldownRemainingTicks = P1Skills.WarCry.CooldownTicks;
+        CooldownRemainingTicks = CooldownDurationTicks;
         EmpoweredHeavyStrikes = EchoNotableAllocated ? 4 : 3;
         ExpireTick = tick + 160;
         return true;
@@ -123,7 +165,8 @@ public sealed class WarCryState
         }
 
         EmpoweredHeavyStrikes--;
-        return EchoNotableAllocated ? 12_000 : 12_500;
+        int bonus = EchoNotableAllocated ? 2_000 : 2_500;
+        return checked(10_000 + bonus * EffectMultiplierBasisPoints / 10_000);
     }
 
     public void AdvanceTick()

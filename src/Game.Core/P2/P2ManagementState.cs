@@ -1,6 +1,8 @@
 using GameForWork.Core.P1.Items;
 using GameForWork.Core.P5;
 using GameForWork.Core.P6;
+using GameForWork.Core.P1.Combat;
+using GameForWork.Core.Simulation;
 
 namespace GameForWork.Core.P2;
 
@@ -29,21 +31,35 @@ public sealed record SkillStoneDefinition(
     string StableId,
     string DisplayName,
     SkillStoneKind Kind,
-    int LinkCost = 0);
+    int LinkCost = 0,
+    SkillTag Tags = SkillTag.None,
+    SkillTag SupportedTags = SkillTag.None,
+    SkillTag ExcludedTags = SkillTag.None,
+    string Description = "",
+    bool StarterGranted = true);
 
 public static class P2SkillStones
 {
     private static readonly IReadOnlyDictionary<string, SkillStoneDefinition> Catalog = new[]
     {
-        new SkillStoneDefinition("core.skill_stone.heavy_strike", "重击", SkillStoneKind.Active),
-        new SkillStoneDefinition("core.skill_stone.war_cry", "战吼", SkillStoneKind.Active),
-        new SkillStoneDefinition("core.skill_stone.earth_cleave", "裂地横扫", SkillStoneKind.Active),
-        new SkillStoneDefinition("core.skill_stone.spirit_blade", "幽魂飞刃", SkillStoneKind.Active),
-        new SkillStoneDefinition("core.skill_stone.increased_area", "扩大范围", SkillStoneKind.Support, 1),
-        new SkillStoneDefinition("core.skill_stone.attack_speed", "攻击速度", SkillStoneKind.Support, 1),
-        new SkillStoneDefinition("core.skill_stone.bleed", "流血", SkillStoneKind.Support, 1),
-        new SkillStoneDefinition("core.skill_stone.life_cost", "生命消耗", SkillStoneKind.Support, 1),
-        new SkillStoneDefinition("core.skill_stone.chain", "追加连锁", SkillStoneKind.Support, 1),
+        Active("core.skill_stone.heavy_strike", "重击", SkillTag.Attack | SkillTag.Melee | SkillTag.Area | SkillTag.Physical),
+        Active("core.skill_stone.war_cry", "战吼", SkillTag.WarCry | SkillTag.Buff | SkillTag.Area),
+        Active("core.skill_stone.earth_cleave", "裂地横扫", SkillTag.Attack | SkillTag.Melee | SkillTag.Area | SkillTag.Physical),
+        Active("core.skill_stone.spirit_blade", "幽魂飞刃", SkillTag.Attack | SkillTag.Projectile | SkillTag.Chaining | SkillTag.Physical),
+        Support("core.skill_stone.increased_area", "扩大范围", SkillTag.Area, "范围提高 35%，伤害总降 10%"),
+        Support("core.skill_stone.attack_speed", "攻击速度", SkillTag.Attack, "攻击速度提高 25%"),
+        Support("core.skill_stone.bleed", "流血", SkillTag.Attack | SkillTag.Physical, "获得 60% 流血几率"),
+        Support("core.skill_stone.life_cost", "生命消耗", SkillTag.Attack, "改为消耗生命并提高伤害"),
+        Support("core.skill_stone.chain", "追加连锁", SkillTag.Projectile, "投射物追加连锁"),
+        Active("core.skill_stone.seismic_charge", "震地冲锋", SkillTag.Attack | SkillTag.Melee | SkillTag.Area | SkillTag.Physical | SkillTag.Movement, false),
+        Active("core.skill_stone.blood_tide_spin", "血潮旋斩", SkillTag.Attack | SkillTag.Melee | SkillTag.Area | SkillTag.Physical | SkillTag.Bleed, false),
+        Active("core.skill_stone.iron_oath_banner", "铁誓战旗", SkillTag.Buff | SkillTag.Area | SkillTag.Reservation, false),
+        Support("core.skill_stone.brutality", "残暴", SkillTag.Physical, "物理伤害总增 35%", false),
+        Support("core.skill_stone.multiple_projectiles", "多重投射", SkillTag.Projectile, "额外 2 个投射物，单发伤害总降 20%", false),
+        Support("core.skill_stone.faster_projectiles", "极速投射", SkillTag.Projectile, "投射物速度提高 50%，距离提高 15%", false),
+        Support("core.skill_stone.urgent_war_cry", "急促战吼", SkillTag.WarCry, "冷却恢复提高 30%，效果总降 15%", false),
+        Support("core.skill_stone.life_leech", "血之汲取", SkillTag.Attack, "命中恢复伤害的 2% 生命，消耗总增 20%", false),
+        Support("core.skill_stone.execution", "处决", SkillTag.Attack, "低于 20% 生命时伤害总增 40%，否则总降 10%", false),
     }.ToDictionary(item => item.StableId, StringComparer.Ordinal);
 
     public static IReadOnlyCollection<SkillStoneDefinition> All => Catalog.Values.ToArray();
@@ -51,6 +67,14 @@ public static class P2SkillStones
     public static SkillStoneDefinition Get(string stableId) => Catalog.TryGetValue(stableId, out SkillStoneDefinition? value)
         ? value
         : throw new KeyNotFoundException($"Unknown skill stone: {stableId}");
+
+    public static IReadOnlyCollection<SkillStoneDefinition> DropPool => Catalog.Values.Where(item => !item.StarterGranted).ToArray();
+
+    private static SkillStoneDefinition Active(string id, string name, SkillTag tags, bool starter = true) =>
+        new(id, name, SkillStoneKind.Active, Tags: tags, Description: name, StarterGranted: starter);
+
+    private static SkillStoneDefinition Support(string id, string name, SkillTag supported, string description, bool starter = true) =>
+        new(id, name, SkillStoneKind.Support, 1, SupportedTags: supported, Description: description, StarterGranted: starter);
 }
 
 public sealed record SkillStoneInstance(
@@ -115,7 +139,8 @@ public sealed class P2ManagementState
     public static P2ManagementState CreateNew()
     {
         var state = new P2ManagementState();
-        foreach (SkillStoneDefinition definition in P2SkillStones.All.OrderBy(item => item.StableId, StringComparer.Ordinal))
+        foreach (SkillStoneDefinition definition in P2SkillStones.All.Where(item => item.StarterGranted)
+                     .OrderBy(item => item.StableId, StringComparer.Ordinal))
         {
             state._skillStones.Add(new SkillStoneInstance(
                 $"starter-{definition.StableId[(definition.StableId.LastIndexOf('.') + 1)..]}",
@@ -157,7 +182,7 @@ public sealed class P2ManagementState
             state.AddHistory("旧存档已迁移：获得一次免费完整洗点。");
         }
 
-        foreach (SkillStoneDefinition definition in P2SkillStones.All.Where(definition =>
+        foreach (SkillStoneDefinition definition in P2SkillStones.All.Where(definition => definition.StarterGranted &&
                      state._skillStones.All(stone => stone.DefinitionId != definition.StableId)))
         {
             state._skillStones.Add(new SkillStoneInstance(
@@ -619,6 +644,22 @@ public sealed class P2ManagementState
         {
             _skillLinks[index] = next;
         }
+    }
+
+    public SkillStoneInstance AddDroppedSkillStone(ulong seed)
+    {
+        SkillStoneDefinition[] pool = P2SkillStones.DropPool.OrderBy(item => item.StableId, StringComparer.Ordinal).ToArray();
+        if (pool.Length == 0)
+        {
+            throw new InvalidOperationException("Skill stone drop pool is empty.");
+        }
+        var random = new Pcg32(seed);
+        SkillStoneDefinition definition = pool[(int)(random.NextUInt() % (uint)pool.Length)];
+        string id = $"drop-skill-{seed:x16}-{_operationSequence++:x8}";
+        var stone = new SkillStoneInstance(id, definition.StableId);
+        _skillStones.Add(stone);
+        AddHistory($"获得技能石：{definition.DisplayName}。");
+        return stone;
     }
 
     private SkillStoneInstance? Stone(string? instanceId) => string.IsNullOrEmpty(instanceId)

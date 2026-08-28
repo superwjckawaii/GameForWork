@@ -347,6 +347,7 @@ public sealed class P1GameSession
                 campaignResult.FinalHash);
         }
 
+        int skillStoneRewardsBefore = World.Economy.SkillStones;
         P1OfflineResult result = _simulator.Simulate(
             World,
             simulatedMilliseconds,
@@ -357,6 +358,12 @@ public sealed class P1GameSession
         if (ashes > 0)
         {
             Passives.AddMemoryAshes(ashes);
+        }
+
+        int newSkillStones = Math.Max(0, World.Economy.SkillStones - skillStoneRewardsBefore);
+        for (int index = 0; index < newSkillStones; index++)
+        {
+            Management.AddDroppedSkillStone(Seed ^ ((ulong)SimulationSequence << 32) ^ (uint)index);
         }
 
         RefreshHeroTeamBuild();
@@ -769,7 +776,6 @@ public sealed class P1GameSession
         .Where(stone => stone.DefinitionId != "core.skill_stone.war_cry")
         .Select(stone => new SkillConfiguration(ToCombatSkillId(stone.DefinitionId), SupportsFor(stone.DefinitionId)))
         .Where(configuration => !string.IsNullOrEmpty(configuration.SkillId))
-        .Take(3)
         .ToArray();
 
     private SkillSupport SupportsFor(string activeDefinitionId)
@@ -789,6 +795,12 @@ public sealed class P1GameSession
                 "core.skill_stone.bleed" => SkillSupport.Bleed,
                 "core.skill_stone.life_cost" => SkillSupport.LifeCost,
                 "core.skill_stone.chain" => SkillSupport.Chain,
+                "core.skill_stone.brutality" => SkillSupport.Brutality,
+                "core.skill_stone.multiple_projectiles" => SkillSupport.MultipleProjectiles,
+                "core.skill_stone.faster_projectiles" => SkillSupport.FasterProjectiles,
+                "core.skill_stone.urgent_war_cry" => SkillSupport.UrgentWarCry,
+                "core.skill_stone.life_leech" => SkillSupport.LifeLeech,
+                "core.skill_stone.execution" => SkillSupport.Execution,
                 _ => SkillSupport.None,
             };
         }
@@ -801,6 +813,10 @@ public sealed class P1GameSession
         "core.skill_stone.heavy_strike" => P1SkillIds.HeavyStrike,
         "core.skill_stone.earth_cleave" => P1SkillIds.EarthCleave,
         "core.skill_stone.spirit_blade" => P1SkillIds.SpiritBlade,
+        "core.skill_stone.war_cry" => P1SkillIds.WarCry,
+        "core.skill_stone.seismic_charge" => P1SkillIds.SeismicCharge,
+        "core.skill_stone.blood_tide_spin" => P1SkillIds.BloodTideSpin,
+        "core.skill_stone.iron_oath_banner" => P1SkillIds.IronOathBanner,
         _ => string.Empty,
     };
 
@@ -811,6 +827,12 @@ public sealed class P1GameSession
         if (supports.HasFlag(SkillSupport.Bleed)) yield return "core.skill_stone.bleed";
         if (supports.HasFlag(SkillSupport.LifeCost)) yield return "core.skill_stone.life_cost";
         if (supports.HasFlag(SkillSupport.Chain)) yield return "core.skill_stone.chain";
+        if (supports.HasFlag(SkillSupport.Brutality)) yield return "core.skill_stone.brutality";
+        if (supports.HasFlag(SkillSupport.MultipleProjectiles)) yield return "core.skill_stone.multiple_projectiles";
+        if (supports.HasFlag(SkillSupport.FasterProjectiles)) yield return "core.skill_stone.faster_projectiles";
+        if (supports.HasFlag(SkillSupport.UrgentWarCry)) yield return "core.skill_stone.urgent_war_cry";
+        if (supports.HasFlag(SkillSupport.LifeLeech)) yield return "core.skill_stone.life_leech";
+        if (supports.HasFlag(SkillSupport.Execution)) yield return "core.skill_stone.execution";
     }
 
     private static void SynchronizeLegacyHeavySupports(P2ManagementState management, SkillSupport supports)

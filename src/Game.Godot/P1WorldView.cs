@@ -375,6 +375,21 @@ public partial class P1WorldView : Control
             {
                 DrawArc(actor, 20 + age * 48, -2.7f, -0.25f, 22, new Color(0.83f, 0.55f, 0.24f, 1 - age), 5);
             }
+            else if (item.Kind == P3SceneEventKind.SeismicCharge)
+            {
+                DrawLine(source, target, new Color(0.92f, 0.55f, 0.2f, 1 - age), 6);
+                DrawArc(target, 10 + age * 34, 0, MathF.Tau, 18, new Color(0.9f, 0.45f, 0.18f, 1 - age), 4);
+            }
+            else if (item.Kind == P3SceneEventKind.BloodTideSpin)
+            {
+                DrawArc(actor, 22 + age * 22, 0, MathF.Tau, 28, new Color(0.76f, 0.12f, 0.18f, 1 - age), 5);
+            }
+            else if (item.Kind == P3SceneEventKind.Banner)
+            {
+                DrawLine(actor + new Vector2(-12, 5), actor + new Vector2(-12, -45), new Color("d7c07b"), 3);
+                DrawColoredPolygon([actor + new Vector2(-10, -44), actor + new Vector2(18, -37), actor + new Vector2(-10, -27)],
+                    new Color(0.58f, 0.12f, 0.16f, 1 - age * 0.35f));
+            }
             else if (item.Kind is P3SceneEventKind.SpiritBlade or P3SceneEventKind.Chain)
             {
                 DrawLine(source, target, new Color(0.43f, 0.86f, 0.92f, 1 - age * 0.8f), item.Kind == P3SceneEventKind.Chain ? 2 : 4);
@@ -395,7 +410,8 @@ public partial class P1WorldView : Control
     {
         var merged = recent.Where(item => item.Value > 0 && item.Kind is
                 P3SceneEventKind.HeavyStrike or P3SceneEventKind.EarthCleave or P3SceneEventKind.SpiritBlade or
-                P3SceneEventKind.Chain or P3SceneEventKind.EnemyAttack or P3SceneEventKind.Bleed)
+                P3SceneEventKind.Chain or P3SceneEventKind.SeismicCharge or P3SceneEventKind.BloodTideSpin or
+                P3SceneEventKind.EnemyAttack or P3SceneEventKind.Bleed)
             .GroupBy(item =>
             {
                 string[] parts = item.Detail.Split('|');
