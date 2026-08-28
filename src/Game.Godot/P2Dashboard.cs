@@ -1196,16 +1196,15 @@ public partial class P2Dashboard : VBoxContainer
 
     private void RefreshUnlockedPages(P1GameSession session)
     {
-        int step = session.Journey.CurrentStepIndex;
-        SetHidden(_mainTabs!, _characterPage!, step < JourneyIndex(P8JourneyStep.EquipItem));
-        SetHidden(_mainTabs!, _townPage!, step <= JourneyIndex(P8JourneyStep.CraftItem));
+        SetHidden(_mainTabs!, _characterPage!, !session.Journey.TutorialAllowsPage(P8JourneyStep.EquipItem));
+        SetHidden(_mainTabs!, _townPage!, !session.Journey.TutorialAllowsPage(P8JourneyStep.CraftItem, requireGateCompletion: true));
         SetHidden(_mainTabs!, _expeditionPage!, !session.Campaign.Completed);
         if (_characterModes is not null)
         {
             // Core build pages remain available from the start; the journey guides without hiding them.
             SetHidden(_characterModes, _skillMode!, hidden: false);
-            SetHidden(_characterModes, _passiveMode!, step < JourneyIndex(P8JourneyStep.AllocatePassive));
-            SetHidden(_characterModes, _aiMode!, step <= JourneyIndex(P8JourneyStep.ConfigureSkillTarget));
+            SetHidden(_characterModes, _passiveMode!, !session.Journey.TutorialAllowsPage(P8JourneyStep.AllocatePassive));
+            SetHidden(_characterModes, _aiMode!, !session.Journey.TutorialAllowsPage(P8JourneyStep.ConfigureSkillTarget, requireGateCompletion: true));
         }
     }
 
@@ -1311,9 +1310,6 @@ public partial class P2Dashboard : VBoxContainer
     private static string TimeText(long milliseconds) => TimeSpan.FromMilliseconds(milliseconds) is TimeSpan time
         ? $"{(int)time.TotalHours:00}:{time.Minutes:00}:{time.Seconds:00}"
         : "00:00:00";
-
-    private static int JourneyIndex(P8JourneyStep step) => Array.FindIndex(
-        Enum.GetValues<P8JourneyStep>(), value => value == step);
 
     private static void SetHidden(TabContainer tabs, Control control, bool hidden)
     {

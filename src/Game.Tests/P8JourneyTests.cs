@@ -44,6 +44,20 @@ public sealed class P8JourneyTests
     }
 
     [Fact]
+    public void SkippingTutorialUnlocksEveryTutorialGatedPageImmediately()
+    {
+        P1GameSession skipped = CreateSession(tutorial: false);
+        P1GameSession guided = CreateSession(tutorial: true);
+
+        Assert.True(skipped.Journey.TutorialAllowsPage(P8JourneyStep.EquipItem));
+        Assert.True(skipped.Journey.TutorialAllowsPage(P8JourneyStep.CraftItem, requireGateCompletion: true));
+        Assert.True(skipped.Journey.TutorialAllowsPage(P8JourneyStep.AllocatePassive));
+        Assert.True(skipped.Journey.TutorialAllowsPage(P8JourneyStep.ConfigureSkillTarget, requireGateCompletion: true));
+        Assert.False(guided.Journey.TutorialAllowsPage(P8JourneyStep.EquipItem));
+        Assert.False(guided.Journey.TutorialAllowsPage(P8JourneyStep.CraftItem, requireGateCompletion: true));
+    }
+
+    [Fact]
     public void VersionNineSaveMigratesWithoutReplayingForcedGuide()
     {
         P1GameSession current = CreateSession(tutorial: true);

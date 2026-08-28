@@ -14,7 +14,7 @@ public partial class P2SkillStonePanel : VBoxContainer
     private VBoxContainer? _groups;
     private Label? _errors;
     private HBoxContainer? _wideColumns;
-    private TabContainer? _compactTabs;
+    private VBoxContainer? _compactStack;
     private VBoxContainer? _inventoryColumn;
     private VBoxContainer? _groupsColumn;
     private bool _compact;
@@ -30,8 +30,9 @@ public partial class P2SkillStonePanel : VBoxContainer
         _wideColumns = new HBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill, SizeFlagsVertical = SizeFlags.ExpandFill };
         _wideColumns.AddThemeConstantOverride("separation", 12);
         AddChild(_wideColumns);
-        _compactTabs = new TabContainer { Visible = false, SizeFlagsHorizontal = SizeFlags.ExpandFill, SizeFlagsVertical = SizeFlags.ExpandFill };
-        AddChild(_compactTabs);
+        _compactStack = new VBoxContainer { Visible = false, SizeFlagsHorizontal = SizeFlags.ExpandFill, SizeFlagsVertical = SizeFlags.ExpandFill };
+        _compactStack.AddThemeConstantOverride("separation", 10);
+        AddChild(_compactStack);
         _inventoryColumn = Column(_wideColumns, "技能石背包", 240);
         var inventoryScroll = new ScrollContainer { SizeFlagsVertical = SizeFlags.ExpandFill, SizeFlagsHorizontal = SizeFlags.ExpandFill };
         _inventoryColumn.AddChild(inventoryScroll);
@@ -194,23 +195,19 @@ public partial class P2SkillStonePanel : VBoxContainer
 
     private void ApplyResponsiveLayout()
     {
-        if (_wideColumns is null || _compactTabs is null || _inventoryColumn is null || _groupsColumn is null) return;
+        if (_wideColumns is null || _compactStack is null || _inventoryColumn is null || _groupsColumn is null) return;
         if (_compact)
         {
-            _inventoryColumn.Reparent(_compactTabs);
-            _groupsColumn.Reparent(_compactTabs);
-            _inventoryColumn.Name = "技能石背包";
-            _groupsColumn.Name = "装备孔组";
+            _inventoryColumn.Reparent(_compactStack);
+            _groupsColumn.Reparent(_compactStack);
             _wideColumns.Visible = false;
-            _compactTabs.Visible = true;
+            _compactStack.Visible = true;
         }
         else
         {
             _inventoryColumn.Reparent(_wideColumns);
             _groupsColumn.Reparent(_wideColumns);
-            _inventoryColumn.Name = "技能石背包";
-            _groupsColumn.Name = "当前装备孔组";
-            _compactTabs.Visible = false;
+            _compactStack.Visible = false;
             _wideColumns.Visible = true;
         }
     }
@@ -225,7 +222,12 @@ public partial class P2SkillStonePanel : VBoxContainer
 
     private static VBoxContainer Column(Container parent, string title, float minimumWidth)
     {
-        var column = new VBoxContainer { CustomMinimumSize = new Vector2(minimumWidth, 0), SizeFlagsHorizontal = SizeFlags.ExpandFill };
+        var column = new VBoxContainer
+        {
+            CustomMinimumSize = new Vector2(minimumWidth, 0),
+            SizeFlagsHorizontal = SizeFlags.ExpandFill,
+            SizeFlagsVertical = SizeFlags.ExpandFill,
+        };
         column.AddChild(new Label { Text = title });
         parent.AddChild(column);
         return column;

@@ -131,6 +131,14 @@ public sealed class P8DemoJourney
     public P8JourneyStepDefinition? CurrentStep => CurrentStepIndex < Definitions.Length ? Definitions[CurrentStepIndex] : null;
     public IReadOnlyList<P8JourneyStepDefinition> AllSteps => Definitions;
 
+    public bool TutorialAllowsPage(P8JourneyStep gate, bool requireGateCompletion = false)
+    {
+        if (!TutorialEnabled) return true;
+        int gateIndex = Array.FindIndex(Definitions, definition => definition.Step == gate);
+        if (gateIndex < 0) throw new ArgumentOutOfRangeException(nameof(gate));
+        return requireGateCompletion ? CurrentStepIndex > gateIndex : CurrentStepIndex >= gateIndex;
+    }
+
     public static P8DemoJourney CreateNew(bool tutorialEnabled) => new(tutorialEnabled);
 
     public static P8DemoJourney Restore(P8DemoJourneySnapshot? snapshot, bool legacy)
