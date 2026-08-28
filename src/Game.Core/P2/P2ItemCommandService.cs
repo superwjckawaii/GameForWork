@@ -3,6 +3,7 @@ using GameForWork.Core.P1.Items;
 using System.Runtime.CompilerServices;
 using GameForWork.Core.P6;
 using GameForWork.Core.P4;
+using GameForWork.Core.P9;
 
 namespace GameForWork.Core.P2;
 
@@ -12,12 +13,17 @@ public sealed record P2ItemCommandResult(bool Succeeded, string Code, string Mes
     public static P2ItemCommandResult Fail(string code, string message) => new(false, code, message);
 }
 
-public sealed class P2ItemCommandService(P1GameSession session, P2CharacterKind character = P2CharacterKind.Hero)
+public sealed class P2ItemCommandService(
+    P1GameSession session,
+    P2CharacterKind character = P2CharacterKind.Hero,
+    string mercenaryId = "")
 {
     private static readonly ConditionalWeakTable<P1GameSession, UndoState> UndoStates = new();
     private EquipmentLoadout Loadout => character == P2CharacterKind.Hero
         ? session.HeroEquipment
-        : session.MercenaryEquipment;
+        : string.IsNullOrEmpty(mercenaryId)
+            ? session.MercenaryEquipment
+            : session.Town.Roster.First(member => member.Identity.StableId == mercenaryId).Equipment;
 
     public P2ItemCommandResult TryEquip(ItemContainerKind source, int index, EquipmentSlot slot)
     {
@@ -181,6 +187,44 @@ public sealed class P2ItemCommandService(P1GameSession session, P2CharacterKind 
         return result;
     }
 
+    public P9CraftResult CraftP9(ItemContainerKind source, int index, P9CraftOperation operation)
+    {
+        ItemInstance? item = PeekIncludingEquipped(source, index);
+        if (item is null)
+            return new(false, "item_missing", "物品不存在。", null, MetalCurrencyKind.AwakeningCopper, 0);
+        P9CraftResult result = P9CraftingRules.Craft(session.World.Economy, item, operation);
+        if (!result.Succeeded) return result;
+        bool applied = result.Destroyed ? RemoveIncludingEquipped(source, index) is not null : Replace(source, index, result.Result!);
+        if (!applied)
+        {
+            session.World.Economy.AddMetal(result.Currency, result.Cost);
+            return result with { Succeeded = false, FailureReason = "replace_failed", Summary = "物品位置变化，制作与材料已回滚。" };
+        }
+        if (source == ItemContainerKind.Equipped) session.NotifyEquipmentChanged(character);
+        session.Management.AddHistory($"金属加工：{result.Summary}。 ");
+        session.RecordJourneyEvent(P8JourneyEvent.CraftedItem);
+        return result;
+    }
+
+    public P9CraftResult EnchantP9(ItemContainerKind source, int index, string enchantmentId)
+    {
+        ItemInstance? item = PeekIncludingEquipped(source, index);
+        if (item is null)
+            return new(false, "item_missing", "物品不存在。", null, MetalCurrencyKind.TemperingIron, 0);
+        P9CraftResult result = P9EnchantmentCatalog.Craft(session.World.Economy, item, enchantmentId,
+            session.Town.Level(P9BuildingKind.Workshop));
+        if (!result.Succeeded) return result;
+        if (!Replace(source, index, result.Result!))
+        {
+            ItemEnchantment enchantment = P9EnchantmentCatalog.Get(enchantmentId);
+            session.World.Economy.AddDispositionProceeds(enchantment.GoldCost, 0);
+            return result with { Succeeded = false, FailureReason = "replace_failed", Summary = "物品位置变化，金币已返还。" };
+        }
+        if (source == ItemContainerKind.Equipped) session.NotifyEquipmentChanged(character);
+        session.Management.AddHistory(result.Summary);
+        return result;
+    }
+
     public P2ItemCommandResult TryUnequip(EquipmentSlot slot)
     {
         ItemInstance? item = Loadout.Unequip(slot);
@@ -274,7 +318,7 @@ public sealed class P2ItemCommandService(P1GameSession session, P2CharacterKind 
                 return P2ItemCommandResult.Fail("reorder_failed", "该容器不能调整顺序。");
             }
 
-            RegisterUndo(() => new P2ItemCommandService(session, character)
+            RegisterUndo(() => new P2ItemCommandService(session, character, mercenaryId)
                 .Move(source, targetIndex, source, sourceIndex));
             return P2ItemCommandResult.Ok("物品顺序已调整，可撤销。");
         }
@@ -299,7 +343,7 @@ public sealed class P2ItemCommandService(P1GameSession session, P2CharacterKind 
             return P2ItemCommandResult.Fail("target_full", "目标容器已满，操作已回滚。");
         }
 
-        RegisterUndo(() => new P2ItemCommandService(session, character)
+        RegisterUndo(() => new P2ItemCommandService(session, character, mercenaryId)
             .Move(target, targetIndex, source, sourceIndex));
         return P2ItemCommandResult.Ok($"已移动 {item.Base.DisplayName}，可撤销。");
     }
@@ -529,6 +573,11 @@ public sealed class P2ItemCommandService(P1GameSession session, P2CharacterKind 
         ItemContainerKind.Recovery => session.Management.TakeRecoveryAt(index),
         _ => null,
     };
+
+    private ItemInstance? RemoveIncludingEquipped(ItemContainerKind source, int index) =>
+        source == ItemContainerKind.Equipped && Enum.IsDefined(typeof(EquipmentSlot), index)
+            ? Loadout.Unequip((EquipmentSlot)index)
+            : Take(source, index);
 
     private void ReturnToSource(ItemContainerKind source, int index, ItemInstance item)
     {

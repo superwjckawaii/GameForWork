@@ -79,6 +79,12 @@ public sealed class TownEconomyState
         return true;
     }
 
+    public void AddExpeditionSupplies(int amount)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(amount);
+        ExpeditionSupplies = checked(ExpeditionSupplies + amount);
+    }
+
     public int AdvanceProduction(long elapsedMilliseconds)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(elapsedMilliseconds);

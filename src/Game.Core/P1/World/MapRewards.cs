@@ -99,12 +99,10 @@ public static class P1MapRewardGenerator
             }
         }
 
-        MetalCurrencyKind commonMetal = (MetalCurrencyKind)Next(random, 3);
+        MetalCurrencyKind commonMetal = RollMetal(random, allowDangerous: false);
         var metals = new List<MetalCurrencyStack> { new(commonMetal, 1 + Next(random, 2)) };
-        if (random.NextBasisPoints() < 1_000)
-        {
-            metals.Add(new MetalCurrencyStack(MetalCurrencyKind.ChaosGold, 1));
-        }
+        if (random.NextBasisPoints() < (route == MapRoute.Abyss ? 3_000 : 1_000))
+            metals.Add(new MetalCurrencyStack(RollMetal(random, allowDangerous: route == MapRoute.Abyss), 1));
         if (route == MapRoute.Abyss || P5ExpeditionDirector.IsBoss(completedMap) || random.NextBasisPoints() < 3_000)
         {
             metals.Add(new MetalCurrencyStack(MetalCurrencyKind.ChainSteel,
@@ -139,6 +137,20 @@ public static class P1MapRewardGenerator
     }
 
     private static ulong NextSeed(Pcg32 random) => ((ulong)random.NextUInt() << 32) | random.NextUInt();
+
+    private static MetalCurrencyKind RollMetal(Pcg32 random, bool allowDangerous)
+    {
+        MetalCurrencyDefinition[] candidates = P4MetalCurrencies.All
+            .Where(item => allowDangerous || item.Tier != MetalCurrencyTier.Dangerous).ToArray();
+        int total = candidates.Sum(item => item.DropWeight);
+        int roll = Next(random, total);
+        foreach (MetalCurrencyDefinition candidate in candidates)
+        {
+            if (roll < candidate.DropWeight) return candidate.Kind;
+            roll -= candidate.DropWeight;
+        }
+        return candidates[^1].Kind;
+    }
 
     private static int Next(Pcg32 random, int exclusiveMaximum) =>
         (int)(random.NextUInt() % (uint)exclusiveMaximum);

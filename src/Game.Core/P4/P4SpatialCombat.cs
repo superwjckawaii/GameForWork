@@ -92,6 +92,8 @@ public sealed record P4EnemyFrame(
     P4Point Position,
     string TargetId);
 
+public sealed record P4AllyFrame(string EntityId, P4Point Position, bool Frontline);
+
 public sealed record P4SpatialFrame(
     long AtMilliseconds,
     int NodeIndex,
@@ -103,7 +105,8 @@ public sealed record P4SpatialFrame(
     int HeroShield,
     int HeroMaximumShield,
     string HeroTargetId,
-    IReadOnlyList<P4EnemyFrame> Enemies);
+    IReadOnlyList<P4EnemyFrame> Enemies,
+    IReadOnlyList<P4AllyFrame>? Allies = null);
 
 public sealed record P4SpatialEvent(
     long AtMilliseconds,
@@ -199,7 +202,8 @@ public sealed class P4SpatialCombatRunner
                 heroPosition, heroPosition, "reservation:20"));
         }
         int tick;
-        CaptureFrame(frames, 0, request.NodeIndex, heroPosition, hero, heroTargetId, enemies);
+        CaptureFrame(frames, 0, request.NodeIndex, heroPosition, hero, heroTargetId, enemies,
+            request.Build.PartySize, request.Build.FrontlineCount);
 
         for (tick = 0; tick < request.MaximumTicks && hero.IsAlive && enemies.Any(enemy => enemy.Life > 0); tick++)
         {
@@ -367,7 +371,8 @@ public sealed class P4SpatialCombatRunner
             }
 
             ResolveEnemies(request, enemies, hero, heroPosition, random, tick, events);
-            CaptureFrame(frames, tick * TickMilliseconds, request.NodeIndex, heroPosition, hero, heroTargetId, enemies);
+            CaptureFrame(frames, tick * TickMilliseconds, request.NodeIndex, heroPosition, hero, heroTargetId, enemies,
+                request.Build.PartySize, request.Build.FrontlineCount);
         }
 
         bool victory = enemies.All(enemy => enemy.Life <= 0);
@@ -376,7 +381,8 @@ public sealed class P4SpatialCombatRunner
             : hero.IsAlive ? P1BattleOutcome.Timeout : P1BattleOutcome.EnemyVictory;
         events.Add(Event(tick, victory ? P4SpatialEventKind.NodeCleared : P4SpatialEventKind.HeroDefeated,
             victory ? "hero" : "enemies", string.Empty, 0, heroPosition, heroPosition, outcome.ToString()));
-        CaptureFrame(frames, tick * TickMilliseconds, request.NodeIndex, heroPosition, hero, heroTargetId, enemies);
+        CaptureFrame(frames, tick * TickMilliseconds, request.NodeIndex, heroPosition, hero, heroTargetId, enemies,
+            request.Build.PartySize, request.Build.FrontlineCount);
         string hash = Hash(seed, outcome, tick, hero, enemies, events);
         return new P4NodeCombatResult(outcome, tick, hero.Life, hero.Mana, hero.Shield, frames, events, hash);
     }
@@ -686,7 +692,9 @@ public sealed class P4SpatialCombatRunner
         P4Point heroPosition,
         ResourceState hero,
         string target,
-        IEnumerable<P4EnemyUnit> enemies)
+        IEnumerable<P4EnemyUnit> enemies,
+        int partySize,
+        int frontlineCount)
     {
         if (frames.LastOrDefault()?.AtMilliseconds == at)
         {
@@ -714,7 +722,23 @@ public sealed class P4SpatialCombatRunner
                 enemy.Life,
                 enemy.MaximumLife,
                 enemy.Position,
-                "hero")).ToArray()));
+                "hero")).ToArray(),
+            BuildAllies(heroPosition, partySize, frontlineCount)));
+    }
+
+    private static IReadOnlyList<P4AllyFrame> BuildAllies(P4Point leader, int partySize, int frontlineCount)
+    {
+        var result = new List<P4AllyFrame>();
+        int frontRemaining = Math.Max(0, frontlineCount - 1);
+        for (int index = 1; index < Math.Clamp(partySize, 1, 6); index++)
+        {
+            bool front = index <= frontRemaining;
+            int ordinal = front ? index - 1 : index - frontRemaining - 1;
+            int x = leader.XRaw + (ordinal % 2 == 0 ? -1 : 1) * (900 + ordinal / 2 * 650);
+            int y = leader.YRaw + (front ? -1_100 : 1_200 + ordinal / 2 * 550);
+            result.Add(new P4AllyFrame($"ally-{index}", new P4Point(Math.Clamp(x, 350, 11_650), Math.Clamp(y, 350, 23_650)), front));
+        }
+        return result;
     }
 
     private static P4SpatialEvent Event(

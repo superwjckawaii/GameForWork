@@ -133,7 +133,7 @@ public static class P1MercenaryFactory
 
 public sealed class TeleporterState
 {
-    private static readonly int[] MercenaryCapacityByLevel = [1, 2, 3, 4];
+    private static readonly int[] MercenaryCapacityByLevel = [3, 4, 5, 6];
 
     public int Level { get; private set; } = 1;
     public int MercenaryTeamCapacity => MercenaryCapacityByLevel[Level - 1];

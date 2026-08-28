@@ -309,6 +309,14 @@ public partial class P1WorldView : Control
         }
 
         DrawShadow(actor + new Vector2(0, 6), 10);
+        foreach (P4AllyFrame ally in current.Allies ?? [])
+        {
+            Vector2 allyPosition = MapPoint(field, ally.Position);
+            _positions[ally.EntityId] = allyPosition;
+            DrawShadow(allyPosition + new Vector2(0, 5), 7);
+            DrawActor(allyPosition, ally.Frontline ? new Color("9b6f9f") : new Color("6f769f"), false,
+                (float)((_visualClock * 2.3 + ally.EntityId.GetHashCode() * 0.01) % 1));
+        }
         DrawActor(actor, hero ? new Color("6da9c0") : new Color("a885bd"), hero, (float)(_visualClock * 2.3 % 1));
         DrawBar(new Rect2(actor + new Vector2(-30, 21), new Vector2(60, 5)),
             current.HeroMaximumLife <= 0 ? 0 : (float)current.HeroLife / current.HeroMaximumLife, new Color("a73737"));
@@ -326,7 +334,7 @@ public partial class P1WorldView : Control
         int alive = current.Enemies.Count(enemy => enemy.Life > 0);
         string target = current.Enemies.FirstOrDefault(enemy => enemy.EntityId == current.HeroTargetId)?.DisplayName ?? "移动接敌";
         DrawString(ThemeDB.FallbackFont, bounds.Position + new Vector2(16, 59),
-            $"节点 {Math.Max(1, current.NodeIndex)}/{timeline.NodeCount} · 敌人 {alive}/{current.Enemies.Count} · 目标 {target} · {sceneProgress * 100:0.0}%",
+            $"节点 {Math.Max(1, current.NodeIndex)}/{timeline.NodeCount} · 队伍 {(current.Allies?.Count ?? 0) + 1} · 敌人 {alive}/{current.Enemies.Count} · 目标 {target} · {sceneProgress * 100:0.0}%",
             HorizontalAlignment.Left, -1, 13, new Color("c6bca9"));
     }
 

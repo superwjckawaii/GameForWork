@@ -99,13 +99,20 @@ public sealed class EquipmentStorage
         Upgrade = new StorageUpgradeState(0, capacity);
     }
 
-    public int Capacity { get; }
+    public int Capacity { get; private set; }
     public StorageUpgradeState Upgrade { get; }
     public int Count => _items.Count;
     public bool IsFull => Count >= Capacity;
     public IReadOnlyList<ItemInstance> Items => _items;
     public IReadOnlySet<string> DiscoveredBases => _discoveredBases;
     public IReadOnlySet<string> DiscoveredLegendaryRules => _discoveredLegendaryRules;
+
+    public bool TrySetCapacity(int capacity)
+    {
+        if (capacity < Count || capacity <= 0) return false;
+        Capacity = capacity;
+        return true;
+    }
 
     public bool IsFirstDiscovery(ItemInstance item) =>
         !_discoveredBases.Contains(item.Base.StableId) ||

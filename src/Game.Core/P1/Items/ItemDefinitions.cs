@@ -175,6 +175,14 @@ public sealed record AffixDefinition(
 
 public sealed record AffixRoll(AffixDefinition Definition, int Value, bool Crafted = false);
 
+public sealed record ItemEnchantment(
+    string StableId,
+    string DisplayName,
+    ItemModifierKind ModifierKind,
+    int Value,
+    int WorkshopLevel,
+    int GoldCost);
+
 public sealed record LegendaryRule(
     string StableId,
     int HeavyStrikeAttackSpeedMultiplierBasisPoints,
@@ -192,7 +200,11 @@ public sealed record ItemInstance(
     bool IsLocked = false,
     bool IsCraftingBase = false,
     int LinkedSocketCount = 0,
-    string FracturedAffixFamilyId = "")
+    string FracturedAffixFamilyId = "",
+    int Quality = 0,
+    ItemEnchantment? Enchantment = null,
+    bool IsCorrupted = false,
+    string CorruptionOutcome = "")
 {
     public int PrefixCount => Affixes.Count(affix => affix.Definition.Position == AffixPosition.Prefix);
     public int SuffixCount => Affixes.Count(affix => affix.Definition.Position == AffixPosition.Suffix);
@@ -208,6 +220,8 @@ public sealed record ItemInstance(
 
     public bool IsFractured(AffixRoll affix) =>
         string.Equals(FracturedAffixFamilyId, affix.Definition.StableFamilyId, StringComparison.Ordinal);
+
+    public bool CanModify => !IsLocked && !IsCorrupted;
 }
 
 public static class P1Legendary

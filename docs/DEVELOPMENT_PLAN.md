@@ -1,4 +1,4 @@
-# GameForWork P0～P8 开发计划
+# GameForWork P0～P9 开发计划
 
 > 状态：已确认  
 > 更新日期：2026-08-28
@@ -218,3 +218,7 @@ P6 的装备实例孔组、技能石唯一位置、标签兼容、AI 执行、�
 
 - P7 的技能页收敛、逐技能攻击目标、20 Hz/60 FPS 表现、后台战斗预演与后台存档规则见 [`P7_SPECIFICATION.md`](P7_SPECIFICATION.md)。
 - P8 的单线 Demo 旅程、强制聚焦教学、页面解锁、停止警告、深渊监守者结算和旧档迁移规则见 [`P8_SPECIFICATION.md`](P8_SPECIFICATION.md)。
+
+### P9 完成定义
+
+P9 的七座固定建筑、施工队列、城镇方针、酒馆候选与名册、单支 2×3 佣兵队、19 种金属仓、完整装备加工和高阶工坊附魔规则见 [`P9_SPECIFICATION.md`](P9_SPECIFICATION.md)。

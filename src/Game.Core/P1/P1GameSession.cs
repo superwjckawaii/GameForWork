@@ -6,6 +6,7 @@ using GameForWork.Core.P2;
 using GameForWork.Core.P4;
 using GameForWork.Core.P5;
 using GameForWork.Core.P6;
+using GameForWork.Core.P9;
 
 namespace GameForWork.Core.P1;
 
@@ -106,11 +107,12 @@ public sealed record P1GameSessionSnapshot(
     P2ManagementSnapshot? Management = null,
     IReadOnlyList<EquippedItemSnapshot>? MercenaryEquipment = null,
     P2CampaignSnapshot? Campaign = null,
-    P8DemoJourneySnapshot? Journey = null);
+    P8DemoJourneySnapshot? Journey = null,
+    P9TownSnapshot? Town = null);
 
 public sealed class P1GameSession
 {
-    public const int CurrentFormatVersion = 10;
+    public const int CurrentFormatVersion = 11;
     private readonly P1WorldSimulator _simulator = new(new P1MapAttemptResolver());
     private readonly P2CampaignSimulator _campaignSimulator = new();
     private AssembledCharacterBuild _heroBuild;
@@ -127,6 +129,7 @@ public sealed class P1GameSession
         P2ManagementState management,
         P2CampaignState campaign,
         P8DemoJourney journey,
+        P9TownState town,
         ulong seed,
         int simulationSequence,
         bool debugTwentyTimes)
@@ -142,6 +145,7 @@ public sealed class P1GameSession
         Management = management;
         Campaign = campaign;
         Journey = journey;
+        Town = town;
         Seed = seed;
         SimulationSequence = simulationSequence;
         DebugTwentyTimes = debugTwentyTimes;
@@ -149,6 +153,7 @@ public sealed class P1GameSession
         HeavyStrikeSupports = SupportsFor("core.skill_stone.heavy_strike");
         _heroBuild = AssembleHero();
         RefreshHeroTeamBuild();
+        RefreshMercenaryPartyBuild();
     }
 
     public PlayerIdentity Player { get; }
@@ -162,6 +167,7 @@ public sealed class P1GameSession
     public P2ManagementState Management { get; }
     public P2CampaignState Campaign { get; }
     public P8DemoJourney Journey { get; }
+    public P9TownState Town { get; }
     public bool IsExpeditionUnlocked => Campaign.Completed;
     public bool DebugTwentyTimes { get; set; }
     public ulong Seed { get; }
@@ -191,9 +197,10 @@ public sealed class P1GameSession
             metalCurrencies: Enum.GetValues<MetalCurrencyKind>().ToDictionary(
                 kind => kind,
                 kind => kind is MetalCurrencyKind.TemperingIron or MetalCurrencyKind.WardSteel or MetalCurrencyKind.VitalSilver ? 3 : 0));
+        P9TownState town = P9TownState.CreateNew(seed ^ 0x7039746f776eUL, mercenary.Equipment);
         var world = new P1WorldState(
             ToTeamBuild(build, SkillSupport.Bleed, HeroAiConfiguration.Balanced),
-            mercenary.CreateTeamBuild(),
+            town.BuildMercenaryParty(1),
             economy);
         return new P1GameSession(
             player,
@@ -207,6 +214,7 @@ public sealed class P1GameSession
             P2ManagementState.CreateNew(),
             P2CampaignState.CreateNew(),
             P8DemoJourney.CreateNew(tutorialEnabled),
+            town,
             seed,
             simulationSequence: 0,
             debugTwentyTimes: false);
@@ -232,6 +240,8 @@ public sealed class P1GameSession
             snapshot.AllocatedPassives,
             snapshot.MemoryAshes);
         P1WorldState world = P1WorldSnapshots.Restore(snapshot.World);
+        P9TownState town = P9TownState.Restore(snapshot.Town, snapshot.Seed ^ 0x7039746f776eUL, mercenaryEquipment);
+        if (town.Roster.Count > 0) mercenaryEquipment = town.Roster[0].Equipment;
         if (snapshot.FormatVersion == 1)
         {
             P1MercenaryProfile upgradedMercenary = P1MercenaryFactory.GenerateCantor(snapshot.Seed ^ 0xa5a5a5a5UL);
@@ -274,9 +284,11 @@ public sealed class P1GameSession
             management,
             P2CampaignState.Restore(legacyP1Migration ? null : snapshot.Campaign, legacyP1Migration),
             P8DemoJourney.Restore(snapshot.Journey, snapshot.FormatVersion < 10),
+            town,
             snapshot.Seed,
             snapshot.SimulationSequence,
             snapshot.DebugTwentyTimes);
+        session.ApplyTownBuildingEffects();
         session.Journey.Synchronize(session);
         return session;
     }
@@ -300,7 +312,8 @@ public sealed class P1GameSession
         Management.Capture(),
         MercenaryEquipment.Items.Select(pair => new EquippedItemSnapshot(pair.Key, pair.Value)).ToArray(),
         Campaign.Capture(),
-        Journey.Capture());
+        Journey.Capture(),
+        Town.Capture());
 
     public P1OfflineResult Advance(long realElapsedMilliseconds)
     {
@@ -347,12 +360,14 @@ public sealed class P1GameSession
             : realElapsedMilliseconds * SimulationSpeed;
         Journey.AddElapsed(realElapsedMilliseconds, offline: false);
         int produced = World.Economy.AdvanceProduction(simulated);
+        AdvanceTownSystems(simulated);
         Journey.Synchronize(this);
         return produced;
     }
 
     private P1OfflineResult AdvanceSimulated(long simulatedMilliseconds, bool offline, bool asyncPreparation)
     {
+        AdvanceTownSystems(simulatedMilliseconds);
         if (!Campaign.Completed)
         {
             P2CampaignAdvanceResult campaignResult = _campaignSimulator.Simulate(
@@ -404,12 +419,73 @@ public sealed class P1GameSession
         if (result.TotalMapsCompleted > 0)
         {
             Management.AddSkillExperience(checked(result.TotalMapsCompleted * 120));
+            Town.AddActiveExperience(checked(result.TotalMapsCompleted * 120));
         }
 
+        if (World.Expedition.Reports.Any(report => report.Context.Contains("深渊监守者", StringComparison.Ordinal)))
+            Town.RecordMilestone("p9.milestone.abyss_warden", World.Economy);
         if (result.TotalMapsCompleted > 0 || ashes > 0 || newSkillStones > 0)
             RefreshHeroTeamBuild();
+        if (result.TotalMapsCompleted > 0) RefreshMercenaryPartyBuild();
         return result;
     }
+
+    private void AdvanceTownSystems(long simulatedMilliseconds)
+    {
+        Town.Advance(simulatedMilliseconds, World.Economy, map => World.MapInventory.Add(map));
+        ApplyTownBuildingEffects();
+    }
+
+    private void ApplyTownBuildingEffects()
+    {
+        int storageCapacity = Town.Level(P9BuildingKind.Storage) switch { 1 => 100, 2 => 150, 3 => 225, _ => 325 };
+        World.Storage.TrySetCapacity(Math.Max(storageCapacity, World.Storage.Count));
+        World.Teleporter.TrySetLevel(Town.Level(P9BuildingKind.Teleporter));
+    }
+
+    public bool TryUpgradeTownBuilding(P9BuildingKind kind, out string message) =>
+        Town.TryStartUpgrade(kind, World.Economy, out message);
+
+    public void SetTownPolicy(P9TownPolicy policy) => Town.SetPolicy(policy);
+
+    public bool TryRefreshTavern() => Town.TryManualRefresh(World.Economy);
+
+    public bool TryRecruitMercenary(string stableId, out string message)
+    {
+        bool changed = Town.TryRecruit(stableId, World.Economy, out message);
+        if (changed) RefreshMercenaryPartyBuild();
+        return changed;
+    }
+
+    public bool TryPlaceMercenary(string stableId, int slot)
+    {
+        if (World.Mercenaries.ActiveMap is not null) return false;
+        bool changed = Town.TryPlaceFormation(stableId, slot);
+        if (changed) RefreshMercenaryPartyBuild();
+        return changed;
+    }
+
+    public bool TryClearMercenarySlot(int slot)
+    {
+        if (World.Mercenaries.ActiveMap is not null) return false;
+        bool changed = Town.ClearFormationSlot(slot);
+        if (changed) RefreshMercenaryPartyBuild();
+        return changed;
+    }
+
+    public bool TryDismissMercenary(string stableId, out string message)
+    {
+        if (World.Mercenaries.ActiveMap is not null)
+        {
+            message = "远征中不能解雇佣兵。";
+            return false;
+        }
+        bool changed = Town.TryDismiss(stableId, World.Storage, out message);
+        if (changed) RefreshMercenaryPartyBuild();
+        return changed;
+    }
+
+    public bool TryTransmuteMetal(MetalCurrencyKind output) => Town.TryTransmute(World.Economy, output);
 
     public void ResumeCampaignAfterDefeat()
     {
@@ -839,17 +915,11 @@ public sealed class P1GameSession
 
     private void RefreshMercenaryBuild()
     {
-        P1MercenaryProfile generated = P1MercenaryFactory.GenerateCantor(Seed ^ 0xa5a5a5a5UL);
-        var profile = new P1MercenaryProfile(
-            generated.StableId,
-            MercenaryName,
-            generated.Archetype,
-            generated.FinalAttributes,
-            generated.Traits,
-            generated.AutonomousConfiguration,
-            MercenaryEquipment);
-        World.Mercenaries.UpdateBuild(profile.CreateTeamBuild(World.Mercenaries.Progression.Level));
+        RefreshMercenaryPartyBuild();
     }
+
+    private void RefreshMercenaryPartyBuild() => World.Mercenaries.UpdateBuild(
+        Town.BuildMercenaryParty(World.Mercenaries.Progression.Level));
 
     private static P1TeamBuild ToTeamBuild(
         AssembledCharacterBuild build,

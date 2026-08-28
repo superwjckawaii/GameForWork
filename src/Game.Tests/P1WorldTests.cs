@@ -287,18 +287,18 @@ public sealed class P1WorldTests
     }
 
     [Fact]
-    public void TeleporterCapacityGrowsOneThroughFourWithoutAddingATeam()
+    public void TeleporterCapacityGrowsThreeThroughSixWithoutAddingATeam()
     {
         var teleporter = new TeleporterState();
-        Assert.Equal(1, teleporter.MercenaryTeamCapacity);
+        Assert.Equal(3, teleporter.MercenaryTeamCapacity);
         for (int level = 2; level <= 4; level++)
         {
             Assert.True(teleporter.TrySetLevel(level));
-            Assert.Equal(level, teleporter.MercenaryTeamCapacity);
+            Assert.Equal(level + 2, teleporter.MercenaryTeamCapacity);
         }
 
         Assert.False(teleporter.TrySetLevel(5));
-        Assert.Equal(4, teleporter.MercenaryTeamCapacity);
+        Assert.Equal(6, teleporter.MercenaryTeamCapacity);
         Assert.Equal(2, WorldWithInitialMaps().Teams.Count);
     }
 

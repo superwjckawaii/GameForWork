@@ -8,6 +8,7 @@ using GameForWork.Core.P2;
 using GameForWork.Core.P4;
 using GameForWork.Core.P5;
 using GameForWork.Core.P6;
+using GameForWork.Core.P9;
 using Godot;
 using System.Security.Cryptography;
 using System.Text.Json;
@@ -45,6 +46,7 @@ public partial class P2Dashboard : VBoxContainer
     private Control? _skillMode;
     private Control? _passiveMode;
     private Control? _aiMode;
+    private Control? _metalMode;
     private Label? _miniStatus;
     private Label? _overviewStatus;
     private Label? _characterStatus;
@@ -70,6 +72,8 @@ public partial class P2Dashboard : VBoxContainer
     private P2LootFilterPanel? _filterPanel;
     private P2SkillStonePanel? _skillStonePanel;
     private P5ExpeditionPanel? _expeditionPanel;
+    private P9MetalPanel? _metalPanel;
+    private P9TownPanel? _townPanel;
     private OptionButton? _characterSelector;
     private PopupMenu? _itemMenu;
     private ConfirmationDialog? _confirmDialog;
@@ -79,6 +83,8 @@ public partial class P2Dashboard : VBoxContainer
     private int _craftIndex = -1;
     private Action? _pendingConfirmation;
     private P2CharacterKind _selectedCharacter;
+    private string _selectedMercenaryId = string.Empty;
+    private string _characterSelectorSignature = string.Empty;
     private double _refreshAccumulator;
     private bool _miniMode;
     private Label? _journeyStatus;
@@ -335,10 +341,12 @@ public partial class P2Dashboard : VBoxContainer
         VBoxContainer page = Page("角色与物品");
         var header = new HBoxContainer();
         page.AddChild(header);
-        _characterSelector = AddOptions(header, "当前角色", ["主角", "佣兵"]);
+        _characterSelector = AddOptions(header, "当前角色", ["主角"]);
         _characterSelector.ItemSelected += index =>
         {
-            _selectedCharacter = (P2CharacterKind)index;
+            _selectedCharacter = index == 0 ? P2CharacterKind.Hero : P2CharacterKind.Mercenary;
+            _selectedMercenaryId = index == 0 || index - 1 >= RequireSession().Town.Roster.Count
+                ? string.Empty : RequireSession().Town.Roster[(int)index - 1].Identity.StableId;
             Refresh();
         };
         var collapseSidebar = new Button
@@ -349,7 +357,7 @@ public partial class P2Dashboard : VBoxContainer
         };
         header.AddChild(collapseSidebar);
         AddButton(header, "撤销移动", () => Execute(
-            new P2ItemCommandService(RequireSession(), _selectedCharacter).UndoLastMovement()));
+            ItemCommands().UndoLastMovement()));
         _characterStatus = new Label
         {
             SizeFlagsHorizontal = SizeFlags.ExpandFill,
@@ -374,6 +382,8 @@ public partial class P2Dashboard : VBoxContainer
         _characterModes.AddChild(_passiveMode);
         _aiMode = BuildAiMode();
         _characterModes.AddChild(_aiMode);
+        _metalMode = BuildMetalMode();
+        _characterModes.AddChild(_metalMode);
         _characterModes.TabChanged += index =>
         {
             if (_skillMode is not null && _characterModes.GetTabControl((int)index) == _skillMode)
@@ -396,7 +406,7 @@ public partial class P2Dashboard : VBoxContainer
         _equipmentGrid.ItemSelected += index => SelectCraftTarget(ItemContainerKind.Equipped, index);
         _equipmentGrid.ItemContextRequested += (index, position) => OpenItemMenu(ItemContainerKind.Equipped, index, position);
         _equipmentGrid.QuickTransferRequested += index =>
-            Execute(new P2ItemCommandService(RequireSession(), _selectedCharacter)
+            Execute(ItemCommands()
                 .QuickTransfer(ItemContainerKind.Equipped, index));
         _equipmentGrid.ItemDropped += (source, sourceIndex, targetIndex) =>
             HandleDrop(source, sourceIndex, ItemContainerKind.Equipped, targetIndex);
@@ -457,21 +467,9 @@ public partial class P2Dashboard : VBoxContainer
             Changed("仓库已按连接数、稀有度和物品等级整理。");
         });
 
-        var workshop = new VBoxContainer();
-        body.AddChild(workshop);
-        workshop.AddChild(new Label { Text = "装备工坊 · 先选择背包、仓库或已装备物品，再消耗对应金属加工" });
+        body.AddChild(new Label { Text = "装备制作与附魔已集中到“金属仓与附魔”页；选择物品后切换该页操作。" });
         _craftingStatus = new Label { AutowrapMode = TextServer.AutowrapMode.WordSmart };
-        workshop.AddChild(_craftingStatus);
-        var recipes = new HFlowContainer();
-        workshop.AddChild(recipes);
-        AddButton(recipes, "淬刃铁：物理锻造", () => CraftSelected(P2WorkshopRecipe.WeaponPhysical));
-        AddButton(recipes, "守壁钢：防具加固", () => CraftSelected(P2WorkshopRecipe.ReinforceDefense));
-        AddButton(recipes, "活血银：生命刻印", () => CraftSelected(P2WorkshopRecipe.VitalityEtching));
-        AddButton(recipes, "链铸钢：重铸连接", () => CraftP6Selected(P6CraftOperation.RerollLinks));
-        AddButton(recipes, "链铸钢：保证升连", () => CraftP6Selected(P6CraftOperation.UpgradeLinks));
-        AddButton(recipes, "混沌金：重铸词缀", () => CraftP6Selected(P6CraftOperation.ChaosReroll));
-        AddButton(recipes, "神铸银：重掷数值", () => CraftP6Selected(P6CraftOperation.DivineReroll));
-        AddButton(recipes, "破溃钢：固化词缀", () => CraftP6Selected(P6CraftOperation.FractureAffix));
+        body.AddChild(_craftingStatus);
 
         var safetyTabs = new TabContainer { CustomMinimumSize = new Vector2(0, 150) };
         body.AddChild(safetyTabs);
@@ -485,6 +483,20 @@ public partial class P2Dashboard : VBoxContainer
         _buybackGrid = BuildGrid(ItemContainerKind.Buyback, 10, P2ManagementState.BuybackCapacity, 30);
         buyback.AddChild(_buybackGrid);
         safetyTabs.AddChild(buyback);
+        return scroll;
+    }
+
+    private Control BuildMetalMode()
+    {
+        var scroll = new ScrollContainer
+        {
+            Name = "金属仓与附魔",
+            SizeFlagsHorizontal = SizeFlags.ExpandFill,
+            SizeFlagsVertical = SizeFlags.ExpandFill,
+        };
+        _metalPanel = new P9MetalPanel { SizeFlagsHorizontal = SizeFlags.ExpandFill };
+        _metalPanel.Initialize(RequireSession, CurrentCraftTarget, Changed);
+        scroll.AddChild(_metalPanel);
         return scroll;
     }
 
@@ -611,6 +623,9 @@ public partial class P2Dashboard : VBoxContainer
     private Control BuildTownPage()
     {
         VBoxContainer page = Page("城镇事务");
+        _townPanel = new P9TownPanel { CustomMinimumSize = new Vector2(0, 560) };
+        _townPanel.Initialize(RequireSession, Changed);
+        page.AddChild(_townPanel);
         var workshop = new HFlowContainer();
         page.AddChild(workshop);
         AddButton(workshop, "监守印记兑换传奇", () =>
@@ -631,6 +646,20 @@ public partial class P2Dashboard : VBoxContainer
         };
         page.AddChild(_history);
         return page;
+    }
+
+    private P9CraftTarget? CurrentCraftTarget()
+    {
+        if (_craftIndex < 0) return null;
+        ItemInstance? item = _craftContainer switch
+        {
+            ItemContainerKind.Storage when _craftIndex < RequireSession().World.Storage.Items.Count => RequireSession().World.Storage.Items[_craftIndex],
+            ItemContainerKind.SortingBag when _craftIndex < RequireSession().Management.SortingBag.Count => RequireSession().Management.SortingBag[_craftIndex],
+            ItemContainerKind.Equipped => SelectedLoadout()
+                .Items.GetValueOrDefault((EquipmentSlot)_craftIndex),
+            _ => null,
+        };
+        return item is null ? null : new P9CraftTarget(_craftContainer, _craftIndex, item, _selectedCharacter, _selectedMercenaryId);
     }
 
     private VBoxContainer BuildMiniPanel()
@@ -678,7 +707,7 @@ public partial class P2Dashboard : VBoxContainer
         grid.ItemActivated += index => ActivateItem(kind, index);
         grid.ItemSelected += index => SelectCraftTarget(kind, index);
         grid.ItemContextRequested += (index, position) => OpenItemMenu(kind, index, position);
-        grid.QuickTransferRequested += index => Execute(new P2ItemCommandService(RequireSession(), _selectedCharacter).QuickTransfer(kind, index));
+        grid.QuickTransferRequested += index => Execute(ItemCommands().QuickTransfer(kind, index));
         grid.ItemDropped += (source, sourceIndex, targetIndex) => HandleDrop(source, sourceIndex, kind, targetIndex);
         return grid;
     }
@@ -702,7 +731,7 @@ public partial class P2Dashboard : VBoxContainer
 
     private void ActivateItem(ItemContainerKind kind, int index)
     {
-        var commands = new P2ItemCommandService(RequireSession(), _selectedCharacter);
+        P2ItemCommandService commands = ItemCommands();
         if (kind == ItemContainerKind.Equipped)
         {
             Execute(commands.TryUnequip((EquipmentSlot)index));
@@ -732,7 +761,7 @@ public partial class P2Dashboard : VBoxContainer
 
     private void HandleDrop(ItemContainerKind source, int sourceIndex, ItemContainerKind target, int targetIndex)
     {
-        var commands = new P2ItemCommandService(RequireSession(), _selectedCharacter);
+        P2ItemCommandService commands = ItemCommands();
         if (target == ItemContainerKind.Equipped)
         {
             Execute(commands.TryEquip(source, sourceIndex, (EquipmentSlot)targetIndex));
@@ -784,7 +813,7 @@ public partial class P2Dashboard : VBoxContainer
 
     private void OnContextAction(long id)
     {
-        var commands = new P2ItemCommandService(RequireSession(), _selectedCharacter);
+        P2ItemCommandService commands = ItemCommands();
         switch (id)
         {
             case ContextEquip:
@@ -931,7 +960,7 @@ public partial class P2Dashboard : VBoxContainer
             $"确认对 {currentItem.Base.DisplayName} 执行？";
         _pendingConfirmation = () =>
         {
-            P2WorkshopPreview result = new P2ItemCommandService(RequireSession(), _selectedCharacter)
+            P2WorkshopPreview result = ItemCommands()
                 .Craft(container, index, recipe);
             Changed(result.Succeeded ? $"制作完成：{result.Summary}" : $"制作失败：{result.Summary}");
         };
@@ -981,7 +1010,7 @@ public partial class P2Dashboard : VBoxContainer
             $"确认对 {currentItem.Base.DisplayName} 执行？";
         _pendingConfirmation = () =>
         {
-            P6CraftPreview result = new P2ItemCommandService(RequireSession(), _selectedCharacter)
+            P6CraftPreview result = ItemCommands()
                 .CraftP6(container, index, operation, fractureFamily);
             Changed(result.Succeeded ? $"制作完成：{result.Summary}" : $"制作失败：{result.Summary}");
         };
@@ -1271,33 +1300,47 @@ public partial class P2Dashboard : VBoxContainer
 
         _worldView!.Session = _session;
         _worldView.QueueRedraw();
+        RefreshCharacterSelector();
         TownEconomyState economy = _session.World.Economy;
         string recoveryWarning = _session.Management.Recovery.Count == 0
             ? string.Empty
             : $" · ⚠ 恢复箱 {_session.Management.Recovery.Count}";
         _overviewStatus!.Text =
-            $"{_session.Player.Name} Lv.{_session.World.Hero.Progression.Level} · 佣兵 {_session.MercenaryName} Lv.{_session.World.Mercenaries.Progression.Level}\n" +
+            $"{_session.Player.Name} Lv.{_session.World.Hero.Progression.Level} · 佣兵队 {_session.Town.ActiveMembers().Count}/{_session.Town.MercenaryCapacity} 人\n" +
             $"补给 {economy.ExpeditionSupplies} · 金币 {economy.Gold} · 铁屑 {economy.IronScraps} · " +
             $"淬刃铁 {economy.MetalAmount(MetalCurrencyKind.TemperingIron)} · 守壁钢 {economy.MetalAmount(MetalCurrencyKind.WardSteel)} · " +
             $"活血银 {economy.MetalAmount(MetalCurrencyKind.VitalSilver)} · 地图 {_session.World.MapInventory.Count}{recoveryWarning}";
 
-        EquipmentLoadout selectedLoadout = _selectedCharacter == P2CharacterKind.Hero
-            ? _session.HeroEquipment
-            : _session.MercenaryEquipment;
+        EquipmentLoadout selectedLoadout = SelectedLoadout();
         P1TeamExpeditionState selectedTeam = _selectedCharacter == P2CharacterKind.Hero
             ? _session.World.Hero
             : _session.World.Mercenaries;
         EquipmentSummary equipment = selectedLoadout.CalculateSummary();
+        P9MercenaryMember? selectedMercenary = SelectedMercenary();
+        CharacterSheet selectedSheet = selectedTeam.Build.Sheet;
+        if (selectedMercenary is not null)
+        {
+            selectedSheet = CharacterBuildAssembler.Assemble(
+                selectedMercenary.Level,
+                selectedMercenary.Identity.FinalAttributes,
+                selectedMercenary.Equipment,
+                new PassiveTreeAllocation(),
+                new SkillConfiguration(P1SkillIds.HeavyStrike, SkillSupport.Bleed)).Sheet;
+        }
         _characterStatus!.Text = _selectedCharacter == P2CharacterKind.Hero
             ? $"{_session.Player.Name} · {_session.Player.Ascendancy} · Lv.{selectedTeam.Progression.Level}"
-            : $"{_session.MercenaryName} · 颂仪者倾向 · Lv.{selectedTeam.Progression.Level}";
+            : $"{selectedMercenary?.Identity.Name ?? "佣兵"} · {MercenaryArchetypeName(selectedMercenary?.Identity.Archetype)} · Lv.{selectedMercenary?.Level ?? selectedTeam.Progression.Level}";
         _storageStatus!.Text =
-            $"生命 {selectedTeam.Build.Sheet.MaximumLife().Value} · 法力 {selectedTeam.Build.Sheet.MaximumMana().Value} · 护盾 {selectedTeam.Build.Sheet.Equipment.Shield}\n" +
-            $"体魄 {selectedTeam.Build.Sheet.Attributes.Physique} · 灵巧 {selectedTeam.Build.Sheet.Attributes.Dexterity} · 精神 {selectedTeam.Build.Sheet.Attributes.Spirit} · 能量 {selectedTeam.Build.Sheet.Attributes.Energy}\n" +
+            $"生命 {selectedSheet.MaximumLife().Value} · 法力 {selectedSheet.MaximumMana().Value} · 护盾 {selectedSheet.Equipment.Shield}\n" +
+            $"体魄 {selectedSheet.Attributes.Physique} · 灵巧 {selectedSheet.Attributes.Dexterity} · 精神 {selectedSheet.Attributes.Spirit} · 能量 {selectedSheet.Attributes.Energy}\n" +
             $"核心槽 {equipment.CoreSkillCapacity} · 旧制连接 {equipment.SupportLinkCapacity}\n" +
-            BuildSummaryText(_session.GetBuildSummary());
+            (selectedMercenary is null
+                ? BuildSummaryText(_session.GetBuildSummary())
+                : $"最终属性已公开；内部加点隐藏。\n技能：{selectedMercenary.Identity.SkillSummary}\nAI：{selectedMercenary.Identity.AiSummary}");
 
         RefreshJourneyInterface();
+        _townPanel?.Refresh();
+        _metalPanel?.Refresh();
         if (string.IsNullOrWhiteSpace(_storageSearch))
         {
             _storageGrid!.SetItems(_session.World.Storage.Items);
@@ -1379,9 +1422,7 @@ public partial class P2Dashboard : VBoxContainer
             RequireSession().Management.SortingBag[index],
         ItemContainerKind.Recovery when index >= 0 && index < RequireSession().Management.Recovery.Count =>
             RequireSession().Management.Recovery[index],
-        ItemContainerKind.Equipped => (_selectedCharacter == P2CharacterKind.Hero
-            ? RequireSession().HeroEquipment
-            : RequireSession().MercenaryEquipment).Items.GetValueOrDefault((EquipmentSlot)index),
+        ItemContainerKind.Equipped => SelectedLoadout().Items.GetValueOrDefault((EquipmentSlot)index),
         _ => null,
     };
 
@@ -1429,6 +1470,47 @@ public partial class P2Dashboard : VBoxContainer
         summary.Assumptions;
 
     private P1GameSession RequireSession() => _session ?? throw new InvalidOperationException("请先创建角色。");
+
+    private P2ItemCommandService ItemCommands() => new(RequireSession(), _selectedCharacter, _selectedMercenaryId);
+
+    private P9MercenaryMember? SelectedMercenary()
+    {
+        if (_session is null || _selectedCharacter != P2CharacterKind.Mercenary) return null;
+        P9MercenaryMember? selected = _session.Town.Roster.FirstOrDefault(member => member.Identity.StableId == _selectedMercenaryId);
+        return selected ?? _session.Town.Roster.FirstOrDefault();
+    }
+
+    private EquipmentLoadout SelectedLoadout() => _selectedCharacter == P2CharacterKind.Hero
+        ? RequireSession().HeroEquipment
+        : SelectedMercenary()?.Equipment ?? RequireSession().MercenaryEquipment;
+
+    private void RefreshCharacterSelector()
+    {
+        if (_characterSelector is null || _session is null) return;
+        string signature = string.Join('|', _session.Town.Roster.Select(member => member.Identity.StableId));
+        if (signature == _characterSelectorSignature) return;
+        _characterSelectorSignature = signature;
+        string selectedId = _selectedMercenaryId;
+        _characterSelector.Clear();
+        _characterSelector.AddItem("主角");
+        foreach (P9MercenaryMember member in _session.Town.Roster)
+            _characterSelector.AddItem($"佣兵：{member.Identity.Name}");
+        int selectedIndex = _selectedCharacter == P2CharacterKind.Hero ? 0 :
+            Math.Max(1, _session.Town.Roster.ToList().FindIndex(member => member.Identity.StableId == selectedId) + 1);
+        if (selectedIndex >= _characterSelector.ItemCount) selectedIndex = 0;
+        _characterSelector.Select(selectedIndex);
+        if (selectedIndex == 0) { _selectedCharacter = P2CharacterKind.Hero; _selectedMercenaryId = string.Empty; }
+        else _selectedMercenaryId = _session.Town.Roster[selectedIndex - 1].Identity.StableId;
+    }
+
+    private static string MercenaryArchetypeName(P9MercenaryArchetype? archetype) => archetype switch
+    {
+        P9MercenaryArchetype.Guardian => "守卫",
+        P9MercenaryArchetype.Ranger => "游猎者",
+        P9MercenaryArchetype.Cantor => "颂仪者",
+        P9MercenaryArchetype.Arcanist => "秘械师",
+        _ => "未知职业",
+    };
 
     private P1TeamExpeditionState Team(ExpeditionTeamKind kind) =>
         kind == ExpeditionTeamKind.Hero ? RequireSession().World.Hero : RequireSession().World.Mercenaries;

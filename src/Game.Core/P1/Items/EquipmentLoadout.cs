@@ -80,9 +80,9 @@ public sealed class EquipmentLoadout
     public EquipmentSummary CalculateSummary()
     {
         ItemInstance[] equipped = _items.Values.ToArray();
-        int armor = equipped.Sum(item => item.Base.Armor);
-        int evasion = equipped.Sum(item => item.Base.Evasion);
-        int shield = equipped.Sum(item => item.Base.Shield);
+        int armor = equipped.Sum(item => QualityScale(item.Base.Armor, item.Quality));
+        int evasion = equipped.Sum(item => QualityScale(item.Base.Evasion, item.Quality));
+        int shield = equipped.Sum(item => QualityScale(item.Base.Shield, item.Quality));
         int[] sums = new int[Enum.GetValues<ItemModifierKind>().Length];
         foreach (ItemInstance item in equipped)
         {
@@ -91,6 +91,11 @@ public sealed class EquipmentLoadout
             {
                 sums[(int)affix.Definition.ModifierKind] = checked(
                     sums[(int)affix.Definition.ModifierKind] + affix.Value);
+            }
+            if (item.Enchantment is not null)
+            {
+                sums[(int)item.Enchantment.ModifierKind] = checked(
+                    sums[(int)item.Enchantment.ModifierKind] + item.Enchantment.Value);
             }
         }
 
@@ -116,8 +121,20 @@ public sealed class EquipmentLoadout
             modifiers,
             equipped.Sum(item => item.Base.CoreSkillCapacity),
             equipped.Sum(item => item.Base.SupportLinkCapacity + item.ExtraSupportLinkCapacity),
-            weaponItem?.Base.Category == ItemCategory.TwoHandWeapon ? weaponItem.Base.ToWeaponProfile() : null,
+            weaponItem?.Base.Category == ItemCategory.TwoHandWeapon ? QualityWeapon(weaponItem) : null,
             weaponItem?.LegendaryRule);
+    }
+
+    private static int QualityScale(int value, int quality) => checked(value * (100 + Math.Clamp(quality, 0, 30)) / 100);
+
+    private static WeaponProfile QualityWeapon(ItemInstance item)
+    {
+        WeaponProfile weapon = item.Base.ToWeaponProfile();
+        return weapon with
+        {
+            MinimumPhysicalDamage = QualityScale(weapon.MinimumPhysicalDamage, item.Quality),
+            MaximumPhysicalDamage = QualityScale(weapon.MaximumPhysicalDamage, item.Quality),
+        };
     }
 
     public static bool CanEquip(EquipmentSlot slot, ItemCategory category) => category switch

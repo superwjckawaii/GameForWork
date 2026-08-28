@@ -156,8 +156,10 @@ public sealed class P1SessionTests
 
         Assert.NotNull(restored.World.Mercenaries.Build.LifeFlask);
         Assert.NotNull(restored.World.Mercenaries.Build.HeavyStrikeProfile);
-        Assert.Equal(45, restored.World.Mercenaries.Build.Sheet.Equipment.Armor);
-        Assert.Equal(112, restored.World.Mercenaries.Build.Sheet.MaximumLife().Value);
+        Assert.Equal(3, restored.Town.Roster.Count);
+        Assert.Equal(3, restored.World.Mercenaries.Build.PartySize);
+        Assert.Equal(105, restored.World.Mercenaries.Build.Sheet.Equipment.Armor);
+        Assert.Equal(1_720, restored.World.Mercenaries.Build.Sheet.MaximumLife().Value);
     }
 
     private static P1GameSession CreateSession() => P1GameSession.CreateNew(Identity("阿斯特"), 1234);

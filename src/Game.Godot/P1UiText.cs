@@ -12,6 +12,7 @@ internal static class P1UiText
         var text = new StringBuilder();
         text.AppendLine($"{RarityName(item.Rarity)} · {item.Base.DisplayName}");
         text.AppendLine($"物品等级 {item.ItemLevel} · {CategoryName(item.Base.Category)}");
+        if (item.Quality > 0) text.AppendLine($"品质 +{item.Quality}%");
         if (item.Base.Category == ItemCategory.TwoHandWeapon)
         {
             text.AppendLine($"物理伤害 {item.Base.MinimumPhysicalDamage}–{item.Base.MaximumPhysicalDamage}");
@@ -40,6 +41,11 @@ internal static class P1UiText
                 Modifier(affix.Definition.ModifierKind, affix.Value));
         }
 
+        if (item.Enchantment is not null)
+        {
+            text.AppendLine($"附魔 · {item.Enchantment.DisplayName}：{Modifier(item.Enchantment.ModifierKind, item.Enchantment.Value)}");
+        }
+
         if (item.LegendaryRule is not null)
         {
             text.AppendLine("传奇规则：重击总攻击速度降低 30%");
@@ -55,6 +61,10 @@ internal static class P1UiText
         if (item.IsCraftingBase)
         {
             text.Append(" · ◆ 制作底材");
+        }
+        if (item.IsCorrupted)
+        {
+            text.Append($" · ☠ 已腐化（{item.CorruptionOutcome}）");
         }
         return text.ToString();
     }

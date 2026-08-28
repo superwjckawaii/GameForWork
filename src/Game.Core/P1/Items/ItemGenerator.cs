@@ -69,6 +69,20 @@ public static class ItemGenerator
         return selected;
     }
 
+    public static AffixRoll? RollAdditionalAffix(ItemInstance item, ulong seed)
+    {
+        ArgumentNullException.ThrowIfNull(item);
+        var random = new Pcg32(seed);
+        AffixDefinition[] candidates = P1Affixes.For(item.Base.Category, item.ItemLevel)
+            .Where(affix => IsApplicableToBase(affix.ModifierKind, item.Base))
+            .Where(affix => item.Affixes.All(existing => existing.Definition.StableFamilyId != affix.StableFamilyId))
+            .Where(affix => affix.Position == AffixPosition.Prefix ? item.PrefixCount < 3 : item.SuffixCount < 3)
+            .ToArray();
+        if (candidates.Length == 0) return null;
+        AffixDefinition selected = WeightedPick(candidates, random);
+        return new AffixRoll(selected, RollInclusive(random, selected.MinimumValue, selected.MaximumValue));
+    }
+
     private static AffixDefinition WeightedPick(IReadOnlyList<AffixDefinition> candidates, Pcg32 random)
     {
         int totalWeight = candidates.Sum(candidate => candidate.Weight);
