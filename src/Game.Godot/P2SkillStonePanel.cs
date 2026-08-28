@@ -14,6 +14,10 @@ public partial class P2SkillStonePanel : VBoxContainer
     private VBoxContainer? _groups;
     private Label? _details;
     private Label? _errors;
+    private LineEdit? _search;
+    private OptionButton? _kindFilter;
+    private OptionButton? _tagFilter;
+    private SpinBox? _minimumLevel;
     private string _signature = string.Empty;
     private bool _readOnly;
 
@@ -26,6 +30,26 @@ public partial class P2SkillStonePanel : VBoxContainer
         columns.AddThemeConstantOverride("separation", 10);
         AddChild(columns);
         VBoxContainer left = Column(columns, "未安装技能石", 205);
+        _search = new LineEdit { PlaceholderText = "搜索名称" };
+        _search.TextChanged += _ => Invalidate();
+        left.AddChild(_search);
+        _kindFilter = new OptionButton();
+        _kindFilter.AddItem("全部类型");
+        _kindFilter.AddItem("主动");
+        _kindFilter.AddItem("辅助");
+        _kindFilter.ItemSelected += _ => Invalidate();
+        left.AddChild(_kindFilter);
+        _tagFilter = new OptionButton();
+        _tagFilter.AddItem("全部标签", (int)SkillTag.None);
+        foreach (SkillTag tag in Enum.GetValues<SkillTag>().Where(tag => tag != SkillTag.None))
+        {
+            _tagFilter.AddItem(tag.ToString(), (int)tag);
+        }
+        _tagFilter.ItemSelected += _ => Invalidate();
+        left.AddChild(_tagFilter);
+        _minimumLevel = new SpinBox { MinValue = 1, MaxValue = 20, Value = 1, Prefix = "最低等级 " };
+        _minimumLevel.ValueChanged += _ => Invalidate();
+        left.AddChild(_minimumLevel);
         var inventoryScroll = new ScrollContainer { CustomMinimumSize = new Vector2(195, 270) };
         left.AddChild(inventoryScroll);
         _inventory = new VBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
@@ -90,16 +114,20 @@ public partial class P2SkillStonePanel : VBoxContainer
             return;
         }
 
-        foreach (SkillStoneInstance stone in management.UninstalledSkillStones
-                     .OrderBy(stone => stone.Definition.Kind).ThenBy(stone => stone.Definition.DisplayName, StringComparer.Ordinal))
+        SkillStoneInstance[] visibleStones = management.UninstalledSkillStones
+            .Where(MatchesInventoryFilter)
+            .OrderBy(stone => stone.Definition.Kind)
+            .ThenBy(stone => stone.Definition.DisplayName, StringComparer.Ordinal)
+            .ToArray();
+        foreach (SkillStoneInstance stone in visibleStones)
         {
             P2SkillStoneButton button = StoneButton(stone);
             button.Pressed += () => ShowDetails(stone, installed: false);
             _inventory.AddChild(button);
         }
-        if (management.UninstalledSkillStones.Count == 0)
+        if (visibleStones.Length == 0)
         {
-            _inventory.AddChild(new Label { Text = "所有技能石均已安装。", Modulate = new Color("7c8490") });
+            _inventory.AddChild(new Label { Text = "没有符合筛选条件的未安装技能石。", Modulate = new Color("7c8490") });
         }
 
         var invalid = new List<string>();
@@ -153,6 +181,24 @@ public partial class P2SkillStonePanel : VBoxContainer
             invalid.Add("没有提供连接孔的装备");
         }
         _errors.Text = invalid.Count == 0 ? "构筑错误：无" : "构筑错误：" + string.Join("；", invalid);
+    }
+
+    private void Invalidate()
+    {
+        _signature = string.Empty;
+        RefreshState();
+    }
+
+    private bool MatchesInventoryFilter(SkillStoneInstance stone)
+    {
+        string query = _search?.Text.Trim() ?? string.Empty;
+        if (query.Length > 0 && !stone.Definition.DisplayName.Contains(query, StringComparison.OrdinalIgnoreCase)) return false;
+        if (_kindFilter?.Selected == 1 && stone.Definition.Kind != SkillStoneKind.Active) return false;
+        if (_kindFilter?.Selected == 2 && stone.Definition.Kind != SkillStoneKind.Support) return false;
+        if (stone.Level < (_minimumLevel?.Value ?? 1)) return false;
+        SkillTag requested = _tagFilter is null ? SkillTag.None : (SkillTag)_tagFilter.GetItemId(_tagFilter.Selected);
+        SkillTag tags = stone.Definition.Kind == SkillStoneKind.Active ? stone.Definition.Tags : stone.Definition.SupportedTags;
+        return requested == SkillTag.None || tags.HasFlag(requested);
     }
 
     public void DropOnSocket(string chainId, int socketIndex, string stoneInstanceId)

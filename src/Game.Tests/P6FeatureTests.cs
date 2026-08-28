@@ -180,6 +180,70 @@ public sealed class P6FeatureTests
         Assert.Equal(4, restored.AiRule!.MinimumEnemyCount);
     }
 
+    [Fact]
+    public void ChainSteelCraftingUsesGuaranteedCostsAndProtectsSixLinks()
+    {
+        P1GameSession session = CreateSession();
+        session.World.Economy.AddMetal(MetalCurrencyKind.ChainSteel, 20);
+        ItemInstance item = ItemGenerator.Generate(
+            "core.base.rusted_greatsword", 10, ItemRarity.Rare, 601) with { LinkedSocketCount = 3 };
+
+        P6CraftPreview upgrade = P6CraftingRules.Craft(
+            session.World.Economy, item, P6CraftOperation.UpgradeLinks);
+        P6CraftPreview reroll = P6CraftingRules.Preview(
+            upgrade.Result! with { LinkedSocketCount = 4 }, P6CraftOperation.RerollLinks, seed: 602);
+        P6CraftPreview protectedSix = P6CraftingRules.Preview(
+            item with { LinkedSocketCount = 6 }, P6CraftOperation.RerollLinks, seed: 603);
+
+        Assert.True(upgrade.Succeeded);
+        Assert.Equal(4, upgrade.ResultLinks);
+        Assert.Equal(2, upgrade.Cost);
+        Assert.True(reroll.Succeeded);
+        Assert.InRange(reroll.ResultLinks, 2, 6);
+        Assert.False(protectedSix.Succeeded);
+        Assert.Equal("six_link_locked", protectedSix.FailureReason);
+    }
+
+    [Fact]
+    public void AdvancedMetalsPreserveCraftedFracturedAndSocketState()
+    {
+        ItemInstance generated = ItemGenerator.Generate(
+            "core.base.rusted_greatsword", 10, ItemRarity.Rare, 610) with { LinkedSocketCount = 5, IsLocked = false };
+        AffixRoll crafted = generated.Affixes[0] with { Crafted = true };
+        AffixRoll natural = generated.Affixes[1];
+        ItemInstance prepared = generated with { Affixes = [crafted, natural] };
+        P6CraftPreview fracture = P6CraftingRules.Preview(
+            prepared, P6CraftOperation.FractureAffix, natural.Definition.StableFamilyId);
+        P6CraftPreview chaos = P6CraftingRules.Preview(
+            fracture.Result!, P6CraftOperation.ChaosReroll, seed: 611);
+        P6CraftPreview divine = P6CraftingRules.Preview(
+            chaos.Result!, P6CraftOperation.DivineReroll, seed: 612);
+
+        Assert.True(fracture.Succeeded);
+        Assert.True(chaos.Succeeded);
+        Assert.True(divine.Succeeded);
+        Assert.Equal(5, divine.Result!.LinkedSocketCount);
+        Assert.Equal(natural.Definition.StableFamilyId, divine.Result.FracturedAffixFamilyId);
+        Assert.Contains(divine.Result.Affixes, affix => affix.Crafted && affix.Value == crafted.Value);
+        Assert.Contains(divine.Result.Affixes, affix =>
+            affix.Definition.StableFamilyId == natural.Definition.StableFamilyId && affix.Value == natural.Value);
+    }
+
+    [Fact]
+    public void LinkFilterPrecedesRarityAndBuildSummaryStatesItsAssumptions()
+    {
+        var filter = new LootFilter();
+        ItemInstance sixLinkMagic = ItemGenerator.Generate(
+            "core.base.rusted_greatsword", 10, ItemRarity.Magic, 620) with { LinkedSocketCount = 6 };
+        P1GameSession session = CreateSession();
+        P6BuildSummary summary = session.GetBuildSummary();
+
+        Assert.Equal(LootDisposition.Keep, filter.Evaluate(sixLinkMagic));
+        Assert.NotEqual("无", summary.MainSkill);
+        Assert.InRange(summary.MainSkillLinks, 1, 6);
+        Assert.Contains("估算假设", summary.Assumptions);
+    }
+
     private static P1TeamBuild AiBuild(SkillAiRule rule) => new(
         new CharacterSheet(60, new CharacterAttributes(250, 160, 140, 120),
             new DefensiveEquipment(700, 160, 220), FlatMaximumLife: 1_600),

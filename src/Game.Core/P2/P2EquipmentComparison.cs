@@ -14,4 +14,7 @@ public sealed record P2EquipmentComparison(
     int EffectiveLifeDelta,
     bool RequirementsMet,
     int DisabledSkillLinks,
-    EquipmentSlot TargetSlot);
+    EquipmentSlot TargetSlot,
+    int LinkedSocketDelta = 0,
+    IReadOnlyList<string>? EjectedSkillStones = null,
+    IReadOnlyList<string>? RetainedSkillStones = null);

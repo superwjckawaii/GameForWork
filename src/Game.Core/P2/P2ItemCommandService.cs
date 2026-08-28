@@ -1,6 +1,8 @@
 using GameForWork.Core.P1;
 using GameForWork.Core.P1.Items;
 using System.Runtime.CompilerServices;
+using GameForWork.Core.P6;
+using GameForWork.Core.P4;
 
 namespace GameForWork.Core.P2;
 
@@ -145,6 +147,33 @@ public sealed class P2ItemCommandService(P1GameSession session, P2CharacterKind 
             session.NotifyEquipmentChanged(character);
         }
         session.Management.AddHistory($"已对 {item.Base.DisplayName} 完成制作：{result.Summary}。");
+        return result;
+    }
+
+    public P6CraftPreview CraftP6(
+        ItemContainerKind source,
+        int index,
+        P6CraftOperation operation,
+        string fractureFamilyId = "")
+    {
+        ItemInstance? item = PeekIncludingEquipped(source, index);
+        if (item is null)
+        {
+            return new P6CraftPreview(false, "item_missing", "物品不存在。", null,
+                MetalCurrencyKind.ChainSteel, 0, 0, 0);
+        }
+        P6CraftPreview result = P6CraftingRules.Craft(session.World.Economy, item, operation, fractureFamilyId);
+        if (!result.Succeeded) return result;
+        if (!Replace(source, index, result.Result!))
+        {
+            session.World.Economy.AddMetal(result.Currency, result.Cost);
+            return result with { Succeeded = false, FailureReason = "replace_failed", Summary = "物品位置变化，制作与材料已回滚。" };
+        }
+        if (source == ItemContainerKind.Equipped)
+        {
+            session.NotifyEquipmentChanged(character);
+        }
+        session.Management.AddHistory($"制作完成：{result.Summary}。 ");
         return result;
     }
 

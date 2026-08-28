@@ -16,12 +16,20 @@ public sealed record LootFilterRule(
     string? BaseStableId = null,
     string? AffixFamilyId = null,
     int? MinimumAffixValue = null,
-    bool Enabled = true)
+    bool Enabled = true,
+    EquipmentSlot? Slot = null,
+    int MinimumLinkedSockets = 0,
+    bool RequireFiveOrSixLink = false,
+    bool RequireCurrentSchemeNeed = false)
 {
     public bool Matches(ItemInstance item)
     {
         if (!Enabled || Rarity is not null && item.Rarity != Rarity ||
-            BaseStableId is not null && item.Base.StableId != BaseStableId)
+            BaseStableId is not null && item.Base.StableId != BaseStableId ||
+            Slot is not null && item.Base.PrimarySlot != Slot ||
+            item.LinkedSocketCount < MinimumLinkedSockets ||
+            RequireFiveOrSixLink && item.LinkedSocketCount < 5 ||
+            RequireCurrentSchemeNeed && item.LinkedSocketCount < Math.Max(2, MinimumLinkedSockets))
         {
             return false;
         }
@@ -64,6 +72,8 @@ public sealed class LootFilter
 
     private static IReadOnlyList<LootFilterRule> CreateDefaultRules() =>
     [
+        new("core.filter.six_link", LootDisposition.Keep, MinimumLinkedSockets: 6),
+        new("core.filter.five_link", LootDisposition.Keep, MinimumLinkedSockets: 5),
         new("core.filter.legendary", LootDisposition.Keep, ItemRarity.Legendary),
         new("core.filter.rare", LootDisposition.Keep, ItemRarity.Rare),
         new("core.filter.magic", LootDisposition.Sell, ItemRarity.Magic),
@@ -170,6 +180,16 @@ public sealed class EquipmentStorage
         _items.Insert(Math.Clamp(targetIndex, 0, _items.Count), item);
         return true;
     }
+
+    public void SortByLinkedSockets() => _items.Sort((left, right) =>
+    {
+        int links = right.LinkedSocketCount.CompareTo(left.LinkedSocketCount);
+        if (links != 0) return links;
+        int rarity = right.Rarity.CompareTo(left.Rarity);
+        if (rarity != 0) return rarity;
+        int level = right.ItemLevel.CompareTo(left.ItemLevel);
+        return level != 0 ? level : string.Compare(left.Base.DisplayName, right.Base.DisplayName, StringComparison.Ordinal);
+    });
 
     public void RestoreDiscoveries(IEnumerable<string> bases, IEnumerable<string> legendaryRules)
     {

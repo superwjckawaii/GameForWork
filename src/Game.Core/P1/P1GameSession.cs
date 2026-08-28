@@ -5,6 +5,7 @@ using GameForWork.Core.P1.World;
 using GameForWork.Core.P2;
 using GameForWork.Core.P4;
 using GameForWork.Core.P5;
+using GameForWork.Core.P6;
 
 namespace GameForWork.Core.P1;
 
@@ -667,6 +668,8 @@ public sealed class P1GameSession
         increasedCriticalChanceBasisPoints: _heroBuild.IncreasedCriticalChanceBasisPoints,
         increasedBleedChanceBasisPoints: _heroBuild.IncreasedBleedChanceBasisPoints);
 
+    public P6BuildSummary GetBuildSummary() => P6BuildSummaryRules.Calculate(this);
+
     public P2EquipmentComparison CompareHeroEquipment(ItemInstance candidate, EquipmentSlot slot)
     {
         ArgumentNullException.ThrowIfNull(candidate);
@@ -695,6 +698,12 @@ public sealed class P1GameSession
         EquipmentSummary next = hypothetical.CalculateSummary();
         SkillCapacityResult capacity = SkillCapacityRules.Validate(
             [new SkillConfiguration(P1SkillIds.HeavyStrike, HeavyStrikeSupports)], next);
+        ItemInstance? currentItem = HeroEquipment.Items.GetValueOrDefault(slot);
+        SkillLinkConfiguration? socketGroup = Management.SkillLinks.FirstOrDefault(link =>
+            link.ChainId == GameForWork.Core.P6.P6SocketGroupIds.For(slot));
+        string[] installed = socketGroup?.SocketStoneInstanceIds?.Where(id => !string.IsNullOrEmpty(id)).Cast<string>().ToArray() ?? [];
+        int retainedCount = Math.Min(candidate.LinkedSocketCount, installed.Length);
+        string NameOf(string id) => Management.SkillStones.FirstOrDefault(stone => stone.InstanceId == id)?.Definition.DisplayName ?? id;
         return new P2EquipmentComparison(
             proposed.Sheet.MaximumLife().Value - _heroBuild.Sheet.MaximumLife().Value,
             proposed.Sheet.MaximumMana().Value - _heroBuild.Sheet.MaximumMana().Value,
@@ -707,7 +716,10 @@ public sealed class P1GameSession
             proposedPreview.EffectiveLife.Value - currentPreview.EffectiveLife.Value,
             RequirementsMet: true,
             DisabledSkillLinks: capacity.IsValid ? 0 : Math.Max(0, capacity.RequiredSupportLinks - capacity.AvailableSupportLinks),
-            slot);
+            slot,
+            candidate.LinkedSocketCount - (currentItem?.LinkedSocketCount ?? 0),
+            installed.Skip(retainedCount).Select(NameOf).ToArray(),
+            installed.Take(retainedCount).Select(NameOf).ToArray());
     }
 
     private static void EquipStarter(EquipmentLoadout equipment, EquipmentSlot slot, string baseId, ulong seed)

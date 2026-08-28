@@ -7,6 +7,7 @@ using GameForWork.Core.P1.World;
 using GameForWork.Core.P2;
 using GameForWork.Core.P4;
 using GameForWork.Core.P5;
+using GameForWork.Core.P6;
 using Godot;
 
 namespace GameForWork.GodotClient;
@@ -40,6 +41,7 @@ public partial class P2Dashboard : VBoxContainer
     private Label? _skillSummary;
     private Label? _activeSkillSummary;
     private Label? _craftingStatus;
+    private string _storageSearch = string.Empty;
     private RichTextLabel? _history;
     private RichTextLabel? _storyLog;
     private Label? _storyStatus;
@@ -361,6 +363,13 @@ public partial class P2Dashboard : VBoxContainer
         _sortingGrid = BuildGrid(ItemContainerKind.SortingBag, 5, P2ManagementState.SortingBagCapacity, 36);
         containers.AddChild(_sortingGrid);
         containers.AddChild(new Label { Text = "军锋镇仓库 · 100 格" });
+        var storageSearch = new LineEdit { PlaceholderText = "搜索仓库：名称 / 类型 / 稀有度 / 连接数（如 5连）" };
+        storageSearch.TextChanged += query =>
+        {
+            _storageSearch = query.Trim();
+            Refresh();
+        };
+        containers.AddChild(storageSearch);
         _storageGrid = BuildGrid(ItemContainerKind.Storage, 10, EquipmentStorage.InitialCapacity, 32);
         _storageGrid.ExtraTooltip = EquipmentComparisonText;
         containers.AddChild(_storageGrid);
@@ -368,6 +377,11 @@ public partial class P2Dashboard : VBoxContainer
         containers.AddChild(batch);
         AddButton(batch, "批量出售普通/魔法", () => ConfirmBatch(sell: true));
         AddButton(batch, "批量分解普通/魔法", () => ConfirmBatch(sell: false));
+        AddButton(batch, "按连接数整理", () =>
+        {
+            RequireSession().World.Storage.SortByLinkedSockets();
+            Changed("仓库已按连接数、稀有度和物品等级整理。");
+        });
 
         var workshop = new VBoxContainer();
         body.AddChild(workshop);
@@ -379,6 +393,11 @@ public partial class P2Dashboard : VBoxContainer
         AddButton(recipes, "淬刃铁：物理锻造", () => CraftSelected(P2WorkshopRecipe.WeaponPhysical));
         AddButton(recipes, "守壁钢：防具加固", () => CraftSelected(P2WorkshopRecipe.ReinforceDefense));
         AddButton(recipes, "活血银：生命刻印", () => CraftSelected(P2WorkshopRecipe.VitalityEtching));
+        AddButton(recipes, "链铸钢：重铸连接", () => CraftP6Selected(P6CraftOperation.RerollLinks));
+        AddButton(recipes, "链铸钢：保证升连", () => CraftP6Selected(P6CraftOperation.UpgradeLinks));
+        AddButton(recipes, "混沌金：重铸词缀", () => CraftP6Selected(P6CraftOperation.ChaosReroll));
+        AddButton(recipes, "神铸银：重掷数值", () => CraftP6Selected(P6CraftOperation.DivineReroll));
+        AddButton(recipes, "破溃钢：固化词缀", () => CraftP6Selected(P6CraftOperation.FractureAffix));
 
         var safetyTabs = new TabContainer { CustomMinimumSize = new Vector2(0, 150) };
         body.AddChild(safetyTabs);
@@ -837,6 +856,56 @@ public partial class P2Dashboard : VBoxContainer
         _confirmDialog.PopupCentered();
     }
 
+    private void CraftP6Selected(P6CraftOperation operation)
+    {
+        ItemInstance? currentItem = ItemAt(_craftContainer, _craftIndex);
+        if (currentItem is null)
+        {
+            Changed("请先选择背包、仓库或已装备物品作为制作目标。");
+            return;
+        }
+
+        string fractureFamily = operation == P6CraftOperation.FractureAffix
+            ? currentItem.Affixes.FirstOrDefault(affix => !affix.Crafted)?.Definition.StableFamilyId ?? string.Empty
+            : string.Empty;
+        P6CraftPreview preview = P6CraftingRules.Preview(currentItem, operation, fractureFamily);
+        if (!preview.Succeeded)
+        {
+            Changed($"制作失败：{preview.Summary}");
+            return;
+        }
+
+        MetalCurrencyDefinition metal = P4MetalCurrencies.Get(preview.Currency);
+        ItemContainerKind container = _craftContainer;
+        int index = _craftIndex;
+        string socketWarning = string.Empty;
+        if (container == ItemContainerKind.Equipped && preview.ResultLinks < preview.CurrentLinks)
+        {
+            string groupId = P6SocketGroupIds.For((EquipmentSlot)index);
+            SkillLinkConfiguration? link = RequireSession().Management.SkillLinks.FirstOrDefault(item => item.ChainId == groupId);
+            string[] ejected = link?.SocketStoneInstanceIds?.Skip(preview.ResultLinks)
+                .Where(id => !string.IsNullOrEmpty(id))
+                .Select(id => RequireSession().Management.SkillStones.First(stone => stone.InstanceId == id).Definition.DisplayName)
+                .ToArray() ?? [];
+            if (ejected.Length > 0)
+            {
+                socketWarning = $"\n⚠ 超出新连接数的技能石将弹回技能石背包：{string.Join("、", ejected)}";
+            }
+        }
+
+        _confirmDialog!.DialogText =
+            $"{preview.Summary}\n消耗：{preview.Cost} {metal.DisplayName}\n" +
+            $"连接：{preview.CurrentLinks} → {preview.ResultLinks}{socketWarning}\n\n" +
+            $"确认对 {currentItem.Base.DisplayName} 执行？";
+        _pendingConfirmation = () =>
+        {
+            P6CraftPreview result = new P2ItemCommandService(RequireSession(), _selectedCharacter)
+                .CraftP6(container, index, operation, fractureFamily);
+            Changed(result.Succeeded ? $"制作完成：{result.Summary}" : $"制作失败：{result.Summary}");
+        };
+        _confirmDialog.PopupCentered();
+    }
+
     private void ConfirmBatch(bool sell)
     {
         P1GameSession session = RequireSession();
@@ -937,9 +1006,21 @@ public partial class P2Dashboard : VBoxContainer
         _storageStatus!.Text =
             $"生命 {selectedTeam.Build.Sheet.MaximumLife().Value} · 法力 {selectedTeam.Build.Sheet.MaximumMana().Value} · 护盾 {selectedTeam.Build.Sheet.Equipment.Shield}\n" +
             $"体魄 {selectedTeam.Build.Sheet.Attributes.Physique} · 灵巧 {selectedTeam.Build.Sheet.Attributes.Dexterity} · 精神 {selectedTeam.Build.Sheet.Attributes.Spirit} · 能量 {selectedTeam.Build.Sheet.Attributes.Energy}\n" +
-            $"核心槽 {equipment.CoreSkillCapacity} · 连接 {equipment.SupportLinkCapacity}";
+            $"核心槽 {equipment.CoreSkillCapacity} · 旧制连接 {equipment.SupportLinkCapacity}\n" +
+            BuildSummaryText(_session.GetBuildSummary());
 
-        _storageGrid!.SetItems(_session.World.Storage.Items);
+        if (string.IsNullOrWhiteSpace(_storageSearch))
+        {
+            _storageGrid!.SetItems(_session.World.Storage.Items);
+        }
+        else
+        {
+            string query = _storageSearch.ToLowerInvariant();
+            _storageGrid!.SetFilteredItems(_session.World.Storage.Items.Select((item, index) => (index, item))
+                .Where(entry => $"{entry.item.Base.DisplayName} {entry.item.Base.Category} {entry.item.Rarity} {entry.item.LinkedSocketCount}连"
+                    .ToLowerInvariant().Contains(query, StringComparison.Ordinal))
+                .ToArray());
+        }
         _sortingGrid!.SetItems(_session.Management.SortingBag);
         _recoveryGrid!.SetItems(_session.Management.Recovery.Take(30).ToArray());
         _buybackGrid!.SetItems(_session.Management.Buyback.Select(entry => entry.Item).ToArray());
@@ -973,7 +1054,9 @@ public partial class P2Dashboard : VBoxContainer
         ItemInstance? craftItem = ItemAt(_craftContainer, _craftIndex);
         _craftingStatus!.Text =
             $"金属库存：淬刃铁 {economy.MetalAmount(MetalCurrencyKind.TemperingIron)} · " +
-            $"守壁钢 {economy.MetalAmount(MetalCurrencyKind.WardSteel)} · 活血银 {economy.MetalAmount(MetalCurrencyKind.VitalSilver)}\n" +
+            $"守壁钢 {economy.MetalAmount(MetalCurrencyKind.WardSteel)} · 活血银 {economy.MetalAmount(MetalCurrencyKind.VitalSilver)} · " +
+            $"链铸钢 {economy.MetalAmount(MetalCurrencyKind.ChainSteel)} · 混沌金 {economy.MetalAmount(MetalCurrencyKind.ChaosGold)} · " +
+            $"神铸银 {economy.MetalAmount(MetalCurrencyKind.DivineSilver)} · 破溃钢 {economy.MetalAmount(MetalCurrencyKind.FractureSteel)}\n" +
             (craftItem is null ? "当前未选择制作目标。" : $"当前目标：{craftItem.Base.DisplayName}（{_craftContainer}）");
         _skillStonePanel?.SetReadOnly(!heroSelected);
         _skillStonePanel?.RefreshState();
@@ -1037,7 +1120,9 @@ public partial class P2Dashboard : VBoxContainer
                 $"平均命中 {Delta(compare.AverageHitDelta)} · 有效生命 {Delta(compare.EffectiveLifeDelta)}\n" +
                 $"生命 {Delta(compare.MaximumLifeDelta)} · 法力 {Delta(compare.MaximumManaDelta)} · " +
                 $"护甲 {Delta(compare.ArmorDelta)} · 闪避 {Delta(compare.EvasionDelta)} · 护盾 {Delta(compare.ShieldDelta)}\n" +
-                $"核心槽 {Delta(compare.CoreCapacityDelta)} · 连接 {Delta(compare.LinkCapacityDelta)}" +
+                $"连接数 {Delta(compare.LinkedSocketDelta)}" +
+                ((compare.RetainedSkillStones?.Count ?? 0) == 0 ? string.Empty : $" · 保留 {string.Join("、", compare.RetainedSkillStones!)}") +
+                ((compare.EjectedSkillStones?.Count ?? 0) == 0 ? string.Empty : $"\n⚠ 弹回技能石背包：{string.Join("、", compare.EjectedSkillStones!)}") +
                 (compare.DisabledSkillLinks == 0 ? string.Empty : $" · ⚠ 将禁用 {compare.DisabledSkillLinks} 个辅助连接");
         }
         catch
@@ -1045,6 +1130,13 @@ public partial class P2Dashboard : VBoxContainer
             return "该物品无法生成当前构筑的换装对比。";
         }
     }
+
+    private static string BuildSummaryText(P6BuildSummary summary) =>
+        $"主技能 {summary.MainSkill} · {summary.MainSkillLinks} 连 · 单体估算 {summary.EstimatedSingleTargetDamage}/s · 清图估算 {summary.EstimatedClearDamage}/s\n" +
+        $"有效生命 {summary.EffectiveLife} · 护甲 {summary.Armor} · 闪避 {summary.Evasion} · 护盾 {summary.Shield}\n" +
+        $"恢复：{summary.Recovery} · 增益：{summary.BuffCoverage}\n" +
+        (summary.Issues.Count == 0 ? "构筑检查：未发现孔位或兼容性问题\n" : $"构筑检查：{string.Join("；", summary.Issues)}\n") +
+        summary.Assumptions;
 
     private P1GameSession RequireSession() => _session ?? throw new InvalidOperationException("请先创建角色。");
 

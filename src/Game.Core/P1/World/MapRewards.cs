@@ -1,6 +1,7 @@
 using GameForWork.Core.P1.Items;
 using GameForWork.Core.Simulation;
 using GameForWork.Core.P4;
+using GameForWork.Core.P5;
 
 namespace GameForWork.Core.P1.World;
 
@@ -103,6 +104,11 @@ public static class P1MapRewardGenerator
         if (random.NextBasisPoints() < 1_000)
         {
             metals.Add(new MetalCurrencyStack(MetalCurrencyKind.ChaosGold, 1));
+        }
+        if (route == MapRoute.Abyss || P5ExpeditionDirector.IsBoss(completedMap) || random.NextBasisPoints() < 3_000)
+        {
+            metals.Add(new MetalCurrencyStack(MetalCurrencyKind.ChainSteel,
+                P5ExpeditionDirector.IsBoss(completedMap) ? 3 : route == MapRoute.Abyss ? 2 : 1));
         }
 
         return new P1MapRewards(

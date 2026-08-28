@@ -8,6 +8,7 @@ public enum MetalCurrencyKind
     ChaosGold,
     DivineSilver,
     FractureSteel,
+    ChainSteel,
 }
 
 public sealed record MetalCurrencyDefinition(
@@ -27,9 +28,10 @@ public static class P4MetalCurrencies
             new MetalCurrencyDefinition(MetalCurrencyKind.TemperingIron, "core.metal.tempering_iron", "淬刃铁", "为武器烙入固定物理加工词缀。", 36),
             new MetalCurrencyDefinition(MetalCurrencyKind.WardSteel, "core.metal.ward_steel", "守壁钢", "为防具烙入固定防御加工词缀。", 30),
             new MetalCurrencyDefinition(MetalCurrencyKind.VitalSilver, "core.metal.vital_silver", "活血银", "为非武器装备烙入固定生命加工词缀。", 24),
-            new MetalCurrencyDefinition(MetalCurrencyKind.ChaosGold, "core.metal.chaos_gold", "混沌金", "重铸稀有装备的随机词缀；配方将在后续阶段开放。", 7),
-            new MetalCurrencyDefinition(MetalCurrencyKind.DivineSilver, "core.metal.divine_silver", "神铸银", "重掷词缀数值；配方将在后续阶段开放。", 2),
-            new MetalCurrencyDefinition(MetalCurrencyKind.FractureSteel, "core.metal.fracture_steel", "破溃钢", "固化一条词缀；配方将在后续阶段开放。", 1),
+            new MetalCurrencyDefinition(MetalCurrencyKind.ChaosGold, "core.metal.chaos_gold", "混沌金", "重铸稀有装备的随机词缀并保护破溃与工匠词缀。", 7),
+            new MetalCurrencyDefinition(MetalCurrencyKind.DivineSilver, "core.metal.divine_silver", "神铸银", "重掷现有自然词缀的数值。", 2),
+            new MetalCurrencyDefinition(MetalCurrencyKind.FractureSteel, "core.metal.fracture_steel", "破溃钢", "选择并固化一条自然词缀。", 1),
+            new MetalCurrencyDefinition(MetalCurrencyKind.ChainSteel, "core.metal.chain_steel", "链铸钢", "重铸或保证提高装备连接数。", 5),
         }.ToDictionary(item => item.Kind);
 
     public static IReadOnlyCollection<MetalCurrencyDefinition> All => Definitions.Values.ToArray();

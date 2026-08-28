@@ -8,6 +8,8 @@ public partial class P1ItemGrid : GridContainer
 {
     private readonly List<P2ItemCell> _cells = [];
     private IReadOnlyList<ItemInstance?> _items = [];
+    private IReadOnlyList<int> _externalIndices = [];
+    private bool _filtered;
     private int _selectedIndex = -1;
     private Texture2D? _iconAtlas;
 
@@ -68,6 +70,8 @@ public partial class P1ItemGrid : GridContainer
     public void SetItems(IReadOnlyList<ItemInstance> items)
     {
         _items = items.Cast<ItemInstance?>().ToArray();
+        _externalIndices = Enumerable.Range(0, items.Count).Select(index => index + IndexOffset).ToArray();
+        _filtered = false;
         if (_selectedIndex >= items.Count)
         {
             _selectedIndex = -1;
@@ -76,9 +80,20 @@ public partial class P1ItemGrid : GridContainer
         ApplyCells();
     }
 
+    public void SetFilteredItems(IReadOnlyList<(int Index, ItemInstance Item)> items)
+    {
+        _items = items.Select(entry => (ItemInstance?)entry.Item).ToArray();
+        _externalIndices = items.Select(entry => entry.Index).ToArray();
+        _filtered = true;
+        _selectedIndex = -1;
+        ApplyCells();
+    }
+
     public void SetSlots(IReadOnlyList<ItemInstance?> items)
     {
         _items = items;
+        _externalIndices = Enumerable.Range(0, items.Count).Select(index => index + IndexOffset).ToArray();
+        _filtered = false;
         if (_selectedIndex >= items.Count || _selectedIndex >= 0 && items[_selectedIndex] is null)
         {
             _selectedIndex = -1;
@@ -87,7 +102,9 @@ public partial class P1ItemGrid : GridContainer
         ApplyCells();
     }
 
-    public int ToExternalIndex(int index) => checked(index + IndexOffset);
+    public int ToExternalIndex(int index) => index >= 0 && index < _externalIndices.Count
+        ? _externalIndices[index]
+        : checked(index + IndexOffset);
 
     public void Activate(int index) => ItemActivated?.Invoke(ToExternalIndex(index));
 
@@ -118,7 +135,7 @@ public partial class P1ItemGrid : GridContainer
             cell.TooltipText = occupied
                 ? P1UiText.ItemTooltip(item!) + (extra.Length == 0 ? string.Empty : $"\n\n{extra}")
                 : $"空格 {index + 1}";
-            cell.Disabled = false;
+            cell.Disabled = _filtered && !occupied;
             cell.SetPressedNoSignal(index == _selectedIndex);
             Color color = occupied ? P1UiText.RarityColor(item!.Rarity) : new Color("71695e");
             cell.TooltipRarityColor = color;

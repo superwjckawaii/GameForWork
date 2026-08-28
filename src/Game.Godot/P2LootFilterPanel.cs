@@ -1,6 +1,7 @@
 using GameForWork.Core.P1;
 using GameForWork.Core.P1.Items;
 using GameForWork.Core.P1.World;
+using GameForWork.Core.P6;
 using Godot;
 
 namespace GameForWork.GodotClient;
@@ -28,6 +29,12 @@ public partial class P2LootFilterPanel : VBoxContainer
         var add = new Button { Text = "新增保留规则" };
         add.Pressed += AddRule;
         AddChild(add);
+        var addFive = new Button { Text = "新增五连保留规则" };
+        addFive.Pressed += () => AddSocketRule(5, false);
+        AddChild(addFive);
+        var addNeed = new Button { Text = "新增当前方案缺口规则" };
+        addNeed.Pressed += AddCurrentSchemeNeedRules;
+        AddChild(addNeed);
     }
 
     public void RefreshRules()
@@ -114,6 +121,57 @@ public partial class P2LootFilterPanel : VBoxContainer
         Replace(rules, "已新增稀有物品保留规则。");
     }
 
+    private void AddSocketRule(int minimum, bool schemeNeed)
+    {
+        List<LootFilterRule> rules = _session!().World.Filter.Rules.ToList();
+        rules.Insert(0, new LootFilterRule(
+            $"user.filter.links.{DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()}",
+            LootDisposition.Keep,
+            MinimumLinkedSockets: minimum,
+            RequireFiveOrSixLink: minimum >= 5,
+            RequireCurrentSchemeNeed: schemeNeed));
+        Replace(rules, schemeNeed ? "已新增当前技能方案连接缺口规则。" : $"已新增至少 {minimum} 连保留规则。");
+    }
+
+    private void AddCurrentSchemeNeedRules()
+    {
+        P1GameSession session = _session!();
+        IReadOnlyList<SkillLinkConfiguration> desired = session.Management.SkillSchemes
+            .GetValueOrDefault(session.Management.ActiveSkillScheme, session.Management.SkillLinks);
+        IReadOnlyDictionary<string, int> current = session.GetSkillChains()
+            .ToDictionary(chain => chain.StableId, chain => chain.TotalSockets, StringComparer.Ordinal);
+        var missing = new List<(EquipmentSlot Slot, int Links)>();
+        foreach (EquipmentSlot slot in new[]
+                 { EquipmentSlot.MainHand, EquipmentSlot.Chest, EquipmentSlot.Helmet, EquipmentSlot.Gloves, EquipmentSlot.Boots })
+        {
+            string groupId = P6SocketGroupIds.For(slot);
+            SkillLinkConfiguration? link = desired.FirstOrDefault(candidate => candidate.ChainId == groupId);
+            int required = link?.SocketStoneInstanceIds?.Select((id, index) => (id, index))
+                .Where(entry => !string.IsNullOrEmpty(entry.id))
+                .Select(entry => entry.index + 1)
+                .DefaultIfEmpty(0).Max() ?? 0;
+            if (required > current.GetValueOrDefault(groupId)) missing.Add((slot, required));
+        }
+
+        if (missing.Count == 0)
+        {
+            _changed?.Invoke("当前技能方案没有装备连接缺口。");
+            return;
+        }
+
+        List<LootFilterRule> rules = session.World.Filter.Rules.ToList();
+        foreach ((EquipmentSlot slot, int links) in missing.AsEnumerable().Reverse())
+        {
+            rules.Insert(0, new LootFilterRule(
+                $"user.filter.scheme.{slot.ToString().ToLowerInvariant()}.{DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()}",
+                LootDisposition.Keep,
+                Slot: slot,
+                MinimumLinkedSockets: links,
+                RequireCurrentSchemeNeed: true));
+        }
+        Replace(rules, $"已为当前方案新增 {missing.Count} 条连接缺口规则。");
+    }
+
     private void Move(int source, int target)
     {
         List<LootFilterRule> rules = _session!().World.Filter.Rules.ToList();
@@ -177,6 +235,10 @@ public partial class P2LootFilterPanel : VBoxContainer
         {
             match += $" · {rule.AffixFamilyId} ≥ {rule.MinimumAffixValue ?? 0}";
         }
+        if (rule.Slot is not null) match += $" · 槽位 {rule.Slot}";
+        if (rule.MinimumLinkedSockets > 0) match += $" · 至少 {rule.MinimumLinkedSockets} 连";
+        if (rule.RequireFiveOrSixLink) match += " · 五/六连";
+        if (rule.RequireCurrentSchemeNeed) match += " · 当前方案缺口";
 
         return $"{match} → {rule.Disposition}";
     }
