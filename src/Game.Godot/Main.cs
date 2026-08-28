@@ -38,6 +38,17 @@ public partial class Main : Node
     private int _restoreRequested;
     private double _simulationAccumulator;
     private double _autoSaveAccumulator;
+    private readonly object _saveSync = new();
+    private P1GameSessionSnapshot? _pendingSave;
+    private Task? _saveWorker;
+    private bool _saveWorkerRunning;
+    private bool _saveNoticePending;
+    private bool _quitAfterSave;
+    private Exception? _saveFailure;
+    private long _lastSaveMilliseconds;
+    private double _performanceAccumulator;
+    private double _lastSimulationMilliseconds;
+    private Label? _performanceLabel;
 
     public override void _Ready()
     {
@@ -81,13 +92,20 @@ public partial class Main : Node
 
     public override void _Process(double delta)
     {
+        PollSaveWorker();
+        if (_quitAfterSave && !IsSaveWorkerRunning())
+        {
+            _quitAfterSave = false;
+            GetTree().Quit();
+            return;
+        }
+
         if (Interlocked.Exchange(ref _restoreRequested, 0) == 1)
         {
             _windowController?.Restore();
         }
 
         _windowController?.TickSnapping(delta);
-        UpdateWindowModeInterface();
         Engine.MaxFps = _windowController?.IsHiddenToTray == true
             ? 5
             : _windowController?.IsMini == true && !DisplayServer.WindowIsFocused() ? 30 : 60;
@@ -104,14 +122,16 @@ public partial class Main : Node
             _simulationAccumulator -= SimulationStepSeconds;
             try
             {
+                long started = System.Diagnostics.Stopwatch.GetTimestamp();
                 if (_battlePaused)
                 {
                     _session.AdvanceTownOnly(SimulationStepMilliseconds);
                 }
                 else
                 {
-                    _session.Advance(SimulationStepMilliseconds);
+                    _session.AdvanceResponsive(SimulationStepMilliseconds);
                 }
+                _lastSimulationMilliseconds = System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds;
             }
             catch (Exception exception)
             {
@@ -122,6 +142,12 @@ public partial class Main : Node
         }
 
         _dashboard?.Tick(delta);
+        _performanceAccumulator += delta;
+        if (_performanceAccumulator >= 0.5 && _performanceLabel is not null)
+        {
+            _performanceAccumulator = 0;
+            _performanceLabel.Text = $"P7 性能：{Engine.GetFramesPerSecond()} FPS · 模拟 {_lastSimulationMilliseconds:0.00} ms · 后台存档 {_lastSaveMilliseconds} ms";
+        }
 
         if (_autoSaveAccumulator >= 10.0)
         {
@@ -142,6 +168,9 @@ public partial class Main : Node
 
     public override void _ExitTree()
     {
+        Task? saveWorker;
+        lock (_saveSync) saveWorker = _saveWorker;
+        saveWorker?.GetAwaiter().GetResult();
         if (_singleInstance?.IsPrimary == true)
         {
             _windowController?.Dispose();
@@ -271,6 +300,8 @@ public partial class Main : Node
         AddButton(_testHarness, "打开日志", OpenLogs);
         AddButton(_testHarness, "复制日志路径", CopyLogPath);
         AddButton(_testHarness, "重置关闭询问", ResetCloseChoice);
+        _performanceLabel = new Label { Text = "P7 性能：等待采样…", TooltipText = "仅测试栏显示；正式小窗自动隐藏" };
+        _testHarness.AddChild(_performanceLabel);
 
         _closeDialog = new ConfirmationDialog
         {
@@ -391,6 +422,7 @@ public partial class Main : Node
 
         try
         {
+            FlushPendingSave();
             _saveRepository?.CreateBackup();
             var watch = System.Diagnostics.Stopwatch.StartNew();
             P1OfflineResult result = _session.AdvanceOffline(OfflineTime.MaximumMilliseconds);
@@ -418,18 +450,77 @@ public partial class Main : Node
             return;
         }
 
-        try
+        P1GameSessionSnapshot snapshot = _session.Capture();
+        lock (_saveSync)
         {
-            _saveRepository.SaveP1SessionJson(JsonSerializer.Serialize(_session.Capture(), SaveJsonOptions));
-            if (showNotice)
+            _pendingSave = snapshot;
+            _saveNoticePending |= showNotice;
+            if (_saveWorkerRunning) return;
+            _saveWorkerRunning = true;
+            _saveWorker = Task.Run(SaveWorkerLoop);
+        }
+    }
+
+    private void SaveWorkerLoop()
+    {
+        while (true)
+        {
+            P1GameSessionSnapshot? snapshot;
+            SaveRepository? repository;
+            lock (_saveSync)
             {
-                ShowNotice($"P1 状态已保存（Schema {_saveRepository.GetSchemaVersion()}）。");
+                snapshot = _pendingSave;
+                _pendingSave = null;
+                repository = _saveRepository;
+                if (snapshot is null || repository is null)
+                {
+                    _saveWorkerRunning = false;
+                    return;
+                }
+            }
+
+            try
+            {
+                var watch = System.Diagnostics.Stopwatch.StartNew();
+                repository.SaveP1SessionJson(JsonSerializer.Serialize(snapshot, SaveJsonOptions));
+                watch.Stop();
+                Interlocked.Exchange(ref _lastSaveMilliseconds, watch.ElapsedMilliseconds);
+            }
+            catch (Exception exception)
+            {
+                lock (_saveSync) _saveFailure = exception;
             }
         }
-        catch (Exception exception)
+    }
+
+    private bool IsSaveWorkerRunning()
+    {
+        lock (_saveSync) return _saveWorkerRunning;
+    }
+
+    private void PollSaveWorker()
+    {
+        Exception? failure;
+        bool notice;
+        lock (_saveSync)
         {
-            ReportError("p1a.save_failed", "P1A state save failed.", exception);
+            failure = _saveFailure;
+            _saveFailure = null;
+            notice = _saveNoticePending && !_saveWorkerRunning;
+            if (notice) _saveNoticePending = false;
         }
+        if (failure is not null) ReportError("p1a.save_failed", "P1A background save failed.", failure);
+        else if (notice && _saveRepository is not null)
+            ShowNotice($"P1 状态已保存（Schema {_saveRepository.GetSchemaVersion()}）。");
+    }
+
+    private void FlushPendingSave()
+    {
+        SaveP1State(showNotice: false);
+        Task? worker;
+        lock (_saveSync) worker = _saveWorker;
+        worker?.GetAwaiter().GetResult();
+        PollSaveWorker();
     }
 
     private void TryInitializeSave(int slot)
@@ -501,7 +592,7 @@ public partial class Main : Node
             return;
         }
 
-        SaveP1State(showNotice: false);
+        FlushPendingSave();
         _saveRepository?.Dispose();
         _saveRepository = null;
         _activeSlot = slot;
@@ -514,7 +605,7 @@ public partial class Main : Node
     {
         try
         {
-            SaveP1State(showNotice: false);
+            FlushPendingSave();
             string path = _saveRepository?.CreateBackup() ?? "存档未初始化";
             ShowNotice($"备份已创建：{path}");
         }
@@ -569,9 +660,10 @@ public partial class Main : Node
 
     private void QuitApplication()
     {
-        SaveP1State(showNotice: false);
         _quitting = true;
-        GetTree().Quit();
+        _quitAfterSave = true;
+        SaveP1State(showNotice: false);
+        ShowNotice("正在后台保存并安全退出…");
     }
 
     private void OpenLogs()

@@ -278,6 +278,8 @@ public sealed class P2CampaignState
 
 public sealed class P2CampaignSimulator
 {
+    private sealed record TimelinePreparation(string NodeId, int BuildHash, Task<P3SceneTimeline> Task);
+    private TimelinePreparation? _timelinePreparation;
     private static readonly string[] DropBases =
     [
         "core.base.iron_gauntlets",
@@ -294,7 +296,8 @@ public sealed class P2CampaignSimulator
         P2ManagementState management,
         long elapsedMilliseconds,
         ulong seed,
-        bool offline = false)
+        bool offline = false,
+        bool asyncPreparation = false)
     {
         ArgumentNullException.ThrowIfNull(campaign);
         ArgumentNullException.ThrowIfNull(world);
@@ -320,10 +323,30 @@ public sealed class P2CampaignSimulator
                         Sheet = world.Hero.Build.Sheet with { Level = world.Hero.Progression.Level },
                     };
                     world.Hero.UpdateBuild(currentBuild);
-                    campaign.BeginTimeline(P3SceneTimelineBuilder.BuildCampaign(
-                        currentBuild,
-                        node,
-                        DeriveNodeSeed(seed, node)));
+                    ulong nodeSeed = DeriveNodeSeed(seed, node);
+                    if (asyncPreparation)
+                    {
+                        int buildHash = currentBuild.GetHashCode();
+                        if (_timelinePreparation?.NodeId != node.StableId || _timelinePreparation.BuildHash != buildHash)
+                        {
+                            _timelinePreparation = new TimelinePreparation(node.StableId, buildHash,
+                                Task.Run(() => P3SceneTimelineBuilder.BuildCampaign(currentBuild, node, nodeSeed)));
+                        }
+                        if (!_timelinePreparation.Task.IsCompleted)
+                        {
+                            suppliesProduced = checked(suppliesProduced + world.Economy.AdvanceProduction(remaining));
+                            remaining = 0;
+                            break;
+                        }
+                        Task<P3SceneTimeline> completed = _timelinePreparation.Task;
+                        _timelinePreparation = null;
+                        campaign.BeginTimeline(completed.GetAwaiter().GetResult());
+                    }
+                    else
+                    {
+                        _timelinePreparation = null;
+                        campaign.BeginTimeline(P3SceneTimelineBuilder.BuildCampaign(currentBuild, node, nodeSeed));
+                    }
                 }
 
                 duration = campaign.ActiveTimeline!.DurationMilliseconds;

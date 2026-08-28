@@ -21,6 +21,7 @@ public partial class P1PassiveTreeView : Control
     private float _zoom = 0.55f;
     private Vector2 _lastSize;
     private bool _fitInitialized;
+    private string _stateSignature = string.Empty;
 
     public event Action<string>? NodeSelected;
     public event Action<string>? NodeAllocateRequested;
@@ -100,6 +101,9 @@ public partial class P1PassiveTreeView : Control
 
     public void SetState(IReadOnlySet<string> allocated, int earnedPoints)
     {
+        string signature = earnedPoints + "|" + string.Join('|', allocated.OrderBy(id => id, StringComparer.Ordinal));
+        if (signature == _stateSignature) return;
+        _stateSignature = signature;
         _allocated = allocated;
         _earnedPoints = earnedPoints;
         foreach (PassiveNodeDefinition node in P1PassiveTree.Nodes)

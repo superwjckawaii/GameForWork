@@ -111,6 +111,7 @@ public sealed class P1GameSession
 {
     public const int CurrentFormatVersion = 9;
     private readonly P1WorldSimulator _simulator = new(new P1MapAttemptResolver());
+    private readonly P2CampaignSimulator _campaignSimulator = new();
     private AssembledCharacterBuild _heroBuild;
 
     private P1GameSession(
@@ -299,7 +300,17 @@ public sealed class P1GameSession
         long simulated = realElapsedMilliseconds > maximum / SimulationSpeed
             ? maximum
             : realElapsedMilliseconds * SimulationSpeed;
-        return AdvanceSimulated(simulated, offline: false);
+        return AdvanceSimulated(simulated, offline: false, asyncPreparation: false);
+    }
+
+    public P1OfflineResult AdvanceResponsive(long realElapsedMilliseconds)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(realElapsedMilliseconds);
+        long maximum = GameForWork.Core.Offline.OfflineTime.MaximumMilliseconds;
+        long simulated = realElapsedMilliseconds > maximum / SimulationSpeed
+            ? maximum
+            : realElapsedMilliseconds * SimulationSpeed;
+        return AdvanceSimulated(simulated, offline: false, asyncPreparation: true);
     }
 
     public P1OfflineResult AdvanceOffline(long elapsedMilliseconds)
@@ -307,7 +318,7 @@ public sealed class P1GameSession
         ArgumentOutOfRangeException.ThrowIfNegative(elapsedMilliseconds);
         return AdvanceSimulated(Math.Min(
             elapsedMilliseconds,
-            GameForWork.Core.Offline.OfflineTime.MaximumMilliseconds), offline: true);
+            GameForWork.Core.Offline.OfflineTime.MaximumMilliseconds), offline: true, asyncPreparation: false);
     }
 
     public int AdvanceTownOnly(long realElapsedMilliseconds)
@@ -320,19 +331,20 @@ public sealed class P1GameSession
         return World.Economy.AdvanceProduction(simulated);
     }
 
-    private P1OfflineResult AdvanceSimulated(long simulatedMilliseconds, bool offline)
+    private P1OfflineResult AdvanceSimulated(long simulatedMilliseconds, bool offline, bool asyncPreparation)
     {
         if (!Campaign.Completed)
         {
-            P2CampaignAdvanceResult campaignResult = new P2CampaignSimulator().Simulate(
+            P2CampaignAdvanceResult campaignResult = _campaignSimulator.Simulate(
                 Campaign,
                 World,
                 Management,
                 simulatedMilliseconds,
                 Seed,
-                offline);
+                offline,
+                asyncPreparation);
             SimulationSequence = checked(SimulationSequence + campaignResult.NodesCompleted);
-            RefreshHeroBuild();
+            if (campaignResult.NodesCompleted > 0) RefreshHeroBuild();
             return new P1OfflineResult(
                 campaignResult.EffectiveMilliseconds,
                 campaignResult.WasClamped,
@@ -354,7 +366,8 @@ public sealed class P1GameSession
             World,
             simulatedMilliseconds,
             Seed,
-            offline);
+            offline,
+            asyncPreparation);
         SimulationSequence = checked(
             SimulationSequence + result.TotalMapsCompleted + result.TotalMapsFailed);
         int ashes = World.Economy.TakeMemoryAshes();
@@ -373,7 +386,8 @@ public sealed class P1GameSession
             Management.AddSkillExperience(checked(result.TotalMapsCompleted * 120));
         }
 
-        RefreshHeroTeamBuild();
+        if (result.TotalMapsCompleted > 0 || ashes > 0 || newSkillStones > 0)
+            RefreshHeroTeamBuild();
         return result;
     }
 
@@ -488,6 +502,33 @@ public sealed class P1GameSession
         {
             RefreshHeroTeamBuild();
         }
+        return changed;
+    }
+
+    public bool ConfigureSkillTarget(string activeStoneInstanceId, SkillTargetPolicy targetPolicy)
+    {
+        SkillLinkConfiguration? link = Management.SkillLinks.FirstOrDefault(
+            item => item.ActiveStoneInstanceId == activeStoneInstanceId);
+        if (link is null || !Enum.IsDefined(targetPolicy)) return false;
+        SkillAiRule current = link.AiRule ?? new SkillAiRule();
+        bool changed = Management.ConfigureSkill(
+            activeStoneInstanceId,
+            link.Priority,
+            current with
+            {
+                TargetPolicy = targetPolicy,
+                EnemyRarity = "任意",
+                BossOnly = false,
+                MatchAll = true,
+                MinimumLifeBasisPoints = 0,
+                MinimumManaBasisPoints = 0,
+                MinimumEnemyCount = 1,
+                MinimumDistanceRaw = 0,
+                MaximumDistanceRaw = 30_000,
+                DangerThreshold = 0,
+            },
+            link.ReservationEnabled);
+        if (changed) RefreshHeroTeamBuild();
         return changed;
     }
 

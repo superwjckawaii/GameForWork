@@ -68,6 +68,7 @@ public partial class P2Dashboard : VBoxContainer
     private Action? _pendingConfirmation;
     private P2CharacterKind _selectedCharacter;
     private double _refreshAccumulator;
+    private bool _miniMode;
 
     public void Initialize(
         P1GameSession? session,
@@ -87,6 +88,7 @@ public partial class P2Dashboard : VBoxContainer
     public void SetSession(P1GameSession? session)
     {
         _session = session;
+        _miniMode = false;
         _creationPanel!.Visible = session is null;
         _fullPanel!.Visible = session is not null;
         _miniPanel!.Visible = false;
@@ -95,11 +97,12 @@ public partial class P2Dashboard : VBoxContainer
 
     public void SetMiniMode(bool mini)
     {
-        if (_session is null)
+        if (_session is null || _miniMode == mini)
         {
             return;
         }
 
+        _miniMode = mini;
         _fullPanel!.Visible = !mini;
         _miniPanel!.Visible = mini;
         Refresh();
@@ -124,7 +127,7 @@ public partial class P2Dashboard : VBoxContainer
 
         try
         {
-            P1OfflineResult result = _session.Advance(realMilliseconds);
+            P1OfflineResult result = _session.AdvanceResponsive(realMilliseconds);
             if (result.TotalMapsCompleted + result.TotalMapsFailed > 0)
             {
                 _session.Management.AddHistory(

@@ -66,6 +66,21 @@ public sealed class P1SessionTests
     }
 
     [Fact]
+    public void ResponsiveAdvancePublishesPreparedCampaignTimeline()
+    {
+        P1GameSession session = CreateSession();
+
+        for (int attempt = 0; attempt < 2_000 && session.Campaign.ActiveTimeline is null; attempt++)
+        {
+            session.AdvanceResponsive(50);
+            Thread.Sleep(1);
+        }
+
+        Assert.NotNull(session.Campaign.ActiveTimeline);
+        Assert.True(session.Campaign.CurrentNodeElapsedMilliseconds > 0);
+    }
+
+    [Fact]
     public void CombatPreviewIncludesExpandedCalculationSteps()
     {
         CombatPreview preview = CreateSession().GetCombatPreview();

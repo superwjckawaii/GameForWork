@@ -26,6 +26,9 @@ public partial class P1WorldView : Control
     private Texture2D? _combatBackground;
     private Texture2D? _characterAtlas;
     private Texture2D? _mercenaryTexture;
+    private readonly Dictionary<string, P4EnemyFrame> _nextEnemies = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, Vector2> _positions = new(StringComparer.Ordinal);
+    private readonly List<P3SceneEvent> _recentEvents = [];
 
     public P1GameSession? Session
     {
@@ -258,8 +261,9 @@ public partial class P1WorldView : Control
         bool hero)
     {
         IReadOnlyList<P4SpatialFrame> frames = timeline.SpatialFrames!;
-        P4SpatialFrame current = frames.TakeWhile(frame => frame.AtMilliseconds <= elapsed).LastOrDefault() ?? frames[0];
-        P4SpatialFrame next = frames.FirstOrDefault(frame => frame.AtMilliseconds > elapsed) ?? current;
+        int frameIndex = FindFrameIndex(frames, elapsed);
+        P4SpatialFrame current = frames[frameIndex];
+        P4SpatialFrame next = frameIndex + 1 < frames.Count ? frames[frameIndex + 1] : current;
         float interpolation = next.AtMilliseconds == current.AtMilliseconds
             ? 0
             : Math.Clamp((elapsed - current.AtMilliseconds) / (float)(next.AtMilliseconds - current.AtMilliseconds), 0, 1);
@@ -278,24 +282,24 @@ public partial class P1WorldView : Control
         }
 
         Vector2 actor = MapPoint(field, Lerp(current.HeroPosition, next.HeroPosition, interpolation));
-        IReadOnlyDictionary<string, P4EnemyFrame> nextEnemies = next.Enemies.ToDictionary(enemy => enemy.EntityId, StringComparer.Ordinal);
-        var positions = new Dictionary<string, Vector2>(StringComparer.Ordinal) { ["hero"] = actor };
+        _nextEnemies.Clear();
+        foreach (P4EnemyFrame enemy in next.Enemies) _nextEnemies[enemy.EntityId] = enemy;
+        _positions.Clear();
+        _positions["hero"] = actor;
         foreach (P4EnemyFrame enemy in current.Enemies)
         {
-            P4Point position = nextEnemies.TryGetValue(enemy.EntityId, out P4EnemyFrame? future)
+            P4Point position = _nextEnemies.TryGetValue(enemy.EntityId, out P4EnemyFrame? future)
                 ? Lerp(enemy.Position, future.Position, interpolation)
                 : enemy.Position;
-            positions[enemy.EntityId] = MapPoint(field, position);
+            _positions[enemy.EntityId] = MapPoint(field, position);
         }
 
-        IReadOnlyList<P3SceneEvent> recent = timeline.Events
-            .Where(item => item.AtMilliseconds <= elapsed && item.AtMilliseconds >= elapsed - 900)
-            .ToArray();
-        DrawSpatialSkills(field, actor, positions, recent, elapsed);
+        CollectRecentEvents(timeline.Events, elapsed, _recentEvents);
+        DrawSpatialSkills(field, actor, _positions, _recentEvents, elapsed);
 
         foreach (P4EnemyFrame enemy in current.Enemies.Where(enemy => enemy.Life > 0))
         {
-            Vector2 position = positions[enemy.EntityId];
+            Vector2 position = _positions[enemy.EntityId];
             float radius = enemy.Boss ? 12 : enemy.Elite ? 9 : 7;
             DrawShadow(position + new Vector2(0, 5), radius + 2);
             DrawSpatialEnemy(position, enemy, radius, enemy.EntityId == current.HeroTargetId);
@@ -316,7 +320,7 @@ public partial class P1WorldView : Control
                 (float)current.HeroShield / current.HeroMaximumShield, new Color("76c7d9"));
         }
 
-        DrawSpatialNumbers(field, positions, recent, elapsed);
+        DrawSpatialNumbers(field, _positions, _recentEvents, elapsed);
         DrawBar(new Rect2(bounds.Position + new Vector2(16, 35), new Vector2(bounds.Size.X - 32, 7)), sceneProgress, new Color("bb8442"));
         DrawCaption(bounds, observed.Title, new Color("e5d7be"));
         int alive = current.Enemies.Count(enemy => enemy.Life > 0);
@@ -416,7 +420,7 @@ public partial class P1WorldView : Control
             {
                 string[] parts = item.Detail.Split('|');
                 string target = parts.Length > 1 ? parts[1] : item.Position.ToString();
-                return $"{target}|{item.AtMilliseconds / 180}|{(item.Kind == P3SceneEventKind.EnemyAttack ? "hero" : "enemy")}";
+                return $"{target}|{item.AtMilliseconds / 50}|{(item.Kind == P3SceneEventKind.EnemyAttack ? "hero" : "enemy")}";
             })
             .Select(group => (Event: group.OrderByDescending(item => item.AtMilliseconds).First(), Value: group.Sum(item => item.Value)))
             .OrderBy(entry => entry.Event.AtMilliseconds)
@@ -445,6 +449,35 @@ public partial class P1WorldView : Control
     private static P4Point Lerp(P4Point from, P4Point to, float weight) => new(
         (int)MathF.Round(Mathf.Lerp(from.XRaw, to.XRaw, weight)),
         (int)MathF.Round(Mathf.Lerp(from.YRaw, to.YRaw, weight)));
+
+    private static int FindFrameIndex(IReadOnlyList<P4SpatialFrame> frames, long elapsed)
+    {
+        int low = 0;
+        int high = frames.Count - 1;
+        while (low < high)
+        {
+            int middle = (low + high + 1) / 2;
+            if (frames[middle].AtMilliseconds <= elapsed) low = middle;
+            else high = middle - 1;
+        }
+        return low;
+    }
+
+    private static void CollectRecentEvents(IReadOnlyList<P3SceneEvent> events, long elapsed, List<P3SceneEvent> destination)
+    {
+        destination.Clear();
+        long minimum = elapsed - 900;
+        int low = 0;
+        int high = events.Count;
+        while (low < high)
+        {
+            int middle = (low + high) / 2;
+            if (events[middle].AtMilliseconds < minimum) low = middle + 1;
+            else high = middle;
+        }
+        for (int index = low; index < events.Count && events[index].AtMilliseconds <= elapsed; index++)
+            destination.Add(events[index]);
+    }
 
     private ObservedScene? Observe()
     {

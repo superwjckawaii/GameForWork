@@ -45,6 +45,13 @@ public static class P1SkillIds
     public const string IronOathBanner = "core.skill.iron_oath_banner";
 }
 
+public enum SkillTargetPolicy
+{
+    AllEnemies,
+    EliteAndBoss,
+    BossOnly,
+}
+
 public sealed record SkillAiRule(
     bool MatchAll = true,
     int MinimumLifeBasisPoints = 0,
@@ -57,7 +64,8 @@ public sealed record SkillAiRule(
     bool BossOnly = false,
     bool Engage = false,
     bool Pursue = false,
-    bool EscapeDanger = false);
+    bool EscapeDanger = false,
+    SkillTargetPolicy TargetPolicy = SkillTargetPolicy.AllEnemies);
 
 public sealed record SkillConfiguration(
     string SkillId,

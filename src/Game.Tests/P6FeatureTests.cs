@@ -164,6 +164,37 @@ public sealed class P6FeatureTests
     }
 
     [Fact]
+    public void PerSkillTargetPolicyGatesNormalEliteAndBossTargets()
+    {
+        P1TeamBuild bossOnly = AiBuild(new SkillAiRule(TargetPolicy: SkillTargetPolicy.BossOnly));
+        P4NodeCombatResult normal = new P4SpatialCombatRunner().Run(new P4NodeCombatRequest(
+            bossOnly, 1, 5, 8, false, false, false, 0, MaximumTicks: 160), 82);
+        P4NodeCombatResult boss = new P4SpatialCombatRunner().Run(new P4NodeCombatRequest(
+            bossOnly, 1, 5, 8, false, true, false, 0, MaximumTicks: 160), 82);
+        P4NodeCombatResult elite = new P4SpatialCombatRunner().Run(new P4NodeCombatRequest(
+            AiBuild(new SkillAiRule(TargetPolicy: SkillTargetPolicy.EliteAndBoss)),
+            1, 5, 8, true, false, false, 0, MaximumTicks: 160), 82);
+
+        Assert.DoesNotContain(normal.Events, item => item.Kind == P4SpatialEventKind.HeavyStrike);
+        Assert.Contains(boss.Events, item => item.Kind == P4SpatialEventKind.HeavyStrike);
+        Assert.Contains(elite.Events, item => item.Kind == P4SpatialEventKind.HeavyStrike);
+    }
+
+    [Fact]
+    public void SimpleTargetPolicySurvivesSessionCaptureAndRestore()
+    {
+        P1GameSession session = CreateSession();
+        SkillLinkConfiguration link = session.Management.SkillLinks.First(item =>
+            !string.IsNullOrEmpty(item.ActiveStoneInstanceId));
+
+        Assert.True(session.ConfigureSkillTarget(link.ActiveStoneInstanceId, SkillTargetPolicy.EliteAndBoss));
+        P1GameSession restored = P1GameSession.Restore(session.Capture());
+
+        Assert.Equal(SkillTargetPolicy.EliteAndBoss, restored.Management.SkillLinks.Single(item =>
+            item.ActiveStoneInstanceId == link.ActiveStoneInstanceId).AiRule!.TargetPolicy);
+    }
+
+    [Fact]
     public void SkillSchemesPreserveSocketLayoutAndAiRules()
     {
         P1GameSession session = CreateSession();

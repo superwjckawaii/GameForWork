@@ -12,6 +12,7 @@ public partial class P1ItemGrid : GridContainer
     private bool _filtered;
     private int _selectedIndex = -1;
     private Texture2D? _iconAtlas;
+    private string _contentSignature = string.Empty;
 
     public event Action<int>? ItemSelected;
     public event Action<int>? ItemActivated;
@@ -69,6 +70,9 @@ public partial class P1ItemGrid : GridContainer
 
     public void SetItems(IReadOnlyList<ItemInstance> items)
     {
+        string signature = "items|" + string.Join('|', items.Select(ItemSignature));
+        if (signature == _contentSignature) return;
+        _contentSignature = signature;
         _items = items.Cast<ItemInstance?>().ToArray();
         _externalIndices = Enumerable.Range(0, items.Count).Select(index => index + IndexOffset).ToArray();
         _filtered = false;
@@ -82,6 +86,9 @@ public partial class P1ItemGrid : GridContainer
 
     public void SetFilteredItems(IReadOnlyList<(int Index, ItemInstance Item)> items)
     {
+        string signature = "filtered|" + string.Join('|', items.Select(entry => $"{entry.Index}:{ItemSignature(entry.Item)}"));
+        if (signature == _contentSignature) return;
+        _contentSignature = signature;
         _items = items.Select(entry => (ItemInstance?)entry.Item).ToArray();
         _externalIndices = items.Select(entry => entry.Index).ToArray();
         _filtered = true;
@@ -91,6 +98,9 @@ public partial class P1ItemGrid : GridContainer
 
     public void SetSlots(IReadOnlyList<ItemInstance?> items)
     {
+        string signature = "slots|" + string.Join('|', items.Select(item => item is null ? "-" : ItemSignature(item)));
+        if (signature == _contentSignature) return;
+        _contentSignature = signature;
         _items = items;
         _externalIndices = Enumerable.Range(0, items.Count).Select(index => index + IndexOffset).ToArray();
         _filtered = false;
@@ -101,6 +111,10 @@ public partial class P1ItemGrid : GridContainer
 
         ApplyCells();
     }
+
+    private static string ItemSignature(ItemInstance item) =>
+        $"{item.InstanceId}:{item.IsLocked}:{item.IsCraftingBase}:{item.Rarity}:{item.LinkedSocketCount}:" +
+        string.Join(',', item.Affixes.Select(affix => $"{affix.Definition.StableFamilyId}:{affix.Value}:{affix.Crafted}"));
 
     public int ToExternalIndex(int index) => index >= 0 && index < _externalIndices.Count
         ? _externalIndices[index]

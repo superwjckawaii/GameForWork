@@ -288,7 +288,11 @@ public sealed record P1OfflineResult(
 
 public sealed class P1WorldSimulator(IP1MapAttemptResolver attemptResolver)
 {
-    public P1OfflineResult Simulate(P1WorldState state, long elapsedMilliseconds, ulong seed, bool offline = false)
+    private sealed record RunPreparation(string MapId, MapRoute Route, ulong Seed, int BuildHash, Task<P1MapRunResult> Task);
+    private readonly Dictionary<ExpeditionTeamKind, RunPreparation> _runPreparations = [];
+
+    public P1OfflineResult Simulate(P1WorldState state, long elapsedMilliseconds, ulong seed, bool offline = false,
+        bool asyncPreparation = false)
     {
         ArgumentNullException.ThrowIfNull(state);
         ArgumentNullException.ThrowIfNull(attemptResolver);
@@ -317,7 +321,7 @@ public sealed class P1WorldSimulator(IP1MapAttemptResolver attemptResolver)
 
         if (effective > 0)
         {
-            StartReadyTeams(state, active, now, seed);
+            StartReadyTeams(state, active, now, seed, asyncPreparation);
         }
 
         while (now < effective)
@@ -351,7 +355,7 @@ public sealed class P1WorldSimulator(IP1MapAttemptResolver attemptResolver)
 
             if (now < effective)
             {
-                StartReadyTeams(state, active, now, seed);
+                StartReadyTeams(state, active, now, seed, asyncPreparation);
             }
             bool noPendingMaps = state.Teams.All(team => team.Queue.Count == 0 || team.IsStopped);
             if (active.Count == 0 && noPendingMaps)
@@ -395,7 +399,8 @@ public sealed class P1WorldSimulator(IP1MapAttemptResolver attemptResolver)
         P1WorldState state,
         IDictionary<ExpeditionTeamKind, ActiveExpedition> active,
         long now,
-        ulong worldSeed)
+        ulong worldSeed,
+        bool asyncPreparation)
     {
         foreach (P1TeamExpeditionState team in state.Teams)
         {
@@ -414,6 +419,29 @@ public sealed class P1WorldSimulator(IP1MapAttemptResolver attemptResolver)
             }
 
             P1MapItem queuedMap = team.Queue.Maps[0];
+            MapRoute route = team.Policy.SelectUnattendedRoute();
+            ulong runSeed = DeriveExpeditionSeed(worldSeed, team, queuedMap, route);
+            int buildHash = team.Build.GetHashCode();
+            P1MapRunResult plannedRun;
+            if (asyncPreparation)
+            {
+                if (!_runPreparations.TryGetValue(team.Kind, out RunPreparation? preparation) ||
+                    preparation.MapId != queuedMap.InstanceId || preparation.Route != route ||
+                    preparation.Seed != runSeed || preparation.BuildHash != buildHash)
+                {
+                    P1TeamBuild preparedBuild = team.Build;
+                    preparation = new RunPreparation(queuedMap.InstanceId, route, runSeed, buildHash,
+                        Task.Run(() => new P1MapRunner(attemptResolver).Run(queuedMap, route, preparedBuild, runSeed)));
+                    _runPreparations[team.Kind] = preparation;
+                }
+                if (!preparation.Task.IsCompleted) continue;
+                plannedRun = preparation.Task.GetAwaiter().GetResult();
+            }
+            else
+            {
+                _runPreparations.Remove(team.Kind);
+                plannedRun = new P1MapRunner(attemptResolver).Run(queuedMap, route, team.Build, runSeed);
+            }
             if (!P5ExpeditionDirector.IsPractice(queuedMap) && !state.Economy.TryConsumeMapSupply())
             {
                 continue;
@@ -423,10 +451,8 @@ public sealed class P1WorldSimulator(IP1MapAttemptResolver attemptResolver)
             {
                 throw new InvalidOperationException("Map queue count and dequeue result disagree.");
             }
+            _runPreparations.Remove(team.Kind);
 
-            MapRoute route = team.Policy.SelectUnattendedRoute();
-            ulong runSeed = DeriveExpeditionSeed(worldSeed, team, map, route);
-            P1MapRunResult plannedRun = new P1MapRunner(attemptResolver).Run(map, route, team.Build, runSeed);
             // Third-party/test resolvers created before P3 do not provide a scene timeline. Keep their
             // historical timing contract while production runs always use the authoritative timeline.
             long duration = plannedRun.DurationMilliseconds > 0

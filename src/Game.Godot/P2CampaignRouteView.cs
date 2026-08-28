@@ -11,6 +11,7 @@ public partial class P2CampaignRouteView : VBoxContainer
     private Action<string>? _selected;
     private string? _selectedId;
     private readonly Texture2D?[] _actTextures = new Texture2D?[5];
+    private string _stateSignature = string.Empty;
 
     public string? SelectedStableId => _selectedId;
 
@@ -90,6 +91,10 @@ public partial class P2CampaignRouteView : VBoxContainer
         }
 
         P2CampaignState campaign = _session().Campaign;
+        string signature = $"{_selectedId}:{campaign.CurrentNodeIndex}:{campaign.Completed}:{campaign.Defeated}:" +
+            string.Join('|', campaign.CompletedNodeIds.OrderBy(id => id, StringComparer.Ordinal));
+        if (signature == _stateSignature) return;
+        _stateSignature = signature;
         foreach (CampaignNodeDefinition node in P2CampaignCatalog.Nodes)
         {
             Button button = _buttons[node.StableId];

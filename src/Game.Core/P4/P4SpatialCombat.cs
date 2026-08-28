@@ -213,26 +213,51 @@ public sealed class P4SpatialCombatRunner
             heroTargetId = target?.EntityId ?? string.Empty;
             if (target is not null && tick >= heroNextActionTick)
             {
-                long distance = P4Point.DistanceSquared(heroPosition, target.Position);
-                P4EnemyUnit[] cleaveTargets = cleave is null ? [] : enemies.Where(enemy => enemy.Life > 0 &&
-                    InCleaveCone(heroPosition, target.Position, enemy.Position, cleave.RangeRaw)).ToArray();
-                P4EnemyUnit[] spinTargets = spin is null ? [] : enemies.Where(enemy => enemy.Life > 0 &&
-                    InRange(heroPosition, enemy.Position, spin.RangeRaw)).ToArray();
+                var skillTargets = skills.ToDictionary(
+                    pair => pair.Key,
+                    pair => SelectTarget(enemies, heroPosition,
+                        pair.Value.AiRule?.TargetPolicy ?? SkillTargetPolicy.AllEnemies),
+                    StringComparer.Ordinal);
+                P4EnemyUnit? SkillTarget(string skillId) => skillTargets.GetValueOrDefault(skillId) ?? target;
+                long SkillDistance(string skillId) => P4Point.DistanceSquared(heroPosition, SkillTarget(skillId)!.Position);
+                int ConeCount(string skillId, int range) => SkillTarget(skillId) is not P4EnemyUnit selected ? 0 :
+                    enemies.Count(enemy => enemy.Life > 0 &&
+                        InCleaveCone(heroPosition, selected.Position, enemy.Position, range));
+                int NearbyCount(string skillId, int range) => SkillTarget(skillId) is null ? 0 :
+                    enemies.Count(enemy => enemy.Life > 0 && InRange(heroPosition, enemy.Position, range));
                 string? chosen = new[]
                     {
                         Candidate(P1SkillIds.WarCry, request.Build.UseWarCry && warCrySkill is not null && warCry.IsReady &&
                             hero.Mana >= warCry.ManaCost),
                         Candidate(P1SkillIds.SeismicCharge, charge is not null && tick >= chargeReadyTick &&
-                            distance > (long)HeavyStrikeRange * HeavyStrikeRange && distance <= (long)charge.RangeRaw * charge.RangeRaw && CanPay(hero, charge)),
-                        Candidate(P1SkillIds.BloodTideSpin, spin is not null && tick >= spinReadyTick && spinTargets.Length >= 2 && CanPay(hero, spin)),
-                        Candidate(P1SkillIds.EarthCleave, cleave is not null && tick >= cleaveReadyTick && cleaveTargets.Length >= 2 && CanPay(hero, cleave)),
-                        Candidate(P1SkillIds.SpiritBlade, blade is not null && tick >= bladeReadyTick && distance <= (long)blade.RangeRaw * blade.RangeRaw && CanPay(hero, blade)),
-                        Candidate(P1SkillIds.HeavyStrike, skills.ContainsKey(P1SkillIds.HeavyStrike) && distance <= (long)heavyStrike.RangeRaw * heavyStrike.RangeRaw &&
+                            SkillTarget(P1SkillIds.SeismicCharge) is not null &&
+                            SkillDistance(P1SkillIds.SeismicCharge) > (long)HeavyStrikeRange * HeavyStrikeRange &&
+                            SkillDistance(P1SkillIds.SeismicCharge) <= (long)charge.RangeRaw * charge.RangeRaw && CanPay(hero, charge)),
+                        Candidate(P1SkillIds.BloodTideSpin, spin is not null && tick >= spinReadyTick &&
+                            SkillTarget(P1SkillIds.BloodTideSpin) is not null && NearbyCount(P1SkillIds.BloodTideSpin, spin.RangeRaw) >= 2 && CanPay(hero, spin)),
+                        Candidate(P1SkillIds.EarthCleave, cleave is not null && tick >= cleaveReadyTick &&
+                            SkillTarget(P1SkillIds.EarthCleave) is not null && ConeCount(P1SkillIds.EarthCleave, cleave.RangeRaw) >= 2 && CanPay(hero, cleave)),
+                        Candidate(P1SkillIds.SpiritBlade, blade is not null && tick >= bladeReadyTick &&
+                            SkillTarget(P1SkillIds.SpiritBlade) is not null && SkillDistance(P1SkillIds.SpiritBlade) <= (long)blade.RangeRaw * blade.RangeRaw && CanPay(hero, blade)),
+                        Candidate(P1SkillIds.HeavyStrike, skills.ContainsKey(P1SkillIds.HeavyStrike) &&
+                            SkillTarget(P1SkillIds.HeavyStrike) is not null && SkillDistance(P1SkillIds.HeavyStrike) <= (long)heavyStrike.RangeRaw * heavyStrike.RangeRaw &&
                             (heavyStrike.LifeCost > 0 ? hero.Life > heavyStrike.LifeCost : hero.Mana >= heavyStrike.ManaCost)),
                     }
-                    .Where(candidate => candidate is not null && AiMatches(skills[candidate], request, hero, target, enemies, distance))
+                    .Where(candidate => candidate is not null && AiMatches(skills[candidate], request, hero,
+                        SkillTarget(candidate)!, enemies, SkillDistance(candidate)))
                     .OrderBy(candidate => skills[candidate!].Priority)
                     .FirstOrDefault();
+
+                if (chosen is not null)
+                {
+                    target = SkillTarget(chosen)!;
+                    heroTargetId = target.EntityId;
+                }
+                long distance = P4Point.DistanceSquared(heroPosition, target.Position);
+                P4EnemyUnit[] cleaveTargets = cleave is null ? [] : enemies.Where(enemy => enemy.Life > 0 &&
+                    InCleaveCone(heroPosition, target.Position, enemy.Position, cleave.RangeRaw)).ToArray();
+                P4EnemyUnit[] spinTargets = spin is null ? [] : enemies.Where(enemy => enemy.Life > 0 &&
+                    InRange(heroPosition, enemy.Position, spin.RangeRaw)).ToArray();
 
                 if (chosen is null)
                 {
@@ -342,10 +367,7 @@ public sealed class P4SpatialCombatRunner
             }
 
             ResolveEnemies(request, enemies, hero, heroPosition, random, tick, events);
-            if ((tick & 3) == 0 || events.Count > 0 && events[^1].AtMilliseconds == tick * TickMilliseconds)
-            {
-                CaptureFrame(frames, tick * TickMilliseconds, request.NodeIndex, heroPosition, hero, heroTargetId, enemies);
-            }
+            CaptureFrame(frames, tick * TickMilliseconds, request.NodeIndex, heroPosition, hero, heroTargetId, enemies);
         }
 
         bool victory = enemies.All(enemy => enemy.Life <= 0);
@@ -410,6 +432,22 @@ public sealed class P4SpatialCombatRunner
         .ThenByDescending(enemy => enemy.Scaled.Base.ThreatPoints)
         .ThenBy(enemy => P4Point.DistanceSquared(heroPosition, enemy.Position))
         .ThenBy(enemy => enemy.Life)
+        .FirstOrDefault();
+
+    private static P4EnemyUnit? SelectTarget(
+        IEnumerable<P4EnemyUnit> enemies,
+        P4Point heroPosition,
+        SkillTargetPolicy policy) => enemies
+        .Where(enemy => enemy.Life > 0 && policy switch
+        {
+            SkillTargetPolicy.BossOnly => enemy.Boss,
+            SkillTargetPolicy.EliteAndBoss => enemy.Elite || enemy.Boss,
+            _ => true,
+        })
+        .OrderBy(enemy => P4Point.DistanceSquared(heroPosition, enemy.Position))
+        .ThenByDescending(enemy => enemy.Boss)
+        .ThenByDescending(enemy => enemy.Elite)
+        .ThenBy(enemy => enemy.EntityId, StringComparer.Ordinal)
         .FirstOrDefault();
 
     private static void ResolveEnemies(
@@ -741,6 +779,13 @@ public sealed class P4SpatialCombatRunner
         int distance = (int)Math.Sqrt(distanceSquared);
         int alive = enemies.Count(enemy => enemy.Life > 0);
         string rarity = target.Boss ? "Boss" : target.Elite ? "精英" : "普通";
+        bool targetMatches = rule.TargetPolicy switch
+        {
+            SkillTargetPolicy.BossOnly => target.Boss,
+            SkillTargetPolicy.EliteAndBoss => target.Elite || target.Boss,
+            _ => true,
+        };
+        if (!targetMatches) return false;
         bool[] checks =
         [
             (long)hero.Life * 10_000 >= (long)hero.MaximumLife * rule.MinimumLifeBasisPoints,
