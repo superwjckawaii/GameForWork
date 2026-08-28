@@ -25,12 +25,19 @@ public partial class P5ExpeditionPanel : VBoxContainer
 
     public void Initialize(Func<P1GameSession> session, Action<string> changed)
     {
+        SizeFlagsHorizontal = SizeFlags.ExpandFill;
+        SizeFlagsVertical = SizeFlags.ExpandFill;
         _session = session;
         _changed = changed;
         _resources = new Label { AutowrapMode = TextServer.AutowrapMode.WordSmart };
         AddChild(_resources);
 
-        var body = new HBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill, SizeFlagsVertical = SizeFlags.ExpandFill };
+        var body = new HBoxContainer
+        {
+            CustomMinimumSize = new Vector2(0, 280),
+            SizeFlagsHorizontal = SizeFlags.ExpandFill,
+            SizeFlagsVertical = SizeFlags.ExpandFill,
+        };
         body.AddThemeConstantOverride("separation", 14);
         AddChild(body);
 
@@ -84,7 +91,7 @@ public partial class P5ExpeditionPanel : VBoxContainer
         dispatches.AddChild(BuildTeamCard(ExpeditionTeamKind.Mercenaries, "佣兵队"));
         var help = new Label
         {
-            Text = "选择队伍目标后开始即可。补给自动消耗；地图耗尽、连续失败 3 次或缺少 Boss 门票时会明确停止。",
+            Text = "选择队伍目标后开始即可。地图耗尽、连续失败 3 次或缺少 Boss 门票时会明确停止。",
             AutowrapMode = TextServer.AutowrapMode.WordSmart,
         };
         dispatches.AddChild(help);
@@ -131,7 +138,7 @@ public partial class P5ExpeditionPanel : VBoxContainer
         P1MapItem[] visibleMaps = session.World.MapInventory.Take(visibleMapCount).ToArray();
         _resources.Text =
             $"地图 {session.World.MapInventory.Count}　深渊监守者碎片 {session.World.Expedition.AbyssWardenFragments}/{P5ExpeditionDirector.FragmentsPerTicket}　" +
-            $"Boss 门票 {session.World.Expedition.AbyssWardenTickets}　远征补给 {session.World.Economy.ExpeditionSupplies}";
+            $"Boss 门票 {session.World.Expedition.AbyssWardenTickets}";
         string mapSignature = $"{session.World.Expedition.AbyssWardenFragments}:{session.World.Expedition.AbyssWardenTickets}:" +
             $"{session.World.Expedition.MapsTowardNextFragment}|" +
             string.Join(',', session.World.MapInventory.Select(map => $"{map.InstanceId}:{map.AreaLevel}:{map.Rarity}:{map.Quality}:{map.IsCorrupted}:{map.SelectedRoute}"));

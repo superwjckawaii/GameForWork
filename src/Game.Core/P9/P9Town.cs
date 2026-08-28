@@ -403,7 +403,7 @@ public sealed class P9TownState
             {
                 case 0: economy.AddDispositionProceeds(15 * Level(P9BuildingKind.Tavern), 0); AddEvent("酒馆商队带来一笔安全交易。", true); break;
                 case 1: economy.AddMetal(MetalCurrencyKind.AwakeningCopper, 1); AddEvent("拾荒者交付了一块启灵铜。", true); break;
-                case 2: economy.AddExpeditionSupplies(2); AddEvent("门扉巡逻队回收了远征补给。", true); break;
+                case 2: economy.AddDispositionProceeds(20, 0); AddEvent("门扉巡逻队带回了遗失的金币。", true); break;
                 case 3: economy.AddDispositionProceeds(0, 3); AddEvent("工匠学徒回收了铁屑。", true); break;
                 case 4: economy.AddMetal(MetalCurrencyKind.PolishingCobalt, 1); AddEvent("炼金所冷凝出一份精磨钴。", true); break;
                 default: economy.AddDispositionProceeds(10, 0); AddEvent("遗物馆展览吸引了旅人。", true); break;

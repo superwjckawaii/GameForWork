@@ -501,7 +501,7 @@ public partial class P1Dashboard : VBoxContainer
         _debugSpeed?.SetPressedNoSignal(_session.DebugTwentyTimes);
         TownEconomyState economy = _session.World.Economy;
         _townStatus!.Text =
-            $"补给 {economy.ExpeditionSupplies}（150 秒/份，无维护费） · 金币 {economy.Gold} · 铁屑 {economy.IronScraps} · " +
+            $"金币 {economy.Gold} · 铁屑 {economy.IronScraps} · " +
             $"技能石 {economy.SkillStones} · 记忆灰烬 {_session.Passives.MemoryAshes} · 监守印记 {economy.WardenMarks}\n" +
             $"传送装置 Lv.{_session.World.Teleporter.Level} · 佣兵队人数上限 {_session.World.Teleporter.MercenaryTeamCapacity}";
         _expeditionStatus!.Text = TeamText(_session.World.Hero) + "\n" + TeamText(_session.World.Mercenaries) +
@@ -525,7 +525,7 @@ public partial class P1Dashboard : VBoxContainer
         _miniStatus!.Text =
             $"{_session.Player.Name} Lv.{_session.World.Hero.Progression.Level}  " +
             $"主角[{CompactTeam(_session.World.Hero)}]  佣兵[{CompactTeam(_session.World.Mercenaries)}]\n" +
-            $"补给 {economy.ExpeditionSupplies} · 金币 {economy.Gold} · 图 {_session.World.MapInventory.Count} · {_session.SimulationSpeed}×";
+            $"金币 {economy.Gold} · 图 {_session.World.MapInventory.Count} · {_session.SimulationSpeed}×";
     }
 
     private void RefreshReport()

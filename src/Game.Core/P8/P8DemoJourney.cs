@@ -103,7 +103,7 @@ public sealed class P8DemoJourney
         new(P8JourneyStep.DispatchMercenaries, "派遣佣兵队", "为佣兵队选择目标并开始第二支派遣。", P8JourneyDestination.Expedition,
             "佣兵技能和 AI 自主成长，玩家通过装备和远征目标影响队伍。"),
         new(P8JourneyStep.CompleteSafeMap, "完成安全地图", "让任意队伍成功完成一张安全探索地图。", P8JourneyDestination.Expedition,
-            "地图、补给或仓库条件不足时，队伍会停止并给出明确原因。"),
+            "地图耗尽或仓库条件不足时，队伍会停止并给出明确原因。"),
         new(P8JourneyStep.CompleteAbyssMap, "完成裂渊地图", "让任意队伍成功完成一张裂渊追猎地图。", P8JourneyDestination.Expedition,
             "裂渊敌人更强，并推进深渊监守者碎片进度。"),
         new(P8JourneyStep.EarnBossTicket, "获得监守者门票", "完成地图 Boss，集齐四枚碎片并自动合成门票。", P8JourneyDestination.Expedition,

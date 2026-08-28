@@ -108,7 +108,6 @@ public sealed record P2CampaignAdvanceResult(
     long EffectiveMilliseconds,
     bool WasClamped,
     int NodesCompleted,
-    int SuppliesProduced,
     bool Defeated,
     bool CampaignCompleted,
     string FinalHash);
@@ -305,7 +304,6 @@ public sealed class P2CampaignSimulator
         long effective = Math.Clamp(elapsedMilliseconds, 0, OfflineTime.MaximumMilliseconds);
         long remaining = effective;
         int nodesCompleted = 0;
-        int suppliesProduced = 0;
         while (remaining > 0 && !campaign.Completed && !campaign.Defeated)
         {
             CampaignNodeDefinition node = campaign.CurrentNode!;
@@ -334,7 +332,6 @@ public sealed class P2CampaignSimulator
                         }
                         if (!_timelinePreparation.Task.IsCompleted)
                         {
-                            suppliesProduced = checked(suppliesProduced + world.Economy.AdvanceProduction(remaining));
                             remaining = 0;
                             break;
                         }
@@ -355,7 +352,6 @@ public sealed class P2CampaignSimulator
             long needed = duration - campaign.CurrentNodeElapsedMilliseconds;
             long step = Math.Min(remaining, needed);
             campaign.AddElapsed(step);
-            suppliesProduced = checked(suppliesProduced + world.Economy.AdvanceProduction(step));
             remaining -= step;
             if (campaign.CurrentNodeElapsedMilliseconds < duration)
             {
@@ -382,16 +378,10 @@ public sealed class P2CampaignSimulator
             nodesCompleted++;
         }
 
-        if (remaining > 0)
-        {
-            suppliesProduced = checked(suppliesProduced + world.Economy.AdvanceProduction(remaining));
-        }
-
         return new P2CampaignAdvanceResult(
             effective,
             elapsedMilliseconds > OfflineTime.MaximumMilliseconds,
             nodesCompleted,
-            suppliesProduced,
             campaign.Defeated,
             campaign.Completed,
             Hash(campaign, world, effective, seed));

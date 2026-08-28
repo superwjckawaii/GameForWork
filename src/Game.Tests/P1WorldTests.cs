@@ -98,18 +98,6 @@ public sealed class P1WorldTests
     }
 
     [Fact]
-    public void TownProducesOneSupplyEveryOneHundredFiftySeconds()
-    {
-        var economy = new TownEconomyState();
-
-        Assert.Equal(0, economy.AdvanceProduction(149_999));
-        Assert.Equal(1, economy.AdvanceProduction(1));
-        Assert.Equal(11, economy.ExpeditionSupplies);
-        Assert.Equal(2, economy.AdvanceProduction(300_000));
-        Assert.Equal(13, economy.ExpeditionSupplies);
-    }
-
-    [Fact]
     public void WorkshopPaysCostAndReplacesCraftedPrefix()
     {
         var economy = new TownEconomyState(gold: 100, ironScraps: 20);
@@ -222,7 +210,6 @@ public sealed class P1WorldTests
         Assert.Equal(2, second.TotalMapsCompleted);
         Assert.Equal(2, state.Hero.MapsCompleted);
         Assert.Equal(2, state.Mercenaries.MapsCompleted);
-        Assert.Equal(1, second.SuppliesProduced);
         Assert.NotEmpty(state.Hero.Backpack.Items);
         Assert.NotEmpty(state.Mercenaries.Backpack.Items);
     }
@@ -255,7 +242,6 @@ public sealed class P1WorldTests
         Assert.True(result.WasClamped);
         Assert.Equal(OfflineTime.MaximumMilliseconds, result.EffectiveMilliseconds);
         Assert.Equal(10, result.TotalMapsCompleted);
-        Assert.Equal(1_152, result.SuppliesProduced);
         Assert.All(result.Teams, team => Assert.Equal(0, team.RemainingQueue));
         Assert.True(state.MapInventory.Count > 0);
         Assert.Equal(10, state.Economy.WardenMarks);

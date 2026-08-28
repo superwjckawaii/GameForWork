@@ -13,7 +13,6 @@ public sealed class P1SessionTests
 
         Assert.Equal("阿斯特", session.Player.Name);
         Assert.False(string.IsNullOrWhiteSpace(session.MercenaryName));
-        Assert.Equal(10, session.World.Economy.ExpeditionSupplies);
         Assert.Equal(5, session.Passives.MemoryAshes);
         Assert.Equal(0, session.World.Hero.Queue.Count);
         Assert.Equal(0, session.World.Mercenaries.Queue.Count);
@@ -128,10 +127,8 @@ public sealed class P1SessionTests
     {
         P1GameSession session = CreateSession();
 
-        int produced = session.AdvanceTownOnly(150_000);
+        session.AdvanceTownOnly(150_000);
 
-        Assert.Equal(1, produced);
-        Assert.Equal(11, session.World.Economy.ExpeditionSupplies);
         Assert.Equal(0, session.World.Hero.Queue.Count);
         Assert.Null(session.World.Hero.ActiveMap);
     }

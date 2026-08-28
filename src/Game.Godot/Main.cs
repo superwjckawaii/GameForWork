@@ -28,6 +28,8 @@ public partial class Main : Node
     private HBoxContainer? _miniToolbar;
     private HFlowContainer? _testHarness;
     private Button? _largeWindowButton;
+    private CheckButton? _alwaysOnTopToggle;
+    private Label? _goldLabel;
     private Label? _noticeLabel;
     private ConfirmationDialog? _closeDialog;
     private ConfirmationDialog? _resetDialog;
@@ -47,6 +49,7 @@ public partial class Main : Node
     private bool _quitAfterSave;
     private Exception? _saveFailure;
     private long _lastSaveMilliseconds;
+    private int _displayedGold = int.MinValue;
     private double _performanceAccumulator;
     private double _lastSimulationMilliseconds;
     private Label? _performanceLabel;
@@ -95,6 +98,7 @@ public partial class Main : Node
     public override void _Process(double delta)
     {
         PollSaveWorker();
+        UpdateGoldDisplay();
         if (_quitAfterSave && !IsSaveWorkerRunning())
         {
             _quitAfterSave = false;
@@ -202,7 +206,7 @@ public partial class Main : Node
         _pixelTitleBar = new P3PixelTitleBar();
         _pixelTitleBar.Initialize(
             ToggleLargeWindow,
-            () => _windowController?.ToggleAlwaysOnTop(),
+            ToggleAlwaysOnTop,
             () => GetWindow().Mode = Window.ModeEnum.Minimized,
             () => _windowController?.HideToTray(),
             OnCloseRequested);
@@ -223,7 +227,14 @@ public partial class Main : Node
 
         slots.ItemSelected += index => SwitchSaveSlot(slots.GetItemId((int)index));
         _standardToolbar.AddChild(slots);
-        AddButton(_standardToolbar, "置顶", () => _windowController?.ToggleAlwaysOnTop());
+        _alwaysOnTopToggle = new CheckButton
+        {
+            Text = "置顶",
+            ButtonPressed = _settingsStore?.Load().AlwaysOnTop ?? false,
+            TooltipText = "开启后窗口始终显示在其他窗口上方",
+        };
+        _alwaysOnTopToggle.Toggled += enabled => _windowController?.SetAlwaysOnTop(enabled);
+        _standardToolbar.AddChild(_alwaysOnTopToggle);
         AddButton(_standardToolbar, "隐藏到托盘 (Tab)", () => _windowController?.HideToTray());
         int initialOpacity = _settingsStore?.Load().OpacityPercent ?? 100;
         var opacity = new HSlider
@@ -285,6 +296,18 @@ public partial class Main : Node
         };
         miniOpacity.ValueChanged += value => _windowController?.SetOpacity((int)value);
         _miniToolbar.AddChild(miniOpacity);
+
+        var goldBar = new HBoxContainer
+        {
+            Alignment = BoxContainer.AlignmentMode.End,
+            SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
+            TooltipText = "金币是城镇升级、制作与交易使用的通用关键资源",
+        };
+        goldBar.AddThemeConstantOverride("separation", 5);
+        goldBar.AddChild(new PixelGoldIcon());
+        _goldLabel = new Label { Text = "金币 0" };
+        goldBar.AddChild(_goldLabel);
+        root.AddChild(goldBar);
 
         _noticeLabel = new Label
         {
@@ -400,6 +423,27 @@ public partial class Main : Node
     {
         _windowController?.ToggleMode();
         UpdateWindowModeInterface();
+    }
+
+    private void ToggleAlwaysOnTop()
+    {
+        _windowController?.ToggleAlwaysOnTop();
+        if (_windowController is not null)
+        {
+            _alwaysOnTopToggle?.SetPressedNoSignal(_windowController.AlwaysOnTop);
+        }
+    }
+
+    private void UpdateGoldDisplay()
+    {
+        int gold = _session?.World.Economy.Gold ?? 0;
+        if (_goldLabel is null || gold == _displayedGold)
+        {
+            return;
+        }
+
+        _displayedGold = gold;
+        _goldLabel.Text = $"金币 {gold:N0}";
     }
 
     private void ToggleLargeWindow()

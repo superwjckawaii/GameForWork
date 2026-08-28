@@ -161,11 +161,6 @@ public sealed class P1TeamExpeditionState
             return "maximum_continuous_maps";
         }
 
-        if (Policy.ReserveSupplies > 0 && state.Economy.ExpeditionSupplies <= Policy.ReserveSupplies)
-        {
-            return "reserved_supplies";
-        }
-
         if (Policy.StopAfterConsecutiveFailures > 0 && ConsecutiveFailures >= Policy.StopAfterConsecutiveFailures)
         {
             return "consecutive_failures";
@@ -317,7 +312,6 @@ public sealed record P1OfflineTeamSummary(
 public sealed record P1OfflineResult(
     long EffectiveMilliseconds,
     bool WasClamped,
-    int SuppliesProduced,
     int TotalMapsCompleted,
     int TotalMapsFailed,
     IReadOnlyList<P1OfflineTeamSummary> Teams,
@@ -338,7 +332,6 @@ public sealed class P1WorldSimulator(IP1MapAttemptResolver attemptResolver)
         int initialFailed = state.Teams.Sum(team => team.MapsFailed);
         var active = new Dictionary<ExpeditionTeamKind, ActiveExpedition>();
         long now = 0;
-        int suppliesProduced = 0;
         foreach (P1TeamExpeditionState team in state.Teams) team.AdvanceRouteDecision(effective, offline);
         foreach (P1TeamExpeditionState team in state.Teams.Where(team => team.ActiveMap is not null))
         {
@@ -367,19 +360,12 @@ public sealed class P1WorldSimulator(IP1MapAttemptResolver attemptResolver)
             long nextCompletion = active.Count == 0
                 ? long.MaxValue
                 : active.Values.Min(item => item.CompletionTimeMilliseconds);
-            bool waitingForSupply = state.Teams.Any(team =>
-                !team.IsStopped && team.Queue.Count > 0 && !active.ContainsKey(team.Kind));
-            long untilSupply = TownEconomyState.SupplyProductionIntervalMilliseconds -
-                state.Economy.SupplyProductionRemainderMilliseconds;
-            long nextSupply = waitingForSupply ? checked(now + untilSupply) : long.MaxValue;
-            long nextEvent = Math.Min(effective, Math.Min(nextCompletion, nextSupply));
+            long nextEvent = Math.Min(effective, nextCompletion);
             if (nextEvent == long.MaxValue)
             {
                 nextEvent = effective;
             }
 
-            long delta = nextEvent - now;
-            suppliesProduced = checked(suppliesProduced + state.Economy.AdvanceProduction(delta));
             now = nextEvent;
             ActiveExpedition[] completed = active.Values
                 .Where(item => item.CompletionTimeMilliseconds == now)
@@ -398,13 +384,7 @@ public sealed class P1WorldSimulator(IP1MapAttemptResolver attemptResolver)
             bool noPendingMaps = state.Teams.All(team => team.Queue.Count == 0 || team.IsStopped);
             if (active.Count == 0 && noPendingMaps)
             {
-                if (now < effective)
-                {
-                    suppliesProduced = checked(
-                        suppliesProduced + state.Economy.AdvanceProduction(effective - now));
-                    now = effective;
-                }
-
+                now = effective;
                 break;
             }
         }
@@ -426,7 +406,6 @@ public sealed class P1WorldSimulator(IP1MapAttemptResolver attemptResolver)
         return new P1OfflineResult(
             effective,
             elapsedMilliseconds > OfflineTime.MaximumMilliseconds,
-            suppliesProduced,
             totalCompleted,
             totalFailed,
             summaries,
@@ -497,11 +476,6 @@ public sealed class P1WorldSimulator(IP1MapAttemptResolver attemptResolver)
                 _runPreparations.Remove(team.Kind);
                 plannedRun = new P1MapRunner(attemptResolver).Run(queuedMap, route, team.Build, runSeed);
             }
-            if (!P5ExpeditionDirector.IsPractice(queuedMap) && !state.Economy.TryConsumeMapSupply())
-            {
-                continue;
-            }
-
             if (!team.Queue.TryDequeue(out P1MapItem? map) || map is null)
             {
                 throw new InvalidOperationException("Map queue count and dequeue result disagree.");
@@ -568,7 +542,6 @@ public sealed class P1WorldSimulator(IP1MapAttemptResolver attemptResolver)
     {
         var builder = new StringBuilder();
         builder.Append(seed).Append('|').Append(elapsed).Append('|')
-            .Append(state.Economy.ExpeditionSupplies).Append('|')
             .Append(state.Economy.Gold).Append('|')
             .Append(state.Economy.IronScraps).Append('|')
             .Append(state.Economy.MemoryAshes).Append('|')

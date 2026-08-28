@@ -5,26 +5,19 @@ namespace GameForWork.Core.P1.World;
 
 public sealed class TownEconomyState
 {
-    public const long SupplyProductionIntervalMilliseconds = 150_000;
-    private long _supplyProductionRemainderMilliseconds;
-
     public TownEconomyState(
-        int expeditionSupplies = 10,
         int gold = 0,
         int ironScraps = 0,
         int memoryAshes = 5,
         int wardenMarks = 0,
         int skillStones = 0,
-        long supplyProductionRemainderMilliseconds = 0,
         IReadOnlyDictionary<MetalCurrencyKind, int>? metalCurrencies = null)
     {
-        if (expeditionSupplies < 0 || gold < 0 || ironScraps < 0 || memoryAshes < 0 ||
-            wardenMarks < 0 || skillStones < 0 || supplyProductionRemainderMilliseconds is < 0 or >= SupplyProductionIntervalMilliseconds)
+        if (gold < 0 || ironScraps < 0 || memoryAshes < 0 || wardenMarks < 0 || skillStones < 0)
         {
-            throw new ArgumentOutOfRangeException(nameof(expeditionSupplies));
+            throw new ArgumentOutOfRangeException(nameof(gold));
         }
 
-        ExpeditionSupplies = expeditionSupplies;
         Gold = gold;
         IronScraps = ironScraps;
         MemoryAshes = memoryAshes;
@@ -34,18 +27,15 @@ public sealed class TownEconomyState
         {
             _metalCurrencies[kind] = Math.Max(0, metalCurrencies?.GetValueOrDefault(kind) ?? 0);
         }
-        _supplyProductionRemainderMilliseconds = supplyProductionRemainderMilliseconds;
     }
 
     private readonly Dictionary<MetalCurrencyKind, int> _metalCurrencies = [];
 
-    public int ExpeditionSupplies { get; private set; }
     public int Gold { get; private set; }
     public int IronScraps { get; private set; }
     public int MemoryAshes { get; private set; }
     public int WardenMarks { get; private set; }
     public int SkillStones { get; private set; }
-    public long SupplyProductionRemainderMilliseconds => _supplyProductionRemainderMilliseconds;
     public IReadOnlyDictionary<MetalCurrencyKind, int> MetalCurrencies => _metalCurrencies;
 
     public int MetalAmount(MetalCurrencyKind kind) => _metalCurrencies.GetValueOrDefault(kind);
@@ -66,34 +56,6 @@ public sealed class TownEconomyState
 
         _metalCurrencies[kind] -= amount;
         return true;
-    }
-
-    public bool TryConsumeMapSupply()
-    {
-        if (ExpeditionSupplies <= 0)
-        {
-            return false;
-        }
-
-        ExpeditionSupplies--;
-        return true;
-    }
-
-    public void AddExpeditionSupplies(int amount)
-    {
-        ArgumentOutOfRangeException.ThrowIfNegative(amount);
-        ExpeditionSupplies = checked(ExpeditionSupplies + amount);
-    }
-
-    public int AdvanceProduction(long elapsedMilliseconds)
-    {
-        ArgumentOutOfRangeException.ThrowIfNegative(elapsedMilliseconds);
-        _supplyProductionRemainderMilliseconds = checked(
-            _supplyProductionRemainderMilliseconds + elapsedMilliseconds);
-        int produced = checked((int)(_supplyProductionRemainderMilliseconds / SupplyProductionIntervalMilliseconds));
-        _supplyProductionRemainderMilliseconds %= SupplyProductionIntervalMilliseconds;
-        ExpeditionSupplies = checked(ExpeditionSupplies + produced);
-        return produced;
     }
 
     public void AddRewards(MapStackableRewards rewards)

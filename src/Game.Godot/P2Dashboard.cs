@@ -330,7 +330,11 @@ public partial class P2Dashboard : VBoxContainer
         page.AddChild(tabs);
         var dispatch = new VBoxContainer { Name = "远征派遣", SizeFlagsVertical = SizeFlags.ExpandFill };
         tabs.AddChild(dispatch);
-        _expeditionPanel = new P5ExpeditionPanel();
+        _expeditionPanel = new P5ExpeditionPanel
+        {
+            SizeFlagsHorizontal = SizeFlags.ExpandFill,
+            SizeFlagsVertical = SizeFlags.ExpandFill,
+        };
         _expeditionPanel.Initialize(RequireSession, Changed);
         _expeditionPanel.ReportsViewed += () =>
         {
@@ -919,8 +923,6 @@ public partial class P2Dashboard : VBoxContainer
         OptionButton storageFull = AddOptions(row, "满仓", ["仅收取堆叠物", "停止远征"]);
         var maximumMaps = new SpinBox { MinValue = 0, MaxValue = 1_000, Step = 1, Value = 0, Prefix = "最多图数 " };
         row.AddChild(maximumMaps);
-        var reserve = new SpinBox { MinValue = 0, MaxValue = 100_000, Step = 1, Value = 0, Prefix = "保留补给 " };
-        row.AddChild(reserve);
         var failures = new SpinBox { MinValue = 0, MaxValue = 100, Step = 1, Value = 0, Prefix = "连败停止 " };
         row.AddChild(failures);
         var freeSlots = new SpinBox { MinValue = 0, MaxValue = 100, Step = 1, Value = 0, Prefix = "最少空格 " };
@@ -934,7 +936,6 @@ public partial class P2Dashboard : VBoxContainer
                 stopOnFailure.ButtonPressed ? QueueFailureBehavior.Stop : QueueFailureBehavior.Continue,
                 storageFull.Selected == 0 ? StorageFullBehavior.AcceptStackablesOnly : StorageFullBehavior.StopExpedition,
                 (int)maximumMaps.Value,
-                (int)reserve.Value,
                 (int)failures.Value,
                 (int)freeSlots.Value));
             Changed($"{label}方针已更新。");
@@ -1293,7 +1294,7 @@ public partial class P2Dashboard : VBoxContainer
             $"{(index < session.Journey.CurrentStepIndex ? "✓" : index == session.Journey.CurrentStepIndex ? "▶" : "·")} {definition.Title}：{definition.HelpText}"));
         _handbookDialog!.DialogText = steps +
             "\n\n常用术语\n连接孔：同组主动技能与辅助技能共享效果。\n法术压制：成功时该次法术命中伤害降低 70%。" +
-            "\n收益路线：地图中选择的主要风险与奖励方向。\n远征补给：队伍开始普通地图时自动消耗的城镇资源。" +
+            "\n收益路线：地图中选择的主要风险与奖励方向。" +
             (session.Journey.TutorialEnabled ? string.Empty : "\n\n本存档创建时已选择跳过强制引导；该选择不能重新开启。");
         _handbookDialog.PopupCentered(new Vector2I(720, 560));
     }
@@ -1323,7 +1324,6 @@ public partial class P2Dashboard : VBoxContainer
         "boss_ticket_missing" => "缺少 Boss 门票",
         "consecutive_failures" => "连续失败达到停止条件",
         "minimum_storage_free_slots" => "仓库空位不足",
-        "reserved_supplies" => "远征补给低于保留量",
         "map_failed" => "地图失败策略要求停止",
         _ => reason,
     };
@@ -1349,7 +1349,7 @@ public partial class P2Dashboard : VBoxContainer
             : $" · ⚠ 恢复箱 {_session.Management.Recovery.Count}";
         _overviewStatus!.Text =
             $"{_session.Player.Name} Lv.{_session.World.Hero.Progression.Level} · 佣兵队 {_session.Town.ActiveMembers().Count}/{_session.Town.MercenaryCapacity} 人\n" +
-            $"补给 {economy.ExpeditionSupplies} · 金币 {economy.Gold} · 铁屑 {economy.IronScraps} · " +
+            $"金币 {economy.Gold} · 铁屑 {economy.IronScraps} · " +
             $"淬刃铁 {economy.MetalAmount(MetalCurrencyKind.TemperingIron)} · 守壁钢 {economy.MetalAmount(MetalCurrencyKind.WardSteel)} · " +
             $"活血银 {economy.MetalAmount(MetalCurrencyKind.VitalSilver)} · 地图 {_session.World.MapInventory.Count}{recoveryWarning}";
 
@@ -1453,7 +1453,7 @@ public partial class P2Dashboard : VBoxContainer
         _storyLog!.Text = string.Join('\n', _session.Campaign.StoryLog.TakeLast(60).Select(item => $"• {item}"));
         _miniStatus!.Text =
             $"{_session.Player.Name} Lv.{_session.World.Hero.Progression.Level}  主角[{CompactTeam(_session.World.Hero)}]\n" +
-            $"佣兵[{CompactTeam(_session.World.Mercenaries)}] · 补给 {economy.ExpeditionSupplies} · 图 {_session.World.MapInventory.Count}";
+            $"佣兵[{CompactTeam(_session.World.Mercenaries)}] · 金币 {economy.Gold} · 图 {_session.World.MapInventory.Count}";
     }
 
     private ItemInstance? ItemAt(ItemContainerKind kind, int index) => kind switch
@@ -1562,7 +1562,7 @@ public partial class P2Dashboard : VBoxContainer
         (team.ActiveMap is null
             ? team.IsStopped ? $"停止：{team.StopReason}" : "等待资源/地图"
             : $"进行中 {team.ActiveMap.InstanceId}，剩余 {team.RemainingMapTimeMilliseconds / 1_000}s") +
-        $" · 停止条件[图数 {DisplayLimit(team.Policy.MaximumContinuousMaps)} / 补给保留 {DisplayLimit(team.Policy.ReserveSupplies)} / " +
+        $" · 停止条件[图数 {DisplayLimit(team.Policy.MaximumContinuousMaps)} / " +
         $"连败 {DisplayLimit(team.Policy.StopAfterConsecutiveFailures)} / 空格 {DisplayLimit(team.Policy.MinimumStorageFreeSlots)}]" +
         (team.PendingPolicy is null ? string.Empty : " · 新方针将在下一张地图生效") +
         $" · 预计最早：{EstimateFirstStop(team, world)}";
@@ -1575,11 +1575,6 @@ public partial class P2Dashboard : VBoxContainer
         if (team.Policy.MaximumContinuousMaps > 0)
         {
             candidates.Add((Math.Max(0, team.Policy.MaximumContinuousMaps - team.MapsRunSincePolicyApplied), "连续图数"));
-        }
-
-        if (team.Policy.ReserveSupplies > 0)
-        {
-            candidates.Add((Math.Max(0, world.Economy.ExpeditionSupplies - team.Policy.ReserveSupplies), "补给保留"));
         }
 
         if (team.Policy.StopAfterConsecutiveFailures > 0)

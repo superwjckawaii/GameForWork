@@ -51,7 +51,6 @@ public sealed record ExpeditionPolicy(
     QueueFailureBehavior FailureBehavior,
     StorageFullBehavior StorageFullBehavior,
     int MaximumContinuousMaps = 0,
-    int ReserveSupplies = 0,
     int StopAfterConsecutiveFailures = 0,
     int MinimumStorageFreeSlots = 0,
     IReadOnlyList<MapRoute>? RoutePriority = null,
@@ -109,7 +108,7 @@ public sealed record ExpeditionPolicy(
 
     public ExpeditionPolicy Validate()
     {
-        if (MaximumContinuousMaps is < 0 or > 10_000 || ReserveSupplies is < 0 or > 1_000_000 ||
+        if (MaximumContinuousMaps is < 0 or > 10_000 ||
             StopAfterConsecutiveFailures is < 0 or > 100 || MinimumStorageFreeSlots is < 0 or > 100_000 ||
             MaximumMapDanger is < 0 or > 100 || RouteDecisionTimeoutSeconds is < 0 or > 300 ||
             MaximumMapTier is < P1MapItem.MinimumAreaLevel or > P1MapItem.MaximumAreaLevel ||

@@ -54,6 +54,7 @@ public sealed class WindowController : IDisposable
     public bool IsLarge { get; private set; }
     public bool IsHiddenToTray { get; private set; }
     public bool SnapEnabled => _settings.SnapEnabled;
+    public bool AlwaysOnTop => _settings.AlwaysOnTop;
     public bool CanUseLarge => DisplayServer.GetName() != "headless" &&
         DisplayServer.ScreenGetUsableRect(DisplayServer.WindowGetCurrentScreen()).Size.X >= LargeSize.X &&
         DisplayServer.ScreenGetUsableRect(DisplayServer.WindowGetCurrentScreen()).Size.Y >= LargeSize.Y;
@@ -136,8 +137,17 @@ public sealed class WindowController : IDisposable
 
     public void ToggleAlwaysOnTop()
     {
-        _window.AlwaysOnTop = !_window.AlwaysOnTop;
-        _settings = _settings with { AlwaysOnTop = _window.AlwaysOnTop };
+        SetAlwaysOnTop(!AlwaysOnTop);
+    }
+
+    public void SetAlwaysOnTop(bool enabled)
+    {
+        if (DisplayServer.GetName() != "headless")
+        {
+            _window.AlwaysOnTop = enabled;
+        }
+
+        _settings = _settings with { AlwaysOnTop = enabled };
         _settingsStore.Save(_settings);
     }
 

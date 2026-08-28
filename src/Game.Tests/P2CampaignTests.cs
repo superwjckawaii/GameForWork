@@ -96,7 +96,7 @@ public sealed class P2CampaignTests
         ExpeditionPolicy next = ExpeditionPolicy.Recommended with
         {
             MaximumContinuousMaps = 1,
-            ReserveSupplies = 999,
+            MinimumStorageFreeSlots = 999,
         };
 
         team.ApplyPolicy(next);

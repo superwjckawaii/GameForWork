@@ -117,7 +117,7 @@ public sealed record P1GameSessionSnapshot(
 
 public sealed class P1GameSession
 {
-    public const int CurrentFormatVersion = 13;
+    public const int CurrentFormatVersion = 14;
     private readonly P1WorldSimulator _simulator = new(new P1MapAttemptResolver());
     private readonly P2CampaignSimulator _campaignSimulator = new();
     private AssembledCharacterBuild _heroBuild;
@@ -367,7 +367,7 @@ public sealed class P1GameSession
         return result;
     }
 
-    public int AdvanceTownOnly(long realElapsedMilliseconds)
+    public void AdvanceTownOnly(long realElapsedMilliseconds)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(realElapsedMilliseconds);
         long maximum = GameForWork.Core.Offline.OfflineTime.MaximumMilliseconds;
@@ -375,10 +375,8 @@ public sealed class P1GameSession
             ? maximum
             : realElapsedMilliseconds * SimulationSpeed;
         Journey.AddElapsed(realElapsedMilliseconds, offline: false);
-        int produced = World.Economy.AdvanceProduction(simulated);
         AdvanceTownSystems(simulated);
         Journey.Synchronize(this);
-        return produced;
     }
 
     private P1OfflineResult AdvanceSimulated(long simulatedMilliseconds, bool offline, bool asyncPreparation)
@@ -399,7 +397,6 @@ public sealed class P1GameSession
             return new P1OfflineResult(
                 campaignResult.EffectiveMilliseconds,
                 campaignResult.WasClamped,
-                campaignResult.SuppliesProduced,
                 0,
                 0,
                 World.Teams.Select(team => new P1OfflineTeamSummary(
