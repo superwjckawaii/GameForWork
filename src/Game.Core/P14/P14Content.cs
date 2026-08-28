@@ -84,7 +84,7 @@ public static class P14MapPlanner
                     new(3, P14MapNodeKind.Boss, P14Bosses.CitadelStages[1].DisplayName, 7, BossStableId: P14Bosses.CitadelStages[1].StableId),
                     new(4, P14MapNodeKind.Boss, P14Bosses.CitadelStages[2].DisplayName, 5, BossStableId: P14Bosses.CitadelStages[2].StableId)],
                 P12MapAltar.None, atlas, 1, P14Bosses.CitadelStages[2].StableId);
-        var random = new Pcg32(seed ^ (ulong)map.AreaLevel << 32);
+        var random = new Pcg32(seed ^ (ulong)map.Tier << 32);
         int count = 5 + (int)(random.NextUInt() % 4);
         int choice = 2 + (int)(random.NextUInt() % 2);
         int mechanicBudget = Math.Clamp(count - 3, 2, 4);
@@ -104,7 +104,7 @@ public static class P14MapPlanner
                 _ => index == count - 1 ? P14MapNodeKind.Elite : P14MapNodeKind.Encounter,
             };
             int enemies = kind is P14MapNodeKind.RouteChoice or P14MapNodeKind.Altar ? 0 :
-                8 + map.AreaLevel / 2 + (int)(random.NextUInt() % 7);
+                8 + map.Tier / 2 + (int)(random.NextUInt() % 7);
             nodes.Add(new(index, kind, NodeName(kind, map.Altar), enemies, kind == P14MapNodeKind.Altar));
         }
         P12MapArea area = P12MapCatalog.TryGet(map.AreaId, out P12MapArea found) ? found : P12MapCatalog.Areas[0];

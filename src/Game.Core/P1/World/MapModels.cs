@@ -3,6 +3,7 @@ using GameForWork.Core.P1.Items;
 using GameForWork.Core.P3;
 using GameForWork.Core.P12;
 using GameForWork.Core.Simulation;
+using System.Text.Json.Serialization;
 
 namespace GameForWork.Core.P1.World;
 
@@ -131,7 +132,7 @@ public sealed record ExpeditionPolicy(
 
 public sealed record P1MapItem(
     string InstanceId,
-    int AreaLevel,
+    [property: JsonPropertyName("AreaLevel")] int Tier,
     string AreaId = "",
     P12MapRarity Rarity = P12MapRarity.Basic,
     int Quality = 0,
@@ -143,15 +144,18 @@ public sealed record P1MapItem(
     IReadOnlyList<string>? Fragments = null,
     IReadOnlyList<string>? AtlasSnapshot = null)
 {
-    public const int MinimumAreaLevel = 1;
-    public const int MaximumAreaLevel = 20;
+    public const int MinimumTier = 1;
+    public const int MaximumTier = 20;
+    public const int MinimumAreaLevel = MinimumTier;
+    public const int MaximumAreaLevel = MaximumTier;
     public const int RescueChances = 2;
     public const int TotalAttempts = RescueChances + 1;
+    public int MonsterLevel => P16MapTierLevels.MonsterLevel(Tier);
     public IReadOnlyList<MapRoute> EffectiveRouteCandidates => RouteCandidates ?? [];
     public IReadOnlyList<P12MapAffix> EffectiveAffixes => Affixes ?? [];
-    public int DangerRating => Math.Clamp(AreaLevel * 3 + EffectiveAffixes.Sum(affix => affix.Danger) +
+    public int DangerRating => Math.Clamp(Tier * 3 + EffectiveAffixes.Sum(affix => affix.Danger) +
         P12MapRules.RouteDanger(SelectedRoute ?? MapRoute.Safe), 0, 100);
-    public int DangerFor(MapRoute route) => Math.Clamp(AreaLevel * 3 + EffectiveAffixes.Sum(affix => affix.Danger) +
+    public int DangerFor(MapRoute route) => Math.Clamp(Tier * 3 + EffectiveAffixes.Sum(affix => affix.Danger) +
         P12MapRules.RouteDanger(route), 0, 100);
     public int ItemQuantityBasisPoints => 10_000 + Quality * 100 + EffectiveAffixes.Sum(affix => affix.QuantityBasisPoints);
 
@@ -159,7 +163,7 @@ public sealed record P1MapItem(
 
     public P1MapItem Validate()
     {
-        if (string.IsNullOrWhiteSpace(InstanceId) || AreaLevel is < MinimumAreaLevel or > MaximumAreaLevel ||
+        if (string.IsNullOrWhiteSpace(InstanceId) || Tier is < MinimumTier or > MaximumTier ||
             Quality is < 0 or > 20 || !Enum.IsDefined(Rarity) || !Enum.IsDefined(Altar) ||
             EffectiveAffixes.Count > 6 || EffectiveRouteCandidates.Count > 3 ||
             EffectiveRouteCandidates.Any(route => !Enum.IsDefined(route)) ||
@@ -168,11 +172,42 @@ public sealed record P1MapItem(
             (Fragments?.Count ?? 0) > 4 || (AtlasSnapshot?.Count ?? 0) > 360 ||
             (AtlasSnapshot?.Distinct(StringComparer.Ordinal).Count() ?? 0) != (AtlasSnapshot?.Count ?? 0))
         {
-            throw new ArgumentOutOfRangeException(nameof(AreaLevel), "P1 maps require an ID and area level 1 through 20.");
+            throw new ArgumentOutOfRangeException(nameof(Tier), "Maps require an ID and tier 1 through 20.");
         }
 
         return this;
     }
+}
+
+public static class P16MapTierLevels
+{
+    private static readonly int[] Levels =
+    [
+        70, 72, 73, 75, 76,
+        78, 79, 81, 83, 84,
+        86, 87, 89, 91, 92,
+        94, 95, 97, 98, 100,
+    ];
+
+    public static IReadOnlyList<int> All => Levels;
+
+    public static int MonsterLevel(int tier)
+    {
+        if (tier is < P1MapItem.MinimumTier or > P1MapItem.MaximumTier)
+        {
+            throw new ArgumentOutOfRangeException(nameof(tier));
+        }
+
+        return Levels[tier - 1];
+    }
+
+    public static int DropItemLevel(int tier, EnemyRarity rarity) => Math.Min(120,
+        MonsterLevel(tier) + rarity switch
+        {
+            EnemyRarity.Rare => 1,
+            EnemyRarity.Boss => 2,
+            _ => 0,
+        });
 }
 
 public sealed class P1MapQueue

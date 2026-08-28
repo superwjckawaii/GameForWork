@@ -387,7 +387,7 @@ public sealed class P1WorldSimulator(IP1MapAttemptResolver attemptResolver)
                 ResolveExpedition(state, expedition, DeriveExpeditionSeed(seed, expedition), offline);
                 long duration = completedRun?.DurationMilliseconds ?? 0;
                 segments.Add(new P1OfflineSegment(expedition.Team.Kind, expedition.Map.InstanceId,
-                    expedition.Map.AreaLevel, expedition.Route, Math.Max(0, now - duration), duration,
+                    expedition.Map.Tier, expedition.Route, Math.Max(0, now - duration), duration,
                     completedRun is null ? P1BattleOutcome.Timeout : completedRun.Succeeded
                         ? P1BattleOutcome.HeroVictory
                         : completedRun.Attempts.LastOrDefault()?.Timeline?.Outcome ?? P1BattleOutcome.EnemyVictory,
@@ -457,7 +457,7 @@ public sealed class P1WorldSimulator(IP1MapAttemptResolver attemptResolver)
             P1MapItem queuedSource = team.Queue.Maps[0];
             bool enteredAsFormalMap = !string.IsNullOrWhiteSpace(queuedSource.AreaId) && queuedSource.EffectiveRouteCandidates.Count > 0;
             P1MapItem queuedMap = queuedSource.EnsureFormal(worldSeed);
-            if (queuedMap.AreaLevel > state.MaximumUnlockedMapTier && !P5ExpeditionDirector.IsBoss(queuedMap) &&
+            if (queuedMap.Tier > state.MaximumUnlockedMapTier && !P5ExpeditionDirector.IsBoss(queuedMap) &&
                 !P5ExpeditionDirector.IsPractice(queuedMap) && !GameForWork.Core.P10.P10EndgameState.IsCitadel(queuedMap))
             {
                 team.Stop("tier_locked");
@@ -467,7 +467,7 @@ public sealed class P1WorldSimulator(IP1MapAttemptResolver attemptResolver)
             if (enteredAsFormalMap && team.WaitForRouteDecision(queuedMap, offline)) continue;
             MapRoute route = queuedMap.SelectedRoute ?? team.Policy.SelectUnattendedRoute(
                 queuedMap, Math.Clamp(team.Progression.Level, 1, 100), worldSeed);
-            if (queuedMap.AreaLevel > team.Policy.MaximumMapTier || queuedMap.DangerFor(route) > team.Policy.MaximumMapDanger)
+            if (queuedMap.Tier > team.Policy.MaximumMapTier || queuedMap.DangerFor(route) > team.Policy.MaximumMapDanger)
             {
                 team.Stop("map_policy_limit");
                 continue;
@@ -521,7 +521,7 @@ public sealed class P1WorldSimulator(IP1MapAttemptResolver attemptResolver)
             {
                 string encounter = P5ExpeditionDirector.IsBoss(expedition.Map)
                     ? "深渊监守者"
-                    : $"T{expedition.Map.AreaLevel} {expedition.Route}";
+                    : $"T{expedition.Map.Tier} {expedition.Route}";
                 state.Expedition.AddCombatReport(P6CombatReportBuilder.Build(attempt.Timeline,
                     $"{expedition.Team.Kind} · {encounter} · 尝试 {index + 1}", offline));
             }
@@ -593,7 +593,7 @@ public sealed class P1WorldSimulator(IP1MapAttemptResolver attemptResolver)
         P1MapItem map,
         MapRoute route)
     {
-        string identity = $"{seed}|{team.Kind}|{map.InstanceId}|{map.AreaLevel}|{route}";
+        string identity = $"{seed}|{team.Kind}|{map.InstanceId}|{map.Tier}|{route}";
         byte[] hash = SHA256.HashData(Encoding.UTF8.GetBytes(identity));
         return BitConverter.ToUInt64(hash, 0);
     }

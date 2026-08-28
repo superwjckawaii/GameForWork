@@ -25,17 +25,16 @@ public sealed class P2CampaignTests
     }
 
     [Fact]
-    public void StarterCompletesFiveActsOfflineBeforeExpeditionStarts()
+    public void StarterStopsAtCampaignBuildCheckBeforeExpeditionStarts()
     {
         P1GameSession session = Session();
 
         P1OfflineResult result = session.AdvanceOffline(OfflineTime.MaximumMilliseconds);
 
-        Assert.True(session.Campaign.Completed);
-        Assert.True(session.IsExpeditionUnlocked);
-        Assert.InRange(session.World.Hero.Progression.Level, 60, 100);
-        Assert.Equal(30, session.Campaign.CompletedNodeIds.Count);
-        Assert.NotEmpty(session.World.MapInventory);
+        Assert.False(session.Campaign.Completed);
+        Assert.True(session.Campaign.Defeated);
+        Assert.False(session.IsExpeditionUnlocked);
+        Assert.NotEmpty(session.Campaign.CompletedNodeIds);
         Assert.Equal(0, session.World.Hero.Queue.Count);
         Assert.Equal(0, result.TotalMapsCompleted);
     }
@@ -79,11 +78,12 @@ public sealed class P2CampaignTests
         var commands = new P2MapCommandService(session);
 
         Assert.Equal("expedition_locked", commands.AddToQueue(0, ExpeditionTeamKind.Hero).Code);
-        session.AdvanceOffline(OfflineTime.MaximumMilliseconds);
-        int inventoryBefore = session.World.MapInventory.Count;
-        Assert.True(commands.AddToQueue(0, ExpeditionTeamKind.Hero).Succeeded);
-        Assert.Equal(inventoryBefore - 1, session.World.MapInventory.Count);
-        Assert.Equal(1, session.World.Hero.Queue.Count);
+        P1GameSession unlocked = MigrateAsCompleted(session);
+        var unlockedCommands = new P2MapCommandService(unlocked);
+        int inventoryBefore = unlocked.World.MapInventory.Count;
+        Assert.True(unlockedCommands.AddToQueue(0, ExpeditionTeamKind.Hero).Succeeded);
+        Assert.Equal(inventoryBefore - 1, unlocked.World.MapInventory.Count);
+        Assert.Equal(1, unlocked.World.Hero.Queue.Count);
     }
 
     [Fact]
@@ -108,10 +108,11 @@ public sealed class P2CampaignTests
 
     private static P1GameSession CompletedSession()
     {
-        P1GameSession session = Session();
-        session.AdvanceOffline(OfflineTime.MaximumMilliseconds);
-        return session;
+        return MigrateAsCompleted(Session());
     }
+
+    private static P1GameSession MigrateAsCompleted(P1GameSession session) =>
+        P1GameSession.Restore(session.Capture() with { FormatVersion = 4, Campaign = null });
 
     private static P1GameSession Session() => P1GameSession.CreateNew(new PlayerIdentity(
         "行路者",

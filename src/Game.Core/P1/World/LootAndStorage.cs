@@ -9,6 +9,29 @@ public enum LootDisposition
     Dismantle,
 }
 
+public enum P16ItemSortMode
+{
+    LinkedSockets,
+    Rarity,
+}
+
+public static class P16ItemSorting
+{
+    public static int Compare(ItemInstance left, ItemInstance right, P16ItemSortMode mode)
+    {
+        int primary = mode == P16ItemSortMode.LinkedSockets
+            ? right.LinkedSocketCount.CompareTo(left.LinkedSocketCount)
+            : right.Rarity.CompareTo(left.Rarity);
+        if (primary != 0) return primary;
+        int secondary = mode == P16ItemSortMode.LinkedSockets
+            ? right.Rarity.CompareTo(left.Rarity)
+            : right.LinkedSocketCount.CompareTo(left.LinkedSocketCount);
+        if (secondary != 0) return secondary;
+        int level = right.ItemLevel.CompareTo(left.ItemLevel);
+        return level != 0 ? level : string.Compare(left.Base.DisplayName, right.Base.DisplayName, StringComparison.Ordinal);
+    }
+}
+
 public sealed record LootFilterRule(
     string StableId,
     LootDisposition Disposition,
@@ -20,14 +43,26 @@ public sealed record LootFilterRule(
     EquipmentSlot? Slot = null,
     int MinimumLinkedSockets = 0,
     bool RequireFiveOrSixLink = false,
-    bool RequireCurrentSchemeNeed = false)
+    bool RequireCurrentSchemeNeed = false,
+    ItemRarity? MinimumRarity = null,
+    ItemRarity? MaximumRarity = null,
+    ItemCategory? Category = null,
+    int? MinimumItemLevel = null,
+    int? MaximumItemLevel = null,
+    int? MaximumLinkedSockets = null)
 {
     public bool Matches(ItemInstance item)
     {
         if (!Enabled || Rarity is not null && item.Rarity != Rarity ||
+            MinimumRarity is not null && item.Rarity < MinimumRarity ||
+            MaximumRarity is not null && item.Rarity > MaximumRarity ||
+            Category is not null && item.Base.Category != Category ||
             BaseStableId is not null && item.Base.StableId != BaseStableId ||
             Slot is not null && item.Base.PrimarySlot != Slot ||
+            MinimumItemLevel is not null && item.ItemLevel < MinimumItemLevel ||
+            MaximumItemLevel is not null && item.ItemLevel > MaximumItemLevel ||
             item.LinkedSocketCount < MinimumLinkedSockets ||
+            MaximumLinkedSockets is not null && item.LinkedSocketCount > MaximumLinkedSockets ||
             RequireFiveOrSixLink && item.LinkedSocketCount < 5 ||
             RequireCurrentSchemeNeed && item.LinkedSocketCount < Math.Max(2, MinimumLinkedSockets))
         {
@@ -59,6 +94,8 @@ public sealed class LootFilter
     public LootDisposition Evaluate(ItemInstance item)
     {
         ArgumentNullException.ThrowIfNull(item);
+        if (item.IsLocked || item.IsKeyItem || item.LinkedSocketCount >= 5)
+            return LootDisposition.Keep;
         LootFilterRule? match = _rules.FirstOrDefault(rule => rule.Matches(item));
         return match?.Disposition ?? LootDisposition.Keep;
     }
@@ -67,13 +104,11 @@ public sealed class LootFilter
     {
         ArgumentNullException.ThrowIfNull(rules);
         _rules.Clear();
-        _rules.AddRange(rules);
+        _rules.AddRange(rules.Where(rule => rule.StableId is not "core.filter.six_link" and not "core.filter.five_link"));
     }
 
     private static IReadOnlyList<LootFilterRule> CreateDefaultRules() =>
     [
-        new("core.filter.six_link", LootDisposition.Keep, MinimumLinkedSockets: 6),
-        new("core.filter.five_link", LootDisposition.Keep, MinimumLinkedSockets: 5),
         new("core.filter.legendary", LootDisposition.Keep, ItemRarity.Legendary),
         new("core.filter.rare", LootDisposition.Keep, ItemRarity.Rare),
         new("core.filter.magic", LootDisposition.Sell, ItemRarity.Magic),
@@ -188,15 +223,9 @@ public sealed class EquipmentStorage
         return true;
     }
 
-    public void SortByLinkedSockets() => _items.Sort((left, right) =>
-    {
-        int links = right.LinkedSocketCount.CompareTo(left.LinkedSocketCount);
-        if (links != 0) return links;
-        int rarity = right.Rarity.CompareTo(left.Rarity);
-        if (rarity != 0) return rarity;
-        int level = right.ItemLevel.CompareTo(left.ItemLevel);
-        return level != 0 ? level : string.Compare(left.Base.DisplayName, right.Base.DisplayName, StringComparison.Ordinal);
-    });
+    public void Sort(P16ItemSortMode mode) => _items.Sort((left, right) => P16ItemSorting.Compare(left, right, mode));
+
+    public void SortByLinkedSockets() => Sort(P16ItemSortMode.LinkedSockets);
 
     public void RestoreDiscoveries(IEnumerable<string> bases, IEnumerable<string> legendaryRules)
     {

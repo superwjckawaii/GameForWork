@@ -118,7 +118,7 @@ public sealed record P1GameSessionSnapshot(
 
 public sealed class P1GameSession
 {
-    public const int CurrentFormatVersion = 15;
+    public const int CurrentFormatVersion = 16;
     private readonly P1WorldSimulator _simulator = new(new P1MapAttemptResolver());
     private readonly P2CampaignSimulator _campaignSimulator = new();
     private AssembledCharacterBuild _heroBuild;
@@ -841,7 +841,7 @@ public sealed class P1GameSession
             P1TeamExpeditionState team = (moved & 1) == 0 ? World.Hero : World.Mercenaries;
             P1MapItem map = World.MapInventory[index].EnsureFormal(Seed ^ (ulong)SimulationSequence ^ (ulong)index);
             map = map with { AtlasSnapshot = Endgame.AtlasPassives.Order(StringComparer.Ordinal).ToArray() };
-            if (map.AreaLevel > World.MaximumUnlockedMapTier) continue;
+            if (map.Tier > World.MaximumUnlockedMapTier) continue;
             if (!team.Queue.TryEnqueue(map))
             {
                 team = team == World.Hero ? World.Mercenaries : World.Hero;

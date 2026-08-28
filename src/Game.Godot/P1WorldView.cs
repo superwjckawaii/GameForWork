@@ -589,7 +589,7 @@ public partial class P1WorldView : Control
             if (elapsed <= attempt.Timeline.DurationMilliseconds)
             {
                 return new ObservedScene(attempt.Timeline, elapsed,
-                    $"{(hero ? "主角" : "佣兵")}远征 · 区域 {team.ActiveMap.AreaLevel} · {team.ActiveRoute}", hero);
+                    $"{(hero ? "主角" : "佣兵")}远征 · T{team.ActiveMap.Tier} · 怪物等级 {team.ActiveMap.MonsterLevel} · {team.ActiveRoute}", hero);
             }
 
             elapsed -= attempt.Timeline.DurationMilliseconds;

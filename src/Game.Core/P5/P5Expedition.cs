@@ -257,7 +257,7 @@ public sealed class P5ExpeditionDirector
         ExpeditionPolicy policy)
     {
         int[] eligible = maps.Select((map, index) => (map, index))
-            .Where(pair => pair.map.AreaLevel <= maximumUnlockedTier && MatchesRoute(pair.map, target, policy) &&
+            .Where(pair => pair.map.Tier <= maximumUnlockedTier && MatchesRoute(pair.map, target, policy) &&
                 MatchesRisk(pair.map, target, policy))
             .Select(pair => pair.index).ToArray();
         if (eligible.Length == 0)
@@ -269,7 +269,7 @@ public sealed class P5ExpeditionDirector
             .OrderByDescending(pair => AltarScore(pair.map, policy.AltarPreference));
         return target == P5ExpeditionTarget.HighestTierMaps || mode == P5DispatchMode.HighestAvailable
             ? eligible.Select(index => (map: maps[index], index))
-                .OrderByDescending(pair => pair.map.AreaLevel)
+                .OrderByDescending(pair => pair.map.Tier)
                 .ThenByDescending(pair => AltarScore(pair.map, policy.AltarPreference))
                 .ThenBy(pair => pair.map.InstanceId, StringComparer.Ordinal)
                 .First().index

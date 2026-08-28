@@ -10,6 +10,7 @@ using GameForWork.Core.P5;
 using GameForWork.Core.P6;
 using GameForWork.Core.P9;
 using GameForWork.Core.P10;
+using GameForWork.Core.P16;
 using Godot;
 using System.Security.Cryptography;
 using System.Text.Json;
@@ -79,6 +80,8 @@ public partial class P2Dashboard : VBoxContainer
     private OptionButton? _characterSelector;
     private PopupMenu? _itemMenu;
     private ConfirmationDialog? _confirmDialog;
+    private OptionButton? _batchRarity;
+    private OptionButton? _batchScope;
     private ItemContainerKind _contextContainer;
     private int _contextIndex = -1;
     private ItemContainerKind _craftContainer = ItemContainerKind.Storage;
@@ -480,13 +483,14 @@ public partial class P2Dashboard : VBoxContainer
         containers.AddChild(_storageGrid);
         var batch = new HFlowContainer();
         containers.AddChild(batch);
-        AddButton(batch, "批量出售普通/魔法", () => ConfirmBatch(sell: true));
-        AddButton(batch, "批量分解普通/魔法", () => ConfirmBatch(sell: false));
-        AddButton(batch, "按连接数整理", () =>
-        {
-            RequireSession().World.Storage.SortByLinkedSockets();
-            Changed("仓库已按连接数、稀有度和物品等级整理。");
-        });
+        _batchRarity = AddOptions(batch, "最高稀有度", ["基础及以下", "魔法及以下", "稀有及以下", "传奇及以下"]);
+        _batchRarity.Select((int)ItemRarity.Magic);
+        _batchScope = AddOptions(batch, "范围", ["整理背包", "仓库", "两者"]);
+        _batchScope.Select((int)P16BatchScope.Storage);
+        AddButton(batch, "批量出售", () => ConfirmBatch(P16BatchAction.Sell));
+        AddButton(batch, "批量分解", () => ConfirmBatch(P16BatchAction.Dismantle));
+        AddButton(batch, "按连接数整理", () => SortItems(P16ItemSortMode.LinkedSockets));
+        AddButton(batch, "按稀有度整理", () => SortItems(P16ItemSortMode.Rarity));
 
         body.AddChild(new Label { Text = "装备制作与附魔已集中到“金属仓与附魔”页；选择物品后切换该页操作。" });
         _craftingStatus = new Label { AutowrapMode = TextServer.AutowrapMode.WordSmart };
@@ -763,6 +767,8 @@ public partial class P2Dashboard : VBoxContainer
         {
             _craftContainer = kind;
             _craftIndex = index;
+            if (_batchScope is not null && kind is ItemContainerKind.Storage or ItemContainerKind.SortingBag)
+                _batchScope.Select(kind == ItemContainerKind.Storage ? (int)P16BatchScope.Storage : (int)P16BatchScope.SortingBag);
             Refresh();
         }
     }
@@ -1059,50 +1065,57 @@ public partial class P2Dashboard : VBoxContainer
         _confirmDialog.PopupCentered();
     }
 
-    private void ConfirmBatch(bool sell)
+    private void ConfirmBatch(P16BatchAction action)
     {
         P1GameSession session = RequireSession();
-        (ItemContainerKind Kind, int Index, ItemInstance Item)[] targets =
-            session.World.Storage.Items.Select((item, index) => (ItemContainerKind.Storage, index, item))
-                .Concat(session.Management.SortingBag.Select((item, index) => (ItemContainerKind.SortingBag, index, item)))
-                .Where(entry => !entry.item.IsLocked && entry.item.Rarity is ItemRarity.Basic or ItemRarity.Magic)
-                .Select(entry => (entry.Item1, entry.index, entry.item))
-                .ToArray();
-        if (targets.Length == 0)
+        ItemRarity maximum = (ItemRarity)(_batchRarity?.Selected ?? (int)ItemRarity.Magic);
+        P16BatchScope scope = (P16BatchScope)(_batchScope?.Selected ?? (int)P16BatchScope.Storage);
+        P16BatchPreview preview = P16BatchItems.Preview(session, action, scope, maximum);
+        if (preview.Total == 0)
         {
-            Changed("没有符合条件的未锁定普通/魔法物品。");
+            Changed($"没有符合“{RarityLabel(maximum)}及以下”的安全物品；锁定、关键、神话、唯一传奇和制作底材已排除。");
             return;
         }
 
-        int proceeds = sell
-            ? targets.Sum(entry => P2ManagementState.SalePrice(entry.Item))
-            : targets.Sum(entry => entry.Item.Rarity == ItemRarity.Basic ? 1 : 2);
+        bool sell = action == P16BatchAction.Sell;
+        string counts = string.Join("、", Enum.GetValues<ItemRarity>()
+            .Where(rarity => preview.Counts.ContainsKey(rarity))
+            .Select(rarity => $"{RarityLabel(rarity)} {preview.Counts[rarity]}"));
+        string warning = maximum == ItemRarity.Legendary
+            ? "\n⚠ 已选择传奇及以下：仅重复普通传奇可处理，神话与唯一一件传奇仍受保护。"
+            : string.Empty;
+        string buyback = sell && preview.BuybackEvictions > 0
+            ? $"\n⚠ 回购栏将挤出最早的 {preview.BuybackEvictions} 件物品。"
+            : string.Empty;
         _confirmDialog!.DialogText =
-            $"将{(sell ? "出售" : "分解")} {targets.Length} 件未锁定普通/魔法物品。\n" +
-            $"预计获得 {proceeds} {(sell ? "金币" : "铁屑")}。锁定与已装备物品已排除。\n确认执行？";
+            $"将{(sell ? "出售" : "分解")} {preview.Total} 件物品：{counts}。\n" +
+            $"预计获得 {preview.Proceeds} {(sell ? "金币" : "铁屑")}；另有 {preview.Excluded} 件受保护。" +
+            warning + buyback + "\n确认执行？";
         _pendingConfirmation = () =>
         {
-            var commands = new P2ItemCommandService(session, _selectedCharacter);
-            foreach (IGrouping<ItemContainerKind, (ItemContainerKind Kind, int Index, ItemInstance Item)> group in
-                     targets.GroupBy(entry => entry.Kind))
-            {
-                foreach ((ItemContainerKind kind, int index, _) in group.OrderByDescending(entry => entry.Index))
-                {
-                    if (sell)
-                    {
-                        commands.Sell(kind, index);
-                    }
-                    else
-                    {
-                        commands.Dismantle(kind, index, confirmed: true);
-                    }
-                }
-            }
-
-            Changed($"批量{(sell ? "出售" : "分解")}完成：{targets.Length} 件。");
+            int completed = P16BatchItems.Execute(session, preview);
+            Changed($"批量{(sell ? "出售" : "分解")}完成：{completed} 件。");
         };
         _confirmDialog.PopupCentered();
     }
+
+    private void SortItems(P16ItemSortMode mode)
+    {
+        P1GameSession session = RequireSession();
+        P16BatchScope scope = (P16BatchScope)(_batchScope?.Selected ?? (int)P16BatchScope.Storage);
+        if (scope is P16BatchScope.Storage or P16BatchScope.Both) session.World.Storage.Sort(mode);
+        if (scope is P16BatchScope.SortingBag or P16BatchScope.Both) session.Management.SortSortingBag(mode);
+        Changed($"{(scope == P16BatchScope.Both ? "整理背包与仓库" : scope == P16BatchScope.Storage ? "仓库" : "整理背包")}已按{(mode == P16ItemSortMode.LinkedSockets ? "连接数" : "稀有度")}整理。");
+    }
+
+    private static string RarityLabel(ItemRarity rarity) => rarity switch
+    {
+        ItemRarity.Basic => "基础",
+        ItemRarity.Magic => "魔法",
+        ItemRarity.Rare => "稀有",
+        ItemRarity.Legendary => "传奇",
+        _ => rarity.ToString(),
+    };
 
     private void QuickRoute(ExpeditionTeamKind kind, MapRoute route)
     {

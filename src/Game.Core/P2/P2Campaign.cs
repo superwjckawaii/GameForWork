@@ -94,6 +94,26 @@ public static class P2CampaignCatalog
     };
 }
 
+public static class P16CampaignLevels
+{
+    private static readonly int[][] Levels =
+    [
+        [2, 4, 6, 8, 10, 12],
+        [13, 16, 19, 22, 25, 27],
+        [28, 31, 34, 37, 40, 43],
+        [44, 47, 50, 52, 55, 57],
+        [58, 60, 62, 65, 67, 69],
+    ];
+
+    public static int MonsterLevel(CampaignNodeDefinition node)
+    {
+        ArgumentNullException.ThrowIfNull(node);
+        if (node.Act is < 1 or > 5 || node.IndexInAct is < 1 or > 6)
+            throw new ArgumentOutOfRangeException(nameof(node));
+        return Levels[node.Act - 1][node.IndexInAct - 1];
+    }
+}
+
 public sealed record P2CampaignSnapshot(
     int CurrentNodeIndex,
     long CurrentNodeElapsedMilliseconds,
@@ -475,7 +495,7 @@ public sealed class P2CampaignSimulator
         };
         return ItemGenerator.Generate(
             baseId,
-            Math.Min(60, node.Act * 10),
+            P16CampaignLevels.MonsterLevel(node) + (node.Kind == CampaignNodeKind.ActBoss ? 2 : node.Kind == CampaignNodeKind.EliteCombat ? 1 : 0),
             rarity,
             seed ^ (ulong)absoluteIndex * 0x9e3779b97f4a7c15UL,
             $"campaign-{node.Act}-{node.IndexInAct}-{suffix}");

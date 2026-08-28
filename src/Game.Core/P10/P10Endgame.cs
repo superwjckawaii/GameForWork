@@ -138,7 +138,7 @@ public sealed class P10EndgameState
     public IReadOnlyList<P10MapMechanic> RecordMapCompletion(P1MapItem map, MapRoute route, ulong seed)
     {
         map.Validate();
-        _completedTiers.Add(map.AreaLevel);
+        _completedTiers.Add(map.Tier);
         var selected = new List<P10MapMechanic>(2);
         if (route == MapRoute.Abyss) selected.Add(P10MapMechanic.Abyss);
         if (route == MapRoute.LifeGarden) selected.Add(P10MapMechanic.LifeGarden);
@@ -147,7 +147,7 @@ public sealed class P10EndgameState
         if (selected.Count == 0)
         {
             P10MapMechanic[] choices = Enum.GetValues<P10MapMechanic>();
-            selected.Add(choices[(int)((seed + (ulong)map.AreaLevel) % (ulong)choices.Length)]);
+            selected.Add(choices[(int)((seed + (ulong)map.Tier) % (ulong)choices.Length)]);
         }
         P10MapMechanic[] result = selected.Distinct().Take(3).ToArray();
         foreach (P10MapMechanic mechanic in result)
@@ -156,12 +156,12 @@ public sealed class P10EndgameState
             int bonus = 100 + AtlasBonus((P10AtlasTheme)((int)mechanic + 1));
             switch (mechanic)
             {
-                case P10MapMechanic.LifeGarden: LifeForce = checked(LifeForce + map.AreaLevel * bonus / 100); break;
+                case P10MapMechanic.LifeGarden: LifeForce = checked(LifeForce + map.Tier * bonus / 100); break;
                 case P10MapMechanic.RedAltar: RedFavor = checked(RedFavor + bonus); break;
                 case P10MapMechanic.BlueAltar: BlueFavor = checked(BlueFavor + bonus); break;
             }
         }
-        if (map.AreaLevel >= 11)
+        if (map.Tier >= 11)
         {
             CitadelFragments++;
             while (CitadelFragments >= CitadelFragmentsPerTicket) { CitadelFragments -= CitadelFragmentsPerTicket; CitadelTickets++; }

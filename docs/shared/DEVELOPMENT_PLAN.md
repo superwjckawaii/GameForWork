@@ -1,4 +1,4 @@
-# GameForWork P0～P15 开发计划
+# GameForWork P0～P22 开发计划
 
 > 状态：已确认  
 > 更新日期：2026-08-28
@@ -173,7 +173,7 @@ P1B 最小资产范围：
 
 ## 5. P2 主线与管理纵向切片
 
-P2 的完整产品、交互、迁移和验收规则见 [`P2_SPECIFICATION.md`](P2_SPECIFICATION.md)。开发采用四个本地提交边界：
+P2 的完整产品、交互、迁移和验收规则见 [`P2_SPECIFICATION.md`](../v0.1/P2_SPECIFICATION.md)。开发采用四个本地提交边界：
 
 1. 数据模型与旧档迁移
 2. 角色与物品管理界面
@@ -202,31 +202,45 @@ P1A 功能闭环通过，P1B 精细像素素材生成、接入和视觉验收完
 
 ### P2 完成
 
-精简五幕主线、通关解锁远征、正式角色与物品管理、旧档迁移和低密度像素视觉全部达到 [`P2_SPECIFICATION.md`](P2_SPECIFICATION.md) 的验收条件。用户统一验收确认后推送，并在自动检查通过后创建 `v0.2.0-p2` 标签。
+精简五幕主线、通关解锁远征、正式角色与物品管理、旧档迁移和低密度像素视觉全部达到 [`P2_SPECIFICATION.md`](../v0.1/P2_SPECIFICATION.md) 的验收条件。用户统一验收确认后推送，并在自动检查通过后创建 `v0.2.0-p2` 标签。
 
 ### P3～P5 完成
 
-- P3 的完整规则见 [`P3_SPECIFICATION.md`](P3_SPECIFICATION.md)。
-- P4 的空间群战与角色工坊规则见 [`P4_SPECIFICATION.md`](P4_SPECIFICATION.md)。
-- P5 的单页远征、碎片 Boss、装备技能链和天赋交互规则见 [`P5_SPECIFICATION.md`](P5_SPECIFICATION.md)。
+- P3 的完整规则见 [`P3_SPECIFICATION.md`](../v0.1/P3_SPECIFICATION.md)。
+- P4 的空间群战与角色工坊规则见 [`P4_SPECIFICATION.md`](../v0.1/P4_SPECIFICATION.md)。
+- P5 的单页远征、碎片 Boss、装备技能链和天赋交互规则见 [`P5_SPECIFICATION.md`](../v0.1/P5_SPECIFICATION.md)。
 
 ### P6 已确认
 
-P6 的装备实例孔组、技能石唯一位置、标签兼容、AI 执行、技能经验、三套方案、连接锻造、金属制作、构筑摘要、掉落过滤和战斗报告规则见 [`P6_SPECIFICATION.md`](P6_SPECIFICATION.md)。P6 明确不制作构筑训练场。
+P6 的装备实例孔组、技能石唯一位置、标签兼容、AI 执行、技能经验、三套方案、连接锻造、金属制作、构筑摘要、掉落过滤和战斗报告规则见 [`P6_SPECIFICATION.md`](../v0.1/P6_SPECIFICATION.md)。P6 明确不制作构筑训练场。
 
 ### P7～P8 完成定义
 
-- P7 的技能页收敛、逐技能攻击目标、20 Hz/60 FPS 表现、后台战斗预演与后台存档规则见 [`P7_SPECIFICATION.md`](P7_SPECIFICATION.md)。
-- P8 的单线 Demo 旅程、强制聚焦教学、页面解锁、停止警告、深渊监守者结算和旧档迁移规则见 [`P8_SPECIFICATION.md`](P8_SPECIFICATION.md)。
+- P7 的技能页收敛、逐技能攻击目标、20 Hz/60 FPS 表现、后台战斗预演与后台存档规则见 [`P7_SPECIFICATION.md`](../v0.1/P7_SPECIFICATION.md)。
+- P8 的单线 Demo 旅程、强制聚焦教学、页面解锁、停止警告、深渊监守者结算和旧档迁移规则见 [`P8_SPECIFICATION.md`](../v0.1/P8_SPECIFICATION.md)。
 
 ### P9 完成定义
 
-P9 的七座固定建筑、施工队列、城镇方针、酒馆候选与名册、单支 2×3 佣兵队、19 种金属仓、完整装备加工和高阶工坊附魔规则见 [`P9_SPECIFICATION.md`](P9_SPECIFICATION.md)。
+P9 的七座固定建筑、施工队列、城镇方针、酒馆候选与名册、单支 2×3 佣兵队、19 种金属仓、完整装备加工和高阶工坊附魔规则见 [`P9_SPECIFICATION.md`](../v0.1/P9_SPECIFICATION.md)。
 
 ### P10 完成定义
 
-P10 的周期卡顿与布局修复、1,624 节点主天赋树、专精和记忆珠宝、T11～T20、360 节点异界树、四类地图收益路线、灰烬天垒攻坚与铁誓突破树见 [`P10_SPECIFICATION.md`](P10_SPECIFICATION.md)。
+P10 的周期卡顿与布局修复、1,624 节点主天赋树、专精和记忆珠宝、T11～T20、360 节点异界树、四类地图收益路线、灰烬天垒攻坚与铁誓突破树见 [`P10_SPECIFICATION.md`](../v0.1/P10_SPECIFICATION.md)。
 
 ### P11～P15 完成定义
 
-首个完整可玩 Demo 的终点、内容目标、测试期存档策略与 P11～P15 阶段依赖见 [`DEMO_ROADMAP.md`](DEMO_ROADMAP.md)。P11、P12 的封版实现规则分别见 [`P11_SPECIFICATION.md`](P11_SPECIFICATION.md) 与 [`P12_SPECIFICATION.md`](P12_SPECIFICATION.md)；P14 的异界机制、突破和攻坚规则见 [`P14_SPECIFICATION.md`](P14_SPECIFICATION.md)，P15 的内容封版、稳定性、性能和 Windows 分发规则见 [`P15_SPECIFICATION.md`](P15_SPECIFICATION.md)。
+首个完整可玩 Demo 的终点、内容目标、测试期存档策略与 P11～P15 阶段依赖见 [`DEMO_ROADMAP.md`](../v0.1/DEMO_ROADMAP.md)。P11、P12 的封版实现规则分别见 [`P11_SPECIFICATION.md`](../v0.1/P11_SPECIFICATION.md) 与 [`P12_SPECIFICATION.md`](../v0.1/P12_SPECIFICATION.md)；P14 的异界机制、突破和攻坚规则见 [`P14_SPECIFICATION.md`](../v0.1/P14_SPECIFICATION.md)，P15 的内容封版、稳定性、性能和 Windows 分发规则见 [`P15_SPECIFICATION.md`](../v0.1/P15_SPECIFICATION.md)。
+
+### P16～P22：v0.2 核心战斗与构筑扩充
+
+v0.2 的完整范围、数据规模、难度等级、阶段依赖和验收口径见 [`V0_2_SPECIFICATION.md`](../v0.2/V0_2_SPECIFICATION.md)。阶段固定为：
+
+1. P16：48 种非 Boss 怪物、18 个怪物词缀、剧情至 T20 难度曲线、文档版本化、仓库批处理和过滤器收敛；详见 [`P16_SPECIFICATION.md`](../v0.2/P16_SPECIFICATION.md)。
+2. P17：技能标签/行为/辅助规则拆分，累计 30 主动与 48 辅助技能石。
+3. P18：血征者、壁垒使、破阵者三套完整升华及六套基准构筑。
+4. P19：约 80 种底材、PoE 式词缀数据结构、约 90 个词缀族和 400 条分级记录。
+5. P20：逐怪掉落预算、节点批量结算、地图续航、传奇保底和经济模拟。
+6. P21：技能石、装备底材、怪物主体、四方向动作和战斗特效美术。
+7. P22：完整流程、性能、48 小时离线、正式 Demo 存档迁移与 `v0.2.0` 分发封版。
+
+亡旗战场、沉金港和无光矿脉不属于上述阶段，统一进入 v0.3。

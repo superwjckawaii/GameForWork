@@ -91,6 +91,7 @@ public sealed record P4EnemyFrame(
     string EnemyStableId,
     string DisplayName,
     P4UnitRole Role,
+    EnemyRarity Rarity,
     bool Elite,
     bool Boss,
     int Life,
@@ -465,21 +466,38 @@ public sealed class P4SpatialCombatRunner
     private static List<P4EnemyUnit> CreateEnemies(P4NodeCombatRequest request, Pcg32 random)
     {
         var result = new List<P4EnemyUnit>(request.EnemyCount);
+        IReadOnlyList<EnemyProfile> pool = P1Enemies.ForMonsterLevel(request.AreaLevel);
+        int magicCount = request.AreaLevel >= 8 && request.EnemyCount >= 6 ? Math.Clamp(request.EnemyCount / 4, 2, 6) : 0;
         for (int index = 0; index < request.EnemyCount; index++)
         {
             bool boss = request.HasBoss && index == 0;
-            bool elite = !boss && request.HasElite && index == 0;
+            EnemyRarity rarity = boss
+                ? EnemyRarity.Boss
+                : request.HasElite && index == 0
+                    ? EnemyRarity.Rare
+                    : index >= (request.HasElite ? 1 : 0) && index < magicCount + (request.HasElite ? 1 : 0)
+                        ? EnemyRarity.Magic
+                        : EnemyRarity.Normal;
+            bool elite = rarity is EnemyRarity.Magic or EnemyRarity.Rare;
             EnemyProfile profile = boss
                 ? string.IsNullOrEmpty(request.BossStableId) ? P1Enemies.AbyssWarden : P14Bosses.CombatProfile(request.BossStableId)
-                : P1Enemies.NormalEnemies[(int)(random.NextUInt() % (uint)P1Enemies.NormalEnemies.Count)];
-            IReadOnlyList<EliteAffix> affixes = elite ? EnemyRules.RollEliteAffixes(random) : [];
-            ScaledEnemy scaled = EnemyRules.Scale(profile, request.AreaLevel, affixes, request.AbyssRoute);
-            int lifeScale = boss ? 10_000 : elite ? 7_000 : 4_500;
+                : pool[(int)(random.NextUInt() % (uint)pool.Count)];
+            IReadOnlyList<EliteAffix> affixes = EnemyRules.RollAffixes(random, rarity);
+            ScaledEnemy scaled = EnemyRules.Scale(profile, request.AreaLevel, affixes, request.AbyssRoute, rarity);
+            int lifeScale = boss ? 10_000 : rarity == EnemyRarity.Rare ? 7_000 : rarity == EnemyRarity.Magic ? 5_000 : 4_500;
             int life = Math.Max(2, checked((int)((long)scaled.Life * lifeScale / 10_000 * request.EnemyLifeBasisPoints / 10_000)));
-            P4UnitRole role = boss ? P4UnitRole.Boss : (P4UnitRole)(index % 5);
+            P4UnitRole role = boss ? P4UnitRole.Boss : profile.Role switch
+            {
+                EnemyRole.Ranged => P4UnitRole.Ranged,
+                EnemyRole.Caster => P4UnitRole.Caster,
+                EnemyRole.Charger => P4UnitRole.Charger,
+                EnemyRole.Summoner => P4UnitRole.Summoner,
+                EnemyRole.Support => P4UnitRole.Summoner,
+                _ => P4UnitRole.Melee,
+            };
             P4Point position = SpawnPosition(request.Formation, index, request.EnemyCount, random);
             result.Add(new P4EnemyUnit(
-                $"enemy-{request.NodeIndex}-{index}", profile, scaled, role, elite, boss, life, position, index * 3));
+                $"enemy-{request.NodeIndex}-{index}", profile, scaled, role, rarity, elite, boss, life, position, index * 3));
         }
 
         return result;
@@ -562,7 +580,7 @@ public sealed class P4SpatialCombatRunner
                         enemy.Position, heroPosition, $"{skill.DisplayName}|{skill.Telegraph}|{skill.DamageType}|{skill.Avoidable}"));
                 }
             }
-            int range = EnemyRange(enemy.Role);
+            int range = enemy.Boss ? EnemyRange(enemy.Role) : enemy.Profile.AttackRangeRaw;
             long distance = P4Point.DistanceSquared(enemy.Position, heroPosition);
             if (distance > (long)range * range ||
                 enemy.Role is P4UnitRole.Ranged or P4UnitRole.Caster or P4UnitRole.Summoner && distance < 9_000_000)
@@ -607,8 +625,21 @@ public sealed class P4SpatialCombatRunner
                 TargetEvasion: request.Build.Sheet.Evasion().Value,
                 Accuracy: enemy.Profile.Accuracy,
                 IsSpell: enemy.Role == P4UnitRole.Caster), random);
-            int divisor = Math.Max(2, request.EnemyCount * 2);
+            int divisor = Math.Max(6, 8 + request.EnemyCount / 3);
             int damage = hit.Hit ? hit.FinalPhysicalDamage / divisor : 0;
+            int skillMultiplier = enemy.Profile.Skill switch
+            {
+                EnemySkillKind.HeavySlam => 15_000,
+                EnemySkillKind.Charge when enemy.NextActionTick <= 3 => 16_000,
+                EnemySkillKind.GroundHazard => 13_500,
+                EnemySkillKind.CorpseBurst => 12_500,
+                EnemySkillKind.ArcaneBolt => 12_000,
+                EnemySkillKind.Volley => 9_000,
+                _ => 10_000,
+            };
+            if (enemies.Any(unit => unit.Life > 0 && unit.Profile.Skill == EnemySkillKind.WarAura))
+                skillMultiplier = checked(skillMultiplier * 11_000 / 10_000);
+            damage = checked(damage * skillMultiplier / 10_000);
             if (enemy.BossPhase == 1) damage = checked(damage * 11_500 / 10_000);
             if (enemy.BossPhase == 2) damage = checked(damage * 17_500 / 10_000);
             if (damage > 0 && utilityFlasks.GetValueOrDefault(P1FlaskKind.Armor)?.Active == true)
@@ -625,7 +656,7 @@ public sealed class P4SpatialCombatRunner
                 hero.ApplyDamage(damage, tick);
             }
 
-            string attackDetail = bossDefinition is null ? enemy.Role.ToString() :
+            string attackDetail = bossDefinition is null ? enemy.Profile.Skill.ToString() :
                 bossDefinition.Skills[Math.Abs(enemy.NextActionTick / 8) % bossDefinition.Skills.Count].DisplayName;
             events.Add(Event(tick, P4SpatialEventKind.EnemyAttack, enemy.EntityId, "hero", damage,
                 enemy.Position, heroPosition, attackDetail));
@@ -837,6 +868,7 @@ public sealed class P4SpatialCombatRunner
                 enemy.Profile.StableId,
                 enemy.Profile.DisplayName,
                 enemy.Role,
+                enemy.Rarity,
                 enemy.Elite,
                 enemy.Boss,
                 enemy.Life,
@@ -976,7 +1008,7 @@ public sealed class P4SpatialCombatRunner
     {
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(request.Build);
-        if (request.NodeIndex <= 0 || request.AreaLevel is < 1 or > 20 || request.EnemyCount is < 1 or > 48 ||
+        if (request.NodeIndex <= 0 || request.AreaLevel is < 1 or > 120 || request.EnemyCount is < 1 or > 48 ||
             request.MaximumTicks <= 0 || request.EnemyLifeBasisPoints is < 1_000 or > 100_000 ||
             request.EnemyDamageBasisPoints is < 1_000 or > 100_000 || request.EnemySpeedBasisPoints is < 1_000 or > 50_000 ||
             request.PlayerRecoveryBasisPoints is < 0 or > 10_000)
@@ -990,6 +1022,7 @@ public sealed class P4SpatialCombatRunner
         EnemyProfile profile,
         ScaledEnemy scaled,
         P4UnitRole role,
+        EnemyRarity rarity,
         bool elite,
         bool boss,
         int life,
@@ -1000,6 +1033,7 @@ public sealed class P4SpatialCombatRunner
         public EnemyProfile Profile { get; } = profile;
         public ScaledEnemy Scaled { get; } = scaled;
         public P4UnitRole Role { get; } = role;
+        public EnemyRarity Rarity { get; } = rarity;
         public bool Elite { get; } = elite;
         public bool Boss { get; } = boss;
         public int MaximumLife { get; } = life;

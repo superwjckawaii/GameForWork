@@ -123,7 +123,7 @@ public static class P3SceneTimelineBuilder
             $"campaign:{node.StableId}",
             build,
             nodeCount,
-            Math.Max(1, node.Act),
+            P16CampaignLevels.MonsterLevel(node),
             node.Kind == CampaignNodeKind.EliteCombat,
             node.Kind == CampaignNodeKind.ActBoss,
             abyssRoute: false,
@@ -145,7 +145,7 @@ public static class P3SceneTimelineBuilder
             $"map:{map.AreaId}:{map.InstanceId}:attempt:{attempt}",
             build,
             plan.Nodes.Count,
-            map.AreaLevel,
+            map.MonsterLevel,
             forceElite: route == MapRoute.Abyss,
             finalBoss: true,
             abyssRoute: route == MapRoute.Abyss,
@@ -212,10 +212,10 @@ public static class P3SceneTimelineBuilder
                 continue;
             }
 
+            bool campaign = stableId.StartsWith("campaign:", StringComparison.Ordinal);
             bool bossNode = plannedNode?.Kind == P14MapNodeKind.Boss || finalBoss && nodeIndex == nodeCount;
             bool eliteNode = plannedNode?.Kind == P14MapNodeKind.Elite ||
-                             !bossNode && (forceElite && nodeIndex % 2 == 0 || nodeIndex == nodeCount - 1);
-            bool campaign = stableId.StartsWith("campaign:", StringComparison.Ordinal);
+                             !bossNode && (forceElite && nodeIndex % 2 == 0 || !campaign && nodeIndex == nodeCount - 1);
             int enemyCount = plannedNode?.EnemyCount > 0 ? plannedNode.EnemyCount : bossNode
                 ? 5 + (int)(random.NextUInt() % 5)
                 : campaign

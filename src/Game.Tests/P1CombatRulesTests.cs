@@ -187,11 +187,11 @@ public sealed class P1CombatRulesTests
     public void AreaLevelScalingAndAbyssRouteUseSpecifiedMultipliers()
     {
         ScaledEnemy worker = EnemyRules.Scale(P1Enemies.CorruptedWorker, 10);
-        Assert.Equal(82, worker.Life);
+        Assert.Equal(91, worker.Life);
         Assert.Equal(7, worker.MinimumPhysicalDamage);
         Assert.Equal(11, worker.MaximumPhysicalDamage);
         Assert.Equal(4, worker.Armor);
-        Assert.Equal(7, EnemyRules.ThreatBudget(10));
+        Assert.Equal(4, EnemyRules.ThreatBudget(10));
 
         ScaledEnemy abyss = EnemyRules.Scale(P1Enemies.CorruptedWorker, 1, abyssRoute: true);
         Assert.Equal(42, abyss.Life);

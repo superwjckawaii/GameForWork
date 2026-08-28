@@ -3,6 +3,7 @@ using GameForWork.Core.P5;
 using GameForWork.Core.P6;
 using GameForWork.Core.P1.Combat;
 using GameForWork.Core.Simulation;
+using GameForWork.Core.P1.World;
 
 namespace GameForWork.Core.P2;
 
@@ -450,6 +451,9 @@ public sealed class P2ManagementState
         AddHistory($"{active.Definition.DisplayName} 已装入 {chain.DisplayName}。");
         return true;
     }
+
+    public void SortSortingBag(P16ItemSortMode mode) =>
+        _sortingBag.Sort((left, right) => P16ItemSorting.Compare(left, right, mode));
 
     public bool TryPlaceStone(
         string chainId,

@@ -21,8 +21,8 @@ public static class P14Preflight
             P12MapAffixKind.ElementalPressure => "元素易伤",
             _ => string.Empty,
         }).Where(text => text.Length > 0).Distinct(StringComparer.Ordinal).ToArray();
-        int risk = map.AreaLevel * 4 + map.DangerRating + (map.IsCorrupted ? 20 : 0);
-        string[] requirements = map.AreaLevel switch
+        int risk = map.Tier * 4 + map.DangerRating + (map.IsCorrupted ? 20 : 0);
+        string[] requirements = map.Tier switch
         {
             <= 10 => ["基础生命与主抗性", "至少一项稳定恢复"],
             <= 16 => ["完成装备加工", "法术压制或等效防御", "Boss 单体技能组"],

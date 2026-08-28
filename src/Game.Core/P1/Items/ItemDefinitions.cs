@@ -233,7 +233,8 @@ public sealed record ItemInstance(
     int Quality = 0,
     ItemEnchantment? Enchantment = null,
     bool IsCorrupted = false,
-    string CorruptionOutcome = "")
+    string CorruptionOutcome = "",
+    bool IsKeyItem = false)
 {
     public int PrefixCount => Affixes.Count(affix => affix.Definition.Position == AffixPosition.Prefix);
     public int SuffixCount => Affixes.Count(affix => affix.Definition.Position == AffixPosition.Suffix);

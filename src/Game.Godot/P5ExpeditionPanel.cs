@@ -142,7 +142,7 @@ public partial class P5ExpeditionPanel : VBoxContainer
             $"Boss 门票 {session.World.Expedition.AbyssWardenTickets}";
         string mapSignature = $"{session.World.Expedition.AbyssWardenFragments}:{session.World.Expedition.AbyssWardenTickets}:" +
             $"{session.World.Expedition.MapsTowardNextFragment}|" +
-            string.Join(',', session.World.MapInventory.Select(map => $"{map.InstanceId}:{map.AreaLevel}:{map.Rarity}:{map.Quality}:{map.IsCorrupted}:{map.SelectedRoute}"));
+            string.Join(',', session.World.MapInventory.Select(map => $"{map.InstanceId}:{map.Tier}:{map.Rarity}:{map.Quality}:{map.IsCorrupted}:{map.SelectedRoute}"));
         if (mapSignature != _mapSignature)
         {
             _mapSignature = mapSignature;
@@ -155,7 +155,7 @@ public partial class P5ExpeditionPanel : VBoxContainer
                 P12MapArea area = ResolveArea(map);
                 var button = new Button
                 {
-                    Text = $"{RarityMark(map.Rarity)} T{map.AreaLevel} {area.DisplayName}　Q{map.Quality}" + (map.IsCorrupted ? "　腐化" : string.Empty),
+                    Text = $"{RarityMark(map.Rarity)} T{map.Tier} · Lv{map.MonsterLevel} {area.DisplayName}　Q{map.Quality}" + (map.IsCorrupted ? "　腐化" : string.Empty),
                     Alignment = HorizontalAlignment.Left,
                     TooltipText = DescribeMap(map),
                     ButtonPressed = mapIndex == _selectedMapIndex,
@@ -310,7 +310,7 @@ public partial class P5ExpeditionPanel : VBoxContainer
         {
             string target = P10EndgameState.IsCitadel(team.ActiveMap) ? "灰烬天垒" :
                 P5ExpeditionDirector.IsPractice(team.ActiveMap) ? "Boss 练习" :
-                P5ExpeditionDirector.IsBoss(team.ActiveMap) ? "深渊监守者" : $"T{team.ActiveMap.AreaLevel} 地图";
+                P5ExpeditionDirector.IsBoss(team.ActiveMap) ? "深渊监守者" : $"T{team.ActiveMap.Tier} · Lv{team.ActiveMap.MonsterLevel} 地图";
             return $"执行中：{target} · 剩余约 {Math.Max(1, team.RemainingMapTimeMilliseconds / 1_000)} 秒\n" +
                    $"路线 {team.ActiveRoute} · 最近 {(team.LastRun?.Succeeded == true ? "成功" : team.LastRun is null ? "暂无结算" : "失败")}";
         }
@@ -318,7 +318,7 @@ public partial class P5ExpeditionPanel : VBoxContainer
         if (team.Queue.Count > 0)
         {
             P1MapItem map = team.Queue.Maps[0];
-            return $"准备中：{TargetName(dispatch?.Target ?? P5ExpeditionTarget.SafeMaps)} · T{map.AreaLevel}";
+            return $"准备中：{TargetName(dispatch?.Target ?? P5ExpeditionTarget.SafeMaps)} · T{map.Tier} · Lv{map.MonsterLevel}";
         }
 
         if (team.IsStopped)
@@ -437,7 +437,7 @@ public partial class P5ExpeditionPanel : VBoxContainer
         string routes = string.Join(" / ", map.EffectiveRouteCandidates.Select(RouteName));
         string altar = map.Altar switch { P12MapAltar.RedOath => "赤誓祭坛", P12MapAltar.BlueOath => "苍誓祭坛", _ => "无祭坛" };
         string chain = string.Join(" → ", plan.Nodes.Select(node => node.DisplayName));
-        return $"{area.DisplayName} · {area.Environment} · Boss {area.BossName}\n{RarityMark(map.Rarity)} · 品质 {map.Quality}% · 危险 {map.DangerRating} · 掉落量 {map.ItemQuantityBasisPoints / 100.0:0}%\n{affixes}\n候选 {routes} · {altar}\n节点链：{chain}\n战前：{string.Join('、', preflight.DamageTypes)} · {preflight.EnrageCondition}";
+        return $"{area.DisplayName} · {area.Environment} · Boss {area.BossName}\nT{map.Tier} · 怪物等级 {map.MonsterLevel} · {RarityMark(map.Rarity)} · 品质 {map.Quality}% · 危险 {map.DangerRating} · 掉落量 {map.ItemQuantityBasisPoints / 100.0:0}%\n{affixes}\n候选 {routes} · {altar}\n节点链：{chain}\n战前：{string.Join('、', preflight.DamageTypes)} · {preflight.EnrageCondition}";
     }
 
     private static P12MapArea ResolveArea(P1MapItem map) =>

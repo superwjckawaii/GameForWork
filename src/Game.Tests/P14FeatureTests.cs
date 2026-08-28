@@ -21,8 +21,8 @@ public sealed class P14FeatureTests
         Assert.Equal(12, P14UniqueItems.All.Count(item => !item.Mythic));
         Assert.Single(P14UniqueItems.All, item => item.Mythic);
         Assert.Equal(5, P14Flasks.All.Count);
-        Assert.Equal(18, P1Enemies.NormalEnemies.Count);
-        Assert.Equal(6, Enum.GetValues<EliteAffix>().Length);
+        Assert.Equal(48, P1Enemies.NormalEnemies.Count);
+        Assert.Equal(18, Enum.GetValues<EliteAffix>().Length);
         Assert.Equal(8, P14Bosses.MapBosses.Count);
     }
 

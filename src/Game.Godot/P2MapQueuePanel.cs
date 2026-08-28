@@ -113,7 +113,7 @@ public partial class P2MapQueuePanel : VBoxContainer
                 Panel = this,
                 ContainerKind = kind,
                 SourceIndex = index,
-                Text = $"{index + 1}. {map.InstanceId} · T{map.AreaLevel}",
+                Text = $"{index + 1}. {map.InstanceId} · T{map.Tier} · Lv{map.MonsterLevel}",
                 TooltipText = "左键选择 · 双击加入当前队伍 · 拖拽精确排序 · 右键操作",
                 Alignment = HorizontalAlignment.Left,
             };

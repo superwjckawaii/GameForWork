@@ -1,4 +1,5 @@
 using GameForWork.Core.P1.Items;
+using GameForWork.Core.P1.Combat;
 using GameForWork.Core.Simulation;
 using GameForWork.Core.P4;
 using GameForWork.Core.P5;
@@ -26,7 +27,7 @@ public static class P1MapRewardGenerator
     public const int ExperiencePerMap = 190;
     private static readonly string[] EquipmentBases = P1ItemBases.All.Select(item => item.StableId).ToArray();
 
-    public static P1MapRewards Generate(P1MapItem completedMap, MapRoute route, ulong seed, int maximumUnlockedTier = P1MapItem.MaximumAreaLevel)
+    public static P1MapRewards Generate(P1MapItem completedMap, MapRoute route, ulong seed, int maximumUnlockedTier = P1MapItem.MaximumTier)
     {
         ArgumentNullException.ThrowIfNull(completedMap);
         completedMap.Validate();
@@ -42,7 +43,7 @@ public static class P1MapRewardGenerator
             ulong itemSeed = NextSeed(random);
             equipment.Add(ItemGenerator.Generate(
                 baseId,
-                completedMap.AreaLevel,
+                P16MapTierLevels.DropItemLevel(completedMap.Tier, rarity == ItemRarity.Rare ? EnemyRarity.Rare : EnemyRarity.Normal),
                 rarity,
                 itemSeed,
                 $"drop-{completedMap.InstanceId}-{index}-{itemSeed:x8}"));
@@ -53,7 +54,7 @@ public static class P1MapRewardGenerator
         {
             P14UniqueDefinition unique = P14UniqueItems.All.Where(item => !item.Mythic)
                 .ElementAt(Next(random, P14UniqueItems.All.Count(item => !item.Mythic)));
-            equipment.Add(P14UniqueItems.Create(unique.StableId, completedMap.AreaLevel,
+            equipment.Add(P14UniqueItems.Create(unique.StableId, P16MapTierLevels.DropItemLevel(completedMap.Tier, EnemyRarity.Boss),
                 $"drop-{completedMap.InstanceId}-{unique.StableId.Split('.')[^1]}-{seed:x8}"));
         }
 
@@ -112,11 +113,11 @@ public static class P1MapRewardGenerator
 
     private static P1MapItem CreateDroppedMap(P1MapItem source, Pcg32 random, int ordinal, int maximumUnlockedTier)
     {
-        int areaLevel = random.NextBasisPoints() < 6_000
-            ? Math.Min(maximumUnlockedTier, source.AreaLevel + 1)
-            : source.AreaLevel;
+        int tier = random.NextBasisPoints() < 6_000
+            ? Math.Min(maximumUnlockedTier, source.Tier + 1)
+            : source.Tier;
         string id = $"map-{source.InstanceId}-{ordinal}-{random.NextUInt():x8}";
-        return new P1MapItem(id, Math.Min(maximumUnlockedTier, areaLevel)).EnsureFormal(random.NextUInt());
+        return new P1MapItem(id, Math.Min(maximumUnlockedTier, tier)).EnsureFormal(random.NextUInt());
     }
 
     private static ItemRarity RollRarity(Pcg32 random)

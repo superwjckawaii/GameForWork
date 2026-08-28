@@ -33,17 +33,17 @@ public sealed record P12MapCombatModifiers(
     public static P12MapCombatModifiers From(P1MapItem map)
     {
         int Value(P12MapAffixKind kind) => map.EffectiveAffixes.Where(affix => affix.Kind == kind).Sum(affix => affix.Value);
-        int tierLife = map.AreaLevel == 20 ? 2_500 : 0;
-        int tierDamage = map.AreaLevel is 17 or 20 ? 1_500 : 0;
-        int tierSpeed = map.AreaLevel == 20 ? 1_000 : 0;
-        int tierRecovery = map.AreaLevel == 18 ? 3_000 : 0;
+        int tierLife = map.Tier == 20 ? 2_500 : 0;
+        int tierDamage = map.Tier is 17 or 20 ? 1_500 : 0;
+        int tierSpeed = map.Tier == 20 ? 1_000 : 0;
+        int tierRecovery = map.Tier == 18 ? 3_000 : 0;
         return new(
             10_000 + tierLife + (Value(P12MapAffixKind.MonsterLife) + Value(P12MapAffixKind.PhysicalResistance)) * 100,
             10_000 + tierDamage + (Value(P12MapAffixKind.MonsterDamage) + Value(P12MapAffixKind.ElementalPressure) / 2) * 100,
             10_000 + tierSpeed + Value(P12MapAffixKind.MonsterSpeed) * 100,
             Math.Max(2_000, 10_000 - tierRecovery - Value(P12MapAffixKind.ReducedRecovery) * 100),
             10_000 + Value(P12MapAffixKind.IncreasedPackSize) * 100,
-            map.AreaLevel == 19 || map.EffectiveAffixes.Any(affix => affix.Kind == P12MapAffixKind.ExtraElites));
+            map.Tier == 19 || map.EffectiveAffixes.Any(affix => affix.Kind == P12MapAffixKind.ExtraElites));
     }
 }
 
@@ -104,7 +104,7 @@ public static class P12MapRules
         ArgumentNullException.ThrowIfNull(map);
         if (P12MapCatalog.TryGet(map.AreaId, out _) && map.EffectiveRouteCandidates.Count > 0)
             return map.Validate();
-        ulong stableSeed = StableSeed(seed, map.InstanceId, map.AreaLevel);
+        ulong stableSeed = StableSeed(seed, map.InstanceId, map.Tier);
         var random = new Pcg32(stableSeed);
         P12MapArea area = P12MapCatalog.Areas[(int)(random.NextUInt() % (uint)P12MapCatalog.Areas.Count)];
         MapRoute[] routes = Enum.GetValues<MapRoute>();
@@ -156,7 +156,7 @@ public static class P12MapCrafting
     };
 
     public static P12MapCraftResult Apply(TownEconomyState economy, P1MapItem source, P12MapCraftOperation operation,
-        ulong seed, int maximumUnlockedTier = P1MapItem.MaximumAreaLevel)
+        ulong seed, int maximumUnlockedTier = P1MapItem.MaximumTier)
     {
         ArgumentNullException.ThrowIfNull(economy);
         P1MapItem map = source.EnsureFormal(seed);
@@ -193,7 +193,7 @@ public static class P12MapCrafting
         {
             0 => map with { IsCorrupted = true, Quality = 20 },
             1 => map with { IsCorrupted = true, Rarity = P12MapRarity.Rare, Affixes = P12MapRules.RollAffixes(P12MapRarity.Rare, seed ^ 0xc0ffeeUL) },
-            2 => map with { IsCorrupted = true, AreaLevel = Math.Min(maximumUnlockedTier, map.AreaLevel + 1) },
+            2 => map with { IsCorrupted = true, Tier = Math.Min(maximumUnlockedTier, map.Tier + 1) },
             _ => map with { IsCorrupted = true },
         };
     }

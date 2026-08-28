@@ -87,13 +87,13 @@ public sealed class P1WorldTests
             Assert.InRange(safe.Stackables.IronScraps, 2, 4);
             Assert.Equal(1, safe.Stackables.MemoryAshes);
             Assert.Equal(1, safe.Stackables.WardenMarks);
-            Assert.All(safe.Maps, map => Assert.InRange(map.AreaLevel, 5, 6));
+            Assert.All(safe.Maps, map => Assert.InRange(map.Tier, 5, 6));
 
             P1MapRewards abyss = P1MapRewardGenerator.Generate(new P1MapItem($"abyss-{seed}", 10), MapRoute.Abyss, seed);
             Assert.InRange(abyss.Equipment.Count, 3, 6);
             Assert.InRange(abyss.Stackables.Gold, 15, 25);
             Assert.InRange(abyss.Stackables.SkillStones + abyss.Stackables.IronScraps - 2, 1, 4);
-            Assert.All(abyss.Maps, map => Assert.InRange(map.AreaLevel, 10, 11));
+            Assert.All(abyss.Maps, map => Assert.InRange(map.Tier, 10, 11));
         }
     }
 
