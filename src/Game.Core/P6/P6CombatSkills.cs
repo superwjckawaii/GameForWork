@@ -37,6 +37,7 @@ public static class P6CombatSkillRules
         int executeThreshold = 0;
         int execute = 10_000;
         int nonExecute = 10_000;
+        damage = checked(damage * (10_000 + (Math.Clamp(configuration.Level, 1, 20) - 1) * 250) / 10_000);
 
         if (configuration.Supports.HasFlag(SkillSupport.IncreasedArea))
         {

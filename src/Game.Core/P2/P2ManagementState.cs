@@ -91,7 +91,19 @@ public sealed record SkillLinkConfiguration(
     IReadOnlyList<string> SupportStoneInstanceIds,
     int Priority,
     string ChainId = "",
-    IReadOnlyList<string?>? SocketStoneInstanceIds = null);
+    IReadOnlyList<string?>? SocketStoneInstanceIds = null,
+    SkillAiRule? AiRule = null,
+    bool ReservationEnabled = true);
+
+public enum P6SkillSchemeKind
+{
+    Clear,
+    Boss,
+    Custom,
+}
+
+public sealed record P6SkillSchemeSnapshot(P6SkillSchemeKind Kind, IReadOnlyList<SkillLinkConfiguration> Links);
+public sealed record P6SchemeSwitchResult(bool Succeeded, int MissingStones, int EjectedStones, string Message);
 
 public sealed record BuybackEntry(ItemInstance Item, int SalePrice, long Sequence);
 
@@ -103,7 +115,9 @@ public sealed record P2ManagementSnapshot(
     IReadOnlyList<SkillLinkConfiguration> SkillLinks,
     IReadOnlyList<string> OperationHistory,
     long OperationSequence,
-    bool FreeFullRespecAvailable);
+    bool FreeFullRespecAvailable,
+    IReadOnlyList<P6SkillSchemeSnapshot>? SkillSchemes = null,
+    P6SkillSchemeKind ActiveSkillScheme = P6SkillSchemeKind.Clear);
 
 public sealed class P2ManagementState
 {
@@ -117,6 +131,7 @@ public sealed class P2ManagementState
     private readonly List<SkillStoneInstance> _skillStones = [];
     private readonly List<SkillLinkConfiguration> _skillLinks = [];
     private readonly List<string> _operationHistory = [];
+    private readonly Dictionary<P6SkillSchemeKind, IReadOnlyList<SkillLinkConfiguration>> _skillSchemes = [];
     private long _operationSequence;
 
     public IReadOnlyList<ItemInstance> SortingBag => _sortingBag;
@@ -135,6 +150,8 @@ public sealed class P2ManagementState
         .ToArray();
     public IReadOnlyList<string> OperationHistory => _operationHistory;
     public bool FreeFullRespecAvailable { get; private set; }
+    public P6SkillSchemeKind ActiveSkillScheme { get; private set; } = P6SkillSchemeKind.Clear;
+    public IReadOnlyDictionary<P6SkillSchemeKind, IReadOnlyList<SkillLinkConfiguration>> SkillSchemes => _skillSchemes;
 
     public static P2ManagementState CreateNew()
     {
@@ -157,6 +174,7 @@ public sealed class P2ManagementState
         state._skillLinks.Add(new SkillLinkConfiguration(earthCleave, [], 2, P5SkillChainIds.WeaponSecondary));
         state._skillLinks.Add(new SkillLinkConfiguration(spiritBlade, [chain], 3, P5SkillChainIds.Chest));
         state._skillLinks.Add(new SkillLinkConfiguration(warCry, [], 4, P5SkillChainIds.HelmetTool));
+        state.SaveAllSchemesFromCurrent();
         return state;
     }
 
@@ -174,6 +192,11 @@ public sealed class P2ManagementState
             state._operationHistory.AddRange(snapshot.OperationHistory.TakeLast(HistoryCapacity));
             state._operationSequence = Math.Max(snapshot.OperationSequence, 0);
             state.FreeFullRespecAvailable = snapshot.FreeFullRespecAvailable;
+            state.ActiveSkillScheme = snapshot.ActiveSkillScheme;
+            foreach (P6SkillSchemeSnapshot scheme in snapshot.SkillSchemes ?? [])
+            {
+                state._skillSchemes[scheme.Kind] = CloneLinks(scheme.Links);
+            }
         }
 
         if (legacyMigration)
@@ -193,6 +216,10 @@ public sealed class P2ManagementState
         state.EnsureP4SkillLink("core.skill_stone.earth_cleave", 2);
         state.EnsureP4SkillLink("core.skill_stone.spirit_blade", 3, "core.skill_stone.chain");
         state.EnsureP4SkillLink("core.skill_stone.war_cry", 4);
+        if (state._skillSchemes.Count == 0)
+        {
+            state.SaveAllSchemesFromCurrent();
+        }
 
         return state;
     }
@@ -219,7 +246,9 @@ public sealed class P2ManagementState
         _skillLinks.ToArray(),
         _operationHistory.ToArray(),
         _operationSequence,
-        FreeFullRespecAvailable);
+        FreeFullRespecAvailable,
+        _skillSchemes.Select(pair => new P6SkillSchemeSnapshot(pair.Key, CloneLinks(pair.Value))).ToArray(),
+        ActiveSkillScheme);
 
     public bool TryAddToSortingBag(ItemInstance item)
     {
@@ -604,13 +633,63 @@ public sealed class P2ManagementState
     public void AddSkillExperience(int amount)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(amount);
+        IReadOnlySet<string> installed = EffectiveInstalledStoneIds();
         for (int index = 0; index < _skillStones.Count; index++)
         {
             SkillStoneInstance stone = _skillStones[index];
+            if (!installed.Contains(stone.InstanceId) || stone.Level >= 20)
+            {
+                continue;
+            }
             int total = checked(stone.Experience + amount);
             int level = Math.Min(20, 1 + total / 1_000);
-            _skillStones[index] = stone with { Level = level, Experience = total };
+            _skillStones[index] = stone with { Level = level, Experience = level >= 20 ? Math.Min(total, 19_000) : total };
         }
+    }
+
+    public bool ConfigureSkill(
+        string activeStoneInstanceId,
+        int priority,
+        SkillAiRule aiRule,
+        bool reservationEnabled)
+    {
+        SkillLinkConfiguration? link = _skillLinks.FirstOrDefault(item => item.ActiveStoneInstanceId == activeStoneInstanceId);
+        if (link is null || priority is < 1 or > 999)
+        {
+            return false;
+        }
+        ReplaceLink(link, link with { Priority = priority, AiRule = aiRule, ReservationEnabled = reservationEnabled });
+        return true;
+    }
+
+    public void SaveSkillScheme(P6SkillSchemeKind kind)
+    {
+        _skillSchemes[kind] = CloneLinks(_skillLinks);
+        ActiveSkillScheme = kind;
+        AddHistory($"已保存{kind}技能方案。");
+    }
+
+    public P6SchemeSwitchResult SwitchSkillScheme(
+        P6SkillSchemeKind kind,
+        IReadOnlyList<P5SkillChainDefinition> chains)
+    {
+        if (!_skillSchemes.TryGetValue(kind, out IReadOnlyList<SkillLinkConfiguration>? saved))
+        {
+            return new P6SchemeSwitchResult(false, 0, 0, "技能方案不存在。");
+        }
+        HashSet<string> owned = _skillStones.Select(stone => stone.InstanceId).ToHashSet(StringComparer.Ordinal);
+        int missing = saved.SelectMany(SocketIds).Count(id => !string.IsNullOrEmpty(id) && !owned.Contains(id));
+        _skillLinks.Clear();
+        _skillLinks.AddRange(CloneLinks(saved).Select(link => link with
+        {
+            SocketStoneInstanceIds = link.SocketStoneInstanceIds?.Select(id =>
+                string.IsNullOrEmpty(id) || owned.Contains(id) ? id : null).ToArray(),
+        }));
+        int ejected = NormalizeSkillChains(chains);
+        ActiveSkillScheme = kind;
+        AddHistory($"已切换到{kind}技能方案；缺失 {missing}，弹出 {ejected}。 ");
+        return new P6SchemeSwitchResult(true, missing, ejected,
+            missing + ejected == 0 ? "技能方案已完整切换。" : $"已恢复可完成部分：缺失 {missing}，弹出 {ejected}。");
     }
 
     public void AddHistory(string message)
@@ -636,6 +715,45 @@ public sealed class P2ManagementState
         _sortingBag.Any(item => item.InstanceId == instanceId) ||
         _recovery.Any(item => item.InstanceId == instanceId) ||
         _buyback.Any(entry => entry.Item.InstanceId == instanceId);
+
+    private IReadOnlySet<string> EffectiveInstalledStoneIds()
+    {
+        var result = new HashSet<string>(StringComparer.Ordinal);
+        foreach (SkillLinkConfiguration link in _skillLinks.Where(link => !string.IsNullOrEmpty(link.ChainId) &&
+                     !string.IsNullOrEmpty(link.ActiveStoneInstanceId)))
+        {
+            SkillStoneInstance? active = Stone(link.ActiveStoneInstanceId);
+            if (active is null)
+            {
+                continue;
+            }
+            result.Add(active.InstanceId);
+            foreach (string supportId in link.SupportStoneInstanceIds)
+            {
+                SkillStoneInstance? support = Stone(supportId);
+                if (support is not null && P6SkillCompatibility.Check(active.Definition, support.Definition).Compatible)
+                {
+                    result.Add(support.InstanceId);
+                }
+            }
+        }
+        return result;
+    }
+
+    private void SaveAllSchemesFromCurrent()
+    {
+        foreach (P6SkillSchemeKind kind in Enum.GetValues<P6SkillSchemeKind>())
+        {
+            _skillSchemes[kind] = CloneLinks(_skillLinks);
+        }
+    }
+
+    private static IReadOnlyList<SkillLinkConfiguration> CloneLinks(IEnumerable<SkillLinkConfiguration> links) => links
+        .Select(link => link with
+        {
+            SupportStoneInstanceIds = link.SupportStoneInstanceIds.ToArray(),
+            SocketStoneInstanceIds = link.SocketStoneInstanceIds?.ToArray(),
+        }).ToArray();
 
     private void ReplaceLink(SkillLinkConfiguration previous, SkillLinkConfiguration next)
     {
@@ -686,7 +804,7 @@ public sealed class P2ManagementState
             .Select(stone => stone!.InstanceId)
             .ToArray();
         return new SkillLinkConfiguration(activeId, supports, previous?.Priority ?? _skillLinks.Count + 1,
-            chainId, sockets.ToArray());
+            chainId, sockets.ToArray(), previous?.AiRule, previous?.ReservationEnabled ?? true);
     }
 
     private void UpsertSocketLink(SkillLinkConfiguration? previous, string chainId, IReadOnlyList<string?> sockets)

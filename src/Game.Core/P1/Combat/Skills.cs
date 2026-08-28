@@ -45,7 +45,27 @@ public static class P1SkillIds
     public const string IronOathBanner = "core.skill.iron_oath_banner";
 }
 
-public sealed record SkillConfiguration(string SkillId, SkillSupport Supports);
+public sealed record SkillAiRule(
+    bool MatchAll = true,
+    int MinimumLifeBasisPoints = 0,
+    int MinimumManaBasisPoints = 0,
+    int MinimumEnemyCount = 1,
+    string EnemyRarity = "任意",
+    int MinimumDistanceRaw = 0,
+    int MaximumDistanceRaw = 30_000,
+    int DangerThreshold = 0,
+    bool BossOnly = false,
+    bool Engage = false,
+    bool Pursue = false,
+    bool EscapeDanger = false);
+
+public sealed record SkillConfiguration(
+    string SkillId,
+    SkillSupport Supports,
+    int Priority = 50,
+    SkillAiRule? AiRule = null,
+    int Level = 1,
+    string StoneInstanceId = "");
 
 public sealed record SkillDefinition(
     string StableId,
@@ -135,6 +155,7 @@ public sealed class WarCryState
     public int EmpoweredHeavyStrikes { get; private set; }
     public int ExpireTick { get; private set; } = -1;
     public bool EchoNotableAllocated { get; set; }
+    public bool IsReady => CooldownRemainingTicks <= 0;
     public int ManaCost { get; set; } = P1Skills.WarCry.BaseManaCost;
     public int CooldownDurationTicks { get; set; } = P1Skills.WarCry.CooldownTicks;
     public int EffectMultiplierBasisPoints { get; set; } = 10_000;
@@ -194,6 +215,10 @@ public static class SkillRules
         int bleedChance = 0;
         int increasedAttackSpeed = additionalIncreasedAttackSpeedBasisPoints;
         var moreMultipliers = new List<int> { 14_000 };
+        if (configuration.Level > 1)
+        {
+            moreMultipliers.Add(checked(10_000 + (Math.Clamp(configuration.Level, 1, 20) - 1) * 250));
+        }
 
         if (configuration.Supports.HasFlag(SkillSupport.IncreasedArea))
         {

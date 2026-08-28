@@ -365,6 +365,10 @@ public sealed class P1GameSession
         {
             Management.AddDroppedSkillStone(Seed ^ ((ulong)SimulationSequence << 32) ^ (uint)index);
         }
+        if (result.TotalMapsCompleted > 0)
+        {
+            Management.AddSkillExperience(checked(result.TotalMapsCompleted * 120));
+        }
 
         RefreshHeroTeamBuild();
         return result;
@@ -472,6 +476,35 @@ public sealed class P1GameSession
             RefreshHeroBuild();
         }
         return changed;
+    }
+
+    public bool ConfigureActiveSkill(string activeStoneInstanceId, int priority, SkillAiRule aiRule, bool reservationEnabled)
+    {
+        bool changed = Management.ConfigureSkill(activeStoneInstanceId, priority, aiRule, reservationEnabled);
+        if (changed)
+        {
+            RefreshHeroTeamBuild();
+        }
+        return changed;
+    }
+
+    public bool CanSwitchSkillScheme => Campaign.Completed && World.Hero.ActiveMap is null;
+
+    public void SaveSkillScheme(P6SkillSchemeKind kind) => Management.SaveSkillScheme(kind);
+
+    public P6SchemeSwitchResult SwitchSkillScheme(P6SkillSchemeKind kind)
+    {
+        if (!CanSwitchSkillScheme)
+        {
+            return new P6SchemeSwitchResult(false, 0, 0, "只能在主线完成后的城镇或主角队空闲时切换方案。");
+        }
+        P6SchemeSwitchResult result = Management.SwitchSkillScheme(kind, GetSkillChains());
+        if (result.Succeeded)
+        {
+            HeavyStrikeSupports = SupportsFor("core.skill_stone.heavy_strike");
+            RefreshHeroBuild();
+        }
+        return result;
     }
 
     public void AssignExpedition(
@@ -772,11 +805,25 @@ public sealed class P1GameSession
     private IReadOnlyList<SkillConfiguration> BuildActiveSkills() => Management.SkillLinks
         .Where(link => !string.IsNullOrEmpty(link.ChainId) && !string.IsNullOrEmpty(link.ActiveStoneInstanceId))
         .OrderBy(link => link.Priority)
-        .Select(link => Management.SkillStones.Single(stone => stone.InstanceId == link.ActiveStoneInstanceId))
-        .Where(stone => stone.DefinitionId != "core.skill_stone.war_cry")
-        .Select(stone => new SkillConfiguration(ToCombatSkillId(stone.DefinitionId), SupportsFor(stone.DefinitionId)))
+        .Select(link => (Link: link, Stone: Management.SkillStones.Single(stone => stone.InstanceId == link.ActiveStoneInstanceId)))
+        .Where(entry => entry.Stone.DefinitionId != "core.skill_stone.iron_oath_banner" || entry.Link.ReservationEnabled)
+        .Select(entry => new SkillConfiguration(
+            ToCombatSkillId(entry.Stone.DefinitionId),
+            SupportsFor(entry.Stone.DefinitionId),
+            entry.Link.Priority,
+            entry.Link.AiRule ?? GlobalSkillRule(),
+            entry.Stone.Level,
+            entry.Stone.InstanceId))
         .Where(configuration => !string.IsNullOrEmpty(configuration.SkillId))
         .ToArray();
+
+    private SkillAiRule GlobalSkillRule() => new(
+        MatchAll: HeroAi.MatchMode == AiRuleMatchMode.All,
+        MinimumEnemyCount: HeroAi.MinimumEnemyCount,
+        EnemyRarity: HeroAi.EnemyRarity,
+        MaximumDistanceRaw: HeroAi.MaximumEnemyDistance * 1_000,
+        DangerThreshold: HeroAi.DangerThreshold,
+        BossOnly: HeroAi.BossPriority);
 
     private SkillSupport SupportsFor(string activeDefinitionId)
     {

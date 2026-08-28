@@ -1,4 +1,5 @@
 using GameForWork.Core.P1;
+using GameForWork.Core.P1.Combat;
 using GameForWork.Core.P2;
 using GameForWork.Core.P5;
 using Godot;
@@ -43,9 +44,19 @@ public partial class P2SkillStonePanel : VBoxContainer
         var schemes = new HFlowContainer();
         AddChild(schemes);
         schemes.AddChild(new Label { Text = "技能方案：" });
-        foreach (string name in new[] { "清图", "Boss", "自定义" })
+        foreach ((P6SkillSchemeKind kind, string name) in new[]
+                 {
+                     (P6SkillSchemeKind.Clear, "清图"),
+                     (P6SkillSchemeKind.Boss, "Boss"),
+                     (P6SkillSchemeKind.Custom, "自定义"),
+                 })
         {
-            schemes.AddChild(new Button { Text = name, Disabled = true, TooltipText = "P6 第四批开放方案切换" });
+            var switchButton = new Button { Text = $"切换{name}" };
+            switchButton.Pressed += () => SwitchScheme(kind);
+            schemes.AddChild(switchButton);
+            var saveButton = new Button { Text = $"保存{name}" };
+            saveButton.Pressed += () => SaveScheme(kind);
+            schemes.AddChild(saveButton);
         }
         _errors = new Label { AutowrapMode = TextServer.AutowrapMode.WordSmart };
         AddChild(_errors);
@@ -130,6 +141,10 @@ public partial class P2SkillStonePanel : VBoxContainer
                 panel.AddChild(new Label { Text = "等待主动技能 · 当前整组不产生战斗效果", Modulate = new Color("d39b58") });
                 invalid.Add($"{chain.DisplayName} 等待主动技能");
             }
+            if (link is not null && !string.IsNullOrEmpty(link.ActiveStoneInstanceId))
+            {
+                panel.AddChild(BuildAiEditor(session, link));
+            }
             _groups.AddChild(panel);
         }
         if (chains.Count == 0)
@@ -165,6 +180,60 @@ public partial class P2SkillStonePanel : VBoxContainer
             $"标签：{(stone.Definition.Kind == SkillStoneKind.Active ? stone.Definition.Tags : stone.Definition.SupportedTags)}\n" +
             $"{stone.Definition.Description}\n\n" +
             $"实例 ID：{stone.InstanceId}\n来源：{(stone.InstanceId.StartsWith("starter-", StringComparison.Ordinal) ? "初始技能" : "战斗掉落")}";
+    }
+
+    private Control BuildAiEditor(P1GameSession session, SkillLinkConfiguration link)
+    {
+        SkillAiRule rule = link.AiRule ?? new SkillAiRule();
+        var row = new HFlowContainer();
+        var priority = new SpinBox { MinValue = 1, MaxValue = 999, Value = link.Priority, Prefix = "优先 " };
+        var life = new SpinBox { MinValue = 0, MaxValue = 100, Value = rule.MinimumLifeBasisPoints / 100, Prefix = "生命≥", Suffix = "%" };
+        var mana = new SpinBox { MinValue = 0, MaxValue = 100, Value = rule.MinimumManaBasisPoints / 100, Prefix = "法力≥", Suffix = "%" };
+        var enemies = new SpinBox { MinValue = 1, MaxValue = 24, Value = rule.MinimumEnemyCount, Prefix = "敌数≥" };
+        var minimumDistance = new SpinBox { MinValue = 0, MaxValue = 30, Value = rule.MinimumDistanceRaw / 1_000, Prefix = "距离≥" };
+        var maximumDistance = new SpinBox { MinValue = 1, MaxValue = 30, Value = Math.Max(1, rule.MaximumDistanceRaw / 1_000), Prefix = "≤" };
+        var danger = new SpinBox { MinValue = 0, MaxValue = 100, Value = rule.DangerThreshold, Prefix = "危险≥" };
+        var boss = new CheckBox { Text = "仅Boss", ButtonPressed = rule.BossOnly };
+        var matchAll = new CheckBox { Text = "全部满足", ButtonPressed = rule.MatchAll };
+        SkillStoneInstance activeStone = session.Management.SkillStones.Single(stone => stone.InstanceId == link.ActiveStoneInstanceId);
+        var reservation = new CheckBox
+        {
+            Text = "启用保留",
+            ButtonPressed = link.ReservationEnabled,
+            Visible = activeStone.Definition.Tags.HasFlag(SkillTag.Reservation),
+        };
+        row.AddChild(priority); row.AddChild(life); row.AddChild(mana); row.AddChild(enemies);
+        row.AddChild(minimumDistance); row.AddChild(maximumDistance); row.AddChild(danger); row.AddChild(boss); row.AddChild(matchAll); row.AddChild(reservation);
+        var apply = new Button { Text = "应用技能AI" };
+        apply.Pressed += () =>
+        {
+            bool changed = session.ConfigureActiveSkill(link.ActiveStoneInstanceId, (int)priority.Value,
+                new SkillAiRule(matchAll.ButtonPressed, (int)life.Value * 100, (int)mana.Value * 100,
+                    (int)enemies.Value, "任意", (int)minimumDistance.Value * 1_000,
+                    (int)maximumDistance.Value * 1_000, (int)danger.Value, boss.ButtonPressed),
+                reservation.ButtonPressed);
+            _changed?.Invoke(changed ? "技能优先级与 AI 条件已更新；下个节点生效。" : "技能 AI 配置无效。");
+            _signature = string.Empty;
+            RefreshState();
+        };
+        row.AddChild(apply);
+        return row;
+    }
+
+    private void SaveScheme(P6SkillSchemeKind kind)
+    {
+        if (_session is null) return;
+        _session().SaveSkillScheme(kind);
+        _changed?.Invoke($"已保存 {kind} 技能方案。");
+    }
+
+    private void SwitchScheme(P6SkillSchemeKind kind)
+    {
+        if (_session is null) return;
+        P6SchemeSwitchResult result = _session().SwitchSkillScheme(kind);
+        _changed?.Invoke(result.Message);
+        _signature = string.Empty;
+        RefreshState();
     }
 
     private static P2SkillStoneButton StoneButton(SkillStoneInstance stone) => new()

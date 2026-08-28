@@ -133,6 +133,62 @@ public sealed class P6FeatureTests
         Assert.Contains(dropped, session.Management.UninstalledSkillStones);
     }
 
+    [Fact]
+    public void OnlyEffectiveInstalledSkillStonesGainExperience()
+    {
+        P1GameSession session = CreateSession();
+        SkillStoneInstance installed = session.Management.SkillStones.First(stone =>
+            session.Management.InstalledSkillStoneIds.Contains(stone.InstanceId));
+        SkillStoneInstance uninstalled = session.Management.UninstalledSkillStones.First();
+
+        session.Management.AddSkillExperience(1_100);
+
+        Assert.Equal(2, session.Management.SkillStones.Single(stone => stone.InstanceId == installed.InstanceId).Level);
+        Assert.Equal(1, session.Management.SkillStones.Single(stone => stone.InstanceId == uninstalled.InstanceId).Level);
+        Assert.Equal(0, session.Management.SkillStones.Single(stone => stone.InstanceId == uninstalled.InstanceId).Experience);
+    }
+
+    [Fact]
+    public void AiEnemyCountConditionGatesRealSkillExecution()
+    {
+        P1TeamBuild baseBuild = AiBuild(new SkillAiRule(MinimumEnemyCount: 20));
+        P4NodeCombatResult blocked = new P4SpatialCombatRunner().Run(new P4NodeCombatRequest(
+            baseBuild, 1, 5, 8, false, false, false, 0, MaximumTicks: 120), 81);
+        P4NodeCombatResult enabled = new P4SpatialCombatRunner().Run(new P4NodeCombatRequest(
+            AiBuild(new SkillAiRule(MinimumEnemyCount: 1)), 1, 5, 8, false, false, false, 0, MaximumTicks: 120), 81);
+
+        Assert.DoesNotContain(blocked.Events, item => item.Kind == P4SpatialEventKind.HeavyStrike);
+        Assert.Contains(enabled.Events, item => item.Kind == P4SpatialEventKind.HeavyStrike);
+    }
+
+    [Fact]
+    public void SkillSchemesPreserveSocketLayoutAndAiRules()
+    {
+        P1GameSession session = CreateSession();
+        SkillLinkConfiguration original = session.Management.SkillLinks.First(link => !string.IsNullOrEmpty(link.ChainId));
+        Assert.True(session.ConfigureActiveSkill(original.ActiveStoneInstanceId, 77,
+            new SkillAiRule(MinimumEnemyCount: 4, MaximumDistanceRaw: 5_000), true));
+        session.Management.SaveSkillScheme(P6SkillSchemeKind.Custom);
+        Assert.True(session.ConfigureActiveSkill(original.ActiveStoneInstanceId, 3, new SkillAiRule(), true));
+
+        P6SchemeSwitchResult result = session.Management.SwitchSkillScheme(P6SkillSchemeKind.Custom, session.GetSkillChains());
+
+        Assert.True(result.Succeeded);
+        SkillLinkConfiguration restored = session.Management.SkillLinks.Single(link =>
+            link.ActiveStoneInstanceId == original.ActiveStoneInstanceId);
+        Assert.Equal(77, restored.Priority);
+        Assert.Equal(4, restored.AiRule!.MinimumEnemyCount);
+    }
+
+    private static P1TeamBuild AiBuild(SkillAiRule rule) => new(
+        new CharacterSheet(60, new CharacterAttributes(250, 160, 140, 120),
+            new DefensiveEquipment(700, 160, 220), FlatMaximumLife: 1_600),
+        new WeaponProfile("test.p6.ai", 160, 220, 1_700, 1_000),
+        new SkillConfiguration(P1SkillIds.HeavyStrike, SkillSupport.None, 1, rule),
+        FlatAccuracy: 1_200,
+        IncreasedDamageBasisPoints: 4_000,
+        ActiveSkills: [new SkillConfiguration(P1SkillIds.HeavyStrike, SkillSupport.None, 1, rule)]);
+
     private static P1GameSession CreateSession() => P1GameSession.CreateNew(new PlayerIdentity(
         "孔铸者", CharacterGender.Androgynous, CharacterSkinTone.Umber,
         CharacterHairStyle.Braided, P1Ascendancy.IronOath), 0x6060);
