@@ -121,6 +121,14 @@ public partial class P5ExpeditionPanel : VBoxContainer
         }
 
         P1GameSession session = _session();
+        int visibleMapCount = Math.Min(40, session.World.MapInventory.Count);
+        for (int index = 0; index < visibleMapCount; index++)
+        {
+            P1MapItem source = session.World.MapInventory[index];
+            P1MapItem formal = source.EnsureFormal(session.Seed ^ (ulong)index);
+            if (!ReferenceEquals(source, formal)) session.World.MapInventory[index] = formal;
+        }
+        P1MapItem[] visibleMaps = session.World.MapInventory.Take(visibleMapCount).ToArray();
         _resources.Text =
             $"地图 {session.World.MapInventory.Count}　深渊监守者碎片 {session.World.Expedition.AbyssWardenFragments}/{P5ExpeditionDirector.FragmentsPerTicket}　" +
             $"Boss 门票 {session.World.Expedition.AbyssWardenTickets}　远征补给 {session.World.Economy.ExpeditionSupplies}";
@@ -132,10 +140,9 @@ public partial class P5ExpeditionPanel : VBoxContainer
             _mapSignature = mapSignature;
             Clear(_mapInventory);
             if (_selectedMapIndex >= session.World.MapInventory.Count) _selectedMapIndex = session.World.MapInventory.Count - 1;
-            foreach ((P1MapItem raw, int index) in session.World.MapInventory.Select((map, index) => (map, index)).Take(40))
+            for (int index = 0; index < visibleMaps.Length; index++)
             {
-                P1MapItem map = raw.EnsureFormal(session.Seed ^ (ulong)index);
-                session.World.MapInventory[index] = map;
+                P1MapItem map = visibleMaps[index];
                 P12MapArea area = P12MapCatalog.Get(map.AreaId);
                 var button = new Button
                 {

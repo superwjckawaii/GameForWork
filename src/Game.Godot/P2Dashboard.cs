@@ -1202,7 +1202,8 @@ public partial class P2Dashboard : VBoxContainer
         SetHidden(_mainTabs!, _expeditionPage!, !session.Campaign.Completed);
         if (_characterModes is not null)
         {
-            SetHidden(_characterModes, _skillMode!, step < JourneyIndex(P8JourneyStep.InspectSkills));
+            // Core build pages remain available from the start; the journey guides without hiding them.
+            SetHidden(_characterModes, _skillMode!, hidden: false);
             SetHidden(_characterModes, _passiveMode!, step < JourneyIndex(P8JourneyStep.AllocatePassive));
             SetHidden(_characterModes, _aiMode!, step <= JourneyIndex(P8JourneyStep.ConfigureSkillTarget));
         }
