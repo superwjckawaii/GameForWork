@@ -37,7 +37,7 @@ public partial class P3PixelTitleBar : PanelContainer
         AddChild(row);
         var drag = new Button
         {
-            Text = "◆ 暗门远征 · GameForWork P5",
+            Text = "◆ 暗门远征 · GameForWork P6",
             Flat = true,
             FocusMode = FocusModeEnum.None,
             SizeFlagsHorizontal = SizeFlags.ExpandFill,
