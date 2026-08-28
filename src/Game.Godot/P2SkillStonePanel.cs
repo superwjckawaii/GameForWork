@@ -33,19 +33,19 @@ public partial class P2SkillStonePanel : VBoxContainer
         _compactStack = new VBoxContainer { Visible = false, SizeFlagsHorizontal = SizeFlags.ExpandFill, SizeFlagsVertical = SizeFlags.ExpandFill };
         _compactStack.AddThemeConstantOverride("separation", 10);
         AddChild(_compactStack);
-        _inventoryColumn = Column(_wideColumns, "技能石背包", 240);
+        _inventoryColumn = Column(_wideColumns, "技能石背包", 600);
         var inventoryScroll = new ScrollContainer { SizeFlagsVertical = SizeFlags.ExpandFill, SizeFlagsHorizontal = SizeFlags.ExpandFill };
-        _inventoryColumn.AddChild(inventoryScroll);
+        _inventoryColumn.AddChild(FramedScroll(inventoryScroll));
         var inventoryBody = new VBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
         inventoryScroll.AddChild(inventoryBody);
-        _inventory = new GridContainer { Columns = 5, SizeFlagsHorizontal = SizeFlags.ExpandFill };
+        _inventory = new GridContainer { Columns = 12, SizeFlagsHorizontal = SizeFlags.ExpandFill };
         _inventory.AddThemeConstantOverride("h_separation", 4);
         _inventory.AddThemeConstantOverride("v_separation", 4);
         inventoryBody.AddChild(_inventory);
         inventoryBody.AddChild(new Control { CustomMinimumSize = new Vector2(0, 12), MouseFilter = MouseFilterEnum.Ignore });
         _groupsColumn = Column(_wideColumns, "当前装备孔组", 340);
         var groupScroll = new ScrollContainer { SizeFlagsVertical = SizeFlags.ExpandFill, SizeFlagsHorizontal = SizeFlags.ExpandFill };
-        _groupsColumn.AddChild(groupScroll);
+        _groupsColumn.AddChild(FramedScroll(groupScroll));
         var groupBody = new VBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
         groupScroll.AddChild(groupBody);
         _groups = new VBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
@@ -95,7 +95,8 @@ public partial class P2SkillStonePanel : VBoxContainer
                 CustomMinimumSize = new Vector2(44, 44),
             });
         }
-        for (int index = stones.Length; index < 30; index++)
+        int visibleSlots = Math.Max(36, ((stones.Length + 11) / 12) * 12);
+        for (int index = stones.Length; index < visibleSlots; index++)
             _inventory.AddChild(new Button { Disabled = true, CustomMinimumSize = new Vector2(44, 44) });
 
         var invalid = new List<string>();
@@ -187,7 +188,7 @@ public partial class P2SkillStonePanel : VBoxContainer
 
     private void QueueResponsiveLayout()
     {
-        bool compact = Size.X > 0 && Size.X < 690;
+        bool compact = Size.X > 0 && Size.X < 960;
         if (compact == _compact) return;
         _compact = compact;
         Callable.From(ApplyResponsiveLayout).CallDeferred();
@@ -234,6 +235,18 @@ public partial class P2SkillStonePanel : VBoxContainer
     }
 
     private static void Clear(Node node) { foreach (Node child in node.GetChildren()) child.QueueFree(); }
+
+    private static PanelContainer FramedScroll(ScrollContainer scroll)
+    {
+        var panel = new PanelContainer
+        {
+            SizeFlagsHorizontal = SizeFlags.ExpandFill,
+            SizeFlagsVertical = SizeFlags.ExpandFill,
+        };
+        panel.AddThemeStyleboxOverride("panel", Frame());
+        panel.AddChild(scroll);
+        return panel;
+    }
 
     private static StyleBoxFlat Frame() => new()
     {

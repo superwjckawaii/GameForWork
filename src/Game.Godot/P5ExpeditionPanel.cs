@@ -149,17 +149,18 @@ public partial class P5ExpeditionPanel : VBoxContainer
             if (_selectedMapIndex >= session.World.MapInventory.Count) _selectedMapIndex = session.World.MapInventory.Count - 1;
             for (int index = 0; index < visibleMaps.Length; index++)
             {
+                int mapIndex = index;
                 P1MapItem map = visibleMaps[index];
-                P12MapArea area = P12MapCatalog.Get(map.AreaId);
+                P12MapArea area = ResolveArea(map);
                 var button = new Button
                 {
                     Text = $"{RarityMark(map.Rarity)} T{map.AreaLevel} {area.DisplayName}　Q{map.Quality}" + (map.IsCorrupted ? "　腐化" : string.Empty),
                     Alignment = HorizontalAlignment.Left,
                     TooltipText = DescribeMap(map),
-                    ButtonPressed = index == _selectedMapIndex,
+                    ButtonPressed = mapIndex == _selectedMapIndex,
                     ToggleMode = true,
                 };
-                button.Pressed += () => { _selectedMapIndex = index; _mapSignature = string.Empty; RefreshState(); };
+                button.Pressed += () => { _selectedMapIndex = mapIndex; _mapSignature = string.Empty; RefreshState(); };
                 _mapInventory.AddChild(button);
             }
             if (session.World.MapInventory.Count == 0) _mapInventory.AddChild(new Label { Text = "地图仓库为空" });
@@ -415,13 +416,18 @@ public partial class P5ExpeditionPanel : VBoxContainer
 
     private static string DescribeMap(P1MapItem map)
     {
-        P12MapArea area = P12MapCatalog.Get(map.AreaId);
+        P12MapArea area = ResolveArea(map);
         string affixes = map.EffectiveAffixes.Count == 0 ? "无显式词缀" :
             string.Join("；", map.EffectiveAffixes.Select(affix => $"{affix.DisplayName} {affix.Value}%"));
         string routes = string.Join(" / ", map.EffectiveRouteCandidates.Select(RouteName));
         string altar = map.Altar switch { P12MapAltar.RedOath => "赤誓祭坛", P12MapAltar.BlueOath => "苍誓祭坛", _ => "无祭坛" };
         return $"{area.DisplayName} · {area.Environment} · Boss {area.BossName}\n{RarityMark(map.Rarity)} · 品质 {map.Quality}% · 危险 {map.DangerRating} · 掉落量 {map.ItemQuantityBasisPoints / 100.0:0}%\n{affixes}\n候选 {routes} · {altar}";
     }
+
+    private static P12MapArea ResolveArea(P1MapItem map) =>
+        P12MapCatalog.TryGet(map.AreaId, out P12MapArea area)
+            ? area
+            : new P12MapArea(map.AreaId, "未登记路印", "未知区域", "未知敌群", "未知首领");
 
     private static string RarityMark(P12MapRarity rarity) => rarity switch
     { P12MapRarity.Basic => "普通", P12MapRarity.Magic => "魔法", _ => "稀有" };

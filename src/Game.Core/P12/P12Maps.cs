@@ -62,6 +62,13 @@ public static class P12MapCatalog
     ];
 
     public static P12MapArea Get(string id) => Areas.First(area => area.StableId == id);
+
+    public static bool TryGet(string? id, out P12MapArea area)
+    {
+        P12MapArea? found = Areas.FirstOrDefault(candidate => candidate.StableId == id);
+        area = found!;
+        return found is not null;
+    }
 }
 
 public static class P12MapRules
@@ -91,7 +98,7 @@ public static class P12MapRules
     public static P1MapItem EnsureFormal(P1MapItem map, ulong seed)
     {
         ArgumentNullException.ThrowIfNull(map);
-        if (!string.IsNullOrWhiteSpace(map.AreaId) && map.EffectiveRouteCandidates.Count > 0)
+        if (P12MapCatalog.TryGet(map.AreaId, out _) && map.EffectiveRouteCandidates.Count > 0)
             return map.Validate();
         ulong stableSeed = StableSeed(seed, map.InstanceId, map.AreaLevel);
         var random = new Pcg32(stableSeed);

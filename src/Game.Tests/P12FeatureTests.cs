@@ -25,6 +25,22 @@ public sealed class P12FeatureTests
     }
 
     [Fact]
+    public void FormalMapGenerationReplacesUnknownLegacyAreaId()
+    {
+        var legacy = new P1MapItem(
+            "legacy-map",
+            6,
+            AreaId: "legacy.unknown.area",
+            RouteCandidates: [MapRoute.Safe]);
+
+        P1MapItem formal = legacy.EnsureFormal(91);
+
+        Assert.True(P12MapCatalog.TryGet(formal.AreaId, out _));
+        Assert.NotEqual(legacy.AreaId, formal.AreaId);
+        Assert.InRange(formal.EffectiveRouteCandidates.Count, 1, 3);
+    }
+
+    [Fact]
     public void MapCraftingConsumesTheMatchingMetalAndLocksAfterCorruption()
     {
         var economy = EconomyWith(P12MapCraftOperation.AlchemicalRare, P12MapCraftOperation.Corrupt);

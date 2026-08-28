@@ -118,7 +118,14 @@ public sealed class WindowController : IDisposable
             _standardPosition = DisplayServer.WindowGetPosition();
         }
 
-        _window.Hide();
+        if (OperatingSystem.IsWindows())
+        {
+            _ = ShowWindow(GetNativeWindowHandle(), SwHide);
+        }
+        else
+        {
+            DisplayServer.WindowSetMode(DisplayServer.WindowMode.Minimized);
+        }
         IsHiddenToTray = true;
     }
 
@@ -129,7 +136,14 @@ public sealed class WindowController : IDisposable
             return;
         }
 
-        _window.Show();
+        if (OperatingSystem.IsWindows())
+        {
+            _ = ShowWindow(GetNativeWindowHandle(), SwShow);
+        }
+        else
+        {
+            DisplayServer.WindowSetMode(DisplayServer.WindowMode.Windowed);
+        }
         IsHiddenToTray = false;
         EnsureVisible();
         DisplayServer.WindowMoveToForeground();
@@ -413,6 +427,8 @@ public sealed class WindowController : IDisposable
     private const int VkControl = 0x11;
     private const int VkMenu = 0x12;
     private const int VkH = 0x48;
+    private const int SwHide = 0;
+    private const int SwShow = 5;
 
     private static bool IsKeyDown(int key) => (GetAsyncKeyState(key) & 0x8000) != 0;
 
@@ -434,4 +450,8 @@ public sealed class WindowController : IDisposable
 
     [DllImport("user32.dll")]
     private static extern short GetAsyncKeyState(int virtualKey);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool ShowWindow(IntPtr window, int command);
 }
