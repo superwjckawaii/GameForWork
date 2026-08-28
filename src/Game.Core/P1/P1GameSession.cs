@@ -105,11 +105,12 @@ public sealed record P1GameSessionSnapshot(
     int SimulationSequence,
     P2ManagementSnapshot? Management = null,
     IReadOnlyList<EquippedItemSnapshot>? MercenaryEquipment = null,
-    P2CampaignSnapshot? Campaign = null);
+    P2CampaignSnapshot? Campaign = null,
+    P8DemoJourneySnapshot? Journey = null);
 
 public sealed class P1GameSession
 {
-    public const int CurrentFormatVersion = 9;
+    public const int CurrentFormatVersion = 10;
     private readonly P1WorldSimulator _simulator = new(new P1MapAttemptResolver());
     private readonly P2CampaignSimulator _campaignSimulator = new();
     private AssembledCharacterBuild _heroBuild;
@@ -125,6 +126,7 @@ public sealed class P1GameSession
         HeroAiConfiguration heroAi,
         P2ManagementState management,
         P2CampaignState campaign,
+        P8DemoJourney journey,
         ulong seed,
         int simulationSequence,
         bool debugTwentyTimes)
@@ -139,6 +141,7 @@ public sealed class P1GameSession
         HeroAi = heroAi.Validate();
         Management = management;
         Campaign = campaign;
+        Journey = journey;
         Seed = seed;
         SimulationSequence = simulationSequence;
         DebugTwentyTimes = debugTwentyTimes;
@@ -158,6 +161,7 @@ public sealed class P1GameSession
     public HeroAiConfiguration HeroAi { get; private set; }
     public P2ManagementState Management { get; }
     public P2CampaignState Campaign { get; }
+    public P8DemoJourney Journey { get; }
     public bool IsExpeditionUnlocked => Campaign.Completed;
     public bool DebugTwentyTimes { get; set; }
     public ulong Seed { get; }
@@ -165,7 +169,7 @@ public sealed class P1GameSession
     public AssembledCharacterBuild HeroBuild => _heroBuild;
     public int SimulationSpeed => DebugTwentyTimes ? 20 : 1;
 
-    public static P1GameSession CreateNew(PlayerIdentity player, ulong seed)
+    public static P1GameSession CreateNew(PlayerIdentity player, ulong seed, bool tutorialEnabled = true)
     {
         var equipment = new EquipmentLoadout();
         EquipStarter(equipment, EquipmentSlot.MainHand, "core.base.rusted_greatsword", seed + 1);
@@ -202,6 +206,7 @@ public sealed class P1GameSession
             HeroAiConfiguration.Balanced,
             P2ManagementState.CreateNew(),
             P2CampaignState.CreateNew(),
+            P8DemoJourney.CreateNew(tutorialEnabled),
             seed,
             simulationSequence: 0,
             debugTwentyTimes: false);
@@ -257,7 +262,7 @@ public sealed class P1GameSession
         {
             SynchronizeLegacyHeavySupports(management, snapshot.HeavyStrikeSupports);
         }
-        return new P1GameSession(
+        var session = new P1GameSession(
             snapshot.Player,
             snapshot.MercenaryName,
             world,
@@ -268,9 +273,12 @@ public sealed class P1GameSession
             snapshot.HeroAi ?? HeroAiConfiguration.Balanced,
             management,
             P2CampaignState.Restore(legacyP1Migration ? null : snapshot.Campaign, legacyP1Migration),
+            P8DemoJourney.Restore(snapshot.Journey, snapshot.FormatVersion < 10),
             snapshot.Seed,
             snapshot.SimulationSequence,
             snapshot.DebugTwentyTimes);
+        session.Journey.Synchronize(session);
+        return session;
     }
 
     public P1GameSessionSnapshot Capture() => new(
@@ -291,7 +299,8 @@ public sealed class P1GameSession
         SimulationSequence,
         Management.Capture(),
         MercenaryEquipment.Items.Select(pair => new EquippedItemSnapshot(pair.Key, pair.Value)).ToArray(),
-        Campaign.Capture());
+        Campaign.Capture(),
+        Journey.Capture());
 
     public P1OfflineResult Advance(long realElapsedMilliseconds)
     {
@@ -300,7 +309,10 @@ public sealed class P1GameSession
         long simulated = realElapsedMilliseconds > maximum / SimulationSpeed
             ? maximum
             : realElapsedMilliseconds * SimulationSpeed;
-        return AdvanceSimulated(simulated, offline: false, asyncPreparation: false);
+        Journey.AddElapsed(realElapsedMilliseconds, offline: false);
+        P1OfflineResult result = AdvanceSimulated(simulated, offline: false, asyncPreparation: false);
+        Journey.Synchronize(this);
+        return result;
     }
 
     public P1OfflineResult AdvanceResponsive(long realElapsedMilliseconds)
@@ -310,15 +322,20 @@ public sealed class P1GameSession
         long simulated = realElapsedMilliseconds > maximum / SimulationSpeed
             ? maximum
             : realElapsedMilliseconds * SimulationSpeed;
-        return AdvanceSimulated(simulated, offline: false, asyncPreparation: true);
+        Journey.AddElapsed(realElapsedMilliseconds, offline: false);
+        P1OfflineResult result = AdvanceSimulated(simulated, offline: false, asyncPreparation: true);
+        Journey.Synchronize(this);
+        return result;
     }
 
     public P1OfflineResult AdvanceOffline(long elapsedMilliseconds)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(elapsedMilliseconds);
-        return AdvanceSimulated(Math.Min(
-            elapsedMilliseconds,
-            GameForWork.Core.Offline.OfflineTime.MaximumMilliseconds), offline: true, asyncPreparation: false);
+        long effective = Math.Min(elapsedMilliseconds, GameForWork.Core.Offline.OfflineTime.MaximumMilliseconds);
+        Journey.AddElapsed(effective, offline: true);
+        P1OfflineResult result = AdvanceSimulated(effective, offline: true, asyncPreparation: false);
+        Journey.Synchronize(this);
+        return result;
     }
 
     public int AdvanceTownOnly(long realElapsedMilliseconds)
@@ -328,7 +345,10 @@ public sealed class P1GameSession
         long simulated = realElapsedMilliseconds > maximum / SimulationSpeed
             ? maximum
             : realElapsedMilliseconds * SimulationSpeed;
-        return World.Economy.AdvanceProduction(simulated);
+        Journey.AddElapsed(realElapsedMilliseconds, offline: false);
+        int produced = World.Economy.AdvanceProduction(simulated);
+        Journey.Synchronize(this);
+        return produced;
     }
 
     private P1OfflineResult AdvanceSimulated(long simulatedMilliseconds, bool offline, bool asyncPreparation)
@@ -528,7 +548,11 @@ public sealed class P1GameSession
                 DangerThreshold = 0,
             },
             link.ReservationEnabled);
-        if (changed) RefreshHeroTeamBuild();
+        if (changed)
+        {
+            RefreshHeroTeamBuild();
+            RecordJourneyEvent(P8JourneyEvent.ConfiguredSkillTarget);
+        }
         return changed;
     }
 
@@ -561,6 +585,13 @@ public sealed class P1GameSession
         World.Expedition.Assign(teamKind, target, mode);
         team.Resume();
         World.Expedition.PrepareNext(World, team);
+        Journey.Synchronize(this);
+    }
+
+    public void RecordJourneyEvent(P8JourneyEvent journeyEvent)
+    {
+        Journey.Record(journeyEvent);
+        Journey.Synchronize(this);
     }
 
     public void CancelExpedition(ExpeditionTeamKind teamKind)
@@ -583,6 +614,7 @@ public sealed class P1GameSession
         if (changed)
         {
             RefreshHeroBuild();
+            Journey.Synchronize(this);
         }
 
         return changed;
@@ -643,6 +675,7 @@ public sealed class P1GameSession
         {
             HeroEquipment.TryEquip(EquipmentSlot.MainHand, result.Item!);
             RefreshHeroBuild();
+            RecordJourneyEvent(P8JourneyEvent.CraftedItem);
         }
 
         return result;
@@ -661,6 +694,7 @@ public sealed class P1GameSession
         {
             World.Storage.TryReplaceAt(storageIndex, result.Result!);
             Management.AddHistory($"工坊完成：{result.Summary}。");
+            RecordJourneyEvent(P8JourneyEvent.CraftedItem);
         }
 
         return result;

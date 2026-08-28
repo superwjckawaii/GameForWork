@@ -8,6 +8,7 @@ namespace GameForWork.GodotClient;
 
 public partial class P5ExpeditionPanel : VBoxContainer
 {
+    public event Action? ReportsViewed;
     private readonly Dictionary<ExpeditionTeamKind, TeamControls> _teams = [];
     private Func<P1GameSession>? _session;
     private Action<string>? _changed;
@@ -56,6 +57,7 @@ public partial class P5ExpeditionPanel : VBoxContainer
         {
             _reports.Visible = expanded;
             reportToggle.Text = expanded ? "收起战斗报告" : "展开最近 50 次战斗报告";
+            if (expanded) ReportsViewed?.Invoke();
         };
     }
 

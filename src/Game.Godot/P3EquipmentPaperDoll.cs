@@ -37,14 +37,14 @@ public partial class P3EquipmentPaperDoll : Control
         IReadOnlyDictionary<EquipmentSlot, Vector2> positions = new Dictionary<EquipmentSlot, Vector2>
         {
             [EquipmentSlot.Helmet] = new(117, 8),
-            [EquipmentSlot.Amulet] = new(192, 66),
+            [EquipmentSlot.Amulet] = new(226, 170),
             [EquipmentSlot.MainHand] = new(8, 106),
             [EquipmentSlot.Chest] = new(117, 94),
             [EquipmentSlot.OffHand] = new(226, 106),
             [EquipmentSlot.Gloves] = new(24, 188),
             [EquipmentSlot.Belt] = new(117, 178),
-            [EquipmentSlot.RingLeft] = new(65, 235),
-            [EquipmentSlot.RingRight] = new(169, 235),
+            [EquipmentSlot.RingLeft] = new(226, 234),
+            [EquipmentSlot.RingRight] = new(226, 298),
             [EquipmentSlot.Boots] = new(117, 286),
             [EquipmentSlot.Flask1] = new(14, 374),
             [EquipmentSlot.Flask2] = new(64, 374),

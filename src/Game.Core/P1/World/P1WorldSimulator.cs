@@ -472,8 +472,11 @@ public sealed class P1WorldSimulator(IP1MapAttemptResolver attemptResolver)
         {
             if (attempt.Timeline is not null)
             {
+                string encounter = P5ExpeditionDirector.IsBoss(expedition.Map)
+                    ? "深渊监守者"
+                    : $"T{expedition.Map.AreaLevel} {expedition.Route}";
                 state.Expedition.AddCombatReport(P6CombatReportBuilder.Build(attempt.Timeline,
-                    $"{expedition.Team.Kind} · T{expedition.Map.AreaLevel} {expedition.Route} · 尝试 {index + 1}", offline));
+                    $"{expedition.Team.Kind} · {encounter} · 尝试 {index + 1}", offline));
             }
         }
         bool practice = P5ExpeditionDirector.IsPractice(expedition.Map);

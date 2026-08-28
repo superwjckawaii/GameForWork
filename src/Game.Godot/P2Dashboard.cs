@@ -9,6 +9,8 @@ using GameForWork.Core.P4;
 using GameForWork.Core.P5;
 using GameForWork.Core.P6;
 using Godot;
+using System.Security.Cryptography;
+using System.Text.Json;
 
 namespace GameForWork.GodotClient;
 
@@ -25,14 +27,24 @@ public partial class P2Dashboard : VBoxContainer
 
     private readonly List<BaseButton> _heroOnlyControls = [];
     private P1GameSession? _session;
-    private Action<PlayerIdentity>? _createCharacter;
+    private Action<PlayerIdentity, bool>? _createCharacter;
     private Action? _stateChanged;
     private Action<string>? _notice;
+    private Action? _expandWindow;
     private Control? _creationPanel;
     private Control? _fullPanel;
     private VBoxContainer? _miniPanel;
     private TabContainer? _mainTabs;
+    private Control? _overviewPage;
+    private Control? _storyPage;
+    private Control? _characterPage;
+    private Control? _townPage;
     private Control? _expeditionPage;
+    private TabContainer? _characterModes;
+    private Control? _equipmentMode;
+    private Control? _skillMode;
+    private Control? _passiveMode;
+    private Control? _aiMode;
     private Label? _miniStatus;
     private Label? _overviewStatus;
     private Label? _characterStatus;
@@ -69,17 +81,31 @@ public partial class P2Dashboard : VBoxContainer
     private P2CharacterKind _selectedCharacter;
     private double _refreshAccumulator;
     private bool _miniMode;
+    private Label? _journeyStatus;
+    private Button? _journeyGo;
+    private Button? _miniJourney;
+    private HBoxContainer? _warningBar;
+    private Label? _warningText;
+    private Button? _warningGo;
+    private AcceptDialog? _journeyDialog;
+    private AcceptDialog? _handbookDialog;
+    private AcceptDialog? _completionDialog;
+    private P8JourneyDestination _pendingDestination;
+    private P8JourneyDestination _warningDestination;
+    private int _lastJourneyStepIndex = -1;
 
     public void Initialize(
         P1GameSession? session,
-        Action<PlayerIdentity> createCharacter,
+        Action<PlayerIdentity, bool> createCharacter,
         Action stateChanged,
-        Action<string> notice)
+        Action<string> notice,
+        Action expandWindow)
     {
         _session = session;
         _createCharacter = createCharacter;
         _stateChanged = stateChanged;
         _notice = notice;
+        _expandWindow = expandWindow;
         SizeFlagsVertical = SizeFlags.ExpandFill;
         Build();
         Refresh();
@@ -89,6 +115,7 @@ public partial class P2Dashboard : VBoxContainer
     {
         _session = session;
         _miniMode = false;
+        _lastJourneyStepIndex = -1;
         _creationPanel!.Visible = session is null;
         _fullPanel!.Visible = session is not null;
         _miniPanel!.Visible = false;
@@ -170,7 +197,13 @@ public partial class P2Dashboard : VBoxContainer
         OptionButton gender = AddOptions(card, "性别", ["女性", "男性", "中性"]);
         OptionButton skin = AddOptions(card, "肤色", ["苍白", "浅色", "棕褐", "深色"]);
         OptionButton hair = AddOptions(card, "发型", ["短发", "长发", "编发", "剃发"]);
-        OptionButton ascendancy = AddOptions(card, "进阶", ["铁誓者", "破阵者"]);
+        card.AddChild(new Label { Text = "Demo 职业：铁誓者（破阵者将在后续版本完成后开放）" });
+        var skipTutorial = new CheckBox
+        {
+            Text = "跳过首次引导（创建后不能重新开启）",
+            TooltipText = "仍会保留 Demo 主目标，但不再弹出强制聚焦教学。",
+        };
+        card.AddChild(skipTutorial);
         AddButton(card, "确认创建并进入余烬营地", () =>
         {
             try
@@ -180,7 +213,7 @@ public partial class P2Dashboard : VBoxContainer
                     (CharacterGender)gender.Selected,
                     (CharacterSkinTone)skin.Selected,
                     (CharacterHairStyle)hair.Selected,
-                    (P1Ascendancy)ascendancy.Selected).Validate());
+                    P1Ascendancy.IronOath).Validate(), !skipTutorial.ButtonPressed);
             }
             catch (Exception exception)
             {
@@ -192,14 +225,33 @@ public partial class P2Dashboard : VBoxContainer
 
     private Control BuildFullPanel()
     {
+        var root = new VBoxContainer { SizeFlagsVertical = SizeFlags.ExpandFill };
+        var journeyBar = new HBoxContainer();
+        root.AddChild(journeyBar);
+        journeyBar.AddChild(new Label { Text = "旅程目标" });
+        _journeyStatus = new Label { SizeFlagsHorizontal = SizeFlags.ExpandFill, AutowrapMode = TextServer.AutowrapMode.WordSmart };
+        journeyBar.AddChild(_journeyStatus);
+        _journeyGo = AddButton(journeyBar, "前往", NavigateToCurrentJourney);
+        AddButton(journeyBar, "旅程手册", ShowHandbook);
+        _warningBar = new HBoxContainer { Visible = false };
+        root.AddChild(_warningBar);
+        _warningText = new Label { SizeFlagsHorizontal = SizeFlags.ExpandFill, AutowrapMode = TextServer.AutowrapMode.WordSmart, Modulate = new Color("f0b36a") };
+        _warningBar.AddChild(_warningText);
+        _warningGo = AddButton(_warningBar, "前往处理", () => Navigate(_warningDestination));
         _mainTabs = new TabContainer { SizeFlagsVertical = SizeFlags.ExpandFill };
-        _mainTabs.AddChild(BuildOverviewPage());
-        _mainTabs.AddChild(BuildStoryPage());
+        root.AddChild(_mainTabs);
+        _overviewPage = BuildOverviewPage();
+        _mainTabs.AddChild(_overviewPage);
+        _storyPage = BuildStoryPage();
+        _mainTabs.AddChild(_storyPage);
         _expeditionPage = BuildExpeditionPage();
         _mainTabs.AddChild(_expeditionPage);
-        _mainTabs.AddChild(BuildCharacterItemsPage());
-        _mainTabs.AddChild(BuildTownPage());
-        return _mainTabs;
+        _characterPage = BuildCharacterItemsPage();
+        _mainTabs.AddChild(_characterPage);
+        _townPage = BuildTownPage();
+        _mainTabs.AddChild(_townPage);
+        BuildJourneyDialogs();
+        return root;
     }
 
     private Control BuildOverviewPage()
@@ -268,6 +320,12 @@ public partial class P2Dashboard : VBoxContainer
         VBoxContainer page = Page("远征");
         _expeditionPanel = new P5ExpeditionPanel();
         _expeditionPanel.Initialize(RequireSession, Changed);
+        _expeditionPanel.ReportsViewed += () =>
+        {
+            RequireSession().RecordJourneyEvent(P8JourneyEvent.ViewedCombatReport);
+            _stateChanged?.Invoke();
+            Refresh();
+        };
         page.AddChild(_expeditionPanel);
         return Wrap(page);
     }
@@ -302,16 +360,29 @@ public partial class P2Dashboard : VBoxContainer
         var workspace = new HBoxContainer { SizeFlagsVertical = SizeFlags.ExpandFill };
         workspace.AddThemeConstantOverride("separation", 12);
         page.AddChild(workspace);
-        var modes = new TabContainer
+        _characterModes = new TabContainer
         {
             SizeFlagsHorizontal = SizeFlags.ExpandFill,
             SizeFlagsVertical = SizeFlags.ExpandFill,
         };
-        workspace.AddChild(modes);
-        modes.AddChild(BuildEquipmentMode());
-        modes.AddChild(BuildSkillMode());
-        modes.AddChild(BuildPassiveMode());
-        modes.AddChild(BuildAiMode());
+        workspace.AddChild(_characterModes);
+        _equipmentMode = BuildEquipmentMode();
+        _characterModes.AddChild(_equipmentMode);
+        _skillMode = BuildSkillMode();
+        _characterModes.AddChild(_skillMode);
+        _passiveMode = BuildPassiveMode();
+        _characterModes.AddChild(_passiveMode);
+        _aiMode = BuildAiMode();
+        _characterModes.AddChild(_aiMode);
+        _characterModes.TabChanged += index =>
+        {
+            if (_skillMode is not null && _characterModes.GetTabControl((int)index) == _skillMode)
+            {
+                RequireSession().RecordJourneyEvent(P8JourneyEvent.InspectedSkills);
+                _stateChanged?.Invoke();
+                Refresh();
+            }
+        };
         var equipment = new VBoxContainer { CustomMinimumSize = new Vector2(296, 0) };
         workspace.AddChild(equipment);
         collapseSidebar.Pressed += () =>
@@ -568,6 +639,13 @@ public partial class P2Dashboard : VBoxContainer
         _miniStatus = new Label { AutowrapMode = TextServer.AutowrapMode.WordSmart };
         _miniStatus.AddThemeFontSizeOverride("font_size", 13);
         panel.AddChild(_miniStatus);
+        _miniJourney = new Button { Text = "当前目标：等待角色创建", AutowrapMode = TextServer.AutowrapMode.WordSmart };
+        _miniJourney.Pressed += () =>
+        {
+            _expandWindow?.Invoke();
+            NavigateToCurrentJourney();
+        };
+        panel.AddChild(_miniJourney);
         var route = new HBoxContainer();
         panel.AddChild(route);
         AddButton(route, "主角安全", () => QuickRoute(ExpeditionTeamKind.Hero, MapRoute.Safe));
@@ -978,6 +1056,212 @@ public partial class P2Dashboard : VBoxContainer
         Refresh();
     }
 
+    private void BuildJourneyDialogs()
+    {
+        _journeyDialog = new AcceptDialog
+        {
+            Title = "旅程引导",
+            OkButtonText = "前往目标",
+            Exclusive = true,
+            MinSize = new Vector2I(520, 230),
+        };
+        _journeyDialog.Confirmed += () => Navigate(_pendingDestination);
+        AddChild(_journeyDialog);
+        _handbookDialog = new AcceptDialog
+        {
+            Title = "旅程手册",
+            OkButtonText = "关闭",
+            Exclusive = true,
+            MinSize = new Vector2I(680, 520),
+        };
+        AddChild(_handbookDialog);
+        _completionDialog = new AcceptDialog
+        {
+            Title = "GameForWork Demo 完成",
+            OkButtonText = "继续游戏",
+            Exclusive = true,
+            MinSize = new Vector2I(620, 500),
+        };
+        AddChild(_completionDialog);
+    }
+
+    private void RefreshJourneyInterface()
+    {
+        P1GameSession session = RequireSession();
+        session.Journey.Synchronize(session);
+        P8JourneyStepDefinition? current = session.Journey.CurrentStep;
+        _journeyStatus!.Text = current is null ? "Demo 主旅程已完成 · 可以继续挂机与优化构筑" : current.Title + " · " + current.Instruction;
+        _journeyGo!.Text = current is null ? "查看结算" : "前往";
+        _journeyGo.Disabled = false;
+        if (_miniJourney is not null) _miniJourney.Text = current is null ? "目标：Demo 已完成" : "目标：" + current.Title;
+        NotifyJourneyRewards(session);
+        RefreshUnlockedPages(session);
+        RefreshStopWarning(session);
+        if (session.Journey.TryPresentCurrentStep() && current is not null)
+        {
+            _pendingDestination = current.Destination;
+            _journeyDialog!.DialogText = $"{current.Title}\n\n{current.Instruction}\n\n{current.HelpText}";
+            _stateChanged?.Invoke();
+            Callable.From(() => _journeyDialog.PopupCentered(new Vector2I(560, 260))).CallDeferred();
+        }
+        if (session.Journey.TryMarkCompletionShown())
+        {
+            _stateChanged?.Invoke();
+            Callable.From(ShowCompletionSummary).CallDeferred();
+        }
+    }
+
+    private void NotifyJourneyRewards(P1GameSession session)
+    {
+        int currentIndex = session.Journey.CurrentStepIndex;
+        if (_lastJourneyStepIndex >= 0 && currentIndex > _lastJourneyStepIndex)
+        {
+            string completed = string.Join("、", session.Journey.AllSteps
+                .Skip(_lastJourneyStepIndex)
+                .Take(currentIndex - _lastJourneyStepIndex)
+                .Select(item => item.Title));
+            _notice?.Invoke($"旅程目标完成：{completed}。奖励已自动领取。");
+        }
+        _lastJourneyStepIndex = currentIndex;
+    }
+
+    private void RefreshUnlockedPages(P1GameSession session)
+    {
+        int step = session.Journey.CurrentStepIndex;
+        SetHidden(_mainTabs!, _characterPage!, step < JourneyIndex(P8JourneyStep.EquipItem));
+        SetHidden(_mainTabs!, _townPage!, step <= JourneyIndex(P8JourneyStep.CraftItem));
+        SetHidden(_mainTabs!, _expeditionPage!, !session.Campaign.Completed);
+        if (_characterModes is not null)
+        {
+            SetHidden(_characterModes, _skillMode!, step < JourneyIndex(P8JourneyStep.InspectSkills));
+            SetHidden(_characterModes, _passiveMode!, step < JourneyIndex(P8JourneyStep.AllocatePassive));
+            SetHidden(_characterModes, _aiMode!, step <= JourneyIndex(P8JourneyStep.ConfigureSkillTarget));
+        }
+    }
+
+    private void RefreshStopWarning(P1GameSession session)
+    {
+        string text = string.Empty;
+        P8JourneyDestination destination = P8JourneyDestination.Overview;
+        if (session.Campaign.Defeated)
+        {
+            text = "主线战败：调整装备、技能或天赋后前往主线页继续。";
+            destination = P8JourneyDestination.Story;
+        }
+        else if (session.Management.SkillLinks.Any(link => string.IsNullOrEmpty(link.ActiveStoneInstanceId) &&
+                     (link.SocketStoneInstanceIds?.Any(id => !string.IsNullOrEmpty(id)) ?? false)))
+        {
+            text = "技能孔组缺少主动技能：该孔组不会产生战斗效果。";
+            destination = P8JourneyDestination.Skills;
+        }
+        else
+        {
+            P1TeamExpeditionState? stopped = session.World.Teams.FirstOrDefault(team => team.IsStopped && team.StopReason != "manual_stop");
+            if (stopped is not null)
+            {
+                text = $"{(stopped.Kind == ExpeditionTeamKind.Hero ? "主角" : "佣兵队")}远征已停止：{JourneyStopReason(stopped.StopReason)}。";
+                destination = P8JourneyDestination.Expedition;
+            }
+        }
+        _warningBar!.Visible = text.Length > 0;
+        _warningText!.Text = text;
+        _warningDestination = destination;
+    }
+
+    private void NavigateToCurrentJourney()
+    {
+        P8JourneyStepDefinition? current = RequireSession().Journey.CurrentStep;
+        if (current is null)
+        {
+            ShowCompletionSummary();
+            return;
+        }
+        Navigate(current.Destination);
+    }
+
+    private void ShowCompletionSummary()
+    {
+        P1GameSession session = RequireSession();
+        byte[] state = JsonSerializer.SerializeToUtf8Bytes(session.Capture());
+        string hash = Convert.ToHexString(SHA256.HashData(state)).ToLowerInvariant();
+        P8DemoSummary summary = session.Journey.BuildSummary(session, hash);
+        _completionDialog!.DialogText = BuildCompletionText(summary);
+        _completionDialog.PopupCentered(new Vector2I(660, 540));
+    }
+
+    private void Navigate(P8JourneyDestination destination)
+    {
+        if (_mainTabs is null) return;
+        Control main = destination switch
+        {
+            P8JourneyDestination.Overview => _overviewPage!,
+            P8JourneyDestination.Story => _storyPage!,
+            P8JourneyDestination.Expedition => _expeditionPage!,
+            P8JourneyDestination.Town => _townPage!,
+            _ => _characterPage!,
+        };
+        int mainIndex = _mainTabs.GetTabIdxFromControl(main);
+        if (mainIndex >= 0 && !_mainTabs.IsTabHidden(mainIndex)) _mainTabs.CurrentTab = mainIndex;
+        if (_characterModes is null) return;
+        Control? mode = destination switch
+        {
+            P8JourneyDestination.Equipment => _equipmentMode,
+            P8JourneyDestination.Skills => _skillMode,
+            P8JourneyDestination.Passives => _passiveMode,
+            _ => null,
+        };
+        if (mode is not null)
+        {
+            int modeIndex = _characterModes.GetTabIdxFromControl(mode);
+            if (modeIndex >= 0 && !_characterModes.IsTabHidden(modeIndex)) _characterModes.CurrentTab = modeIndex;
+        }
+    }
+
+    private void ShowHandbook()
+    {
+        P1GameSession session = RequireSession();
+        string steps = string.Join('\n', session.Journey.AllSteps.Select((definition, index) =>
+            $"{(index < session.Journey.CurrentStepIndex ? "✓" : index == session.Journey.CurrentStepIndex ? "▶" : "·")} {definition.Title}：{definition.HelpText}"));
+        _handbookDialog!.DialogText = steps +
+            "\n\n常用术语\n连接孔：同组主动技能与辅助技能共享效果。\n法术压制：成功时该次法术命中伤害降低 70%。" +
+            "\n收益路线：地图中选择的主要风险与奖励方向。\n远征补给：队伍开始普通地图时自动消耗的城镇资源。" +
+            (session.Journey.TutorialEnabled ? string.Empty : "\n\n本存档创建时已选择跳过强制引导；该选择不能重新开启。");
+        _handbookDialog.PopupCentered(new Vector2I(720, 560));
+    }
+
+    private static string BuildCompletionText(P8DemoSummary summary) =>
+        $"你已经击败深渊监守者，完成首个 Demo 主旅程。之后仍可继续挂机、制作装备和优化构筑。\n\n" +
+        $"现实游玩 {TimeText(summary.RealPlayMilliseconds)} · 离线收益 {TimeText(summary.OfflineMilliseconds)}\n" +
+        $"完成幕数 {summary.ActsCompleted}/5 · 地图成功 {summary.MapsCompleted} · 失败 {summary.MapsFailed}\n" +
+        $"Boss 尝试 {summary.BossAttempts} · 最终等级 {summary.Level}\n" +
+        $"主要技能 {summary.MainSkill} · {summary.MainSkillLinks} 连 · 最高技能总伤害 {summary.HighestDamage}\n" +
+        $"装备评分 {summary.EquipmentScore} · 传奇物品 {summary.LegendaryItems}\n" +
+        $"结算存档哈希 {summary.SaveHash[..16]}…";
+
+    private static string TimeText(long milliseconds) => TimeSpan.FromMilliseconds(milliseconds) is TimeSpan time
+        ? $"{(int)time.TotalHours:00}:{time.Minutes:00}:{time.Seconds:00}"
+        : "00:00:00";
+
+    private static int JourneyIndex(P8JourneyStep step) => Array.FindIndex(
+        Enum.GetValues<P8JourneyStep>(), value => value == step);
+
+    private static void SetHidden(TabContainer tabs, Control control, bool hidden)
+    {
+        int index = tabs.GetTabIdxFromControl(control);
+        if (index >= 0) tabs.SetTabHidden(index, hidden);
+    }
+
+    private static string JourneyStopReason(string reason) => reason switch
+    {
+        "maps_exhausted" => "地图已经耗尽",
+        "boss_ticket_missing" => "缺少 Boss 门票",
+        "consecutive_failures" => "连续失败达到停止条件",
+        "minimum_storage_free_slots" => "仓库空位不足",
+        "reserved_supplies" => "远征补给低于保留量",
+        "map_failed" => "地图失败策略要求停止",
+        _ => reason,
+    };
+
     private void Refresh()
     {
         if (_session is null)
@@ -1013,10 +1297,12 @@ public partial class P2Dashboard : VBoxContainer
             $"核心槽 {equipment.CoreSkillCapacity} · 旧制连接 {equipment.SupportLinkCapacity}\n" +
             BuildSummaryText(_session.GetBuildSummary());
 
+        RefreshJourneyInterface();
         if (string.IsNullOrWhiteSpace(_storageSearch))
         {
             _storageGrid!.SetItems(_session.World.Storage.Items);
         }
+
         else
         {
             string query = _storageSearch.ToLowerInvariant();
@@ -1080,8 +1366,6 @@ public partial class P2Dashboard : VBoxContainer
               $"进度 {_session.Campaign.CurrentNodeElapsedMilliseconds / 1_000}/{currentNodeDuration / 1_000}s\n" +
               (_session.Campaign.Defeated ? "⚠ 战败：调整构筑后点击继续。" : "自动推进中；离线时间同样有效。 ");
         _storyLog!.Text = string.Join('\n', _session.Campaign.StoryLog.TakeLast(60).Select(item => $"• {item}"));
-        int expeditionIndex = _mainTabs!.GetTabIdxFromControl(_expeditionPage!);
-        _mainTabs.SetTabHidden(expeditionIndex, !_session.IsExpeditionUnlocked);
         _miniStatus!.Text =
             $"{_session.Player.Name} Lv.{_session.World.Hero.Progression.Level}  主角[{CompactTeam(_session.World.Hero)}]\n" +
             $"佣兵[{CompactTeam(_session.World.Mercenaries)}] · 补给 {economy.ExpeditionSupplies} · 图 {_session.World.MapInventory.Count}";

@@ -30,6 +30,7 @@ public partial class Main : Node
     private Button? _largeWindowButton;
     private Label? _noticeLabel;
     private ConfirmationDialog? _closeDialog;
+    private ConfirmationDialog? _resetDialog;
     private CheckBox? _rememberCloseChoice;
     private string _savesRoot = string.Empty;
     private int _activeSlot = 1;
@@ -49,6 +50,7 @@ public partial class Main : Node
     private double _performanceAccumulator;
     private double _lastSimulationMilliseconds;
     private Label? _performanceLabel;
+    private static bool DeveloperFeaturesEnabled => OS.HasFeature("editor") || OS.HasFeature("debug");
 
     public override void _Ready()
     {
@@ -212,6 +214,7 @@ public partial class Main : Node
         _largeWindowButton = AddButton(_standardToolbar, "大窗口 1920×1280", ToggleLargeWindow);
         AddButton(_standardToolbar, "暂停战斗", TogglePause);
         AddButton(_standardToolbar, "保存", () => SaveP1State(showNotice: true));
+        AddButton(_standardToolbar, "重新开始", () => _resetDialog?.PopupCentered(new Vector2I(520, 220)));
         var slots = new OptionButton { TooltipText = "三个独立存档槽" };
         for (int slot = 1; slot <= 3; slot++)
         {
@@ -290,10 +293,11 @@ public partial class Main : Node
         };
         root.AddChild(_noticeLabel);
         _dashboard = new P2Dashboard();
-        _dashboard.Initialize(_session, CreateCharacter, OnSessionChanged, ShowNotice);
+        _dashboard.Initialize(_session, CreateCharacter, OnSessionChanged, ShowNotice, EnsureStandardWindow);
         root.AddChild(_dashboard);
 
         _testHarness = new HFlowContainer();
+        _testHarness.Visible = DeveloperFeaturesEnabled;
         root.AddChild(_testHarness);
         AddButton(_testHarness, "P2: 模拟48h", RunOfflineBenchmark);
         AddButton(_testHarness, "P2: 备份", CreateBackup);
@@ -329,6 +333,17 @@ public partial class Main : Node
         _closeDialog.Confirmed += () => CompleteCloseChoice(closeToTray: false);
         _closeDialog.Canceled += () => CompleteCloseChoice(closeToTray: true);
         AddChild(_closeDialog);
+        _resetDialog = new ConfirmationDialog
+        {
+            Title = "重新开始当前存档槽",
+            DialogText = "当前存档会先创建手动备份，再移入可恢复的回收目录。确定清空当前槽并返回角色创建吗？",
+            OkButtonText = "备份并重新开始",
+            CancelButtonText = "取消",
+            MinSize = new Vector2I(520, 220),
+            Theme = P2ThemeFactory.Create(initialFontScale),
+        };
+        _resetDialog.Confirmed += ResetCurrentSlot;
+        AddChild(_resetDialog);
     }
 
     private void SetFontScale(int percent)
@@ -343,6 +358,7 @@ public partial class Main : Node
         {
             _closeDialog.Theme = P2ThemeFactory.Create(clamped);
         }
+        if (_resetDialog is not null) _resetDialog.Theme = P2ThemeFactory.Create(clamped);
 
         if (_settingsStore is not null)
         {
@@ -353,12 +369,18 @@ public partial class Main : Node
         ShowNotice($"界面字体缩放：{clamped}%");
     }
 
-    private void CreateCharacter(PlayerIdentity identity)
+    private void CreateCharacter(PlayerIdentity identity, bool tutorialEnabled)
     {
-        _session = P1GameSession.CreateNew(identity, unchecked(DefaultSeed + (ulong)(_activeSlot - 1)));
+        _session = P1GameSession.CreateNew(identity, unchecked(DefaultSeed + (ulong)(_activeSlot - 1)), tutorialEnabled);
         _dashboard?.SetSession(_session);
         SaveP1State(showNotice: false);
         ShowNotice($"{identity.Name} 已与古代门扉建立契约；第一幕“余烬营地”开始自动推进。");
+    }
+
+    private void EnsureStandardWindow()
+    {
+        if (_windowController?.IsMini == true) _windowController.ToggleMode();
+        UpdateWindowModeInterface();
     }
 
     private void OnSessionChanged()
@@ -407,7 +429,7 @@ public partial class Main : Node
         }
         _standardToolbar.Visible = !mini;
         _miniToolbar.Visible = mini;
-        _testHarness.Visible = !mini;
+        _testHarness.Visible = DeveloperFeaturesEnabled && !mini;
         _noticeLabel.Visible = !mini;
         _dashboard.SetMiniMode(mini);
     }
@@ -536,6 +558,7 @@ public partial class Main : Node
                 : P1GameSession.Restore(
                     JsonSerializer.Deserialize<P1GameSessionSnapshot>(json, SaveJsonOptions) ??
                     throw new InvalidDataException("P1 save JSON was empty."));
+            if (!DeveloperFeaturesEnabled && _session is not null) _session.DebugTwentyTimes = false;
             SettleOfflineOnOpen();
         }
         catch (Exception exception)
@@ -612,6 +635,26 @@ public partial class Main : Node
         catch (Exception exception)
         {
             ReportError("p1a.backup_failed", "Backup failed.", exception);
+        }
+    }
+
+    private void ResetCurrentSlot()
+    {
+        try
+        {
+            FlushPendingSave();
+            string backup = _saveRepository?.CreateBackup(manual: true) ?? throw new InvalidOperationException("存档未初始化。");
+            string trash = _saveRepository.MoveToTrash();
+            _saveRepository.Dispose();
+            _saveRepository = null;
+            _session = null;
+            TryInitializeSave(_activeSlot);
+            _dashboard?.SetSession(_session);
+            ShowNotice($"当前槽已重新开始；备份：{backup}；可恢复回收目录：{trash}");
+        }
+        catch (Exception exception)
+        {
+            ReportError("p8.reset_slot_failed", "Resetting the current save slot failed.", exception);
         }
     }
 

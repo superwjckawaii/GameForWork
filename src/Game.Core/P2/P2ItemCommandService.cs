@@ -73,6 +73,7 @@ public sealed class P2ItemCommandService(P1GameSession session, P2CharacterKind 
         }
 
         session.NotifyEquipmentChanged(character);
+        if (character == P2CharacterKind.Hero) session.RecordJourneyEvent(P8JourneyEvent.EquippedItem);
         session.Management.AddHistory($"已装备 {removed.Base.DisplayName}。 ");
         return P2ItemCommandResult.Ok($"已装备 {removed.Base.DisplayName}。");
     }
@@ -114,6 +115,7 @@ public sealed class P2ItemCommandService(P1GameSession session, P2CharacterKind 
         }
 
         session.NotifyEquipmentChanged(character);
+        if (character == P2CharacterKind.Hero) session.RecordJourneyEvent(P8JourneyEvent.EquippedItem);
         session.Management.AddHistory($"已将 {sourceItem.Base.DisplayName} 移至{target}。");
         return P2ItemCommandResult.Ok("装备槽交换完成。");
     }
@@ -147,6 +149,7 @@ public sealed class P2ItemCommandService(P1GameSession session, P2CharacterKind 
             session.NotifyEquipmentChanged(character);
         }
         session.Management.AddHistory($"已对 {item.Base.DisplayName} 完成制作：{result.Summary}。");
+        session.RecordJourneyEvent(P8JourneyEvent.CraftedItem);
         return result;
     }
 
@@ -174,6 +177,7 @@ public sealed class P2ItemCommandService(P1GameSession session, P2CharacterKind 
             session.NotifyEquipmentChanged(character);
         }
         session.Management.AddHistory($"制作完成：{result.Summary}。 ");
+        session.RecordJourneyEvent(P8JourneyEvent.CraftedItem);
         return result;
     }
 

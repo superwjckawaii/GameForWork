@@ -1,4 +1,4 @@
-# GameForWork P0～P6 开发计划
+# GameForWork P0～P8 开发计划
 
 > 状态：已确认  
 > 更新日期：2026-08-28
@@ -213,3 +213,8 @@ P1A 功能闭环通过，P1B 精细像素素材生成、接入和视觉验收完
 ### P6 已确认
 
 P6 的装备实例孔组、技能石唯一位置、标签兼容、AI 执行、技能经验、三套方案、连接锻造、金属制作、构筑摘要、掉落过滤和战斗报告规则见 [`P6_SPECIFICATION.md`](P6_SPECIFICATION.md)。P6 明确不制作构筑训练场。
+
+### P7～P8 完成定义
+
+- P7 的技能页收敛、逐技能攻击目标、20 Hz/60 FPS 表现、后台战斗预演与后台存档规则见 [`P7_SPECIFICATION.md`](P7_SPECIFICATION.md)。
+- P8 的单线 Demo 旅程、强制聚焦教学、页面解锁、停止警告、深渊监守者结算和旧档迁移规则见 [`P8_SPECIFICATION.md`](P8_SPECIFICATION.md)。
