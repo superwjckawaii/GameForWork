@@ -60,6 +60,16 @@ public static class P2SkillStones
         Support("core.skill_stone.urgent_war_cry", "急促战吼", SkillTag.WarCry, "冷却恢复提高 30%，效果总降 15%", false),
         Support("core.skill_stone.life_leech", "血之汲取", SkillTag.Attack, "命中恢复伤害的 2% 生命，消耗总增 20%", false),
         Support("core.skill_stone.execution", "处决", SkillTag.Attack, "低于 20% 生命时伤害总增 40%，否则总降 10%", false),
+        Active("core.skill_stone.ash_javelin", "烬矛", SkillTag.Attack | SkillTag.Projectile | SkillTag.Physical | SkillTag.Fire, false),
+        Active("core.skill_stone.ember_nova", "余烬新星", SkillTag.Spell | SkillTag.Area | SkillTag.Fire, false),
+        Active("core.skill_stone.storm_brand", "雷痕烙印", SkillTag.Spell | SkillTag.Projectile | SkillTag.Chaining | SkillTag.Lightning, false),
+        Support("core.skill_stone.spell_echo", "法术回响", SkillTag.Spell, "法术重复一次，单次伤害总降 18%", false),
+        Support("core.skill_stone.elemental_focus", "元素集中", SkillTag.Elemental, "元素伤害总增 28%，不能施加元素异常", false),
+        Support("core.skill_stone.added_fire", "附加火焰", SkillTag.Attack | SkillTag.Spell, "获得 18% 物理伤害的额外火焰伤害", false),
+        Support("core.skill_stone.added_cold", "附加冰霜", SkillTag.Attack | SkillTag.Spell, "附加冰霜伤害并降低敌人速度", false),
+        Support("core.skill_stone.added_lightning", "附加闪电", SkillTag.Attack | SkillTag.Spell, "附加闪电伤害并扩大伤害区间", false),
+        Support("core.skill_stone.critical_strikes", "精准暴击", SkillTag.Attack | SkillTag.Spell, "暴击率提高并使暴击伤害总增 12%", false),
+        Support("core.skill_stone.concentrated_effect", "集中效应", SkillTag.Area, "范围缩小 25%，范围伤害总增 32%", false),
     }.ToDictionary(item => item.StableId, StringComparer.Ordinal);
 
     public static IReadOnlyCollection<SkillStoneDefinition> All => Catalog.Values.ToArray();

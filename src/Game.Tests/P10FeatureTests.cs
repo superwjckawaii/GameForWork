@@ -39,7 +39,7 @@ public sealed class P10FeatureTests
         Assert.True(state.TryConsumeCitadelTicket());
         state.RecordCitadelVictory();
         Assert.True(state.CitadelDefeated);
-        Assert.Equal(1, state.BreakthroughPoints);
+        Assert.Equal(2, state.BreakthroughPoints);
         Assert.True(state.TryAllocateAscendancy("core.ascendancy.iron_oath.01"));
     }
 

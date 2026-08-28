@@ -1,5 +1,6 @@
 using GameForWork.Core.P1.Combat;
 using GameForWork.Core.P3;
+using GameForWork.Core.P14;
 
 namespace GameForWork.Core.P6;
 
@@ -25,7 +26,8 @@ public sealed record P6CombatReport(
     int ShieldCoverageBasisPoints,
     IReadOnlyList<string> LastFiveSeconds,
     string TimeoutReason,
-    bool Offline = false);
+    bool Offline = false,
+    P14DeathReport? DeathReport = null);
 
 public static class P6CombatReportBuilder
 {
@@ -39,6 +41,9 @@ public static class P6CombatReportBuilder
             [P3SceneEventKind.Chain] = "追加连锁",
             [P3SceneEventKind.SeismicCharge] = "震地冲锋",
             [P3SceneEventKind.BloodTideSpin] = "血潮旋斩",
+            [P3SceneEventKind.AshJavelin] = "灰烬投枪",
+            [P3SceneEventKind.EmberNova] = "余烬新星",
+            [P3SceneEventKind.StormBrand] = "风暴烙印",
             [P3SceneEventKind.Bleed] = "流血",
         };
 
@@ -94,7 +99,8 @@ public static class P6CombatReportBuilder
             shieldCoverage,
             last,
             TimeoutReason(timeline, dealt, failures),
-            offline);
+            offline,
+            P14DeathReports.Build(timeline));
     }
 
     private static P6SupportCombatStat[] BuildSupportStats(IEnumerable<P3SceneEvent> outgoing)
@@ -142,6 +148,13 @@ public static class P6CombatReportBuilder
         SkillSupport.UrgentWarCry => "急促战吼",
         SkillSupport.LifeLeech => "血之汲取",
         SkillSupport.Execution => "处决",
+        SkillSupport.SpellEcho => "法术回响",
+        SkillSupport.ElementalFocus => "元素集中",
+        SkillSupport.AddedFire => "附加火焰",
+        SkillSupport.AddedCold => "附加冰霜",
+        SkillSupport.AddedLightning => "附加闪电",
+        SkillSupport.CriticalStrikes => "提高暴击",
+        SkillSupport.ConcentratedEffect => "集中效应",
         _ => support.ToString(),
     };
 

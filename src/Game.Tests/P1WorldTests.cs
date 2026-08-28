@@ -67,11 +67,11 @@ public sealed class P1WorldTests
             new P1MapItem("formal", 1), MapRoute.Safe, powerful, 1, 42);
 
         Assert.True(result.Succeeded);
-        Assert.Equal(8, result.Timeline!.NodeCount);
-        Assert.Equal(8, result.Nodes.Select(node => node.NodeIndex).Distinct().Count());
+        Assert.InRange(result.Timeline!.NodeCount, 5, 8);
+        Assert.Equal(result.Timeline.TotalWaves, result.Nodes.Select(node => node.NodeIndex).Distinct().Count());
         Assert.Equal(12, result.Timeline.GridWidth);
         Assert.Equal(24, result.Timeline.GridHeight);
-        Assert.Equal(P1Enemies.AbyssWarden.StableId, result.Nodes[^1].EnemyStableId);
+        Assert.StartsWith("core.boss.map.", result.Nodes[^1].EnemyStableId);
         Assert.All(result.Nodes, node => Assert.Equal(P1BattleOutcome.HeroVictory, node.Outcome));
     }
 

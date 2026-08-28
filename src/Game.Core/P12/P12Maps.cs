@@ -33,13 +33,17 @@ public sealed record P12MapCombatModifiers(
     public static P12MapCombatModifiers From(P1MapItem map)
     {
         int Value(P12MapAffixKind kind) => map.EffectiveAffixes.Where(affix => affix.Kind == kind).Sum(affix => affix.Value);
+        int tierLife = map.AreaLevel == 20 ? 2_500 : 0;
+        int tierDamage = map.AreaLevel is 17 or 20 ? 1_500 : 0;
+        int tierSpeed = map.AreaLevel == 20 ? 1_000 : 0;
+        int tierRecovery = map.AreaLevel == 18 ? 3_000 : 0;
         return new(
-            10_000 + (Value(P12MapAffixKind.MonsterLife) + Value(P12MapAffixKind.PhysicalResistance)) * 100,
-            10_000 + (Value(P12MapAffixKind.MonsterDamage) + Value(P12MapAffixKind.ElementalPressure) / 2) * 100,
-            10_000 + Value(P12MapAffixKind.MonsterSpeed) * 100,
-            Math.Max(2_000, 10_000 - Value(P12MapAffixKind.ReducedRecovery) * 100),
+            10_000 + tierLife + (Value(P12MapAffixKind.MonsterLife) + Value(P12MapAffixKind.PhysicalResistance)) * 100,
+            10_000 + tierDamage + (Value(P12MapAffixKind.MonsterDamage) + Value(P12MapAffixKind.ElementalPressure) / 2) * 100,
+            10_000 + tierSpeed + Value(P12MapAffixKind.MonsterSpeed) * 100,
+            Math.Max(2_000, 10_000 - tierRecovery - Value(P12MapAffixKind.ReducedRecovery) * 100),
             10_000 + Value(P12MapAffixKind.IncreasedPackSize) * 100,
-            map.EffectiveAffixes.Any(affix => affix.Kind == P12MapAffixKind.ExtraElites));
+            map.AreaLevel == 19 || map.EffectiveAffixes.Any(affix => affix.Kind == P12MapAffixKind.ExtraElites));
     }
 }
 

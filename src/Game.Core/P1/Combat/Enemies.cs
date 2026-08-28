@@ -29,7 +29,25 @@ public static class P1Enemies
     public static readonly EnemyProfile AbyssWarden = new(
         "core.enemy.abyss_warden", "裂渊监守者", 250, 8, 12, 20, 5, 70, 2_000, 1_000, 0);
 
-    public static IReadOnlyList<EnemyProfile> NormalEnemies => [CorruptedWorker, GateHound, OathlessGuard];
+    public static IReadOnlyList<EnemyProfile> NormalEnemies { get; } =
+    [
+        CorruptedWorker, GateHound, OathlessGuard,
+        new("core.enemy.ash_bone_archer", "烬骨弓手", 31, 4, 7, 1, 14, 62, 2_100, 1_050, 1),
+        new("core.enemy.drowned_corpse", "溺尸", 48, 5, 8, 8, 2, 48, 1_600, 850, 1),
+        new("core.enemy.crypt_beetle", "墓穴甲虫", 39, 4, 6, 18, 4, 45, 1_900, 950, 1),
+        new("core.enemy.thorn_beast", "棘兽", 62, 7, 11, 12, 5, 58, 2_400, 900, 2),
+        new("core.enemy.iron_dryad", "铁皮树妖", 76, 6, 9, 24, 2, 52, 1_500, 780, 2),
+        new("core.enemy.oathless_crossbow", "失誓弩手", 44, 6, 10, 4, 12, 70, 1_900, 1_000, 1),
+        new("core.enemy.bog_beast", "泥沼兽", 68, 7, 12, 10, 3, 55, 1_800, 850, 2),
+        new("core.enemy.blood_leech", "血蛭", 28, 3, 6, 0, 22, 68, 3_200, 1_300, 1),
+        new("core.enemy.crystal_scarab", "晶壳虫", 52, 5, 9, 20, 8, 56, 2_000, 950, 1),
+        new("core.enemy.mine_thrall", "矿奴", 57, 6, 10, 14, 4, 52, 1_700, 900, 1),
+        new("core.enemy.penitent", "赎罪者", 54, 5, 9, 6, 9, 64, 2_000, 1_000, 1),
+        new("core.enemy.bell_wraith", "钟灵", 42, 5, 8, 0, 16, 72, 2_500, 1_100, 1),
+        new("core.enemy.tide_raider", "潮盗", 65, 7, 11, 11, 8, 67, 2_300, 1_050, 2),
+        new("core.enemy.salt_corpse", "盐尸", 59, 6, 9, 16, 2, 50, 1_600, 800, 1),
+        new("core.enemy.cinder_raven", "烟羽鸦", 33, 4, 7, 0, 25, 75, 3_600, 1_350, 1),
+    ];
 }
 
 public enum EliteAffix
@@ -39,6 +57,7 @@ public enum EliteAffix
     IronSkin,
     Lacerating,
     CorpseExplosion,
+    ArcaneWard,
 }
 
 public sealed record ScaledEnemy(
@@ -104,6 +123,10 @@ public static class EnemyRules
                 case EliteAffix.Lacerating:
                 case EliteAffix.CorpseExplosion:
                     break;
+                case EliteAffix.ArcaneWard:
+                    life = ScaleAtLeastOne(life, 12_500);
+                    evasion = ScaleNonNegative(evasion + 8, 13_000);
+                    break;
                 default:
                     throw new ArgumentOutOfRangeException(nameof(eliteAffixes), affix, "Unknown elite affix.");
             }
@@ -139,9 +162,9 @@ public static class EnemyRules
 
     private static int ValidateAreaLevel(int areaLevel)
     {
-        if (areaLevel is < 1 or > 10)
+        if (areaLevel is < 1 or > 20)
         {
-            throw new ArgumentOutOfRangeException(nameof(areaLevel), "P1 area level must be 1 through 10.");
+            throw new ArgumentOutOfRangeException(nameof(areaLevel), "Area level must be 1 through 20.");
         }
 
         return areaLevel;

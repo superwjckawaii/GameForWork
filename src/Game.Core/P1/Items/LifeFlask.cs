@@ -2,6 +2,47 @@ using GameForWork.Core.P1.Combat;
 
 namespace GameForWork.Core.P1.Items;
 
+public enum P1FlaskKind { Life, Mana, Armor, Movement, Resistance }
+
+public static class P1FlaskRules
+{
+    public static P1FlaskKind? KindForBase(string stableId) => stableId switch
+    {
+        "core.base.life_flask" => P1FlaskKind.Life,
+        "core.base.mana_flask" => P1FlaskKind.Mana,
+        "core.base.armor_flask" => P1FlaskKind.Armor,
+        "core.base.movement_flask" => P1FlaskKind.Movement,
+        "core.base.resistance_flask" => P1FlaskKind.Resistance,
+        _ => null,
+    };
+}
+
+public sealed class P1UtilityFlaskState
+{
+    private readonly int _maximumCharges;
+    private readonly int _chargesPerUse;
+    private readonly int _durationTicks;
+    public P1UtilityFlaskState(int maximumCharges = 40, int chargesPerUse = 20, int durationTicks = 100)
+    {
+        _maximumCharges = maximumCharges;
+        _chargesPerUse = chargesPerUse;
+        _durationTicks = durationTicks;
+        Charges = maximumCharges;
+    }
+    public int Charges { get; private set; }
+    public int RemainingTicks { get; private set; }
+    public bool Active => RemainingTicks > 0;
+    public bool TryUse()
+    {
+        if (Active || Charges < _chargesPerUse) return false;
+        Charges -= _chargesPerUse;
+        RemainingTicks = _durationTicks;
+        return true;
+    }
+    public void AdvanceTick() => RemainingTicks = Math.Max(0, RemainingTicks - 1);
+    public void GainCharges(int amount) => Charges = Math.Min(_maximumCharges, checked(Charges + Math.Max(0, amount)));
+}
+
 public sealed record LifeFlaskDefinition(int BaseRecovery, int MaximumCharges, int ChargesPerUse);
 
 public sealed class LifeFlaskState

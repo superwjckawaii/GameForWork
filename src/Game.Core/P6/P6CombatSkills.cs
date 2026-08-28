@@ -75,6 +75,22 @@ public static class P6CombatSkillRules
             execute = 14_000;
             nonExecute = 9_000;
         }
+        if (configuration.Supports.HasFlag(SkillSupport.SpellEcho) && definition.Tags.HasFlag(SkillTag.Spell))
+        {
+            projectiles += 1;
+            damage = checked(damage * 8_200 / 10_000);
+        }
+        if (configuration.Supports.HasFlag(SkillSupport.ElementalFocus) && (definition.Tags & SkillTag.Elemental) != 0)
+            damage = checked(damage * 12_800 / 10_000);
+        if (configuration.Supports.HasFlag(SkillSupport.AddedFire)) damage = checked(damage * 11_800 / 10_000);
+        if (configuration.Supports.HasFlag(SkillSupport.AddedCold)) damage = checked(damage * 11_500 / 10_000);
+        if (configuration.Supports.HasFlag(SkillSupport.AddedLightning)) damage = checked(damage * 11_700 / 10_000);
+        if (configuration.Supports.HasFlag(SkillSupport.CriticalStrikes)) damage = checked(damage * 11_200 / 10_000);
+        if (configuration.Supports.HasFlag(SkillSupport.ConcentratedEffect) && definition.Tags.HasFlag(SkillTag.Area))
+        {
+            range = checked(range * 7_500 / 10_000);
+            damage = checked(damage * 13_200 / 10_000);
+        }
         if (configuration.Supports.HasFlag(SkillSupport.AttackSpeed) && definition.Tags.HasFlag(SkillTag.Attack))
         {
             cooldown = Math.Max(1, cooldown * 10_000 / 12_500);

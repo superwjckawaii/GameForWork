@@ -3,6 +3,7 @@ using System.Text;
 using GameForWork.Core.Offline;
 using GameForWork.Core.P1.Items;
 using GameForWork.Core.P1.Progression;
+using GameForWork.Core.P1.Combat;
 using GameForWork.Core.P5;
 using GameForWork.Core.P6;
 
@@ -309,13 +310,19 @@ public sealed record P1OfflineTeamSummary(
     bool Stopped,
     string StopReason);
 
+public sealed record P1OfflineSegment(
+    ExpeditionTeamKind Team, string MapInstanceId, int Tier, MapRoute Route,
+    long StartMilliseconds, long DurationMilliseconds, P1BattleOutcome Outcome,
+    int LootCount, string StopReason);
+
 public sealed record P1OfflineResult(
     long EffectiveMilliseconds,
     bool WasClamped,
     int TotalMapsCompleted,
     int TotalMapsFailed,
     IReadOnlyList<P1OfflineTeamSummary> Teams,
-    string FinalHash);
+    string FinalHash,
+    IReadOnlyList<P1OfflineSegment>? Segments = null);
 
 public sealed class P1WorldSimulator(IP1MapAttemptResolver attemptResolver)
 {
@@ -331,6 +338,7 @@ public sealed class P1WorldSimulator(IP1MapAttemptResolver attemptResolver)
         int initialCompleted = state.Teams.Sum(team => team.MapsCompleted);
         int initialFailed = state.Teams.Sum(team => team.MapsFailed);
         var active = new Dictionary<ExpeditionTeamKind, ActiveExpedition>();
+        var segments = new List<P1OfflineSegment>();
         long now = 0;
         foreach (P1TeamExpeditionState team in state.Teams) team.AdvanceRouteDecision(effective, offline);
         foreach (P1TeamExpeditionState team in state.Teams.Where(team => team.ActiveMap is not null))
@@ -374,7 +382,16 @@ public sealed class P1WorldSimulator(IP1MapAttemptResolver attemptResolver)
             foreach (ActiveExpedition expedition in completed)
             {
                 active.Remove(expedition.Team.Kind);
+                P1MapRunResult? completedRun = expedition.Team.ActiveRun;
+                int lootBefore = expedition.Team.Backpack.Count;
                 ResolveExpedition(state, expedition, DeriveExpeditionSeed(seed, expedition), offline);
+                long duration = completedRun?.DurationMilliseconds ?? 0;
+                segments.Add(new P1OfflineSegment(expedition.Team.Kind, expedition.Map.InstanceId,
+                    expedition.Map.AreaLevel, expedition.Route, Math.Max(0, now - duration), duration,
+                    completedRun is null ? P1BattleOutcome.Timeout : completedRun.Succeeded
+                        ? P1BattleOutcome.HeroVictory
+                        : completedRun.Attempts.LastOrDefault()?.Timeline?.Outcome ?? P1BattleOutcome.EnemyVictory,
+                    Math.Max(0, expedition.Team.Backpack.Count - lootBefore), expedition.Team.StopReason));
             }
 
             if (now < effective)
@@ -409,7 +426,8 @@ public sealed class P1WorldSimulator(IP1MapAttemptResolver attemptResolver)
             totalCompleted,
             totalFailed,
             summaries,
-            Hash(state, effective, seed));
+            Hash(state, effective, seed),
+            segments);
     }
 
     private void StartReadyTeams(

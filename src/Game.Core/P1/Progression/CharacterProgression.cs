@@ -11,23 +11,25 @@ public sealed class CharacterProgression
 {
     private static readonly int[] ExperienceToNextLevel = BuildExperienceCurve();
 
-    public const int MaximumLevel = 60;
+    public const int InitialMaximumLevel = 100;
+    public const int MaximumLevel = 120;
     public static readonly int TotalExperienceToCap = ExperienceToNextLevel.Sum();
 
     public int Level { get; private set; } = 1;
     public int Experience { get; private set; }
     public int EarnedPassivePoints { get; private set; }
     public bool FirstBossPassivePointClaimed { get; private set; }
+    public int LevelCap { get; private set; } = InitialMaximumLevel;
 
     public ExperienceGainResult AddExperience(int amount)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(amount);
         int previousLevel = Level;
         int previousPoints = EarnedPassivePoints;
-        if (Level < MaximumLevel)
+        if (Level < LevelCap)
         {
-            Experience = Math.Min(TotalExperienceToCap, checked(Experience + amount));
-            while (Level < MaximumLevel && Experience >= CumulativeExperienceForLevel(Level + 1))
+            Experience = Math.Min(CumulativeExperienceForLevel(LevelCap), checked(Experience + amount));
+            while (Level < LevelCap && Experience >= CumulativeExperienceForLevel(Level + 1))
             {
                 Level++;
                 EarnedPassivePoints++;
@@ -39,7 +41,7 @@ public sealed class CharacterProgression
             Level,
             amount,
             EarnedPassivePoints - previousPoints,
-            Level == MaximumLevel);
+            Level == LevelCap);
     }
 
     public bool ClaimFirstBossPassivePoint()
@@ -65,9 +67,17 @@ public sealed class CharacterProgression
         }
 
         Level = level;
+        if (level > InitialMaximumLevel) LevelCap = MaximumLevel;
         Experience = experience;
         EarnedPassivePoints = earnedPassivePoints;
         FirstBossPassivePointClaimed = firstBossPassivePointClaimed;
+    }
+
+    public bool UnlockFinalBreakthrough()
+    {
+        if (LevelCap == MaximumLevel) return false;
+        LevelCap = MaximumLevel;
+        return true;
     }
 
     public void MigrateToMinimumLevel(int minimumLevel)

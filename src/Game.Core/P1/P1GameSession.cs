@@ -9,6 +9,7 @@ using GameForWork.Core.P6;
 using GameForWork.Core.P9;
 using GameForWork.Core.P10;
 using GameForWork.Core.P12;
+using GameForWork.Core.P14;
 
 namespace GameForWork.Core.P1;
 
@@ -117,7 +118,7 @@ public sealed record P1GameSessionSnapshot(
 
 public sealed class P1GameSession
 {
-    public const int CurrentFormatVersion = 14;
+    public const int CurrentFormatVersion = 15;
     private readonly P1WorldSimulator _simulator = new(new P1MapAttemptResolver());
     private readonly P2CampaignSimulator _campaignSimulator = new();
     private AssembledCharacterBuild _heroBuild;
@@ -176,6 +177,8 @@ public sealed class P1GameSession
     public P8DemoJourney Journey { get; }
     public P9TownState Town { get; }
     public P10EndgameState Endgame { get; }
+    public int UnlockedFlaskSlots => Math.Clamp(2 + Town.Level(P9BuildingKind.Teleporter),
+        P14Flasks.InitialSlots, P14Flasks.MaximumSlots);
     public bool IsExpeditionUnlocked => Campaign.Completed;
     public bool DebugTwentyTimes { get; set; }
     public ulong Seed { get; }
@@ -261,8 +264,8 @@ public sealed class P1GameSession
 
         if (snapshot.FormatVersion < CurrentFormatVersion)
         {
-            world.Hero.Progression.MigrateToMinimumLevel(CharacterProgression.MaximumLevel);
-            world.Mercenaries.Progression.MigrateToMinimumLevel(CharacterProgression.MaximumLevel);
+            world.Hero.Progression.MigrateToMinimumLevel(60);
+            world.Mercenaries.Progression.MigrateToMinimumLevel(60);
             if (snapshot.FormatVersion < 7)
             {
                 world.Economy.AddMetal(MetalCurrencyKind.TemperingIron, 3);
@@ -301,7 +304,11 @@ public sealed class P1GameSession
             snapshot.SimulationSequence,
             snapshot.DebugTwentyTimes);
         session.ApplyTownBuildingEffects();
-        if (session.Endgame.FinalBreakthroughCompleted) session.World.UnlockFinalMapTiers();
+        if (session.Endgame.FinalBreakthroughCompleted)
+        {
+            session.World.UnlockFinalMapTiers();
+            session.World.Hero.Progression.UnlockFinalBreakthrough();
+        }
         session.Journey.Synchronize(session);
         return session;
     }
@@ -423,9 +430,22 @@ public sealed class P1GameSession
         {
             int completed = team.MapsCompleted - completedBefore[team.Kind];
             if (completed <= 0 || team.LastRun is not { Succeeded: true } run) continue;
-            for (int index = 0; index < completed; index++)
-                Endgame.RecordMapCompletion(run.Map, run.Route, Seed ^ (ulong)SimulationSequence ^ ((ulong)(int)team.Kind << 48) ^ (uint)index);
-            if (P10EndgameState.IsCitadel(run.Map)) Endgame.RecordCitadelVictory();
+            bool special = P10EndgameState.IsCitadel(run.Map) || P10EndgameState.IsCitadelPractice(run.Map) ||
+                           P10EndgameState.IsBreakthroughTrial(run.Map);
+            if (!special)
+                for (int index = 0; index < completed; index++)
+                    Endgame.RecordMapCompletion(run.Map, run.Route, Seed ^ (ulong)SimulationSequence ^ ((ulong)(int)team.Kind << 48) ^ (uint)index);
+            if (P10EndgameState.IsBreakthroughTrial(run.Map)) RecordFinalBreakthroughTrialVictory();
+            if (P10EndgameState.IsCitadel(run.Map))
+            {
+                Endgame.RecordCitadelVictory();
+                if (Endgame.TryClaimCitadelMythic())
+                {
+                    ItemInstance mythic = P14UniqueItems.Create("core.mythic.heart_of_ash", 120,
+                        $"mythic-heart-of-ash-{SimulationSequence:000000}");
+                    if (!World.Storage.TryStore(mythic)) Management.AddToRecovery(mythic, "灰烬天垒首杀奖励；仓库已满");
+                }
+            }
         }
         int ashes = World.Economy.TakeMemoryAshes();
         if (ashes > 0)
@@ -683,6 +703,11 @@ public sealed class P1GameSession
         World.Expedition.Assign(teamKind, target, mode);
         team.Resume();
         World.Expedition.PrepareNext(World, team);
+        if (team.Queue.Maps.FirstOrDefault() is { } queued)
+            team.Queue.TryReplaceAt(0, queued with
+            {
+                AtlasSnapshot = Endgame.AtlasPassives.Order(StringComparer.Ordinal).ToArray(),
+            });
         Journey.Synchronize(this);
     }
 
@@ -815,6 +840,7 @@ public sealed class P1GameSession
         {
             P1TeamExpeditionState team = (moved & 1) == 0 ? World.Hero : World.Mercenaries;
             P1MapItem map = World.MapInventory[index].EnsureFormal(Seed ^ (ulong)SimulationSequence ^ (ulong)index);
+            map = map with { AtlasSnapshot = Endgame.AtlasPassives.Order(StringComparer.Ordinal).ToArray() };
             if (map.AreaLevel > World.MaximumUnlockedMapTier) continue;
             if (!team.Queue.TryEnqueue(map))
             {
@@ -910,7 +936,21 @@ public sealed class P1GameSession
     {
         if (!Endgame.TryCompleteFinalBreakthrough(World.Hero.Progression.Level, trialWon: true)) return false;
         World.UnlockFinalMapTiers();
+        World.Hero.Progression.UnlockFinalBreakthrough();
         return true;
+    }
+
+    public bool TryChallengeFinalBreakthrough()
+    {
+        P1TeamExpeditionState team = World.Hero;
+        if (World.Hero.Progression.Level < 100 || Endgame.FinalBreakthroughCompleted ||
+            team.ActiveMap is not null || team.Queue.Count > 0) return false;
+        World.Expedition.Cancel(ExpeditionTeamKind.Hero, "breakthrough_scheduled");
+        team.Resume();
+        team.ApplyPolicy(new ExpeditionPolicy(RouteSelectionMode.Automatic, MapRoute.Safe,
+            QueueFailureBehavior.Stop, StorageFullBehavior.AcceptStackablesOnly, StopAfterConsecutiveFailures: 1));
+        return team.Queue.TryEnqueue(new P1MapItem($"{P10EndgameState.BreakthroughMapPrefix}{SimulationSequence:000000}", 16,
+            AtlasSnapshot: Endgame.AtlasPassives.Order(StringComparer.Ordinal).ToArray()));
     }
 
     private bool ApplyBatchOperation(int index, ref P1MapItem map, P12MapCraftOperation operation,
@@ -1067,7 +1107,20 @@ public sealed class P1GameSession
         team.Resume();
         team.ApplyPolicy(new ExpeditionPolicy(RouteSelectionMode.Automatic, MapRoute.Abyss,
             QueueFailureBehavior.Stop, StorageFullBehavior.AcceptStackablesOnly, StopAfterConsecutiveFailures: 1));
-        return team.Queue.TryEnqueue(new P1MapItem($"{P10EndgameState.CitadelMapPrefix}{SimulationSequence:000000}", 20));
+        return team.Queue.TryEnqueue(new P1MapItem($"{P10EndgameState.CitadelMapPrefix}{SimulationSequence:000000}", 20,
+            AtlasSnapshot: Endgame.AtlasPassives.Order(StringComparer.Ordinal).ToArray()));
+    }
+
+    public bool TryPracticeCitadel()
+    {
+        P1TeamExpeditionState team = World.Hero;
+        if (team.ActiveMap is not null || team.Queue.Count > 0) return false;
+        World.Expedition.Cancel(ExpeditionTeamKind.Hero, "citadel_practice_scheduled");
+        team.Resume();
+        team.ApplyPolicy(new ExpeditionPolicy(RouteSelectionMode.Automatic, MapRoute.Abyss,
+            QueueFailureBehavior.Stop, StorageFullBehavior.AcceptStackablesOnly, StopAfterConsecutiveFailures: 1));
+        return team.Queue.TryEnqueue(new P1MapItem($"{P10EndgameState.CitadelPracticeMapPrefix}{SimulationSequence:000000}", 20,
+            AtlasSnapshot: Endgame.AtlasPassives.Order(StringComparer.Ordinal).ToArray()));
     }
 
     private void RefreshMercenaryPartyBuild() => World.Mercenaries.UpdateBuild(
@@ -1105,7 +1158,8 @@ public sealed class P1GameSession
             new SkillConfiguration(P1SkillIds.HeavyStrike, supports),
             new SkillConfiguration(P1SkillIds.EarthCleave, SkillSupport.IncreasedArea),
             new SkillConfiguration(P1SkillIds.SpiritBlade, SkillSupport.Chain),
-        ]) with
+        ],
+        Flasks: build.Flasks) with
         {
             AiSummary = $"{ai.Preset} · {(ai.MatchMode == AiRuleMatchMode.All ? "全部满足" : "任一满足")}：" +
                 $"敌人≥{ai.MinimumEnemyCount}、稀有度 {ai.EnemyRarity}、距离≤{ai.MaximumEnemyDistance}、" +
@@ -1159,6 +1213,13 @@ public sealed class P1GameSession
                 "core.skill_stone.urgent_war_cry" => SkillSupport.UrgentWarCry,
                 "core.skill_stone.life_leech" => SkillSupport.LifeLeech,
                 "core.skill_stone.execution" => SkillSupport.Execution,
+                "core.skill_stone.spell_echo" => SkillSupport.SpellEcho,
+                "core.skill_stone.elemental_focus" => SkillSupport.ElementalFocus,
+                "core.skill_stone.added_fire" => SkillSupport.AddedFire,
+                "core.skill_stone.added_cold" => SkillSupport.AddedCold,
+                "core.skill_stone.added_lightning" => SkillSupport.AddedLightning,
+                "core.skill_stone.critical_strikes" => SkillSupport.CriticalStrikes,
+                "core.skill_stone.concentrated_effect" => SkillSupport.ConcentratedEffect,
                 _ => SkillSupport.None,
             };
         }
@@ -1175,6 +1236,9 @@ public sealed class P1GameSession
         "core.skill_stone.seismic_charge" => P1SkillIds.SeismicCharge,
         "core.skill_stone.blood_tide_spin" => P1SkillIds.BloodTideSpin,
         "core.skill_stone.iron_oath_banner" => P1SkillIds.IronOathBanner,
+        "core.skill_stone.ash_javelin" => P1SkillIds.AshJavelin,
+        "core.skill_stone.ember_nova" => P1SkillIds.EmberNova,
+        "core.skill_stone.storm_brand" => P1SkillIds.StormBrand,
         _ => string.Empty,
     };
 
@@ -1191,6 +1255,13 @@ public sealed class P1GameSession
         if (supports.HasFlag(SkillSupport.UrgentWarCry)) yield return "core.skill_stone.urgent_war_cry";
         if (supports.HasFlag(SkillSupport.LifeLeech)) yield return "core.skill_stone.life_leech";
         if (supports.HasFlag(SkillSupport.Execution)) yield return "core.skill_stone.execution";
+        if (supports.HasFlag(SkillSupport.SpellEcho)) yield return "core.skill_stone.spell_echo";
+        if (supports.HasFlag(SkillSupport.ElementalFocus)) yield return "core.skill_stone.elemental_focus";
+        if (supports.HasFlag(SkillSupport.AddedFire)) yield return "core.skill_stone.added_fire";
+        if (supports.HasFlag(SkillSupport.AddedCold)) yield return "core.skill_stone.added_cold";
+        if (supports.HasFlag(SkillSupport.AddedLightning)) yield return "core.skill_stone.added_lightning";
+        if (supports.HasFlag(SkillSupport.CriticalStrikes)) yield return "core.skill_stone.critical_strikes";
+        if (supports.HasFlag(SkillSupport.ConcentratedEffect)) yield return "core.skill_stone.concentrated_effect";
     }
 
     private static void SynchronizeLegacyHeavySupports(P2ManagementState management, SkillSupport supports)

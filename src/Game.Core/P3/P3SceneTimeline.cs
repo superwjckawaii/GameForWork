@@ -6,6 +6,7 @@ using GameForWork.Core.P2;
 using GameForWork.Core.Simulation;
 using GameForWork.Core.P4;
 using GameForWork.Core.P12;
+using GameForWork.Core.P14;
 
 namespace GameForWork.Core.P3;
 
@@ -32,6 +33,10 @@ public enum P3SceneEventKind
     BloodTideSpin,
     Banner,
     SkillFailed,
+    AshJavelin,
+    EmberNova,
+    StormBrand,
+    MechanicChoice,
 }
 
 public sealed record P3GridPosition(int X, int Y);
@@ -135,16 +140,18 @@ public static class P3SceneTimelineBuilder
         ArgumentNullException.ThrowIfNull(build);
         ArgumentNullException.ThrowIfNull(map);
         P12MapCombatModifiers modifiers = P12MapCombatModifiers.From(map);
+        P14MapPlan plan = P14MapPlanner.Build(map, route, [], seed ^ (ulong)attempt);
         return Build(
-            $"map:{map.InstanceId}:attempt:{attempt}",
+            $"map:{map.AreaId}:{map.InstanceId}:attempt:{attempt}",
             build,
-            route == MapRoute.Abyss ? 10 : route == MapRoute.LifeGarden ? 9 : 8,
+            plan.Nodes.Count,
             map.AreaLevel,
             forceElite: route == MapRoute.Abyss,
             finalBoss: true,
             abyssRoute: route == MapRoute.Abyss,
             seed,
-            modifiers);
+            modifiers,
+            plan);
     }
 
     public static long TravelMilliseconds(int tileDistance, int movementSpeedBasisPoints)
@@ -169,7 +176,8 @@ public static class P3SceneTimelineBuilder
         bool finalBoss,
         bool abyssRoute,
         ulong seed,
-        P12MapCombatModifiers? mapModifiers = null)
+        P12MapCombatModifiers? mapModifiers = null,
+        P14MapPlan? mapPlan = null)
     {
         var random = new Pcg32(seed);
         var events = new List<P3SceneEvent>();
@@ -187,6 +195,7 @@ public static class P3SceneTimelineBuilder
 
         for (int nodeIndex = 1; nodeIndex <= nodeCount; nodeIndex++)
         {
+            P14MapNode? plannedNode = mapPlan?.Nodes[nodeIndex - 1];
             int distance = 14 + (int)(random.NextUInt() % 9);
             long travel = TravelMilliseconds(distance, build.MovementSpeedBasisPoints);
             events.Add(Event(now, P3SceneEventKind.TravelStarted, nodeIndex, 0, distance, "move", heroLife,
@@ -195,10 +204,19 @@ public static class P3SceneTimelineBuilder
             events.Add(Event(now, P3SceneEventKind.NodeEntered, nodeIndex, 0, 0, "12x24", heroLife,
                 maximumLife, heroMana, maximumMana, heroShield, maximumShield, 0, 0, new(6, 20)));
 
-            bool bossNode = finalBoss && nodeIndex == nodeCount;
-            bool eliteNode = !bossNode && (forceElite && nodeIndex % 2 == 0 || nodeIndex == nodeCount - 1);
+            if (plannedNode is not null && plannedNode.EnemyCount == 0)
+            {
+                events.Add(Event(now, P3SceneEventKind.MechanicChoice, nodeIndex, 0, 0,
+                    $"{plannedNode.Kind}|{plannedNode.DisplayName}", heroLife, maximumLife, heroMana,
+                    maximumMana, heroShield, maximumShield, 0, 0, new(6, 12)));
+                continue;
+            }
+
+            bool bossNode = plannedNode?.Kind == P14MapNodeKind.Boss || finalBoss && nodeIndex == nodeCount;
+            bool eliteNode = plannedNode?.Kind == P14MapNodeKind.Elite ||
+                             !bossNode && (forceElite && nodeIndex % 2 == 0 || nodeIndex == nodeCount - 1);
             bool campaign = stableId.StartsWith("campaign:", StringComparison.Ordinal);
-            int enemyCount = bossNode
+            int enemyCount = plannedNode?.EnemyCount > 0 ? plannedNode.EnemyCount : bossNode
                 ? 5 + (int)(random.NextUInt() % 5)
                 : campaign
                     ? (eliteNode ? 6 : 4) + (int)(random.NextUInt() % 5)
@@ -209,7 +227,7 @@ public static class P3SceneTimelineBuilder
             ulong encounterSeed = ((ulong)random.NextUInt() << 32) | random.NextUInt();
             long start = now;
             events.Add(Event(now, P3SceneEventKind.WaveStarted, nodeIndex, 1, enemyCount,
-                bossNode ? "boss_group" : eliteNode ? "elite_group" : "group", heroLife, maximumLife,
+                plannedNode?.DisplayName ?? (bossNode ? "boss_group" : eliteNode ? "elite_group" : "group"), heroLife, maximumLife,
                 heroMana, maximumMana, heroShield, maximumShield, enemyCount, enemyCount, new(6, 4)));
             P4NodeCombatResult result = new P4SpatialCombatRunner().Run(new P4NodeCombatRequest(
                 build,
@@ -226,13 +244,14 @@ public static class P3SceneTimelineBuilder
                 EnemyLifeBasisPoints: mapModifiers?.EnemyLifeBasisPoints ?? 10_000,
                 EnemyDamageBasisPoints: mapModifiers?.EnemyDamageBasisPoints ?? 10_000,
                 EnemySpeedBasisPoints: mapModifiers?.EnemySpeedBasisPoints ?? 10_000,
-                PlayerRecoveryBasisPoints: mapModifiers?.PlayerRecoveryBasisPoints ?? 10_000), encounterSeed);
+                PlayerRecoveryBasisPoints: mapModifiers?.PlayerRecoveryBasisPoints ?? 10_000,
+                BossStableId: bossNode ? plannedNode?.BossStableId ?? mapPlan?.FinalBossStableId ?? string.Empty : string.Empty), encounterSeed);
             spatialFrames.AddRange(result.Frames.Select(frame => frame with { AtMilliseconds = start + frame.AtMilliseconds }));
             AppendSpatialEvents(events, result, start, nodeIndex, maximumLife, maximumMana, maximumShield);
             long duration = checked((long)result.Ticks * TickMilliseconds);
             now = checked(now + duration);
             encounters.Add(new P3EncounterSegment(nodeIndex, 1,
-                bossNode ? P1Enemies.AbyssWarden.StableId : "core.enemy.group", eliteNode, bossNode,
+                bossNode ? plannedNode?.BossStableId ?? mapPlan?.FinalBossStableId ?? P1Enemies.AbyssWarden.StableId : "core.enemy.group", eliteNode, bossNode,
                 start, duration, result.Outcome, result.Ticks, result.FinalHash, []));
             heroLife = result.HeroLife;
             heroMana = result.HeroMana;
@@ -277,6 +296,10 @@ public static class P3SceneTimelineBuilder
                 P4SpatialEventKind.BloodTideSpin => P3SceneEventKind.BloodTideSpin,
                 P4SpatialEventKind.BannerActivated => P3SceneEventKind.Banner,
                 P4SpatialEventKind.SkillFailed => P3SceneEventKind.SkillFailed,
+                P4SpatialEventKind.AshJavelin => P3SceneEventKind.AshJavelin,
+                P4SpatialEventKind.EmberNova => P3SceneEventKind.EmberNova,
+                P4SpatialEventKind.StormBrand => P3SceneEventKind.StormBrand,
+                P4SpatialEventKind.BossTelegraph or P4SpatialEventKind.BossPhaseChanged => P3SceneEventKind.BossPhase,
                 P4SpatialEventKind.EnemyAttack => P3SceneEventKind.EnemyAttack,
                 P4SpatialEventKind.Bleed => P3SceneEventKind.Bleed,
                 P4SpatialEventKind.Flask => P3SceneEventKind.Flask,

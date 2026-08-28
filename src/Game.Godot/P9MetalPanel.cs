@@ -4,6 +4,7 @@ using GameForWork.Core.P2;
 using GameForWork.Core.P4;
 using GameForWork.Core.P6;
 using GameForWork.Core.P9;
+using GameForWork.Core.P14;
 using Godot;
 
 namespace GameForWork.GodotClient;
@@ -21,6 +22,7 @@ public partial class P9MetalPanel : VBoxContainer
     private Label? _status;
     private HFlowContainer? _enchants;
     private HFlowContainer? _alchemy;
+    private HFlowContainer? _garden;
     private Texture2D? _metalAtlas;
     private ConfirmationDialog? _confirm;
     private Action? _pending;
@@ -49,6 +51,9 @@ public partial class P9MetalPanel : VBoxContainer
         _body.AddChild(new Label { Text = "炼金所 · 固定公开配方" });
         _alchemy = new HFlowContainer();
         _body.AddChild(_alchemy);
+        _body.AddChild(new Label { Text = "命能花园 · 确定性定向加工" });
+        _garden = new HFlowContainer();
+        _body.AddChild(_garden);
         _confirm = new ConfirmationDialog { Title = "确认金属加工", OkButtonText = "确认使用", CancelButtonText = "取消", Exclusive = true };
         _confirm.Confirmed += () => { Action? action = _pending; _pending = null; action?.Invoke(); };
         _confirm.Canceled += () => _pending = null;
@@ -61,7 +66,7 @@ public partial class P9MetalPanel : VBoxContainer
         P1GameSession session = _session();
         P9CraftTarget? target = _target?.Invoke();
         string signature = string.Join('|', P4MetalCurrencies.All.Select(metal => session.World.Economy.MetalAmount(metal.Kind))) +
-            $"|{session.World.Economy.Gold}|{session.Town.Level(P9BuildingKind.Workshop)}|{session.Town.Level(P9BuildingKind.Alchemy)}|{target?.Item.InstanceId}|{target?.Item.Affixes.Count}|{target?.Item.Quality}";
+            $"|{session.World.Economy.Gold}|{session.Endgame.LifeForce}|{session.Town.Level(P9BuildingKind.Workshop)}|{session.Town.Level(P9BuildingKind.Alchemy)}|{target?.Item.InstanceId}|{target?.Item.Affixes.Count}|{target?.Item.Quality}";
         if (!force && signature == _signature) return;
         _signature = signature;
         _status!.Text = target is null ? "尚未选择装备：先在装备栏、整理背包或仓库中单击一件物品。" :
@@ -95,6 +100,7 @@ public partial class P9MetalPanel : VBoxContainer
         }
         RebuildEnchantments(session, target);
         RebuildAlchemy(session);
+        RebuildGarden(session, target);
     }
 
     private void UseMetal(MetalCurrencyKind kind)
@@ -184,6 +190,42 @@ public partial class P9MetalPanel : VBoxContainer
             _alchemy.AddChild(button);
         }
     }
+
+    private void RebuildGarden(P1GameSession session, P9CraftTarget? target)
+    {
+        foreach (Node child in _garden!.GetChildren()) child.QueueFree();
+        foreach (P14GardenCraft craft in Enum.GetValues<P14GardenCraft>())
+        {
+            int cost = P14GardenCrafting.Cost(craft);
+            var button = new Button
+            {
+                Text = $"{GardenName(craft)}\n{cost} 命能",
+                TooltipText = "只保留或偏向公开类别；相同存档种子产生相同结果。",
+                Disabled = target is null || target.Item.Rarity != ItemRarity.Rare || !target.Item.CanModify || session.Endgame.LifeForce < cost,
+            };
+            button.Pressed += () =>
+            {
+                P9CraftTarget? current = _target?.Invoke();
+                if (current is null) return;
+                Confirm($"{GardenName(craft)}\n消耗：{cost} 命能", () =>
+                {
+                    P14GardenCraftResult result = new P2ItemCommandService(_session!(), current.Character, current.MercenaryId)
+                        .CraftP14(current.Container, current.Index, craft);
+                    _changed?.Invoke(result.Summary);
+                });
+            };
+            _garden.AddChild(button);
+        }
+    }
+
+    private static string GardenName(P14GardenCraft craft) => craft switch
+    {
+        P14GardenCraft.KeepPrefixes => "保留前缀重铸",
+        P14GardenCraft.KeepSuffixes => "保留后缀重铸",
+        P14GardenCraft.BiasLife => "生命偏向重铸",
+        P14GardenCraft.BiasDefense => "防御偏向重铸",
+        _ => "攻击偏向重铸",
+    };
 
     private void Confirm(string text, Action action)
     {

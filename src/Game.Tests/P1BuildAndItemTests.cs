@@ -22,18 +22,21 @@ public sealed class P1BuildAndItemTests
     }
 
     [Fact]
-    public void ExperienceTableReachesLevelSixtyAndFiftyNineLevelPoints()
+    public void ExperienceTableStopsAtOneHundredUntilBreakthroughThenReachesOneTwenty()
     {
         var progression = new CharacterProgression();
 
         ExperienceGainResult result = progression.AddExperience(CharacterProgression.TotalExperienceToCap);
 
-        Assert.Equal(60, progression.Level);
-        Assert.Equal(59, progression.EarnedPassivePoints);
-        Assert.Equal(59, result.PassivePointsGained);
+        Assert.Equal(100, progression.Level);
+        Assert.Equal(99, progression.EarnedPassivePoints);
+        Assert.Equal(99, result.PassivePointsGained);
         Assert.True(result.ReachedLevelCap);
         Assert.Equal(1_140, CharacterProgression.RequiredExperience(9));
-        progression.AddExperience(10_000);
+        Assert.True(progression.UnlockFinalBreakthrough());
+        progression.AddExperience(CharacterProgression.TotalExperienceToCap);
+        Assert.Equal(120, progression.Level);
+        Assert.Equal(119, progression.EarnedPassivePoints);
         Assert.Equal(CharacterProgression.TotalExperienceToCap, progression.Experience);
     }
 

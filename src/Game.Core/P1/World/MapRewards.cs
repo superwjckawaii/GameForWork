@@ -2,6 +2,7 @@ using GameForWork.Core.P1.Items;
 using GameForWork.Core.Simulation;
 using GameForWork.Core.P4;
 using GameForWork.Core.P5;
+using GameForWork.Core.P14;
 
 namespace GameForWork.Core.P1.World;
 
@@ -23,22 +24,7 @@ public sealed record P1MapRewards(
 public static class P1MapRewardGenerator
 {
     public const int ExperiencePerMap = 190;
-    private static readonly string[] EquipmentBases =
-    [
-        "core.base.rusted_greatsword",
-        "core.base.heavy_battleaxe",
-        "core.base.pole_warhammer",
-        "core.base.crude_chainmail",
-        "core.base.hide_coat",
-        "core.base.runed_robe",
-        "core.base.iron_helmet",
-        "core.base.hunter_hood",
-        "core.base.ash_circlet",
-        "core.base.iron_ring",
-        "core.base.life_ring",
-        "core.base.focus_ring",
-        "core.base.life_flask",
-    ];
+    private static readonly string[] EquipmentBases = P1ItemBases.All.Select(item => item.StableId).ToArray();
 
     public static P1MapRewards Generate(P1MapItem completedMap, MapRoute route, ulong seed, int maximumUnlockedTier = P1MapItem.MaximumAreaLevel)
     {
@@ -52,7 +38,7 @@ public static class P1MapRewardGenerator
         for (int index = 0; index < itemCount; index++)
         {
             string baseId = EquipmentBases[Next(random, EquipmentBases.Length)];
-            ItemRarity rarity = baseId == "core.base.life_flask" ? ItemRarity.Basic : RollRarity(random);
+            ItemRarity rarity = P1ItemBases.Get(baseId).Category == ItemCategory.LifeFlask ? ItemRarity.Basic : RollRarity(random);
             ulong itemSeed = NextSeed(random);
             equipment.Add(ItemGenerator.Generate(
                 baseId,
@@ -65,10 +51,10 @@ public static class P1MapRewardGenerator
         bool legendary = random.NextBasisPoints() < 1_000;
         if (legendary)
         {
-            equipment.Add(P1Legendary.Create(completedMap.AreaLevel) with
-            {
-                InstanceId = $"drop-{completedMap.InstanceId}-echoing-oathbreaker-{seed:x8}",
-            });
+            P14UniqueDefinition unique = P14UniqueItems.All.Where(item => !item.Mythic)
+                .ElementAt(Next(random, P14UniqueItems.All.Count(item => !item.Mythic)));
+            equipment.Add(P14UniqueItems.Create(unique.StableId, completedMap.AreaLevel,
+                $"drop-{completedMap.InstanceId}-{unique.StableId.Split('.')[^1]}-{seed:x8}"));
         }
 
         var maps = new List<P1MapItem>(2);

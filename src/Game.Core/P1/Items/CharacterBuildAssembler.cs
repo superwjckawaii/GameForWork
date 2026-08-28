@@ -14,7 +14,8 @@ public sealed record AssembledCharacterBuild(
     int IncreasedCriticalChanceBasisPoints,
     int IncreasedBleedChanceBasisPoints,
     WarCryState WarCry,
-    ChargedHeavyStrikeState? ChargedHeavyStrike)
+    ChargedHeavyStrikeState? ChargedHeavyStrike,
+    IReadOnlyList<P1FlaskKind> Flasks)
 {
     public HeavyStrikeRequest CreateHeavyStrikeRequest(
         ResourceState resources,
@@ -90,6 +91,9 @@ public static class CharacterBuildAssembler
             item.IncreasedCriticalChanceBasisPoints,
             checked(item.IncreasedBleedChanceBasisPoints + passive.IncreasedBleedChanceBasisPoints),
             warCry,
-            passive.ChargedHeavyStrike ? new ChargedHeavyStrikeState() : null);
+            passive.ChargedHeavyStrike ? new ChargedHeavyStrikeState() : null,
+            loadout.Items.Where(pair => pair.Key is >= EquipmentSlot.Flask1 and <= EquipmentSlot.Flask5)
+                .Select(pair => P1FlaskRules.KindForBase(pair.Value.Base.StableId)).Where(kind => kind.HasValue)
+                .Select(kind => kind!.Value).Distinct().ToArray());
     }
 }

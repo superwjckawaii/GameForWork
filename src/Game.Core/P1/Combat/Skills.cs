@@ -15,6 +15,11 @@ public enum SkillTag
     Bleed = 1 << 8,
     Movement = 1 << 9,
     Reservation = 1 << 10,
+    Spell = 1 << 11,
+    Fire = 1 << 12,
+    Cold = 1 << 13,
+    Lightning = 1 << 14,
+    Elemental = Fire | Cold | Lightning,
 }
 
 [Flags]
@@ -32,6 +37,13 @@ public enum SkillSupport
     UrgentWarCry = 1 << 8,
     LifeLeech = 1 << 9,
     Execution = 1 << 10,
+    SpellEcho = 1 << 11,
+    ElementalFocus = 1 << 12,
+    AddedFire = 1 << 13,
+    AddedCold = 1 << 14,
+    AddedLightning = 1 << 15,
+    CriticalStrikes = 1 << 16,
+    ConcentratedEffect = 1 << 17,
 }
 
 public static class P1SkillIds
@@ -43,6 +55,9 @@ public static class P1SkillIds
     public const string SeismicCharge = "core.skill.seismic_charge";
     public const string BloodTideSpin = "core.skill.blood_tide_spin";
     public const string IronOathBanner = "core.skill.iron_oath_banner";
+    public const string AshJavelin = "core.skill.ash_javelin";
+    public const string EmberNova = "core.skill.ember_nova";
+    public const string StormBrand = "core.skill.storm_brand";
 }
 
 public enum SkillTargetPolicy
@@ -132,6 +147,25 @@ public static class P1Skills
         SkillTag.Buff | SkillTag.Area | SkillTag.Reservation,
         BaseManaCost: 0, RangeRaw: 8_000, CastTimeTicks: 4, CooldownTicks: 0);
 
+    public static readonly SkillDefinition AshJavelin = new(
+        P1SkillIds.AshJavelin,
+        SkillTag.Attack | SkillTag.Projectile | SkillTag.Physical | SkillTag.Fire,
+        BaseManaCost: 11, RangeRaw: 9_500, CastTimeTicks: 4, CooldownTicks: 18);
+
+    public static readonly SkillDefinition EmberNova = new(
+        P1SkillIds.EmberNova,
+        SkillTag.Spell | SkillTag.Area | SkillTag.Fire,
+        BaseManaCost: 16, RangeRaw: 4_200, CastTimeTicks: 8, CooldownTicks: 32);
+
+    public static readonly SkillDefinition StormBrand = new(
+        P1SkillIds.StormBrand,
+        SkillTag.Spell | SkillTag.Projectile | SkillTag.Chaining | SkillTag.Lightning,
+        BaseManaCost: 14, RangeRaw: 10_000, CastTimeTicks: 7, CooldownTicks: 40);
+
+    public static IReadOnlyList<SkillDefinition> All { get; } =
+    [HeavyStrike, WarCry, EarthCleave, SpiritBlade, SeismicCharge, BloodTideSpin, IronOathBanner,
+        AshJavelin, EmberNova, StormBrand];
+
     public static SkillDefinition Get(string stableId) => stableId switch
     {
         P1SkillIds.HeavyStrike => HeavyStrike,
@@ -141,6 +175,9 @@ public static class P1Skills
         P1SkillIds.SeismicCharge => SeismicCharge,
         P1SkillIds.BloodTideSpin => BloodTideSpin,
         P1SkillIds.IronOathBanner => IronOathBanner,
+        P1SkillIds.AshJavelin => AshJavelin,
+        P1SkillIds.EmberNova => EmberNova,
+        P1SkillIds.StormBrand => StormBrand,
         _ => throw new KeyNotFoundException($"Unknown skill: {stableId}"),
     };
 }

@@ -4,6 +4,7 @@ using GameForWork.Core.P5;
 using GameForWork.Core.P6;
 using GameForWork.Core.P10;
 using GameForWork.Core.P12;
+using GameForWork.Core.P14;
 using Godot;
 
 namespace GameForWork.GodotClient;
@@ -195,6 +196,17 @@ public partial class P5ExpeditionPanel : VBoxContainer
                            $"\n最后 5 秒：{string.Join("；", report.LastFiveSeconds.TakeLast(12))}",
                     AutowrapMode = TextServer.AutowrapMode.WordSmart,
                 });
+                if (report.DeathReport is { } death)
+                {
+                    card.AddChild(new Label
+                    {
+                        Text = $"死亡归因：{death.FatalSkill} · {death.RawDamageType} {death.FatalDamage} · " +
+                               $"可规避：{(death.Avoidable ? "是" : "否")}\n" +
+                               $"防御层：{string.Join('、', death.DefensiveLayers)} · 异常：" +
+                               (death.Ailments.Count == 0 ? "无" : string.Join('、', death.Ailments)),
+                        AutowrapMode = TextServer.AutowrapMode.WordSmart,
+                    });
+                }
                 _reports.AddChild(Frame(card));
             }
             if (session.World.Expedition.Reports.Count == 0) _reports.AddChild(new Label { Text = "尚无战斗报告；完成主线战斗或远征后自动生成。" });
@@ -417,11 +429,15 @@ public partial class P5ExpeditionPanel : VBoxContainer
     private static string DescribeMap(P1MapItem map)
     {
         P12MapArea area = ResolveArea(map);
+        MapRoute route = map.SelectedRoute ?? map.EffectiveRouteCandidates.FirstOrDefault();
+        P14MapPlan plan = P14MapPlanner.Build(map, route, map.AtlasSnapshot ?? [], 0);
+        P14PreflightReport preflight = P14Preflight.ForMap(map, P14Bosses.ForArea(area.StableId));
         string affixes = map.EffectiveAffixes.Count == 0 ? "无显式词缀" :
             string.Join("；", map.EffectiveAffixes.Select(affix => $"{affix.DisplayName} {affix.Value}%"));
         string routes = string.Join(" / ", map.EffectiveRouteCandidates.Select(RouteName));
         string altar = map.Altar switch { P12MapAltar.RedOath => "赤誓祭坛", P12MapAltar.BlueOath => "苍誓祭坛", _ => "无祭坛" };
-        return $"{area.DisplayName} · {area.Environment} · Boss {area.BossName}\n{RarityMark(map.Rarity)} · 品质 {map.Quality}% · 危险 {map.DangerRating} · 掉落量 {map.ItemQuantityBasisPoints / 100.0:0}%\n{affixes}\n候选 {routes} · {altar}";
+        string chain = string.Join(" → ", plan.Nodes.Select(node => node.DisplayName));
+        return $"{area.DisplayName} · {area.Environment} · Boss {area.BossName}\n{RarityMark(map.Rarity)} · 品质 {map.Quality}% · 危险 {map.DangerRating} · 掉落量 {map.ItemQuantityBasisPoints / 100.0:0}%\n{affixes}\n候选 {routes} · {altar}\n节点链：{chain}\n战前：{string.Join('、', preflight.DamageTypes)} · {preflight.EnrageCondition}";
     }
 
     private static P12MapArea ResolveArea(P1MapItem map) =>

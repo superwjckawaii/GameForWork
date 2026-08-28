@@ -193,6 +193,14 @@ public sealed class ResourceState
         return Life - previous;
     }
 
+    public int RestoreMana(int amount)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(amount);
+        int previous = Mana;
+        Mana = Math.Min(MaximumMana, checked(Mana + amount));
+        return Mana - previous;
+    }
+
     public void AdvanceRegenerationTick(int tick)
     {
         const int ticksPerSecond = 20;

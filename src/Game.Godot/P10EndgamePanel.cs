@@ -1,5 +1,7 @@
 using GameForWork.Core.P1;
 using GameForWork.Core.P10;
+using GameForWork.Core.P14;
+using GameForWork.Core.P1.World;
 using Godot;
 
 namespace GameForWork.GodotClient;
@@ -52,7 +54,8 @@ public partial class P10AtlasTreeView : Control
         else if (inputEvent is InputEventMouseMotion hover)
         {
             P10AtlasNode? node = Hit(hover.Position);
-            TooltipText = node is null ? string.Empty : $"{node.DisplayName}\n{ThemeName(node.Theme)}收益提高 {node.RewardBasisPoints / 100.0:0.#}%";
+            TooltipText = node is null ? string.Empty : $"{node.DisplayName}\n{ThemeName(node.Theme)}收益提高 {node.RewardBasisPoints / 100.0:0.#}% · 出现权重 +{node.MechanicWeightBasisPoints / 100.0:0.#}%" +
+                (string.IsNullOrEmpty(node.SpecialRule) ? string.Empty : $"\n规则：{node.SpecialRule}");
         }
     }
 
@@ -73,6 +76,7 @@ public partial class P10EndgamePanel : VBoxContainer
     private OptionButton? _schemes;
     private LineEdit? _schemeName;
     private Button? _breakthrough;
+    private Label? _preflight;
     private string _signature = string.Empty;
 
     public void Initialize(Func<P1GameSession> session, Action<string> changed)
@@ -103,25 +107,31 @@ public partial class P10EndgamePanel : VBoxContainer
             button.Pressed += () => { changed(session().TryAllocateAscendancyPassive(node.StableId) ? $"突破天赋已分配：{node.DisplayName}。" : "突破点不足或前置未分配。"); Refresh(true); };
             ascendancy.AddChild(button);
         }
-        var boss = new Button { Text = "挑战终局：灰烬天垒", TooltipText = "消耗 1 枚天垒门票；首次击败获得突破点。" };
-        boss.Pressed += () => { changed(session().TryChallengeCitadel() ? "灰烬天垒已排入主角远征；胜利后获得突破点。" : "主角队必须空闲，并持有由 8 枚 T11+ 碎片合成的门票。"); Refresh(true); };
-        AddChild(boss);
-        _breakthrough = new Button { Text = "门扉突破试炼（P14 正式战斗）", Disabled = true,
-            TooltipText = "P12 已建立门禁与存档状态；达到 100 级后，P14 的试炼胜利将开放 101–120 级和 T17–T20。" };
-        AddChild(_breakthrough);
+        var bossActions = new HFlowContainer(); AddChild(bossActions);
+        var boss = new Button { Text = "正式挑战：灰烬天垒", TooltipText = "消耗 1 枚天垒门票；正式模式只有一次战斗机会。" };
+        boss.Pressed += () => { changed(session().TryChallengeCitadel() ? "灰烬天垒三阶段已排入主角远征。" : "主角队必须空闲，并持有由 8 枚 T11+ 碎片合成的门票。"); Refresh(true); };
+        bossActions.AddChild(boss);
+        var practice = new Button { Text = "天垒练习", TooltipText = "免费练习三阶段；不消耗门票，也不产生奖励。" };
+        practice.Pressed += () => { changed(session().TryPracticeCitadel() ? "灰烬天垒练习已排入主角远征。" : "主角队必须空闲。"); Refresh(true); };
+        bossActions.AddChild(practice);
+        _breakthrough = new Button { Text = "门扉突破试炼", TooltipText = "达到 100 级后免费重复挑战；胜利开放 101–120 级和 T17–T20。" };
+        _breakthrough.Pressed += () => { changed(session().TryChallengeFinalBreakthrough() ? "百级门扉试炼已排入主角远征。" : "需要 100 级、未完成突破且主角队空闲。"); Refresh(true); };
+        bossActions.AddChild(_breakthrough);
+        _preflight = new Label { AutowrapMode = TextServer.AutowrapMode.WordSmart };
+        AddChild(_preflight);
     }
 
     public void Refresh(bool force = false)
     {
         if (_session is null) return;
         P10EndgameState state = _session().Endgame;
-        string signature = $"{state.EarnedAtlasPoints}:{state.AtlasPassives.Count}:{state.LifeForce}:{state.RedFavor}:{state.BlueFavor}:{state.CitadelFragments}:{state.CitadelTickets}:{state.BreakthroughPoints}:{state.AscendancyPassives.Count}:{state.ActiveAtlasSchemeIndex}:{state.FinalBreakthroughCompleted}:{_session().World.Economy.MemoryAshes}";
+        string signature = $"{state.EarnedAtlasPoints}:{state.AtlasPassives.Count}:{state.LifeForce}:{state.RedFavor}:{state.BlueFavor}:{state.CitadelFragments}:{state.CitadelTickets}:{state.BreakthroughPoints}:{state.AscendancyPassives.Count}:{state.ActiveAtlasSchemeIndex}:{state.FinalBreakthroughCompleted}:{state.CitadelVictories}:{state.MythicReforgeMaterials}:{_session().World.Economy.MemoryAshes}";
         if (!force && signature == _signature) return;
         _signature = signature;
         _summary!.Text = $"T1–T16 常规异界 · T17–T20 {(state.FinalBreakthroughCompleted ? "已开放" : "未开放")} · 首次完成 {state.CompletedTiers.Count}/20 · 异界点 {state.AtlasPassives.Count}/{state.EarnedAtlasPoints} · " +
             $"命能 {state.LifeForce} · 赤誓 {state.RedFavor} · 苍誓 {state.BlueFavor}\n" +
             $"天垒碎片 {state.CitadelFragments}/{P10EndgameState.CitadelFragmentsPerTicket} · 门票 {state.CitadelTickets} · " +
-            $"突破点 {state.AscendancyPassives.Count}/{state.BreakthroughPoints} · 记忆灰烬 {_session().World.Economy.MemoryAshes} · 每张地图出现 1–3 条收益路线";
+            $"突破点 {state.AscendancyPassives.Count}/{state.BreakthroughPoints} · 记忆灰烬 {_session().World.Economy.MemoryAshes} · 天垒胜利 {state.CitadelVictories} · 神话重铸 {state.MythicReforgeMaterials}";
         if (_schemes is not null)
         {
             for (int index = 0; index < 3; index++) _schemes.SetItemText(index, state.AtlasSchemeNames[index]);
@@ -131,7 +141,15 @@ public partial class P10EndgamePanel : VBoxContainer
         if (_breakthrough is not null)
         {
             _breakthrough.Text = state.FinalBreakthroughCompleted ? "门扉突破已完成" :
-                _session().World.Hero.Progression.Level >= 100 ? "门扉突破试炼（等待 P14 战斗）" : "门扉突破试炼（需要 100 级）";
+                _session().World.Hero.Progression.Level >= 100 ? "门扉突破试炼（可挑战）" : "门扉突破试炼（需要 100 级）";
+            _breakthrough.Disabled = state.FinalBreakthroughCompleted || _session().World.Hero.Progression.Level < 100;
+        }
+        if (_preflight is not null)
+        {
+            P14BossDefinition boss = P14Bosses.CitadelStages[^1];
+            P14PreflightReport report = P14Preflight.ForMap(new P1MapItem("preview-citadel", 20), boss);
+            _preflight.Text = $"战前情报｜{report.EncounterName}｜伤害：{string.Join('、', report.DamageTypes)}｜风险 {report.RiskScore}\n" +
+                              $"门槛：{string.Join('；', report.Requirements)}｜{report.EnrageCondition}";
         }
         _atlas?.QueueRedraw();
     }

@@ -140,7 +140,8 @@ public sealed record P1MapItem(
     IReadOnlyList<MapRoute>? RouteCandidates = null,
     MapRoute? SelectedRoute = null,
     P12MapAltar Altar = P12MapAltar.None,
-    IReadOnlyList<string>? Fragments = null)
+    IReadOnlyList<string>? Fragments = null,
+    IReadOnlyList<string>? AtlasSnapshot = null)
 {
     public const int MinimumAreaLevel = 1;
     public const int MaximumAreaLevel = 20;
@@ -164,7 +165,8 @@ public sealed record P1MapItem(
             EffectiveRouteCandidates.Any(route => !Enum.IsDefined(route)) ||
             EffectiveRouteCandidates.Distinct().Count() != EffectiveRouteCandidates.Count ||
             SelectedRoute is not null && !EffectiveRouteCandidates.Contains(SelectedRoute.Value) ||
-            (Fragments?.Count ?? 0) > 4)
+            (Fragments?.Count ?? 0) > 4 || (AtlasSnapshot?.Count ?? 0) > 360 ||
+            (AtlasSnapshot?.Distinct(StringComparer.Ordinal).Count() ?? 0) != (AtlasSnapshot?.Count ?? 0))
         {
             throw new ArgumentOutOfRangeException(nameof(AreaLevel), "P1 maps require an ID and area level 1 through 20.");
         }
@@ -293,7 +295,8 @@ public sealed record P1TeamBuild(
     int MovementSpeedBasisPoints = 10_000,
     IReadOnlyList<SkillConfiguration>? ActiveSkills = null,
     int PartySize = 1,
-    int FrontlineCount = 1);
+    int FrontlineCount = 1,
+    IReadOnlyList<P1FlaskKind>? Flasks = null);
 
 public sealed record MapNodeResult(
     int NodeIndex,

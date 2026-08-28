@@ -4,6 +4,7 @@ using System.Runtime.CompilerServices;
 using GameForWork.Core.P6;
 using GameForWork.Core.P4;
 using GameForWork.Core.P9;
+using GameForWork.Core.P14;
 
 namespace GameForWork.Core.P2;
 
@@ -42,6 +43,9 @@ public sealed class P2ItemCommandService(
         {
             return P2ItemCommandResult.Fail("slot_mismatch", "该物品不能放入目标装备槽。");
         }
+        if (slot is >= EquipmentSlot.Flask1 and <= EquipmentSlot.Flask5 &&
+            (int)slot - (int)EquipmentSlot.Flask1 >= session.UnlockedFlaskSlots)
+            return P2ItemCommandResult.Fail("flask_slot_locked", "升级传送装置可开放更多药剂槽。");
 
         ItemInstance? removed = Take(source, index);
         if (removed is null)
@@ -223,6 +227,24 @@ public sealed class P2ItemCommandService(
         if (source == ItemContainerKind.Equipped) session.NotifyEquipmentChanged(character);
         session.Management.AddHistory(result.Summary);
         return result;
+    }
+
+    public P14GardenCraftResult CraftP14(ItemContainerKind source, int index, P14GardenCraft craft)
+    {
+        ItemInstance? item = PeekIncludingEquipped(source, index);
+        int cost = P14GardenCrafting.Cost(craft);
+        if (item is null) return new(false, "物品不存在。", null, cost);
+        if (!item.CanModify || item.Rarity != ItemRarity.Rare)
+            return new(false, "命能加工要求未锁定、未腐化的稀有装备。", null, cost);
+        if (session.Endgame.LifeForce < cost) return new(false, $"命能不足，需要 {cost}。", null, cost);
+        ItemInstance result = P14GardenCrafting.Apply(item, craft,
+            session.Seed ^ (ulong)session.SimulationSequence ^ (ulong)index * 0x9e3779b97f4a7c15UL);
+        if (!Replace(source, index, result)) return new(false, "物品位置变化，命能未消耗。", null, cost);
+        if (!session.Endgame.TrySpendLifeForce(cost)) throw new InvalidOperationException("Life force changed during crafting.");
+        if (source == ItemContainerKind.Equipped) session.NotifyEquipmentChanged(character);
+        session.Management.AddHistory($"命能加工：{craft}，消耗 {cost} 命能。" );
+        session.RecordJourneyEvent(P8JourneyEvent.CraftedItem);
+        return new(true, $"{craft} 完成，消耗 {cost} 命能。", result, cost);
     }
 
     public P2ItemCommandResult TryUnequip(EquipmentSlot slot)

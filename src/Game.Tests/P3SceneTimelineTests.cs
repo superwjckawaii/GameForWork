@@ -14,9 +14,9 @@ public sealed class P3SceneTimelineTests
 
         Assert.Equal(12, timeline.GridWidth);
         Assert.Equal(24, timeline.GridHeight);
-        Assert.Equal(8, timeline.NodeCount);
-        Assert.Equal(8, timeline.Encounters.Select(item => item.NodeIndex).Distinct().Count());
-        Assert.Equal(timeline.NodeCount, timeline.TotalWaves);
+        Assert.InRange(timeline.NodeCount, 5, 8);
+        Assert.Equal(timeline.TotalWaves, timeline.Encounters.Select(item => item.NodeIndex).Distinct().Count());
+        Assert.InRange(timeline.TotalWaves, 3, timeline.NodeCount);
         Assert.NotNull(timeline.SpatialFrames);
         Assert.Contains(timeline.SpatialFrames!, frame => frame.Enemies.Count >= 8);
         Assert.Contains(timeline.Events, item => item.Kind == P3SceneEventKind.TravelStarted);

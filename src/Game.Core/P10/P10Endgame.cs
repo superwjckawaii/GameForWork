@@ -14,7 +14,10 @@ public sealed record P10AtlasNode(
     int OrbitIndex,
     string? PrerequisiteId,
     int RewardBasisPoints,
-    bool Notable);
+    bool Notable,
+    int MechanicWeightBasisPoints = 0,
+    bool BlocksCompetingMechanic = false,
+    string SpecialRule = "");
 
 public static class P10AtlasTree
 {
@@ -35,9 +38,16 @@ public static class P10AtlasTree
             string id = $"core.atlas.{lane:00}.{index:00}";
             string? prerequisite = index == 0 ? null : $"core.atlas.{lane:00}.{index - 1:00}";
             bool notable = index is 9 or 19 or 29;
+            string special = !notable ? string.Empty : index switch
+            {
+                9 => "该机制出现权重提高，并至少生成一个额外节点",
+                19 => "可屏蔽同组竞争机制，将权重转移给本机制",
+                _ => "Boss 结算时把该机制奖励提升一个档位",
+            };
             result.Add(new P10AtlasNode(id,
                 notable ? $"{themeNames[(int)theme]}·枢纽 {index / 10 + 1}" : $"{themeNames[(int)theme]} {index + 1:00}",
-                theme, index / 10, lane * 30 + index, prerequisite, notable ? 900 : 180, notable));
+                theme, index / 10, lane * 30 + index, prerequisite, notable ? 900 : 180, notable,
+                notable ? 2_500 : 150, notable && index == 19, special));
         }
         return result;
     }
@@ -78,7 +88,13 @@ public sealed record P10EndgameSnapshot(
     int BreakthroughPoints,
     bool FinalBreakthroughCompleted = false,
     IReadOnlyList<P12AtlasSchemeSnapshot>? AtlasSchemes = null,
-    int ActiveAtlasSchemeIndex = 0);
+    int ActiveAtlasSchemeIndex = 0,
+    int CitadelVictories = 0,
+    int MythicReforgeMaterials = 0,
+    bool MythicGranted = false,
+    int BreakthroughAttempts = 0,
+    int BreakthroughVictories = 0,
+    int BonusAtlasPoints = 0);
 
 public sealed record P12AtlasSchemeSnapshot(string Name, IReadOnlyList<string> AllocatedPassives);
 
@@ -86,6 +102,8 @@ public sealed class P10EndgameState
 {
     public const int CitadelFragmentsPerTicket = 8;
     public const string CitadelMapPrefix = "p10-ashen-citadel-";
+    public const string CitadelPracticeMapPrefix = "p14-ashen-practice-";
+    public const string BreakthroughMapPrefix = "p14-gate-trial-";
     private readonly HashSet<int> _completedTiers = [];
     private readonly List<(string Name, HashSet<string> Nodes)> _atlasSchemes =
     [
@@ -101,7 +119,7 @@ public sealed class P10EndgameState
     public int ActiveAtlasSchemeIndex { get; private set; }
     public IReadOnlyDictionary<P10MapMechanic, int> MechanicEncounters => _mechanics;
     public IReadOnlySet<string> AscendancyPassives => _ascendancy;
-    public int EarnedAtlasPoints => _completedTiers.Count + (CitadelDefeated ? 5 : 0);
+    public int EarnedAtlasPoints => _completedTiers.Count + BonusAtlasPoints;
     public int LifeForce { get; private set; }
     public int RedFavor { get; private set; }
     public int BlueFavor { get; private set; }
@@ -110,6 +128,12 @@ public sealed class P10EndgameState
     public bool CitadelDefeated { get; private set; }
     public int BreakthroughPoints { get; private set; }
     public bool FinalBreakthroughCompleted { get; private set; }
+    public int CitadelVictories { get; private set; }
+    public int MythicReforgeMaterials { get; private set; }
+    public bool MythicGranted { get; private set; }
+    public int BreakthroughAttempts { get; private set; }
+    public int BreakthroughVictories { get; private set; }
+    public int BonusAtlasPoints { get; private set; }
 
     public IReadOnlyList<P10MapMechanic> RecordMapCompletion(P1MapItem map, MapRoute route, ulong seed)
     {
@@ -169,8 +193,13 @@ public sealed class P10EndgameState
 
     public bool TryCompleteFinalBreakthrough(int level, bool trialWon)
     {
-        if (FinalBreakthroughCompleted || level < 100 || !trialWon) return false;
+        if (level < 100) return false;
+        BreakthroughAttempts++;
+        if (!trialWon) return false;
+        BreakthroughVictories++;
+        if (FinalBreakthroughCompleted) return true;
         FinalBreakthroughCompleted = true;
+        AwardBreakthroughPoint(2);
         return true;
     }
 
@@ -181,7 +210,13 @@ public sealed class P10EndgameState
         return _ascendancy.Add(id);
     }
 
-    public void AwardBreakthroughPoint() { if (BreakthroughPoints < 4) BreakthroughPoints++; }
+    public void AwardBreakthroughPoint(int count = 1) => BreakthroughPoints = Math.Min(6, BreakthroughPoints + Math.Max(0, count));
+    public bool TrySpendLifeForce(int amount)
+    {
+        if (amount <= 0 || LifeForce < amount) return false;
+        LifeForce -= amount;
+        return true;
+    }
     public bool TryConsumeCitadelTicket()
     {
         if (CitadelTickets <= 0) return false;
@@ -189,13 +224,33 @@ public sealed class P10EndgameState
         return true;
     }
 
-    public void RecordCitadelVictory()
+    public bool RecordCitadelVictory()
     {
+        bool first = !CitadelDefeated;
         CitadelDefeated = true;
-        AwardBreakthroughPoint();
+        CitadelVictories++;
+        if (first)
+        {
+            BonusAtlasPoints += 5;
+            AwardBreakthroughPoint(2);
+        }
+        else
+        {
+            MythicReforgeMaterials++;
+        }
+        return first;
+    }
+
+    public bool TryClaimCitadelMythic()
+    {
+        if (!CitadelDefeated || MythicGranted) return false;
+        MythicGranted = true;
+        return true;
     }
 
     public static bool IsCitadel(P1MapItem map) => map.InstanceId.StartsWith(CitadelMapPrefix, StringComparison.Ordinal);
+    public static bool IsCitadelPractice(P1MapItem map) => map.InstanceId.StartsWith(CitadelPracticeMapPrefix, StringComparison.Ordinal);
+    public static bool IsBreakthroughTrial(P1MapItem map) => map.InstanceId.StartsWith(BreakthroughMapPrefix, StringComparison.Ordinal);
 
     public int AtlasBonus(P10AtlasTheme theme) => AtlasPassives.Select(P10AtlasTree.Get).Where(node => node.Theme == theme).Sum(node => node.RewardBasisPoints) / 100;
 
@@ -204,7 +259,8 @@ public sealed class P10EndgameState
         CitadelTickets, CitadelDefeated, _ascendancy.Order().ToArray(), BreakthroughPoints,
         FinalBreakthroughCompleted,
         _atlasSchemes.Select(scheme => new P12AtlasSchemeSnapshot(scheme.Name, scheme.Nodes.Order().ToArray())).ToArray(),
-        ActiveAtlasSchemeIndex);
+        ActiveAtlasSchemeIndex, CitadelVictories, MythicReforgeMaterials, MythicGranted,
+        BreakthroughAttempts, BreakthroughVictories, BonusAtlasPoints);
 
     public static P10EndgameState Restore(P10EndgameSnapshot? snapshot)
     {
@@ -212,7 +268,9 @@ public sealed class P10EndgameState
         if (snapshot is null) return state;
         if (snapshot.CompletedTiers.Any(tier => tier is < 1 or > 20) || snapshot.AtlasPassives.Count > 25 ||
             snapshot.CitadelFragments is < 0 or >= CitadelFragmentsPerTicket || snapshot.CitadelTickets < 0 ||
-            snapshot.BreakthroughPoints is < 0 or > 4 || snapshot.AscendancyPassives.Count > snapshot.BreakthroughPoints)
+            snapshot.BreakthroughPoints is < 0 or > 6 || snapshot.AscendancyPassives.Count > snapshot.BreakthroughPoints ||
+            snapshot.CitadelVictories < 0 || snapshot.MythicReforgeMaterials < 0 || snapshot.BreakthroughAttempts < 0 ||
+            snapshot.BreakthroughVictories < 0 || snapshot.BonusAtlasPoints is < 0 or > 5)
             throw new InvalidDataException("P10 endgame snapshot is invalid.");
         foreach (int tier in snapshot.CompletedTiers) state._completedTiers.Add(tier);
         IReadOnlyList<P12AtlasSchemeSnapshot> schemes = snapshot.AtlasSchemes ??
@@ -230,6 +288,12 @@ public sealed class P10EndgameState
         state.CitadelFragments = snapshot.CitadelFragments; state.CitadelTickets = snapshot.CitadelTickets; state.CitadelDefeated = snapshot.CitadelDefeated;
         state.BreakthroughPoints = snapshot.BreakthroughPoints;
         state.FinalBreakthroughCompleted = snapshot.FinalBreakthroughCompleted;
+        state.CitadelVictories = snapshot.CitadelVictories;
+        state.MythicReforgeMaterials = snapshot.MythicReforgeMaterials;
+        state.MythicGranted = snapshot.MythicGranted;
+        state.BreakthroughAttempts = snapshot.BreakthroughAttempts;
+        state.BreakthroughVictories = snapshot.BreakthroughVictories;
+        state.BonusAtlasPoints = snapshot.BonusAtlasPoints > 0 ? snapshot.BonusAtlasPoints : snapshot.CitadelDefeated ? 5 : 0;
         foreach (string id in snapshot.AscendancyPassives) { _ = P10IronOathAscendancy.Nodes.Single(node => node.StableId == id); state._ascendancy.Add(id); }
         return state;
     }
