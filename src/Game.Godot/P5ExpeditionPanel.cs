@@ -2,6 +2,7 @@ using GameForWork.Core.P1;
 using GameForWork.Core.P1.World;
 using GameForWork.Core.P5;
 using GameForWork.Core.P6;
+using GameForWork.Core.P10;
 using Godot;
 
 namespace GameForWork.GodotClient;
@@ -15,7 +16,9 @@ public partial class P5ExpeditionPanel : VBoxContainer
     private Label? _resources;
     private VBoxContainer? _mapInventory;
     private VBoxContainer? _reports;
-    private string _signature = string.Empty;
+    private string _mapSignature = string.Empty;
+    private string _reportSignature = string.Empty;
+    private string _dispatchSignature = string.Empty;
 
     public void Initialize(Func<P1GameSession> session, Action<string> changed)
     {
@@ -57,7 +60,12 @@ public partial class P5ExpeditionPanel : VBoxContainer
         {
             _reports.Visible = expanded;
             reportToggle.Text = expanded ? "收起战斗报告" : "展开最近 50 次战斗报告";
-            if (expanded) ReportsViewed?.Invoke();
+            if (expanded)
+            {
+                _reportSignature = string.Empty;
+                ReportsViewed?.Invoke();
+                RefreshState();
+            }
         };
     }
 
@@ -69,80 +77,63 @@ public partial class P5ExpeditionPanel : VBoxContainer
         }
 
         P1GameSession session = _session();
-        string signature = $"{session.World.Economy.ExpeditionSupplies}|{session.World.Expedition.AbyssWardenFragments}|" +
-            $"{session.World.Expedition.AbyssWardenTickets}|{session.World.Expedition.MapsTowardNextFragment}|" +
-            string.Join(',', session.World.MapInventory.OrderBy(map => map.InstanceId).Select(map => $"{map.InstanceId}:{map.AreaLevel}")) + "|" +
-            string.Join('|', session.World.Teams.Select(TeamSignature)) + "|" +
-            string.Join('|', session.World.Expedition.Dispatches.Values.OrderBy(item => item.Team)) + "|" +
-            string.Join('|', session.World.Expedition.Reports.Select(report => report.StableId));
-        if (signature == _signature)
-        {
-            return;
-        }
-
-        _signature = signature;
         _resources.Text =
             $"地图 {session.World.MapInventory.Count}　深渊监守者碎片 {session.World.Expedition.AbyssWardenFragments}/{P5ExpeditionDirector.FragmentsPerTicket}　" +
             $"Boss 门票 {session.World.Expedition.AbyssWardenTickets}　远征补给 {session.World.Economy.ExpeditionSupplies}";
-        Clear(_mapInventory);
-        for (int tier = P1MapItem.MinimumAreaLevel; tier <= P1MapItem.MaximumAreaLevel; tier++)
+        string mapSignature = $"{session.World.Expedition.AbyssWardenFragments}:{session.World.Expedition.AbyssWardenTickets}:" +
+            $"{session.World.Expedition.MapsTowardNextFragment}|" +
+            string.Join(',', session.World.MapInventory.OrderBy(map => map.InstanceId).Select(map => $"{map.InstanceId}:{map.AreaLevel}"));
+        if (mapSignature != _mapSignature)
         {
-            int count = session.World.MapInventory.Count(map => map.AreaLevel == tier);
-            if (count > 0)
+            _mapSignature = mapSignature;
+            Clear(_mapInventory);
+            for (int tier = P1MapItem.MinimumAreaLevel; tier <= P1MapItem.MaximumAreaLevel; tier++)
             {
-                _mapInventory.AddChild(new Label { Text = $"T{tier} 地图　×{count}" });
+                int count = session.World.MapInventory.Count(map => map.AreaLevel == tier);
+                if (count > 0) _mapInventory.AddChild(new Label { Text = $"T{tier} 地图　×{count}" });
             }
-        }
-
-        if (session.World.MapInventory.Count == 0)
-        {
-            _mapInventory.AddChild(new Label { Text = "地图仓库为空" });
-        }
-
-        _mapInventory.AddChild(new HSeparator());
-        _mapInventory.AddChild(new Label
-        {
-            Text = $"碎片进度：地图 Boss {session.World.Expedition.MapsTowardNextFragment}/{P5ExpeditionDirector.MapsPerFragment}\n" +
-                   $"深渊监守者碎片 {session.World.Expedition.AbyssWardenFragments}/{P5ExpeditionDirector.FragmentsPerTicket}\n" +
-                   $"完整门票 ×{session.World.Expedition.AbyssWardenTickets}",
-        });
-
-        Clear(_reports);
-        foreach (P6CombatReport report in session.World.Expedition.Reports.Reverse())
-        {
-            var card = new VBoxContainer();
-            card.AddChild(new Label
+            if (session.World.MapInventory.Count == 0) _mapInventory.AddChild(new Label { Text = "地图仓库为空" });
+            _mapInventory.AddChild(new HSeparator());
+            _mapInventory.AddChild(new Label
             {
-                Text = $"{report.Context} · {report.Outcome} · {report.DurationMilliseconds / 1_000.0:0.0}s" +
-                       (report.Offline ? " · 离线" : string.Empty),
+                Text = $"碎片进度：地图 Boss {session.World.Expedition.MapsTowardNextFragment}/{P5ExpeditionDirector.MapsPerFragment}\n" +
+                       $"深渊监守者碎片 {session.World.Expedition.AbyssWardenFragments}/{P5ExpeditionDirector.FragmentsPerTicket}\n" +
+                       $"完整门票 ×{session.World.Expedition.AbyssWardenTickets}",
             });
-            string skills = report.Skills.Count == 0 ? "无有效输出" : string.Join(" · ", report.Skills.Take(6)
-                .Select(skill => $"{skill.Skill} {skill.Damage}({skill.DamageBasisPoints / 100.0:0.#}%)/{skill.Uses}次"));
-            string sources = report.DamageSources.Count == 0 ? "无承伤" : string.Join(" · ", report.DamageSources.Take(4)
-                .Select(source => $"{source.Source} {source.Damage}({source.DamageBasisPoints / 100.0:0.#}%)"));
-            string supports = report.Supports.Count == 0 ? "无可归因辅助触发" : string.Join(" · ", report.Supports.Take(6)
-                .Select(support => $"{support.Support} {support.Triggers}次/贡献约{support.EstimatedDamageContribution:+#;-#;0}"));
-            card.AddChild(new Label
-            {
-                Text = $"输出 {report.DamageDealt}：{skills}\n辅助：{supports}\n承伤 {report.DamageTaken}：{sources}\n" +
-                       $"战吼覆盖 {report.WarCryCoverageBasisPoints / 100.0:0.#}% · 战旗覆盖 {report.BannerCoverageBasisPoints / 100.0:0.#}% · " +
-                       $"护盾覆盖 {report.ShieldCoverageBasisPoints / 100.0:0.#}% · 药剂 {report.FlaskUses}次/+{report.FlaskRecovery} · 资源失败 {report.ResourceFailureCount}" +
-                       (string.IsNullOrEmpty(report.TimeoutReason) ? string.Empty : $"\n超时归因：{report.TimeoutReason}") +
-                       $"\n最后 5 秒：{string.Join("；", report.LastFiveSeconds.TakeLast(12))}",
-                AutowrapMode = TextServer.AutowrapMode.WordSmart,
-            });
-            _reports.AddChild(Frame(card));
-        }
-        if (session.World.Expedition.Reports.Count == 0)
-        {
-            _reports.AddChild(new Label { Text = "尚无战斗报告；完成主线战斗或远征后自动生成。" });
         }
 
+        string reportSignature = string.Join('|', session.World.Expedition.Reports.Select(report => report.StableId));
+        if (_reports.Visible && reportSignature != _reportSignature)
+        {
+            _reportSignature = reportSignature;
+            Clear(_reports);
+            foreach (P6CombatReport report in session.World.Expedition.Reports.Reverse())
+            {
+                var card = new VBoxContainer();
+                card.AddChild(new Label { Text = $"{report.Context} · {report.Outcome} · {report.DurationMilliseconds / 1_000.0:0.0}s" + (report.Offline ? " · 离线" : string.Empty) });
+                string skills = report.Skills.Count == 0 ? "无有效输出" : string.Join(" · ", report.Skills.Take(6).Select(skill => $"{skill.Skill} {skill.Damage}({skill.DamageBasisPoints / 100.0:0.#}%)/{skill.Uses}次"));
+                string sources = report.DamageSources.Count == 0 ? "无承伤" : string.Join(" · ", report.DamageSources.Take(4).Select(source => $"{source.Source} {source.Damage}({source.DamageBasisPoints / 100.0:0.#}%)"));
+                string supports = report.Supports.Count == 0 ? "无可归因辅助触发" : string.Join(" · ", report.Supports.Take(6).Select(support => $"{support.Support} {support.Triggers}次/贡献约{support.EstimatedDamageContribution:+#;-#;0}"));
+                card.AddChild(new Label
+                {
+                    Text = $"输出 {report.DamageDealt}：{skills}\n辅助：{supports}\n承伤 {report.DamageTaken}：{sources}\n" +
+                           $"战吼覆盖 {report.WarCryCoverageBasisPoints / 100.0:0.#}% · 战旗覆盖 {report.BannerCoverageBasisPoints / 100.0:0.#}% · " +
+                           $"护盾覆盖 {report.ShieldCoverageBasisPoints / 100.0:0.#}% · 药剂 {report.FlaskUses}次/+{report.FlaskRecovery} · 资源失败 {report.ResourceFailureCount}" +
+                           (string.IsNullOrEmpty(report.TimeoutReason) ? string.Empty : $"\n超时归因：{report.TimeoutReason}") +
+                           $"\n最后 5 秒：{string.Join("；", report.LastFiveSeconds.TakeLast(12))}",
+                    AutowrapMode = TextServer.AutowrapMode.WordSmart,
+                });
+                _reports.AddChild(Frame(card));
+            }
+            if (session.World.Expedition.Reports.Count == 0) _reports.AddChild(new Label { Text = "尚无战斗报告；完成主线战斗或远征后自动生成。" });
+        }
+
+        string dispatchSignature = string.Join('|', session.World.Expedition.Dispatches.Values.OrderBy(item => item.Team));
         foreach ((ExpeditionTeamKind kind, TeamControls controls) in _teams)
         {
             P1TeamExpeditionState team = kind == ExpeditionTeamKind.Hero ? session.World.Hero : session.World.Mercenaries;
             P5TeamDispatchSnapshot? dispatch = session.World.Expedition.Get(kind);
-            if (dispatch is not null)
+            if (dispatch is not null && dispatchSignature != _dispatchSignature)
             {
                 controls.Target.Select(controls.Target.GetItemIndex((int)dispatch.Target));
                 controls.Mode.Select(controls.Mode.GetItemIndex((int)dispatch.Mode));
@@ -150,6 +141,7 @@ public partial class P5ExpeditionPanel : VBoxContainer
             }
             controls.Status.Text = TeamStatus(team, dispatch);
         }
+        _dispatchSignature = dispatchSignature;
     }
 
     private Control BuildTeamCard(ExpeditionTeamKind kind, string title)
@@ -185,7 +177,7 @@ public partial class P5ExpeditionPanel : VBoxContainer
             P5ExpeditionTarget selectedTarget = (P5ExpeditionTarget)target.GetItemId(target.Selected);
             P5DispatchMode selectedMode = (P5DispatchMode)mode.GetItemId(mode.Selected);
             _session!().AssignExpedition(kind, selectedTarget, selectedMode);
-            _signature = string.Empty;
+            _mapSignature = string.Empty;
             _changed?.Invoke($"{title}已派往{TargetName(selectedTarget)}。");
             RefreshState();
         };
@@ -194,7 +186,7 @@ public partial class P5ExpeditionPanel : VBoxContainer
         stop.Pressed += () =>
         {
             _session!().CancelExpedition(kind);
-            _signature = string.Empty;
+            _mapSignature = string.Empty;
             _changed?.Invoke($"{title}已停止派遣。");
             RefreshState();
         };
@@ -209,7 +201,8 @@ public partial class P5ExpeditionPanel : VBoxContainer
     {
         if (team.ActiveMap is not null)
         {
-            string target = P5ExpeditionDirector.IsPractice(team.ActiveMap) ? "Boss 练习" :
+            string target = P10EndgameState.IsCitadel(team.ActiveMap) ? "灰烬天垒" :
+                P5ExpeditionDirector.IsPractice(team.ActiveMap) ? "Boss 练习" :
                 P5ExpeditionDirector.IsBoss(team.ActiveMap) ? "深渊监守者" : $"T{team.ActiveMap.AreaLevel} 地图";
             return $"执行中：{target} · 剩余约 {Math.Max(1, team.RemainingMapTimeMilliseconds / 1_000)} 秒\n" +
                    $"路线 {team.ActiveRoute} · 最近 {(team.LastRun?.Succeeded == true ? "成功" : team.LastRun is null ? "暂无结算" : "失败")}";

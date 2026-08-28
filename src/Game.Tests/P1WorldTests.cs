@@ -18,7 +18,7 @@ public sealed class P1WorldTests
         }
 
         Assert.False(queue.TryEnqueue(new P1MapItem("overflow", 1)));
-        Assert.Throws<ArgumentOutOfRangeException>(() => queue.TryEnqueue(new P1MapItem("bad", 11)));
+        Assert.Throws<ArgumentOutOfRangeException>(() => queue.TryEnqueue(new P1MapItem("bad", 21)));
     }
 
     [Fact]
@@ -93,7 +93,7 @@ public sealed class P1WorldTests
             Assert.InRange(abyss.Equipment.Count, 3, 6);
             Assert.InRange(abyss.Stackables.Gold, 15, 25);
             Assert.InRange(abyss.Stackables.SkillStones + abyss.Stackables.IronScraps - 2, 1, 4);
-            Assert.All(abyss.Maps, map => Assert.Equal(10, map.AreaLevel));
+            Assert.All(abyss.Maps, map => Assert.InRange(map.AreaLevel, 10, 11));
         }
     }
 

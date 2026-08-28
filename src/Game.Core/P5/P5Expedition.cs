@@ -102,7 +102,7 @@ public sealed class P5ExpeditionDirector
             BossSequence++;
             map = new P1MapItem(
                 $"{(practice ? PracticePrefix : BossPrefix)}{BossSequence:000000}",
-                P1MapItem.MaximumAreaLevel);
+                10);
             route = MapRoute.Abyss;
             status = practice ? "practice_scheduled" : "boss_scheduled";
         }

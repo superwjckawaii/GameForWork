@@ -78,7 +78,7 @@ public sealed record ExpeditionPolicy(
 public sealed record P1MapItem(string InstanceId, int AreaLevel)
 {
     public const int MinimumAreaLevel = 1;
-    public const int MaximumAreaLevel = 10;
+    public const int MaximumAreaLevel = 20;
     public const int RescueChances = 2;
     public const int TotalAttempts = RescueChances + 1;
 
@@ -86,7 +86,7 @@ public sealed record P1MapItem(string InstanceId, int AreaLevel)
     {
         if (string.IsNullOrWhiteSpace(InstanceId) || AreaLevel is < MinimumAreaLevel or > MaximumAreaLevel)
         {
-            throw new ArgumentOutOfRangeException(nameof(AreaLevel), "P1 maps require an ID and area level 1 through 10.");
+            throw new ArgumentOutOfRangeException(nameof(AreaLevel), "P1 maps require an ID and area level 1 through 20.");
         }
 
         return this;

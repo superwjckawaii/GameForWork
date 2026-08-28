@@ -133,6 +133,12 @@ public partial class P1ItemGrid : GridContainer
 
     public void QuickTransfer(int index) => QuickTransferRequested?.Invoke(ToExternalIndex(index));
 
+    public void ClearSelection()
+    {
+        _selectedIndex = -1;
+        foreach (P2ItemCell cell in _cells) cell.SetPressedNoSignal(false);
+    }
+
     private void ApplyCells()
     {
         for (int index = 0; index < _cells.Count; index++)
@@ -212,6 +218,13 @@ public partial class P1ItemGrid : GridContainer
     {
         if (index < 0 || index >= _items.Count)
         {
+            return;
+        }
+
+        if (_selectedIndex == index)
+        {
+            ClearSelection();
+            ItemSelected?.Invoke(-1);
             return;
         }
 

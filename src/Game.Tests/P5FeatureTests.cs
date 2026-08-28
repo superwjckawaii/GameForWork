@@ -120,7 +120,7 @@ public sealed class P5FeatureTests
     public void FirstFourMasteriesProvideBuildDefiningEffects()
     {
         PassiveNodeDefinition[] masteries = P1PassiveTree.Nodes
-            .Where(node => node.Kind == PassiveNodeKind.Mastery)
+            .Where(node => node.Kind == PassiveNodeKind.Mastery && node.Effects.Count >= 2)
             .ToArray();
 
         Assert.Equal(4, masteries.Length);

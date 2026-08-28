@@ -200,6 +200,7 @@ internal static class P1UiText
         PassiveNodeKind.Notable => "显著天赋",
         PassiveNodeKind.Mastery => "集群专精",
         PassiveNodeKind.Rule => "规则天赋",
+        PassiveNodeKind.JewelSocket => "记忆棱孔",
         _ => kind.ToString(),
     };
 

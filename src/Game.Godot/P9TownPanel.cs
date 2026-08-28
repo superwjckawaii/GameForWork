@@ -36,10 +36,10 @@ public partial class P9TownPanel : VBoxContainer
         top.AddChild(_policy);
         _summary = new Label { SizeFlagsHorizontal = SizeFlags.ExpandFill, HorizontalAlignment = HorizontalAlignment.Right };
         top.AddChild(_summary);
-        var split = new HSplitContainer { SizeFlagsVertical = SizeFlags.ExpandFill };
-        AddChild(split);
-        var leftScroll = new ScrollContainer { CustomMinimumSize = new Vector2(450, 500) };
-        split.AddChild(leftScroll);
+        var tabs = new TabContainer { SizeFlagsVertical = SizeFlags.ExpandFill };
+        AddChild(tabs);
+        var leftScroll = new ScrollContainer { Name = "城区建筑", SizeFlagsHorizontal = SizeFlags.ExpandFill, SizeFlagsVertical = SizeFlags.ExpandFill };
+        tabs.AddChild(leftScroll);
         var left = new VBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
         leftScroll.AddChild(left);
         var townMap = new Control { CustomMinimumSize = new Vector2(430, 242), ClipContents = true };
@@ -63,11 +63,8 @@ public partial class P9TownPanel : VBoxContainer
         left.AddChild(new Label { Text = "城区建筑 · 点击升级，施工期间保留旧等级效果" });
         _buildings = new GridContainer { Columns = 2 };
         left.AddChild(_buildings);
-        left.AddChild(new Label { Text = "安全城镇事件" });
-        _events = new RichTextLabel { BbcodeEnabled = true, CustomMinimumSize = new Vector2(0, 140), ScrollActive = true };
-        left.AddChild(_events);
-        var rightScroll = new ScrollContainer { CustomMinimumSize = new Vector2(430, 500) };
-        split.AddChild(rightScroll);
+        var rightScroll = new ScrollContainer { Name = "酒馆名册", SizeFlagsHorizontal = SizeFlags.ExpandFill, SizeFlagsVertical = SizeFlags.ExpandFill };
+        tabs.AddChild(rightScroll);
         var right = new VBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
         rightScroll.AddChild(right);
         var tavernHeader = new HBoxContainer();
@@ -81,9 +78,16 @@ public partial class P9TownPanel : VBoxContainer
         right.AddChild(new Label { Text = "佣兵名册 · 单击成员后放入阵型；技能、天赋与 AI 自主成长" });
         _roster = new VBoxContainer();
         right.AddChild(_roster);
-        right.AddChild(new Label { Text = "2×3 阵型 · 上排为前排，下排为后排" });
+        var formationScroll = new ScrollContainer { Name = "阵型与事件", SizeFlagsHorizontal = SizeFlags.ExpandFill, SizeFlagsVertical = SizeFlags.ExpandFill };
+        tabs.AddChild(formationScroll);
+        var formationBody = new VBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
+        formationScroll.AddChild(formationBody);
+        formationBody.AddChild(new Label { Text = "2×3 阵型 · 上排为前排，下排为后排" });
         _formation = new GridContainer { Columns = 3 };
-        right.AddChild(_formation);
+        formationBody.AddChild(_formation);
+        formationBody.AddChild(new Label { Text = "安全城镇事件" });
+        _events = new RichTextLabel { BbcodeEnabled = true, CustomMinimumSize = new Vector2(0, 260), ScrollActive = true };
+        formationBody.AddChild(_events);
     }
 
     public void Refresh(bool force = false)

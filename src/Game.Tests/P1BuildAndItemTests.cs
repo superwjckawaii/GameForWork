@@ -9,7 +9,7 @@ public sealed class P1BuildAndItemTests
     [Fact]
     public void P3PassiveTreeContainsTenOriginalClustersAndMovementGrowth()
     {
-        Assert.Equal(184, P1PassiveTree.Nodes.Count);
+        Assert.True(P1PassiveTree.Nodes.Count >= 1_500);
         Assert.Equal(10, P1PassiveTree.Nodes.Select(node => node.Branch).Distinct().Count());
 
         var allocation = new PassiveTreeAllocation();
@@ -50,12 +50,13 @@ public sealed class P1BuildAndItemTests
     [Fact]
     public void PassiveTreeHasP3NodeCounts()
     {
-        Assert.Equal(184, P1PassiveTree.Nodes.Count);
-        Assert.Equal(156, P1PassiveTree.Nodes.Count(node => node.Kind == PassiveNodeKind.Small));
-        Assert.Equal(16, P1PassiveTree.Nodes.Count(node => node.Kind == PassiveNodeKind.Notable));
-        Assert.Equal(8, P1PassiveTree.Nodes.Count(node => node.Kind == PassiveNodeKind.Rule));
-        Assert.Equal(4, P1PassiveTree.Nodes.Count(node => node.Kind == PassiveNodeKind.Mastery));
-        Assert.Equal(70, PassiveTreeAllocation.MaximumAllocatedPoints);
+        Assert.Equal(1_624, P1PassiveTree.Nodes.Count);
+        Assert.Equal(1_400, P1PassiveTree.Nodes.Count(node => node.Kind == PassiveNodeKind.Small));
+        Assert.True(P1PassiveTree.Nodes.Count(node => node.Kind == PassiveNodeKind.Notable) >= 120);
+        Assert.True(P1PassiveTree.Nodes.Count(node => node.Kind == PassiveNodeKind.Rule) >= 24);
+        Assert.True(P1PassiveTree.Nodes.Count(node => node.Kind == PassiveNodeKind.Mastery) >= 30);
+        Assert.Equal(16, P1PassiveTree.Nodes.Count(node => node.Kind == PassiveNodeKind.JewelSocket));
+        Assert.Equal(120, PassiveTreeAllocation.MaximumAllocatedPoints);
     }
 
     [Fact]

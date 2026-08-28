@@ -32,8 +32,8 @@ public partial class P3EquipmentPaperDoll : Control
 
     public override void _Ready()
     {
-        CustomMinimumSize = new Vector2(284, 430);
-        MouseFilter = MouseFilterEnum.Ignore;
+        CustomMinimumSize = new Vector2(284, 406);
+        MouseFilter = MouseFilterEnum.Stop;
         IReadOnlyDictionary<EquipmentSlot, Vector2> positions = new Dictionary<EquipmentSlot, Vector2>
         {
             [EquipmentSlot.Helmet] = new(117, 8),
@@ -46,11 +46,11 @@ public partial class P3EquipmentPaperDoll : Control
             [EquipmentSlot.RingLeft] = new(226, 234),
             [EquipmentSlot.RingRight] = new(226, 298),
             [EquipmentSlot.Boots] = new(117, 286),
-            [EquipmentSlot.Flask1] = new(14, 374),
-            [EquipmentSlot.Flask2] = new(64, 374),
-            [EquipmentSlot.Flask3] = new(114, 374),
-            [EquipmentSlot.Flask4] = new(164, 374),
-            [EquipmentSlot.Flask5] = new(214, 374),
+            [EquipmentSlot.Flask1] = new(14, 356),
+            [EquipmentSlot.Flask2] = new(64, 356),
+            [EquipmentSlot.Flask3] = new(114, 356),
+            [EquipmentSlot.Flask4] = new(164, 356),
+            [EquipmentSlot.Flask5] = new(214, 356),
         };
         foreach ((EquipmentSlot slot, Vector2 position) in positions)
         {
@@ -65,7 +65,11 @@ public partial class P3EquipmentPaperDoll : Control
             grid.Configure(1, 1, slot is >= EquipmentSlot.Flask1 and <= EquipmentSlot.Flask5 ? 42 : 50);
             grid.DropValidator = (source, sourceIndex, targetIndex) =>
                 DropValidator?.Invoke(source, sourceIndex, targetIndex) ?? true;
-            grid.ItemSelected += index => ItemSelected?.Invoke(index);
+            grid.ItemSelected += index =>
+            {
+                foreach (P1ItemGrid other in _slots.Values.Where(other => other != grid)) other.ClearSelection();
+                ItemSelected?.Invoke(index);
+            };
             grid.ItemActivated += index => ItemActivated?.Invoke(index);
             grid.ItemContextRequested += (index, screen) => ItemContextRequested?.Invoke(index, screen);
             grid.ItemDropped += (source, sourceIndex, targetIndex) => ItemDropped?.Invoke(source, sourceIndex, targetIndex);
@@ -86,7 +90,7 @@ public partial class P3EquipmentPaperDoll : Control
         DrawLine(new Vector2(170, 108), new Vector2(210, 224), silhouette, 24);
         DrawLine(new Vector2(124, 222), new Vector2(105, 344), silhouette, 26);
         DrawLine(new Vector2(160, 222), new Vector2(179, 344), silhouette, 26);
-        DrawString(ThemeDB.FallbackFont, new Vector2(106, 366), "药剂腰带", HorizontalAlignment.Center, 72, 11,
+        DrawString(ThemeDB.FallbackFont, new Vector2(106, 350), "药剂腰带", HorizontalAlignment.Center, 72, 11,
             new Color("91836c"));
         DrawRect(new Rect2(Vector2.Zero, Size), new Color("665b4c"), false, 2);
     }
@@ -97,6 +101,13 @@ public partial class P3EquipmentPaperDoll : Control
         {
             grid.SetSlots([items.Count > (int)slot ? items[(int)slot] : null]);
         }
+    }
+
+    public override void _GuiInput(InputEvent inputEvent)
+    {
+        if (inputEvent is not InputEventMouseButton { ButtonIndex: MouseButton.Left, Pressed: true }) return;
+        foreach (P1ItemGrid grid in _slots.Values) grid.ClearSelection();
+        ItemSelected?.Invoke(-1);
     }
 
     private static string SlotName(EquipmentSlot slot) => slot switch

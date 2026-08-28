@@ -7,6 +7,7 @@ using GameForWork.Core.P4;
 using GameForWork.Core.P5;
 using GameForWork.Core.P6;
 using GameForWork.Core.P9;
+using GameForWork.Core.P10;
 
 namespace GameForWork.Core.P1;
 
@@ -108,11 +109,14 @@ public sealed record P1GameSessionSnapshot(
     IReadOnlyList<EquippedItemSnapshot>? MercenaryEquipment = null,
     P2CampaignSnapshot? Campaign = null,
     P8DemoJourneySnapshot? Journey = null,
-    P9TownSnapshot? Town = null);
+    P9TownSnapshot? Town = null,
+    P10EndgameSnapshot? Endgame = null,
+    IReadOnlyDictionary<string, int>? MasterySelections = null,
+    IReadOnlyDictionary<string, PassiveJewelKind>? SocketedJewels = null);
 
 public sealed class P1GameSession
 {
-    public const int CurrentFormatVersion = 11;
+    public const int CurrentFormatVersion = 12;
     private readonly P1WorldSimulator _simulator = new(new P1MapAttemptResolver());
     private readonly P2CampaignSimulator _campaignSimulator = new();
     private AssembledCharacterBuild _heroBuild;
@@ -130,6 +134,7 @@ public sealed class P1GameSession
         P2CampaignState campaign,
         P8DemoJourney journey,
         P9TownState town,
+        P10EndgameState endgame,
         ulong seed,
         int simulationSequence,
         bool debugTwentyTimes)
@@ -146,6 +151,7 @@ public sealed class P1GameSession
         Campaign = campaign;
         Journey = journey;
         Town = town;
+        Endgame = endgame;
         Seed = seed;
         SimulationSequence = simulationSequence;
         DebugTwentyTimes = debugTwentyTimes;
@@ -168,6 +174,7 @@ public sealed class P1GameSession
     public P2CampaignState Campaign { get; }
     public P8DemoJourney Journey { get; }
     public P9TownState Town { get; }
+    public P10EndgameState Endgame { get; }
     public bool IsExpeditionUnlocked => Campaign.Completed;
     public bool DebugTwentyTimes { get; set; }
     public ulong Seed { get; }
@@ -215,6 +222,7 @@ public sealed class P1GameSession
             P2CampaignState.CreateNew(),
             P8DemoJourney.CreateNew(tutorialEnabled),
             town,
+            new P10EndgameState(),
             seed,
             simulationSequence: 0,
             debugTwentyTimes: false);
@@ -238,7 +246,9 @@ public sealed class P1GameSession
                 new KeyValuePair<EquipmentSlot, ItemInstance>(entry.Slot, entry.Item)));
         PassiveTreeAllocation passives = PassiveTreeAllocation.Restore(
             snapshot.AllocatedPassives,
-            snapshot.MemoryAshes);
+            snapshot.MemoryAshes,
+            snapshot.MasterySelections,
+            snapshot.SocketedJewels);
         P1WorldState world = P1WorldSnapshots.Restore(snapshot.World);
         P9TownState town = P9TownState.Restore(snapshot.Town, snapshot.Seed ^ 0x7039746f776eUL, mercenaryEquipment);
         if (town.Roster.Count > 0) mercenaryEquipment = town.Roster[0].Equipment;
@@ -285,6 +295,7 @@ public sealed class P1GameSession
             P2CampaignState.Restore(legacyP1Migration ? null : snapshot.Campaign, legacyP1Migration),
             P8DemoJourney.Restore(snapshot.Journey, snapshot.FormatVersion < 10),
             town,
+            P10EndgameState.Restore(snapshot.Endgame),
             snapshot.Seed,
             snapshot.SimulationSequence,
             snapshot.DebugTwentyTimes);
@@ -313,7 +324,10 @@ public sealed class P1GameSession
         MercenaryEquipment.Items.Select(pair => new EquippedItemSnapshot(pair.Key, pair.Value)).ToArray(),
         Campaign.Capture(),
         Journey.Capture(),
-        Town.Capture());
+        Town.Capture(),
+        Endgame.Capture(),
+        new Dictionary<string, int>(Passives.MasterySelections),
+        new Dictionary<string, PassiveJewelKind>(Passives.SocketedJewels));
 
     public P1OfflineResult Advance(long realElapsedMilliseconds)
     {
@@ -397,6 +411,7 @@ public sealed class P1GameSession
         }
 
         int skillStoneRewardsBefore = World.Economy.SkillStones;
+        Dictionary<ExpeditionTeamKind, int> completedBefore = World.Teams.ToDictionary(team => team.Kind, team => team.MapsCompleted);
         P1OfflineResult result = _simulator.Simulate(
             World,
             simulatedMilliseconds,
@@ -405,6 +420,14 @@ public sealed class P1GameSession
             asyncPreparation);
         SimulationSequence = checked(
             SimulationSequence + result.TotalMapsCompleted + result.TotalMapsFailed);
+        foreach (P1TeamExpeditionState team in World.Teams)
+        {
+            int completed = team.MapsCompleted - completedBefore[team.Kind];
+            if (completed <= 0 || team.LastRun is not { Succeeded: true } run) continue;
+            for (int index = 0; index < completed; index++)
+                Endgame.RecordMapCompletion(run.Map, run.Route, Seed ^ (ulong)SimulationSequence ^ ((ulong)(int)team.Kind << 48) ^ (uint)index);
+            if (P10EndgameState.IsCitadel(run.Map)) Endgame.RecordCitadelVictory();
+        }
         int ashes = World.Economy.TakeMemoryAshes();
         if (ashes > 0)
         {
@@ -918,6 +941,40 @@ public sealed class P1GameSession
         RefreshMercenaryPartyBuild();
     }
 
+    public bool TryAllocateAtlasPassive(string stableId) => Endgame.TryAllocateAtlas(stableId);
+
+    public bool TrySelectMastery(string stableId, int option)
+    {
+        bool changed = Passives.TrySelectMastery(stableId, option);
+        if (changed) RefreshHeroBuild();
+        return changed;
+    }
+
+    public bool TrySocketJewel(string stableId, PassiveJewelKind jewel)
+    {
+        bool changed = Passives.TrySocketJewel(stableId, jewel);
+        if (changed) RefreshHeroBuild();
+        return changed;
+    }
+
+    public bool TryAllocateAscendancyPassive(string stableId)
+    {
+        bool changed = Endgame.TryAllocateAscendancy(stableId);
+        if (changed) RefreshHeroBuild();
+        return changed;
+    }
+
+    public bool TryChallengeCitadel()
+    {
+        P1TeamExpeditionState team = World.Hero;
+        if (team.ActiveMap is not null || team.Queue.Count > 0 || !Endgame.TryConsumeCitadelTicket()) return false;
+        World.Expedition.Cancel(ExpeditionTeamKind.Hero, "citadel_scheduled");
+        team.Resume();
+        team.ApplyPolicy(new ExpeditionPolicy(RouteSelectionMode.Automatic, MapRoute.Abyss,
+            QueueFailureBehavior.Stop, StorageFullBehavior.AcceptStackablesOnly, StopAfterConsecutiveFailures: 1));
+        return team.Queue.TryEnqueue(new P1MapItem($"{P10EndgameState.CitadelMapPrefix}{SimulationSequence:000000}", 20));
+    }
+
     private void RefreshMercenaryPartyBuild() => World.Mercenaries.UpdateBuild(
         Town.BuildMercenaryParty(World.Mercenaries.Progression.Level));
 
@@ -1061,7 +1118,7 @@ public sealed class P1GameSession
         while (team.Queue.Count > 0)
         {
             P1MapItem? map = team.Queue.TakeAt(0);
-            if (map is not null && !P5ExpeditionDirector.IsBoss(map) && !P5ExpeditionDirector.IsPractice(map))
+            if (map is not null && !P5ExpeditionDirector.IsBoss(map) && !P5ExpeditionDirector.IsPractice(map) && !P10EndgameState.IsCitadel(map))
             {
                 World.MapInventory.Add(map);
             }

@@ -9,6 +9,7 @@ using GameForWork.Core.P4;
 using GameForWork.Core.P5;
 using GameForWork.Core.P6;
 using GameForWork.Core.P9;
+using GameForWork.Core.P10;
 using Godot;
 using System.Security.Cryptography;
 using System.Text.Json;
@@ -74,6 +75,7 @@ public partial class P2Dashboard : VBoxContainer
     private P5ExpeditionPanel? _expeditionPanel;
     private P9MetalPanel? _metalPanel;
     private P9TownPanel? _townPanel;
+    private P10EndgamePanel? _endgamePanel;
     private OptionButton? _characterSelector;
     private PopupMenu? _itemMenu;
     private ConfirmationDialog? _confirmDialog;
@@ -144,7 +146,7 @@ public partial class P2Dashboard : VBoxContainer
     public void Tick(double delta)
     {
         _refreshAccumulator += delta;
-        if (_refreshAccumulator >= 0.1)
+        if (_refreshAccumulator >= 0.25)
         {
             _refreshAccumulator = 0;
             Refresh();
@@ -324,6 +326,10 @@ public partial class P2Dashboard : VBoxContainer
     private Control BuildExpeditionPage()
     {
         VBoxContainer page = Page("远征");
+        var tabs = new TabContainer { SizeFlagsVertical = SizeFlags.ExpandFill };
+        page.AddChild(tabs);
+        var dispatch = new VBoxContainer { Name = "远征派遣", SizeFlagsVertical = SizeFlags.ExpandFill };
+        tabs.AddChild(dispatch);
         _expeditionPanel = new P5ExpeditionPanel();
         _expeditionPanel.Initialize(RequireSession, Changed);
         _expeditionPanel.ReportsViewed += () =>
@@ -332,7 +338,10 @@ public partial class P2Dashboard : VBoxContainer
             _stateChanged?.Invoke();
             Refresh();
         };
-        page.AddChild(_expeditionPanel);
+        dispatch.AddChild(_expeditionPanel);
+        _endgamePanel = new P10EndgamePanel { Name = "异界与突破", SizeFlagsVertical = SizeFlags.ExpandFill };
+        _endgamePanel.Initialize(RequireSession, Changed);
+        tabs.AddChild(_endgamePanel);
         return Wrap(page);
     }
 
@@ -382,8 +391,6 @@ public partial class P2Dashboard : VBoxContainer
         _characterModes.AddChild(_passiveMode);
         _aiMode = BuildAiMode();
         _characterModes.AddChild(_aiMode);
-        _metalMode = BuildMetalMode();
-        _characterModes.AddChild(_metalMode);
         _characterModes.TabChanged += index =>
         {
             if (_skillMode is not null && _characterModes.GetTabControl((int)index) == _skillMode)
@@ -393,12 +400,17 @@ public partial class P2Dashboard : VBoxContainer
                 Refresh();
             }
         };
-        var equipment = new VBoxContainer { CustomMinimumSize = new Vector2(296, 0) };
-        workspace.AddChild(equipment);
+        var sidebar = new TabContainer { CustomMinimumSize = new Vector2(304, 0), SizeFlagsVertical = SizeFlags.ExpandFill };
+        workspace.AddChild(sidebar);
+        var equipment = new VBoxContainer { Name = "装备", SizeFlagsVertical = SizeFlags.ExpandFill };
+        sidebar.AddChild(equipment);
+        _metalMode = BuildMetalMode();
+        _metalMode.Name = "金属";
+        sidebar.AddChild(_metalMode);
         collapseSidebar.Pressed += () =>
         {
-            equipment.Visible = !equipment.Visible;
-            collapseSidebar.Text = equipment.Visible ? "收起装备侧栏" : "展开装备侧栏";
+            sidebar.Visible = !sidebar.Visible;
+            collapseSidebar.Text = sidebar.Visible ? "收起装备侧栏" : "展开装备侧栏";
         };
         equipment.AddChild(new Label { Text = "角色装备备栏 · 所有模式常驻" });
         _equipmentGrid = new P3EquipmentPaperDoll();
@@ -488,16 +500,9 @@ public partial class P2Dashboard : VBoxContainer
 
     private Control BuildMetalMode()
     {
-        var scroll = new ScrollContainer
-        {
-            Name = "金属仓与附魔",
-            SizeFlagsHorizontal = SizeFlags.ExpandFill,
-            SizeFlagsVertical = SizeFlags.ExpandFill,
-        };
-        _metalPanel = new P9MetalPanel { SizeFlagsHorizontal = SizeFlags.ExpandFill };
+        _metalPanel = new P9MetalPanel { Name = "金属", SizeFlagsHorizontal = SizeFlags.ExpandFill, SizeFlagsVertical = SizeFlags.ExpandFill };
         _metalPanel.Initialize(RequireSession, CurrentCraftTarget, Changed);
-        scroll.AddChild(_metalPanel);
-        return scroll;
+        return _metalPanel;
     }
 
     private Control BuildSkillMode()
@@ -572,6 +577,31 @@ public partial class P2Dashboard : VBoxContainer
         Button refund = AddButton(row, "退还", RefundSelectedPassive);
         Button reset = AddButton(row, "完整重置", ResetPassives);
         _heroOnlyControls.AddRange([allocate, refund, reset]);
+        var specialization = new HFlowContainer();
+        page.AddChild(specialization);
+        var mastery = new OptionButton { TooltipText = "分配专精节点后，从三个互斥效果中选择一个。" };
+        mastery.AddItem("攻坚 / 生命 / 机动选项一", 0);
+        mastery.AddItem("攻坚 / 生命 / 机动选项二", 1);
+        mastery.AddItem("攻坚 / 生命 / 机动选项三", 2);
+        specialization.AddChild(mastery);
+        Button chooseMastery = AddButton(specialization, "选择专精效果", () =>
+        {
+            string? id = _passiveTree?.SelectedStableId;
+            Changed(id is not null && RequireSession().TrySelectMastery(id, mastery.Selected)
+                ? "专精效果已切换。" : "请先分配并选中一个专精节点。");
+        });
+        var jewel = new OptionButton { TooltipText = "记忆珠宝会影响插槽周围主题并提供基础效果。" };
+        jewel.AddItem("赤铁记忆：攻击", (int)PassiveJewelKind.CrimsonMemory);
+        jewel.AddItem("翠生记忆：生命", (int)PassiveJewelKind.VerdantMemory);
+        jewel.AddItem("苍风记忆：移速", (int)PassiveJewelKind.AzureMemory);
+        specialization.AddChild(jewel);
+        Button socketJewel = AddButton(specialization, "镶嵌记忆珠宝", () =>
+        {
+            string? id = _passiveTree?.SelectedStableId;
+            Changed(id is not null && RequireSession().TrySocketJewel(id, (PassiveJewelKind)jewel.GetItemId(jewel.Selected))
+                ? "记忆珠宝已镶嵌，半径主题效果已生效。" : "请先分配并选中记忆棱孔。");
+        });
+        _heroOnlyControls.AddRange([chooseMastery, socketJewel]);
         return Wrap(page);
     }
 
@@ -623,7 +653,7 @@ public partial class P2Dashboard : VBoxContainer
     private Control BuildTownPage()
     {
         VBoxContainer page = Page("城镇事务");
-        _townPanel = new P9TownPanel { CustomMinimumSize = new Vector2(0, 560) };
+        _townPanel = new P9TownPanel { CustomMinimumSize = new Vector2(0, 470), SizeFlagsVertical = SizeFlags.ExpandFill };
         _townPanel.Initialize(RequireSession, Changed);
         page.AddChild(_townPanel);
         var workshop = new HFlowContainer();
@@ -645,7 +675,7 @@ public partial class P2Dashboard : VBoxContainer
             SizeFlagsVertical = SizeFlags.ExpandFill,
         };
         page.AddChild(_history);
-        return page;
+        return Wrap(page);
     }
 
     private P9CraftTarget? CurrentCraftTarget()
@@ -714,6 +744,12 @@ public partial class P2Dashboard : VBoxContainer
 
     private void SelectCraftTarget(ItemContainerKind kind, int index)
     {
+        if (index < 0)
+        {
+            _craftIndex = -1;
+            Refresh();
+            return;
+        }
         if (kind is ItemContainerKind.Storage or ItemContainerKind.SortingBag or ItemContainerKind.Equipped)
         {
             _craftContainer = kind;
@@ -1298,8 +1334,13 @@ public partial class P2Dashboard : VBoxContainer
             return;
         }
 
+        bool overviewActive = _mainTabs?.GetTabControl(_mainTabs.CurrentTab) == _overviewPage;
+        bool storyActive = _mainTabs?.GetTabControl(_mainTabs.CurrentTab) == _storyPage;
+        bool expeditionActive = _mainTabs?.GetTabControl(_mainTabs.CurrentTab) == _expeditionPage;
+        bool characterActive = _mainTabs?.GetTabControl(_mainTabs.CurrentTab) == _characterPage;
+        bool townActive = _mainTabs?.GetTabControl(_mainTabs.CurrentTab) == _townPage;
         _worldView!.Session = _session;
-        _worldView.QueueRedraw();
+        if (overviewActive) _worldView.QueueRedraw();
         RefreshCharacterSelector();
         TownEconomyState economy = _session.World.Economy;
         string recoveryWarning = _session.Management.Recovery.Count == 0
@@ -1339,8 +1380,8 @@ public partial class P2Dashboard : VBoxContainer
                 : $"最终属性已公开；内部加点隐藏。\n技能：{selectedMercenary.Identity.SkillSummary}\nAI：{selectedMercenary.Identity.AiSummary}");
 
         RefreshJourneyInterface();
-        _townPanel?.Refresh();
-        _metalPanel?.Refresh();
+        if (townActive) _townPanel?.Refresh();
+        if (characterActive) _metalPanel?.Refresh();
         if (string.IsNullOrWhiteSpace(_storageSearch))
         {
             _storageGrid!.SetItems(_session.World.Storage.Items);
@@ -1394,11 +1435,11 @@ public partial class P2Dashboard : VBoxContainer
             $"神铸银 {economy.MetalAmount(MetalCurrencyKind.DivineSilver)} · 破溃钢 {economy.MetalAmount(MetalCurrencyKind.FractureSteel)}\n" +
             (craftItem is null ? "当前未选择制作目标。" : $"当前目标：{craftItem.Base.DisplayName}（{_craftContainer}）");
         _skillStonePanel?.SetReadOnly(!heroSelected);
-        _skillStonePanel?.RefreshState();
+        if (characterActive) _skillStonePanel?.RefreshState();
         _history!.Text = string.Join('\n', _session.Management.OperationHistory.TakeLast(200).Select(item => $"• {item}"));
-        _filterPanel?.RefreshRules();
-        _expeditionPanel?.RefreshState();
-        _campaignRoute?.RefreshState();
+        if (townActive) _filterPanel?.RefreshRules();
+        if (expeditionActive) { _expeditionPanel?.RefreshState(); _endgamePanel?.Refresh(); }
+        if (storyActive) _campaignRoute?.RefreshState();
         CampaignNodeDefinition? currentNode = _session.Campaign.CurrentNode;
         long currentNodeDuration = _session.Campaign.ActiveTimeline?.DurationMilliseconds ??
                                    currentNode?.DurationMilliseconds ?? 0;

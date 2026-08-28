@@ -20,6 +20,7 @@ public enum PassiveNodeKind
     Notable,
     Mastery,
     Rule,
+    JewelSocket,
 }
 
 public enum PassiveEffectKind
@@ -54,13 +55,23 @@ public enum PassiveEffectKind
 
 public sealed record PassiveEffect(PassiveEffectKind Kind, int Value = 0);
 
+public enum PassiveJewelKind { CrimsonMemory, VerdantMemory, AzureMemory }
+
 public sealed record PassiveNodeDefinition(
     string StableId,
     string DisplayName,
     PassiveBranch Branch,
     PassiveNodeKind Kind,
     string? PrerequisiteId,
-    IReadOnlyList<PassiveEffect> Effects);
+    IReadOnlyList<PassiveEffect> Effects,
+    IReadOnlyList<string>? Connections = null,
+    float X = 0,
+    float Y = 0,
+    int ThemeGroup = 0)
+{
+    public IReadOnlyList<string> LinkedNodes => Connections ??
+        (PrerequisiteId is null ? Array.Empty<string>() : [PrerequisiteId]);
+}
 
 public sealed record PassiveBuildModifiers(
     int IncreasedAttackDamageBasisPoints,
@@ -95,12 +106,30 @@ public static class P1PassiveTree
     private static readonly IReadOnlyDictionary<string, PassiveNodeDefinition> NodeMap = BuildNodes()
         .ToDictionary(node => node.StableId, StringComparer.Ordinal);
 
+    private static readonly IReadOnlyDictionary<string, IReadOnlyList<string>> AdjacencyMap = BuildAdjacency(NodeMap.Values);
+
     public static IReadOnlyCollection<PassiveNodeDefinition> Nodes => NodeMap.Values.ToArray();
 
     public static PassiveNodeDefinition Get(string stableId) =>
         NodeMap.TryGetValue(stableId, out PassiveNodeDefinition? node)
             ? node
             : throw new KeyNotFoundException($"Unknown passive node: {stableId}");
+
+    public static IReadOnlyList<string> Neighbors(string stableId) =>
+        AdjacencyMap.TryGetValue(stableId, out IReadOnlyList<string>? result) ? result : [];
+
+    public static IReadOnlyList<PassiveEffect> MasteryOptions(PassiveNodeDefinition node)
+    {
+        if (node.Kind != PassiveNodeKind.Mastery) return [];
+        return node.Branch switch
+        {
+            PassiveBranch.Defense or PassiveBranch.Shield =>
+                [new(PassiveEffectKind.IncreasedMaximumLifeBasisPoints, 800), new(PassiveEffectKind.IncreasedArmorBasisPoints, 1_500), new(PassiveEffectKind.FlatMaximumLife, 12)],
+            PassiveBranch.Mobility =>
+                [new(PassiveEffectKind.IncreasedMovementSpeedBasisPoints, 300), new(PassiveEffectKind.IncreasedAttackSpeedBasisPoints, 500), new(PassiveEffectKind.FlatAccuracy, 20)],
+            _ => [new(PassiveEffectKind.IncreasedAttackDamageBasisPoints, 1_000), new(PassiveEffectKind.IncreasedBleedDamageBasisPoints, 1_200), new(PassiveEffectKind.IncreasedAttackSpeedBasisPoints, 600)],
+        };
+    }
 
     private static IReadOnlyList<PassiveNodeDefinition> BuildNodes()
     {
@@ -175,7 +204,119 @@ public static class P1PassiveTree
         AddCluster(nodes, PassiveBranch.Mana, "mana", PassiveEffectKind.FlatMaximumMana, 2);
         AddCluster(nodes, PassiveBranch.Shield, "shield", PassiveEffectKind.IncreasedArmorBasisPoints, 350);
         AddCluster(nodes, PassiveBranch.Flask, "flask", PassiveEffectKind.IncreasedLifeFlaskEffectBasisPoints, 250);
+        AddConstellation(nodes);
         return nodes;
+    }
+
+    private static void AddConstellation(ICollection<PassiveNodeDefinition> nodes)
+    {
+        const int groupCount = 30;
+        const int nodesPerGroup = 48;
+        string[] roots = ["heavy.1", "bleed.1", "defense.1", "warcry.1", "mobility.1",
+            "critical.1", "accuracy.1", "mana.1", "shield.1", "flask.1"];
+        string[] themes = ["铸锋", "裂创", "壁垒", "战令", "逐风", "暴烈", "洞察", "源流", "铁卫", "炼金",
+            "破阵", "血潮", "磐石", "回声", "长途", "致命", "鹰眼", "灵泉", "守望", "药理",
+            "巨兵", "创痕", "不屈", "号角", "疾驰", "处决", "猎手", "秘能", "城塞", "回春"];
+        for (int group = 0; group < groupCount; group++)
+        {
+            PassiveBranch branch = (PassiveBranch)(group % 10);
+            int belt = group / 10;
+            float groupAngle = -MathF.PI / 2 + (group % 10) * MathF.Tau / 10 + belt * 0.085f;
+            float groupRadius = 520 + belt * 390;
+            float centerX = MathF.Cos(groupAngle) * groupRadius;
+            float centerY = MathF.Sin(groupAngle) * groupRadius * 0.78f;
+            for (int index = 0; index < nodesPerGroup; index++)
+            {
+                string local = $"constellation.{group:00}.{index:00}";
+                string id = $"core.passive.{local}";
+                string previous = index == 0
+                    ? $"core.passive.{roots[group % roots.Length]}"
+                    : $"core.passive.constellation.{group:00}.{index - 1:00}";
+                string next = $"core.passive.constellation.{group:00}.{(index + 1) % nodesPerGroup:00}";
+                var links = new List<string> { previous, next };
+                if (index == 0 && group > 0)
+                {
+                    links.Add($"core.passive.constellation.{group - 1:00}.24");
+                }
+                if (index == 24 && group + 1 < groupCount)
+                {
+                    links.Add($"core.passive.constellation.{group + 1:00}.00");
+                }
+
+                PassiveNodeKind kind = index switch
+                {
+                    8 or 18 or 28 or 38 => PassiveNodeKind.Notable,
+                    45 => PassiveNodeKind.Mastery,
+                    46 => PassiveNodeKind.Rule,
+                    47 when group < 16 => PassiveNodeKind.JewelSocket,
+                    _ => PassiveNodeKind.Small,
+                };
+                int orbit = index / 12;
+                float radius = 72 + orbit * 30;
+                float angle = index % 12 * MathF.Tau / 12 + orbit * 0.14f;
+                PassiveEffect effect = EffectFor(branch, kind, group, index);
+                nodes.Add(new PassiveNodeDefinition(
+                    id,
+                    kind switch
+                    {
+                        PassiveNodeKind.Notable => $"{themes[group]}·{(index / 10) + 1}式",
+                        PassiveNodeKind.Mastery => $"{themes[group]}专精",
+                        PassiveNodeKind.Rule => $"{themes[group]}誓律",
+                        PassiveNodeKind.JewelSocket => "记忆棱孔",
+                        _ => $"{themes[group]}·{index + 1:00}",
+                    },
+                    branch,
+                    kind,
+                    previous,
+                    [effect],
+                    links.Distinct(StringComparer.Ordinal).ToArray(),
+                    centerX + MathF.Cos(angle) * radius,
+                    centerY + MathF.Sin(angle) * radius,
+                    group));
+            }
+        }
+    }
+
+    private static PassiveEffect EffectFor(PassiveBranch branch, PassiveNodeKind kind, int group, int index)
+    {
+        int multiplier = kind switch
+        {
+            PassiveNodeKind.Notable => 4,
+            PassiveNodeKind.Mastery => 6,
+            PassiveNodeKind.Rule => 8,
+            PassiveNodeKind.JewelSocket => 2,
+            _ => 1,
+        };
+        return branch switch
+        {
+            PassiveBranch.HeavyWeapon => new(PassiveEffectKind.IncreasedTwoHandDamageBasisPoints, 180 * multiplier),
+            PassiveBranch.Bleed => new(PassiveEffectKind.IncreasedBleedDamageBasisPoints, 220 * multiplier),
+            PassiveBranch.Defense => new(PassiveEffectKind.IncreasedMaximumLifeBasisPoints, 120 * multiplier),
+            PassiveBranch.WarCry => new(PassiveEffectKind.IncreasedWarCryCooldownRecoveryBasisPoints, 140 * multiplier),
+            PassiveBranch.Mobility => new(PassiveEffectKind.IncreasedMovementSpeedBasisPoints, 55 * multiplier),
+            PassiveBranch.Critical => new(PassiveEffectKind.IncreasedAttackDamageBasisPoints, 190 * multiplier),
+            PassiveBranch.Accuracy => new(PassiveEffectKind.FlatAccuracy, Math.Max(1, multiplier * 2)),
+            PassiveBranch.Mana => new(PassiveEffectKind.FlatMaximumMana, Math.Max(1, multiplier)),
+            PassiveBranch.Shield => new(PassiveEffectKind.IncreasedArmorBasisPoints, 210 * multiplier),
+            _ => new(PassiveEffectKind.IncreasedLifeFlaskEffectBasisPoints, 120 * multiplier),
+        };
+    }
+
+    private static IReadOnlyDictionary<string, IReadOnlyList<string>> BuildAdjacency(
+        IEnumerable<PassiveNodeDefinition> nodes)
+    {
+        PassiveNodeDefinition[] all = nodes.ToArray();
+        var result = all.ToDictionary(node => node.StableId, _ => new HashSet<string>(StringComparer.Ordinal), StringComparer.Ordinal);
+        foreach (PassiveNodeDefinition node in all)
+        {
+            foreach (string linked in node.LinkedNodes)
+            {
+                if (!result.ContainsKey(linked) || linked == node.StableId) continue;
+                result[node.StableId].Add(linked);
+                result[linked].Add(node.StableId);
+            }
+        }
+        return result.ToDictionary(pair => pair.Key, pair => (IReadOnlyList<string>)pair.Value.ToArray(), StringComparer.Ordinal);
     }
 
     private static void AddCluster(
@@ -259,9 +400,11 @@ public static class P1PassiveTree
 
 public sealed class PassiveTreeAllocation
 {
-    public const int MaximumAllocatedPoints = 70;
+    public const int MaximumAllocatedPoints = 120;
 
     private readonly HashSet<string> _allocated = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, int> _masterySelections = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, PassiveJewelKind> _socketedJewels = new(StringComparer.Ordinal);
 
     public PassiveTreeAllocation(int memoryAshes = 5)
     {
@@ -270,6 +413,8 @@ public sealed class PassiveTreeAllocation
     }
 
     public IReadOnlySet<string> Allocated => _allocated;
+    public IReadOnlyDictionary<string, int> MasterySelections => _masterySelections;
+    public IReadOnlyDictionary<string, PassiveJewelKind> SocketedJewels => _socketedJewels;
     public int MemoryAshes { get; private set; }
 
     public bool TryAllocate(string stableId, int earnedPassivePoints)
@@ -281,7 +426,7 @@ public sealed class PassiveTreeAllocation
             return false;
         }
 
-        if (node.PrerequisiteId is not null && !_allocated.Contains(node.PrerequisiteId))
+        if (node.PrerequisiteId is not null && !P1PassiveTree.Neighbors(stableId).Any(_allocated.Contains))
         {
             return false;
         }
@@ -297,6 +442,8 @@ public sealed class PassiveTreeAllocation
         }
 
         _allocated.Remove(stableId);
+        _masterySelections.Remove(stableId);
+        _socketedJewels.Remove(stableId);
         MemoryAshes--;
         return true;
     }
@@ -314,16 +461,8 @@ public sealed class PassiveTreeAllocation
             return true;
         }
 
-        Dictionary<string, List<string>> edges = remaining.ToDictionary(id => id, _ => new List<string>(), StringComparer.Ordinal);
-        foreach (string id in remaining)
-        {
-            string? prerequisite = P1PassiveTree.Get(id).PrerequisiteId;
-            if (prerequisite is not null && remaining.Contains(prerequisite))
-            {
-                edges[id].Add(prerequisite);
-                edges[prerequisite].Add(id);
-            }
-        }
+        Dictionary<string, List<string>> edges = remaining.ToDictionary(id => id,
+            id => P1PassiveTree.Neighbors(id).Where(remaining.Contains).ToList(), StringComparer.Ordinal);
 
         var reachable = new HashSet<string>(StringComparer.Ordinal);
         var pending = new Queue<string>(remaining.Where(id => P1PassiveTree.Get(id).PrerequisiteId is null));
@@ -351,6 +490,8 @@ public sealed class PassiveTreeAllocation
         }
 
         _allocated.Clear();
+        _masterySelections.Clear();
+        _socketedJewels.Clear();
         MemoryAshes -= 10;
         return true;
     }
@@ -363,6 +504,24 @@ public sealed class PassiveTreeAllocation
         }
 
         _allocated.Clear();
+        _masterySelections.Clear();
+        _socketedJewels.Clear();
+        return true;
+    }
+
+    public bool TrySelectMastery(string stableId, int option)
+    {
+        PassiveNodeDefinition node = P1PassiveTree.Get(stableId);
+        if (!_allocated.Contains(stableId) || node.Kind != PassiveNodeKind.Mastery || option < 0 || option >= P1PassiveTree.MasteryOptions(node).Count) return false;
+        _masterySelections[stableId] = option;
+        return true;
+    }
+
+    public bool TrySocketJewel(string stableId, PassiveJewelKind jewel)
+    {
+        PassiveNodeDefinition node = P1PassiveTree.Get(stableId);
+        if (!_allocated.Contains(stableId) || node.Kind != PassiveNodeKind.JewelSocket || !Enum.IsDefined(jewel)) return false;
+        _socketedJewels[stableId] = jewel;
         return true;
     }
 
@@ -372,7 +531,9 @@ public sealed class PassiveTreeAllocation
         MemoryAshes = checked(MemoryAshes + amount);
     }
 
-    public static PassiveTreeAllocation Restore(IEnumerable<string> allocated, int memoryAshes)
+    public static PassiveTreeAllocation Restore(IEnumerable<string> allocated, int memoryAshes,
+        IReadOnlyDictionary<string, int>? masteries = null,
+        IReadOnlyDictionary<string, PassiveJewelKind>? jewels = null)
     {
         ArgumentNullException.ThrowIfNull(allocated);
         var result = new PassiveTreeAllocation(memoryAshes);
@@ -385,12 +546,17 @@ public sealed class PassiveTreeAllocation
         foreach (string stableId in nodes)
         {
             PassiveNodeDefinition node = P1PassiveTree.Get(stableId);
-            if (node.PrerequisiteId is not null && !result._allocated.Contains(node.PrerequisiteId) ||
+            if (node.PrerequisiteId is not null && !P1PassiveTree.Neighbors(stableId).Any(result._allocated.Contains) ||
                 !result._allocated.Add(stableId))
             {
                 throw new InvalidDataException("Passive allocation snapshot is not a valid path.");
             }
         }
+
+        foreach ((string id, int option) in masteries ?? new Dictionary<string, int>())
+            if (!result.TrySelectMastery(id, option)) throw new InvalidDataException("Passive mastery selection is invalid.");
+        foreach ((string id, PassiveJewelKind jewel) in jewels ?? new Dictionary<string, PassiveJewelKind>())
+            if (!result.TrySocketJewel(id, jewel)) throw new InvalidDataException("Passive jewel socket is invalid.");
 
         return result;
     }
@@ -402,6 +568,22 @@ public sealed class PassiveTreeAllocation
                      .Select(P1PassiveTree.Get)
                      .SelectMany(node => node.Effects))
         {
+            sums[(int)effect.Kind] = checked(sums[(int)effect.Kind] + effect.Value);
+        }
+        foreach ((string id, int option) in _masterySelections)
+        {
+            PassiveEffect effect = P1PassiveTree.MasteryOptions(P1PassiveTree.Get(id))[option];
+            sums[(int)effect.Kind] = checked(sums[(int)effect.Kind] + effect.Value);
+        }
+        foreach ((string socket, PassiveJewelKind jewel) in _socketedJewels)
+        {
+            int radiusMultiplier = 1 + P1PassiveTree.Neighbors(socket).Count(_allocated.Contains) / 2;
+            PassiveEffect effect = jewel switch
+            {
+                PassiveJewelKind.CrimsonMemory => new(PassiveEffectKind.IncreasedAttackDamageBasisPoints, 800 * radiusMultiplier),
+                PassiveJewelKind.VerdantMemory => new(PassiveEffectKind.IncreasedMaximumLifeBasisPoints, 600 * radiusMultiplier),
+                _ => new(PassiveEffectKind.IncreasedMovementSpeedBasisPoints, 250 * radiusMultiplier),
+            };
             sums[(int)effect.Kind] = checked(sums[(int)effect.Kind] + effect.Value);
         }
 

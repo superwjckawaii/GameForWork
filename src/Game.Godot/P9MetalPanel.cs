@@ -17,6 +17,7 @@ public partial class P9MetalPanel : VBoxContainer
     private Func<P9CraftTarget?>? _target;
     private Action<string>? _changed;
     private GridContainer? _grid;
+    private VBoxContainer? _body;
     private Label? _status;
     private HFlowContainer? _enchants;
     private HFlowContainer? _alchemy;
@@ -31,20 +32,23 @@ public partial class P9MetalPanel : VBoxContainer
         _target = target;
         _changed = changed;
         _metalAtlas = GD.Load<Texture2D>("res://assets/p9/ui/p9-metal-atlas.png");
-        Name = "金属仓与附魔";
-        AddChild(new Label { Text = "金属仓 · 自动堆叠，不占普通仓库空间", AutowrapMode = TextServer.AutowrapMode.WordSmart });
+        Name = "金属";
+        SizeFlagsVertical = SizeFlags.ExpandFill;
+        var outerScroll = new ScrollContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill, SizeFlagsVertical = SizeFlags.ExpandFill };
+        AddChild(outerScroll);
+        _body = new VBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
+        outerScroll.AddChild(_body);
+        _body.AddChild(new Label { Text = "金属仓 · 不占普通仓库", AutowrapMode = TextServer.AutowrapMode.WordSmart });
         _status = new Label { AutowrapMode = TextServer.AutowrapMode.WordSmart };
-        AddChild(_status);
-        var scroll = new ScrollContainer { CustomMinimumSize = new Vector2(0, 280), SizeFlagsHorizontal = SizeFlags.ExpandFill };
-        AddChild(scroll);
-        _grid = new GridContainer { Columns = 5, SizeFlagsHorizontal = SizeFlags.ExpandFill };
-        scroll.AddChild(_grid);
-        AddChild(new Label { Text = "工坊附魔 · 一件装备只能保留一个附魔，覆盖时不返还金币" });
+        _body.AddChild(_status);
+        _grid = new GridContainer { Columns = 3, SizeFlagsHorizontal = SizeFlags.ExpandFill };
+        _body.AddChild(_grid);
+        _body.AddChild(new Label { Text = "工坊附魔 · 覆盖不返还金币", AutowrapMode = TextServer.AutowrapMode.WordSmart });
         _enchants = new HFlowContainer();
-        AddChild(_enchants);
-        AddChild(new Label { Text = "炼金所 · 固定公开配方" });
+        _body.AddChild(_enchants);
+        _body.AddChild(new Label { Text = "炼金所 · 固定公开配方" });
         _alchemy = new HFlowContainer();
-        AddChild(_alchemy);
+        _body.AddChild(_alchemy);
         _confirm = new ConfirmationDialog { Title = "确认金属加工", OkButtonText = "确认使用", CancelButtonText = "取消", Exclusive = true };
         _confirm.Confirmed += () => { Action? action = _pending; _pending = null; action?.Invoke(); };
         _confirm.Canceled += () => _pending = null;
@@ -67,11 +71,11 @@ public partial class P9MetalPanel : VBoxContainer
         foreach (MetalCurrencyDefinition metal in P4MetalCurrencies.All)
         {
             int count = session.World.Economy.MetalAmount(metal.Kind);
-            var cell = new VBoxContainer { CustomMinimumSize = new Vector2(126, 106) };
+            var cell = new VBoxContainer { CustomMinimumSize = new Vector2(88, 78) };
             cell.AddChild(new TextureRect
             {
                 Texture = MetalIcon(metal.Kind),
-                CustomMinimumSize = new Vector2(0, 58),
+                CustomMinimumSize = new Vector2(0, 38),
                 ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,
                 StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered,
                 MouseFilter = MouseFilterEnum.Ignore,
@@ -79,11 +83,12 @@ public partial class P9MetalPanel : VBoxContainer
             });
             var button = new Button
             {
-                Text = $"{metal.DisplayName}\n×{count}",
-                CustomMinimumSize = new Vector2(118, 44),
+                Text = $"{metal.DisplayName} ×{count}",
+                CustomMinimumSize = new Vector2(82, 34),
                 TooltipText = $"{metal.Description}\n档位：{TierText(metal.Tier)}\n持有：{count}",
                 Disabled = count <= 0 || target is null,
             };
+            button.AddThemeFontSizeOverride("font_size", 11);
             button.Pressed += () => UseMetal(metal.Kind);
             cell.AddChild(button);
             _grid.AddChild(cell);
