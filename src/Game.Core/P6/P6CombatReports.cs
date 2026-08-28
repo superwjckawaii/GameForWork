@@ -1,6 +1,7 @@
 using GameForWork.Core.P1.Combat;
 using GameForWork.Core.P3;
 using GameForWork.Core.P14;
+using GameForWork.Core.P17;
 
 namespace GameForWork.Core.P6;
 
@@ -52,7 +53,7 @@ public static class P6CombatReportBuilder
         ArgumentNullException.ThrowIfNull(timeline);
         P3SceneEvent[] outgoing = timeline.Events.Where(IsOutgoingDamage).ToArray();
         int dealt = outgoing.Sum(item => Math.Max(0, item.Value));
-        P6SkillCombatStat[] skills = outgoing.GroupBy(item => SkillNames[item.Kind])
+        P6SkillCombatStat[] skills = outgoing.GroupBy(SkillName)
             .Select(group => new P6SkillCombatStat(group.Key, group.Sum(item => Math.Max(0, item.Value)), group.Count(),
                 BasisPoints(group.Sum(item => Math.Max(0, item.Value)), dealt)))
             .OrderByDescending(item => item.Damage).ThenBy(item => item.Skill, StringComparer.Ordinal).ToArray();
@@ -110,7 +111,7 @@ public static class P6CombatReportBuilder
         {
             string marker = item.Detail.Split('|').FirstOrDefault(part => part.StartsWith("supports:", StringComparison.Ordinal)) ?? string.Empty;
             if (marker.Length <= "supports:".Length ||
-                !int.TryParse(marker.AsSpan("supports:".Length), out int raw)) continue;
+                !ulong.TryParse(marker.AsSpan("supports:".Length), out ulong raw)) continue;
             SkillSupport flags = (SkillSupport)raw;
             foreach (SkillSupport support in Enum.GetValues<SkillSupport>().Where(flag => flag != SkillSupport.None && flags.HasFlag(flag)))
             {
@@ -135,32 +136,13 @@ public static class P6CombatReportBuilder
         return multiplier == 10_000 ? 0 : finalDamage - (int)(finalDamage * 10_000L / multiplier);
     }
 
-    private static string SupportName(SkillSupport support) => support switch
-    {
-        SkillSupport.IncreasedArea => "扩大范围",
-        SkillSupport.AttackSpeed => "攻击速度",
-        SkillSupport.Bleed => "流血",
-        SkillSupport.LifeCost => "生命消耗",
-        SkillSupport.Chain => "追加连锁",
-        SkillSupport.Brutality => "残暴",
-        SkillSupport.MultipleProjectiles => "多重投射",
-        SkillSupport.FasterProjectiles => "极速投射",
-        SkillSupport.UrgentWarCry => "急促战吼",
-        SkillSupport.LifeLeech => "血之汲取",
-        SkillSupport.Execution => "处决",
-        SkillSupport.SpellEcho => "法术回响",
-        SkillSupport.ElementalFocus => "元素集中",
-        SkillSupport.AddedFire => "附加火焰",
-        SkillSupport.AddedCold => "附加冰霜",
-        SkillSupport.AddedLightning => "附加闪电",
-        SkillSupport.CriticalStrikes => "提高暴击",
-        SkillSupport.ConcentratedEffect => "集中效应",
-        _ => support.ToString(),
-    };
+    private static string SupportName(SkillSupport support) =>
+        P17SkillCatalog.Supports.FirstOrDefault(item => item.Support == support)?.DisplayName ?? support.ToString();
 
     private static bool IsOutgoingDamage(P3SceneEvent item)
     {
-        if (!SkillNames.ContainsKey(item.Kind) || item.Value <= 0) return false;
+        if (item.Kind is not P3SceneEventKind.SkillEffect and not P3SceneEventKind.Ailment &&
+            !SkillNames.ContainsKey(item.Kind) || item.Value <= 0) return false;
         if (item.Kind != P3SceneEventKind.Bleed) return true;
         string[] detail = item.Detail.Split('|');
         return detail.Length < 2 || detail[1] != "hero";
@@ -182,6 +164,19 @@ public static class P6CombatReportBuilder
     }
 
     private static int BasisPoints(int value, int total) => total <= 0 ? 0 : (int)Math.Min(10_000, value * 10_000L / total);
+
+    private static string SkillName(P3SceneEvent item)
+    {
+        if (SkillNames.TryGetValue(item.Kind, out string? name)) return name;
+        string marker = item.Detail.Split('|').FirstOrDefault(part => part.StartsWith("skill:", StringComparison.Ordinal)) ?? string.Empty;
+        if (marker.Length > "skill:".Length)
+        {
+            string stableId = marker["skill:".Length..];
+            return P17SkillCatalog.Active.FirstOrDefault(active => active.SkillId == stableId)?.DisplayName ?? stableId;
+        }
+        string dot = item.Detail.Split('|').FirstOrDefault(part => part.StartsWith("dot:", StringComparison.Ordinal)) ?? string.Empty;
+        return dot.Length > 4 ? $"持续伤害·{dot[4..]}" : "异常伤害";
+    }
 
     private static string TimeoutReason(P3SceneTimeline timeline, int damage, int failures)
     {

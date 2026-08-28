@@ -37,6 +37,10 @@ public enum P3SceneEventKind
     EmberNova,
     StormBrand,
     MechanicChoice,
+    SkillEffect,
+    Ailment,
+    Block,
+    Guard,
 }
 
 public sealed record P3GridPosition(int X, int Y);
@@ -300,6 +304,10 @@ public static class P3SceneTimelineBuilder
                 P4SpatialEventKind.EmberNova => P3SceneEventKind.EmberNova,
                 P4SpatialEventKind.StormBrand => P3SceneEventKind.StormBrand,
                 P4SpatialEventKind.BossTelegraph or P4SpatialEventKind.BossPhaseChanged => P3SceneEventKind.BossPhase,
+                P4SpatialEventKind.SkillEffect => P3SceneEventKind.SkillEffect,
+                P4SpatialEventKind.Ailment => P3SceneEventKind.Ailment,
+                P4SpatialEventKind.Block => P3SceneEventKind.Block,
+                P4SpatialEventKind.Guard => P3SceneEventKind.Guard,
                 P4SpatialEventKind.EnemyAttack => P3SceneEventKind.EnemyAttack,
                 P4SpatialEventKind.Bleed => P3SceneEventKind.Bleed,
                 P4SpatialEventKind.Flask => P3SceneEventKind.Flask,

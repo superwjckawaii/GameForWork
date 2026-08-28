@@ -68,7 +68,9 @@ public sealed class P1MercenaryProfile
             LifeFlaskUseThresholdBasisPoints: 5_000,
             AddedPhysicalDamage: build.AddedPhysicalDamage,
             HeavyStrikeProfile: build.HeavyStrike,
-            WeaponLegendaryRule: build.Equipment.WeaponLegendaryRule);
+            WeaponLegendaryRule: build.Equipment.WeaponLegendaryRule,
+            HasShield: build.Equipment.HasShield,
+            BlockChanceBasisPoints: build.Equipment.HasShield ? 2_000 : 0);
     }
 }
 

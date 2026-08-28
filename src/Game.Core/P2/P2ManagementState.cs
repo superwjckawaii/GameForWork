@@ -4,6 +4,7 @@ using GameForWork.Core.P6;
 using GameForWork.Core.P1.Combat;
 using GameForWork.Core.Simulation;
 using GameForWork.Core.P1.World;
+using GameForWork.Core.P17;
 
 namespace GameForWork.Core.P2;
 
@@ -37,41 +38,21 @@ public sealed record SkillStoneDefinition(
     SkillTag SupportedTags = SkillTag.None,
     SkillTag ExcludedTags = SkillTag.None,
     string Description = "",
-    bool StarterGranted = true);
+    bool StarterGranted = true,
+    P17SkillCapability Capabilities = P17SkillCapability.None,
+    P17SkillCapability RequiredAllCapabilities = P17SkillCapability.None,
+    P17SkillCapability RequiredAnyCapabilities = P17SkillCapability.None,
+    P17SkillCapability ExcludedCapabilities = P17SkillCapability.None,
+    SkillSupport CombatSupport = SkillSupport.None,
+    P17SupportConflict ProvidesConflict = P17SupportConflict.None,
+    P17SupportConflict ConflictsWith = P17SupportConflict.None);
 
 public static class P2SkillStones
 {
-    private static readonly IReadOnlyDictionary<string, SkillStoneDefinition> Catalog = new[]
-    {
-        Active("core.skill_stone.heavy_strike", "重击", SkillTag.Attack | SkillTag.Melee | SkillTag.Area | SkillTag.Physical),
-        Active("core.skill_stone.war_cry", "战吼", SkillTag.WarCry | SkillTag.Buff | SkillTag.Area),
-        Active("core.skill_stone.earth_cleave", "裂地横扫", SkillTag.Attack | SkillTag.Melee | SkillTag.Area | SkillTag.Physical),
-        Active("core.skill_stone.spirit_blade", "幽魂飞刃", SkillTag.Attack | SkillTag.Projectile | SkillTag.Chaining | SkillTag.Physical),
-        Support("core.skill_stone.increased_area", "扩大范围", SkillTag.Area, "范围提高 35%，伤害总降 10%"),
-        Support("core.skill_stone.attack_speed", "攻击速度", SkillTag.Attack, "攻击速度提高 25%"),
-        Support("core.skill_stone.bleed", "流血", SkillTag.Attack | SkillTag.Physical, "获得 60% 流血几率"),
-        Support("core.skill_stone.life_cost", "生命消耗", SkillTag.Attack, "改为消耗生命并提高伤害"),
-        Support("core.skill_stone.chain", "追加连锁", SkillTag.Projectile, "投射物追加连锁"),
-        Active("core.skill_stone.seismic_charge", "震地冲锋", SkillTag.Attack | SkillTag.Melee | SkillTag.Area | SkillTag.Physical | SkillTag.Movement, false),
-        Active("core.skill_stone.blood_tide_spin", "血潮旋斩", SkillTag.Attack | SkillTag.Melee | SkillTag.Area | SkillTag.Physical | SkillTag.Bleed, false),
-        Active("core.skill_stone.iron_oath_banner", "铁誓战旗", SkillTag.Buff | SkillTag.Area | SkillTag.Reservation, false),
-        Support("core.skill_stone.brutality", "残暴", SkillTag.Physical, "物理伤害总增 35%", false),
-        Support("core.skill_stone.multiple_projectiles", "多重投射", SkillTag.Projectile, "额外 2 个投射物，单发伤害总降 20%", false),
-        Support("core.skill_stone.faster_projectiles", "极速投射", SkillTag.Projectile, "投射物速度提高 50%，距离提高 15%", false),
-        Support("core.skill_stone.urgent_war_cry", "急促战吼", SkillTag.WarCry, "冷却恢复提高 30%，效果总降 15%", false),
-        Support("core.skill_stone.life_leech", "血之汲取", SkillTag.Attack, "命中恢复伤害的 2% 生命，消耗总增 20%", false),
-        Support("core.skill_stone.execution", "处决", SkillTag.Attack, "低于 20% 生命时伤害总增 40%，否则总降 10%", false),
-        Active("core.skill_stone.ash_javelin", "烬矛", SkillTag.Attack | SkillTag.Projectile | SkillTag.Physical | SkillTag.Fire, false),
-        Active("core.skill_stone.ember_nova", "余烬新星", SkillTag.Spell | SkillTag.Area | SkillTag.Fire, false),
-        Active("core.skill_stone.storm_brand", "雷痕烙印", SkillTag.Spell | SkillTag.Projectile | SkillTag.Chaining | SkillTag.Lightning, false),
-        Support("core.skill_stone.spell_echo", "法术回响", SkillTag.Spell, "法术重复一次，单次伤害总降 18%", false),
-        Support("core.skill_stone.elemental_focus", "元素集中", SkillTag.Elemental, "元素伤害总增 28%，不能施加元素异常", false),
-        Support("core.skill_stone.added_fire", "附加火焰", SkillTag.Attack | SkillTag.Spell, "获得 18% 物理伤害的额外火焰伤害", false),
-        Support("core.skill_stone.added_cold", "附加冰霜", SkillTag.Attack | SkillTag.Spell, "附加冰霜伤害并降低敌人速度", false),
-        Support("core.skill_stone.added_lightning", "附加闪电", SkillTag.Attack | SkillTag.Spell, "附加闪电伤害并扩大伤害区间", false),
-        Support("core.skill_stone.critical_strikes", "精准暴击", SkillTag.Attack | SkillTag.Spell, "暴击率提高并使暴击伤害总增 12%", false),
-        Support("core.skill_stone.concentrated_effect", "集中效应", SkillTag.Area, "范围缩小 25%，范围伤害总增 32%", false),
-    }.ToDictionary(item => item.StableId, StringComparer.Ordinal);
+    private static readonly IReadOnlyDictionary<string, SkillStoneDefinition> Catalog =
+        P17SkillCatalog.Active.Select(Active)
+            .Concat(P17SkillCatalog.Supports.Select(Support))
+            .ToDictionary(item => item.StableId, StringComparer.Ordinal);
 
     public static IReadOnlyCollection<SkillStoneDefinition> All => Catalog.Values.ToArray();
 
@@ -81,11 +62,18 @@ public static class P2SkillStones
 
     public static IReadOnlyCollection<SkillStoneDefinition> DropPool => Catalog.Values.Where(item => !item.StarterGranted).ToArray();
 
-    private static SkillStoneDefinition Active(string id, string name, SkillTag tags, bool starter = true) =>
-        new(id, name, SkillStoneKind.Active, Tags: tags, Description: name, StarterGranted: starter);
+    private static SkillStoneDefinition Active(P17ActiveSkillDefinition definition) =>
+        new(definition.StoneId, definition.DisplayName, SkillStoneKind.Active, Tags: definition.Tags,
+            Description: definition.Description, StarterGranted: definition.StarterGranted,
+            Capabilities: definition.Capabilities);
 
-    private static SkillStoneDefinition Support(string id, string name, SkillTag supported, string description, bool starter = true) =>
-        new(id, name, SkillStoneKind.Support, 1, SupportedTags: supported, Description: description, StarterGranted: starter);
+    private static SkillStoneDefinition Support(P17SupportSkillDefinition definition) =>
+        new(definition.StoneId, definition.DisplayName, SkillStoneKind.Support, 1,
+            SupportedTags: definition.SupportedTags, Description: definition.Description,
+            StarterGranted: definition.StarterGranted, RequiredAllCapabilities: definition.RequiredAll,
+            RequiredAnyCapabilities: definition.RequiredAny, ExcludedCapabilities: definition.Excluded,
+            CombatSupport: definition.Support, ProvidesConflict: definition.ProvidesConflict,
+            ConflictsWith: definition.ConflictsWith);
 }
 
 public sealed record SkillStoneInstance(
@@ -491,8 +479,19 @@ public sealed class P2ManagementState
             return false;
         }
 
+        SkillStoneDefinition[] installedSupports = targetSockets
+            .Where((_, index) => index != socketIndex)
+            .Select(Stone)
+            .Where(item => item?.Definition.Kind == SkillStoneKind.Support)
+            .Select(item => item!.Definition)
+            .ToArray();
+        if (stone.Definition.Kind == SkillStoneKind.Active && installedSupports.Any(support =>
+                !P6SkillCompatibility.Check(stone.Definition, support).Compatible))
+        {
+            return false;
+        }
         if (active is not null && stone.Definition.Kind == SkillStoneKind.Support &&
-            !P6SkillCompatibility.Check(active.Definition, stone.Definition).Compatible)
+            !P6SkillCompatibility.CheckGroup(active.Definition, stone.Definition, installedSupports).Compatible)
         {
             return false;
         }

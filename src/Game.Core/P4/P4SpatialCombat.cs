@@ -6,6 +6,7 @@ using GameForWork.Core.P1.World;
 using GameForWork.Core.Simulation;
 using GameForWork.Core.P6;
 using GameForWork.Core.P14;
+using GameForWork.Core.P17;
 
 namespace GameForWork.Core.P4;
 
@@ -44,6 +45,10 @@ public enum P4SpatialEventKind
     StormBrand,
     BossTelegraph,
     BossPhaseChanged,
+    SkillEffect,
+    Ailment,
+    Block,
+    Guard,
 }
 
 public readonly record struct P4Point(int XRaw, int YRaw)
@@ -137,7 +142,7 @@ public sealed record P4NodeCombatRequest(
     int? InitialHeroLife = null,
     int? InitialHeroMana = null,
     int? InitialHeroShield = null,
-    int MaximumTicks = 2_400,
+    int MaximumTicks = 0,
     int EnemyLifeBasisPoints = 10_000,
     int EnemyDamageBasisPoints = 10_000,
     int EnemySpeedBasisPoints = 10_000,
@@ -192,6 +197,20 @@ public sealed class P4SpatialCombatRunner
         Dictionary<string, SkillConfiguration> skills = (request.Build.ActiveSkills ?? [request.Build.HeavyStrike])
             .GroupBy(skill => skill.SkillId, StringComparer.Ordinal)
             .ToDictionary(group => group.Key, group => group.First(), StringComparer.Ordinal);
+        HashSet<string> legacySkills =
+        [
+            P1SkillIds.HeavyStrike, P1SkillIds.WarCry, P1SkillIds.EarthCleave, P1SkillIds.SpiritBlade,
+            P1SkillIds.SeismicCharge, P1SkillIds.BloodTideSpin, P1SkillIds.IronOathBanner,
+            P1SkillIds.AshJavelin, P1SkillIds.EmberNova, P1SkillIds.StormBrand,
+        ];
+        Dictionary<string, P6ResolvedSkill> p17Skills = skills
+            .Where(pair => !legacySkills.Contains(pair.Key))
+            .ToDictionary(pair => pair.Key, pair => P6CombatSkillRules.Resolve(pair.Value, hero.MaximumLife), StringComparer.Ordinal);
+        Dictionary<string, int> p17ReadyTicks = p17Skills.Keys.ToDictionary(key => key, _ => 0, StringComparer.Ordinal);
+        Dictionary<string, int> p17UseCounts = p17Skills.Keys.ToDictionary(key => key, _ => 0, StringComparer.Ordinal);
+        P6ResolvedSkill? shieldCounter = p17Skills.GetValueOrDefault(P1SkillIds.VengefulCounter);
+        SkillConfiguration? shieldCounterConfiguration = skills.GetValueOrDefault(P1SkillIds.VengefulCounter);
+        int shieldCounterReadyTick = 0;
         P6ResolvedSkill? cleave = Resolve(skills, P1SkillIds.EarthCleave, hero.MaximumLife);
         P6ResolvedSkill? blade = Resolve(skills, P1SkillIds.SpiritBlade, hero.MaximumLife);
         P6ResolvedSkill? charge = Resolve(skills, P1SkillIds.SeismicCharge, hero.MaximumLife);
@@ -219,17 +238,28 @@ public sealed class P4SpatialCombatRunner
         int ashJavelinReadyTick = 0;
         int emberNovaReadyTick = 0;
         int stormBrandReadyTick = 0;
-        if (banner is not null && hero.TryPayMana(Math.Max(1, hero.MaximumMana * 2_000 / 10_000)))
+        int guardUntilTick = 0;
+        int guardReductionBasisPoints = 0;
+        if (banner is not null && hero.TryPayMana(Math.Max(1, hero.MaximumMana * 1_500 / 10_000)))
         {
             bannerMultiplier = 11_500;
             events.Add(Event(0, P4SpatialEventKind.BannerActivated, "hero", "hero", 0,
-                heroPosition, heroPosition, "reservation:20"));
+                heroPosition, heroPosition, "reservation:15"));
+        }
+        foreach (P6ResolvedSkill reservation in p17Skills.Values.Where(item => item.Role == P17SkillRole.Reservation))
+        {
+            int reservationBasisPoints = reservation.SkillId == P1SkillIds.ElementalResonance ? 2_000 : 1_000;
+            if (!hero.TryPayMana(Math.Max(1, hero.MaximumMana * reservationBasisPoints / 10_000))) continue;
+            bannerMultiplier = checked(bannerMultiplier * 11_000 / 10_000);
+            events.Add(Event(0, P4SpatialEventKind.BannerActivated, "hero", "hero", 0,
+                heroPosition, heroPosition, $"skill:{reservation.SkillId}|reservation:{reservationBasisPoints}"));
         }
         int tick;
         CaptureFrame(frames, 0, request.NodeIndex, heroPosition, hero, heroTargetId, enemies,
             request.Build.PartySize, request.Build.FrontlineCount);
 
-        for (tick = 0; tick < request.MaximumTicks && hero.IsAlive && enemies.Any(enemy => enemy.Life > 0); tick++)
+        for (tick = 0; (request.MaximumTicks == 0 || tick < request.MaximumTicks) &&
+             hero.IsAlive && enemies.Any(enemy => enemy.Life > 0); tick++)
         {
             hero.AdvanceRegenerationTick(tick);
             warCry.AdvanceTick();
@@ -248,6 +278,7 @@ public sealed class P4SpatialCombatRunner
                 ActivateUtility(utilityFlasks, P1FlaskKind.Resistance, tick, heroPosition, events);
             }
             ResolveBleeds(enemies, tick, events);
+            ResolveP17DamageOverTime(enemies, tick, events);
             ResolveProjectiles(request, projectiles, enemies, hero, random, tick, events);
 
             P4EnemyUnit? target = SelectTarget(enemies, heroPosition);
@@ -294,6 +325,18 @@ public sealed class P4SpatialCombatRunner
                         SkillTarget(candidate)!, enemies, SkillDistance(candidate)))
                     .OrderBy(candidate => skills[candidate!].Priority)
                     .FirstOrDefault();
+                string? p17Chosen = p17Skills.Values
+                    .Where(skill => skill.Role is not P17SkillRole.Reservation and not P17SkillRole.Counter &&
+                                    (!skill.RequiresShield || request.Build.HasShield) && tick >= p17ReadyTicks[skill.SkillId] &&
+                                    SkillTarget(skill.SkillId) is not null &&
+                                    (skill.Shape == P17SkillShape.Self ||
+                                     SkillDistance(skill.SkillId) <= (long)skill.RangeRaw * skill.RangeRaw) && CanPay(hero, skill) &&
+                                    AiMatches(skills[skill.SkillId], request, hero, SkillTarget(skill.SkillId)!, enemies, SkillDistance(skill.SkillId)))
+                    .OrderBy(skill => skills[skill.SkillId].Priority)
+                    .Select(skill => skill.SkillId)
+                    .FirstOrDefault();
+                if (p17Chosen is not null && (chosen is null || skills[p17Chosen].Priority < skills[chosen].Priority))
+                    chosen = p17Chosen;
 
                 if (chosen is not null)
                 {
@@ -328,7 +371,16 @@ public sealed class P4SpatialCombatRunner
                 }
                 else
                 {
-                    if (chosen == P1SkillIds.SeismicCharge && P6CombatSkillRules.TryPay(hero, charge!))
+                    if (chosen is not null && p17Skills.TryGetValue(chosen, out P6ResolvedSkill? p17Skill) &&
+                        P6CombatSkillRules.TryPay(hero, p17Skill))
+                    {
+                        ExecuteP17Skill(request, p17Skill, skills[chosen], target, enemies, hero, random, tick,
+                            ref heroPosition, bannerMultiplier, events, ref guardUntilTick, ref guardReductionBasisPoints,
+                            p17UseCounts);
+                        p17ReadyTicks[chosen] = tick + Math.Max(1, p17Skill.CooldownTicks);
+                        heroNextActionTick = tick + Math.Max(1, p17Skill.CastTimeTicks);
+                    }
+                    else if (chosen == P1SkillIds.SeismicCharge && P6CombatSkillRules.TryPay(hero, charge!))
                     {
                         P6ResolvedSkill chargeSkill = charge!;
                         heroPosition = P4Point.MoveToward(heroPosition, target.Position, Math.Max(1, chargeSkill.RangeRaw - 900));
@@ -446,7 +498,9 @@ public sealed class P4SpatialCombatRunner
                 }
             }
 
-            ResolveEnemies(request, enemies, hero, heroPosition, random, tick, events, utilityFlasks);
+            ResolveEnemies(request, enemies, hero, heroPosition, random, tick, events, utilityFlasks,
+                guardUntilTick, guardReductionBasisPoints, shieldCounter, shieldCounterConfiguration,
+                ref shieldCounterReadyTick);
             CaptureFrame(frames, tick * TickMilliseconds, request.NodeIndex, heroPosition, hero, heroTargetId, enemies,
                 request.Build.PartySize, request.Build.FrontlineCount);
         }
@@ -549,6 +603,177 @@ public sealed class P4SpatialCombatRunner
         .ThenBy(enemy => enemy.EntityId, StringComparer.Ordinal)
         .FirstOrDefault();
 
+    private static void ExecuteP17Skill(
+        P4NodeCombatRequest request,
+        P6ResolvedSkill skill,
+        SkillConfiguration configuration,
+        P4EnemyUnit target,
+        IReadOnlyCollection<P4EnemyUnit> enemies,
+        ResourceState hero,
+        Pcg32 random,
+        int tick,
+        ref P4Point heroPosition,
+        int bannerMultiplier,
+        ICollection<P4SpatialEvent> events,
+        ref int guardUntilTick,
+        ref int guardReductionBasisPoints,
+        IDictionary<string, int> useCounts)
+    {
+        if (skill.Role == P17SkillRole.Movement)
+        {
+            heroPosition = P4Point.MoveToward(heroPosition, target.Position, Math.Max(1, skill.RangeRaw - 900));
+            events.Add(Event(tick, P4SpatialEventKind.HeroMoved, "hero", target.EntityId, 0,
+                heroPosition, target.Position, $"skill:{skill.SkillId}"));
+        }
+
+        if (skill.Role == P17SkillRole.Guard || skill.SkillId == P1SkillIds.DefiantCry)
+        {
+            guardUntilTick = tick + (skill.SkillId == P1SkillIds.PrismaticGuard ? 80 : 60);
+            guardReductionBasisPoints = skill.SkillId == P1SkillIds.IronGuard ? 4_000 :
+                skill.SkillId == P1SkillIds.PrismaticGuard ? 2_500 : 2_000;
+            if (skill.SkillId == P1SkillIds.DefiantCry)
+                hero.HealLife(Math.Max(1, (hero.MaximumLife - hero.Life) / 10));
+            events.Add(Event(tick, P4SpatialEventKind.Guard, "hero", "hero", guardReductionBasisPoints,
+                heroPosition, heroPosition, $"skill:{skill.SkillId}|until:{guardUntilTick}"));
+        }
+
+        if (skill.SkillId == P1SkillIds.BreakerCry)
+        {
+            P4Point cryOrigin = heroPosition;
+            foreach (P4EnemyUnit enemy in enemies.Where(item => item.Life > 0 && InRange(cryOrigin, item.Position, skill.RangeRaw)))
+                enemy.ArmorBreakStacks = Math.Min(5, enemy.ArmorBreakStacks + 2);
+            events.Add(Event(tick, P4SpatialEventKind.SkillEffect, "hero", target.EntityId, 0,
+                heroPosition, target.Position, $"skill:{skill.SkillId}|armor-break:2"));
+            return;
+        }
+        if (skill.DamageType == P17DamageType.None) return;
+
+        P4Point origin = heroPosition;
+        P4EnemyUnit[] affected = skill.Shape switch
+        {
+            P17SkillShape.Circle or P17SkillShape.MovementCircle or P17SkillShape.GroundArea => enemies
+                .Where(enemy => enemy.Life > 0 && InRange(origin, enemy.Position, skill.RangeRaw)).ToArray(),
+            P17SkillShape.Cone => enemies.Where(enemy => enemy.Life > 0 &&
+                InCleaveCone(origin, target.Position, enemy.Position, skill.RangeRaw)).ToArray(),
+            P17SkillShape.Chain => enemies.Where(enemy => enemy.Life > 0)
+                .OrderBy(enemy => P4Point.DistanceSquared(target.Position, enemy.Position))
+                .Take(Math.Max(1, skill.MaximumChains + 1)).ToArray(),
+            P17SkillShape.Projectile => enemies.Where(enemy => enemy.Life > 0)
+                .OrderBy(enemy => P4Point.DistanceSquared(origin, enemy.Position))
+                .Take(Math.Max(1, skill.ProjectileCount + skill.PierceCount + skill.ForkCount)).ToArray(),
+            _ => [target],
+        };
+        if (affected.Length == 0) affected = [target];
+
+        int useCount = useCounts[skill.SkillId] = useCounts[skill.SkillId] + 1;
+        if (configuration.Supports.HasFlag(SkillSupport.Trauma))
+        {
+            int traumaStacks = Math.Min(10, useCount);
+            hero.ApplyDamage(Math.Max(1, hero.MaximumLife * traumaStacks / 1_000), tick);
+            bannerMultiplier = checked(bannerMultiplier * (10_000 + traumaStacks * 500) / 10_000);
+        }
+        if (configuration.Supports.HasFlag(SkillSupport.TripleImpact) && useCount % 3 == 0)
+            bannerMultiplier = checked(bannerMultiplier * 18_000 / 10_000);
+
+        foreach (P4EnemyUnit enemy in affected)
+        {
+            int burstDamage = 0;
+            if (skill.SkillId == P1SkillIds.BloodBurst && enemy.BleedRemaining > 0)
+            {
+                burstDamage = enemy.BleedRemaining * 6_500 / 10_000;
+                enemy.BleedRemaining = 0;
+                enemy.BleedPulses = 0;
+            }
+            ApplyP17HeroHit(request, skill, configuration, enemy, hero, random, tick, heroPosition,
+                bannerMultiplier, events);
+            if (burstDamage > 0 && enemy.Life > 0)
+            {
+                int armor = enemy.Scaled.Armor * Math.Max(0, 10_000 - enemy.ArmorBreakStacks * 800) / 10_000;
+                P17DamageBreakdown burst = P17DamageRules.Resolve(burstDamage, P17DamageType.Physical,
+                    SkillSupport.None, armor, 0, 0, 0, 0);
+                enemy.Life = Math.Max(0, enemy.Life - burst.Total);
+                events.Add(Event(tick, P4SpatialEventKind.SkillEffect, "hero", enemy.EntityId, burst.Total,
+                    heroPosition, enemy.Position, $"skill:{skill.SkillId}|blood-burst|damage:{burst.Compact}|supports:{(ulong)configuration.Supports}"));
+                if (enemy.Life == 0)
+                    events.Add(Event(tick, P4SpatialEventKind.EnemyDefeated, "hero", enemy.EntityId, 0,
+                        heroPosition, enemy.Position, enemy.Profile.StableId));
+            }
+            if (skill.Returns && enemy.Life > 0)
+                ApplyP17HeroHit(request, skill, configuration, enemy, hero, random, tick, heroPosition,
+                    bannerMultiplier * 8_000 / 10_000, events);
+        }
+    }
+
+    private static void ApplyP17HeroHit(
+        P4NodeCombatRequest request,
+        P6ResolvedSkill skill,
+        SkillConfiguration configuration,
+        P4EnemyUnit enemy,
+        ResourceState hero,
+        Pcg32 random,
+        int tick,
+        P4Point source,
+        int multiplier,
+        ICollection<P4SpatialEvent> events)
+    {
+        int weaponSpan = request.Build.Weapon.MaximumPhysicalDamage - request.Build.Weapon.MinimumPhysicalDamage + 1;
+        int weaponRoll = request.Build.Weapon.MinimumPhysicalDamage + (int)(random.NextUInt() % (uint)Math.Max(1, weaponSpan));
+        int raw = skill.Role == P17SkillRole.DamageOverTime && skill.Shape == P17SkillShape.GroundArea
+            ? Math.Max(1, request.AreaLevel * 5 + weaponRoll / 2)
+            : Math.Max(1, weaponRoll + request.Build.AddedPhysicalDamage);
+        raw = checked(raw * (10_000 + request.Build.IncreasedDamageBasisPoints) / 10_000);
+        raw = checked(raw * skill.BaseDamageBasisPoints / 10_000);
+        raw = checked(raw * P6CombatSkillRules.DamageMultiplier(skill, enemy.Life, enemy.MaximumLife) / 10_000);
+        raw = checked(raw * multiplier / 10_000);
+        raw = checked(raw * (10_000 + enemy.ShockStacks * 500) / 10_000);
+        int armor = enemy.Scaled.Armor * Math.Max(0, 10_000 - enemy.ArmorBreakStacks * 800) / 10_000;
+        if (configuration.Supports.HasFlag(SkillSupport.ArmorPierce)) armor = armor * 7_000 / 10_000;
+        P17DamageBreakdown damage = P17DamageRules.Resolve(raw, skill.DamageType, configuration.Supports,
+            armor, enemy.Scaled.FireResistanceBasisPoints, enemy.Scaled.ColdResistanceBasisPoints,
+            enemy.Scaled.LightningResistanceBasisPoints, enemy.Scaled.VoidResistanceBasisPoints);
+        int value = damage.Total;
+        enemy.Life = Math.Max(0, enemy.Life - value);
+        if (value > 0 && skill.LifeLeechBasisPoints > 0)
+            hero.HealLife(Math.Max(1, value * skill.LifeLeechBasisPoints / 10_000));
+
+        bool ailmentAllowed = !configuration.Supports.HasFlag(SkillSupport.ElementalFocus) &&
+                              random.NextUInt() % 10_000 < Math.Clamp(skill.AilmentChanceBasisPoints, 0, 10_000);
+        if (ailmentAllowed && enemy.Life > 0)
+        {
+            switch (skill.Ailment)
+            {
+                case P17Ailment.Bleed when !configuration.Supports.HasFlag(SkillSupport.Bloodlust):
+                    enemy.BleedRemaining += Math.Max(1, value * 7 / 10);
+                    enemy.BleedPulses = Math.Max(enemy.BleedPulses, 5);
+                    break;
+                case P17Ailment.Ignite or P17Ailment.Erosion or P17Ailment.Wither:
+                    enemy.P17DotRemaining += Math.Max(1, value / 2);
+                    enemy.P17DotPulses = Math.Max(enemy.P17DotPulses, 4);
+                    enemy.P17DotAilment = skill.Ailment;
+                    break;
+                case P17Ailment.ArmorBreak:
+                    enemy.ArmorBreakStacks = Math.Min(5, enemy.ArmorBreakStacks + 1);
+                    break;
+                case P17Ailment.Chill or P17Ailment.Freeze:
+                    enemy.ImpairedUntilTick = Math.Max(enemy.ImpairedUntilTick, tick + 30);
+                    break;
+                case P17Ailment.Stun or P17Ailment.Paralysis:
+                    enemy.NextActionTick = Math.Max(enemy.NextActionTick, tick + 20);
+                    break;
+                case P17Ailment.Shock:
+                    enemy.ShockStacks = Math.Min(3, enemy.ShockStacks + 1);
+                    break;
+            }
+            events.Add(Event(tick, P4SpatialEventKind.Ailment, "hero", enemy.EntityId, 0,
+                source, enemy.Position, $"skill:{skill.SkillId}|ailment:{skill.Ailment.ToString().ToLowerInvariant()}"));
+        }
+        events.Add(Event(tick, P4SpatialEventKind.SkillEffect, "hero", enemy.EntityId, value,
+            source, enemy.Position, $"skill:{skill.SkillId}|damage:{damage.Compact}|supports:{(ulong)configuration.Supports}"));
+        if (enemy.Life == 0)
+            events.Add(Event(tick, P4SpatialEventKind.EnemyDefeated, "hero", enemy.EntityId, 0,
+                source, enemy.Position, enemy.Profile.StableId));
+    }
+
     private static void ResolveEnemies(
         P4NodeCombatRequest request,
         IEnumerable<P4EnemyUnit> enemies,
@@ -557,7 +782,12 @@ public sealed class P4SpatialCombatRunner
         Pcg32 random,
         int tick,
         ICollection<P4SpatialEvent> events,
-        IReadOnlyDictionary<P1FlaskKind, P1UtilityFlaskState> utilityFlasks)
+        IReadOnlyDictionary<P1FlaskKind, P1UtilityFlaskState> utilityFlasks,
+        int guardUntilTick,
+        int guardReductionBasisPoints,
+        P6ResolvedSkill? shieldCounter,
+        SkillConfiguration? shieldCounterConfiguration,
+        ref int shieldCounterReadyTick)
     {
         foreach (P4EnemyUnit enemy in enemies.Where(enemy => enemy.Life > 0))
         {
@@ -647,6 +877,24 @@ public sealed class P4SpatialCombatRunner
             if (damage > 0 && enemy.Role == P4UnitRole.Caster &&
                 utilityFlasks.GetValueOrDefault(P1FlaskKind.Resistance)?.Active == true)
                 damage = Math.Max(1, damage * 7_500 / 10_000);
+            if (damage > 0 && tick < guardUntilTick)
+                damage = Math.Max(1, damage * (10_000 - guardReductionBasisPoints) / 10_000);
+            if (damage > 0 && request.Build.HasShield && request.Build.BlockChanceBasisPoints > 0 &&
+                random.NextUInt() % 10_000 < request.Build.BlockChanceBasisPoints)
+            {
+                damage = 0;
+                events.Add(Event(tick, P4SpatialEventKind.Block, "hero", enemy.EntityId, 0,
+                    heroPosition, enemy.Position, "shield"));
+                if (shieldCounter is not null && shieldCounterConfiguration is not null &&
+                    tick >= shieldCounterReadyTick)
+                {
+                    foreach (P4EnemyUnit counterTarget in enemies.Where(item => item.Life > 0 &&
+                                 InRange(heroPosition, item.Position, shieldCounter.RangeRaw)).ToArray())
+                        ApplyP17HeroHit(request, shieldCounter, shieldCounterConfiguration, counterTarget, hero,
+                            random, tick, heroPosition, 10_000, events);
+                    shieldCounterReadyTick = tick + Math.Max(1, shieldCounter.CooldownTicks);
+                }
+            }
             if (enemy.Boss && hit.Hit)
             {
                 damage = Math.Max(1, damage);
@@ -809,6 +1057,23 @@ public sealed class P4SpatialCombatRunner
                 events.Add(Event(tick, P4SpatialEventKind.EnemyDefeated, "hero", enemy.EntityId, 0,
                     enemy.Position, enemy.Position, enemy.Profile.StableId));
             }
+        }
+    }
+
+    private static void ResolveP17DamageOverTime(IEnumerable<P4EnemyUnit> enemies, int tick, ICollection<P4SpatialEvent> events)
+    {
+        if (tick == 0 || tick % 20 != 0) return;
+        foreach (P4EnemyUnit enemy in enemies.Where(enemy => enemy.Life > 0 && enemy.P17DotPulses > 0))
+        {
+            int damage = Math.Max(1, enemy.P17DotRemaining / enemy.P17DotPulses);
+            enemy.P17DotRemaining -= damage;
+            enemy.P17DotPulses--;
+            enemy.Life = Math.Max(0, enemy.Life - damage);
+            events.Add(Event(tick, P4SpatialEventKind.Ailment, "hero", enemy.EntityId, damage,
+                enemy.Position, enemy.Position, $"dot:{enemy.P17DotAilment.ToString().ToLowerInvariant()}"));
+            if (enemy.Life == 0)
+                events.Add(Event(tick, P4SpatialEventKind.EnemyDefeated, "hero", enemy.EntityId, 0,
+                    enemy.Position, enemy.Position, enemy.Profile.StableId));
         }
     }
 
@@ -1009,7 +1274,7 @@ public sealed class P4SpatialCombatRunner
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(request.Build);
         if (request.NodeIndex <= 0 || request.AreaLevel is < 1 or > 120 || request.EnemyCount is < 1 or > 48 ||
-            request.MaximumTicks <= 0 || request.EnemyLifeBasisPoints is < 1_000 or > 100_000 ||
+            request.MaximumTicks < 0 || request.EnemyLifeBasisPoints is < 1_000 or > 100_000 ||
             request.EnemyDamageBasisPoints is < 1_000 or > 100_000 || request.EnemySpeedBasisPoints is < 1_000 or > 50_000 ||
             request.PlayerRecoveryBasisPoints is < 0 or > 10_000)
         {
@@ -1043,6 +1308,12 @@ public sealed class P4SpatialCombatRunner
         public int NextActionTick { get; set; } = nextActionTick;
         public int BleedRemaining { get; set; }
         public int BleedPulses { get; set; }
+        public int P17DotRemaining { get; set; }
+        public int P17DotPulses { get; set; }
+        public P17Ailment P17DotAilment { get; set; }
+        public int ArmorBreakStacks { get; set; }
+        public int ShockStacks { get; set; }
+        public int ImpairedUntilTick { get; set; }
         public int BossPhase { get; set; }
         public int LastTelegraphTick { get; set; } = int.MinValue;
     }

@@ -13,7 +13,8 @@ public static class P6SocketGroupIds
 public static class P6SocketRules
 {
     public static bool ProvidesSockets(ItemCategory category) => category is
-        ItemCategory.TwoHandWeapon or ItemCategory.BodyArmor or ItemCategory.Helmet or
+        ItemCategory.TwoHandWeapon or ItemCategory.OneHandWeapon or ItemCategory.Shield or
+        ItemCategory.BodyArmor or ItemCategory.Helmet or
         ItemCategory.Gloves or ItemCategory.Boots;
 
     public static int Minimum(ItemCategory category) => ProvidesSockets(category) ? 2 : 0;
@@ -21,6 +22,7 @@ public static class P6SocketRules
     public static int EquipmentMaximum(ItemCategory category) => category switch
     {
         ItemCategory.TwoHandWeapon or ItemCategory.BodyArmor => 6,
+        ItemCategory.OneHandWeapon or ItemCategory.Shield => 3,
         ItemCategory.Helmet or ItemCategory.Gloves or ItemCategory.Boots => 4,
         _ => 0,
     };

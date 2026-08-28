@@ -320,7 +320,9 @@ public sealed class P9TownState
             MovementSpeedBasisPoints: 10_000,
             ActiveSkills: [skill, new SkillConfiguration(P1SkillIds.WarCry, SkillSupport.IncreasedArea)],
             PartySize: active.Count,
-            FrontlineCount: frontline);
+            FrontlineCount: frontline,
+            HasShield: assembled.Equipment.HasShield,
+            BlockChanceBasisPoints: assembled.Equipment.HasShield ? 2_000 : 0);
     }
 
     public bool TryTransmute(TownEconomyState economy, MetalCurrencyKind output)

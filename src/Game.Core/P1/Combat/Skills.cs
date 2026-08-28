@@ -1,3 +1,5 @@
+using GameForWork.Core.P17;
+
 namespace GameForWork.Core.P1.Combat;
 
 [Flags]
@@ -19,11 +21,23 @@ public enum SkillTag
     Fire = 1 << 12,
     Cold = 1 << 13,
     Lightning = 1 << 14,
+    Void = 1 << 15,
+    Strike = 1 << 16,
+    Slam = 1 << 17,
+    Duration = 1 << 18,
+    Channelling = 1 << 19,
+    Aura = 1 << 20,
+    Guard = 1 << 21,
+    Counter = 1 << 22,
+    Trigger = 1 << 23,
+    Stun = 1 << 24,
+    ArmorBreak = 1 << 25,
+    Returning = 1 << 26,
     Elemental = Fire | Cold | Lightning,
 }
 
 [Flags]
-public enum SkillSupport
+public enum SkillSupport : ulong
 {
     None = 0,
     IncreasedArea = 1 << 0,
@@ -44,6 +58,36 @@ public enum SkillSupport
     AddedLightning = 1 << 15,
     CriticalStrikes = 1 << 16,
     ConcentratedEffect = 1 << 17,
+    HeavyMomentum = 1UL << 18,
+    TripleImpact = 1UL << 19,
+    TremorField = 1UL << 20,
+    Shockwave = 1UL << 21,
+    CloseCombat = 1UL << 22,
+    ArmorShatter = 1UL << 23,
+    ArmorPierce = 1UL << 24,
+    Suppression = 1UL << 25,
+    StunSpread = 1UL << 26,
+    DeepWound = 1UL << 27,
+    SwiftBleed = 1UL << 28,
+    BleedSpread = 1UL << 29,
+    Cruelty = 1UL << 30,
+    Bloodlust = 1UL << 31,
+    Trauma = 1UL << 32,
+    Fortification = 1UL << 33,
+    Vengeance = 1UL << 34,
+    BlockTrigger = 1UL << 35,
+    WarCryPotency = 1UL << 36,
+    WarCryEcho = 1UL << 37,
+    BannerPotency = 1UL << 38,
+    Pierce = 1UL << 39,
+    Fork = 1UL << 40,
+    Return = 1UL << 41,
+    FasterCasting = 1UL << 42,
+    PhysicalToLightning = 1UL << 43,
+    LightningToCold = 1UL << 44,
+    ColdToFire = 1UL << 45,
+    FireToVoid = 1UL << 46,
+    CastWhenDamaged = 1UL << 47,
 }
 
 public static class P1SkillIds
@@ -58,6 +102,26 @@ public static class P1SkillIds
     public const string AshJavelin = "core.skill.ash_javelin";
     public const string EmberNova = "core.skill.ember_nova";
     public const string StormBrand = "core.skill.storm_brand";
+    public const string ArmorBreakStrike = "core.skill.armor_break_strike";
+    public const string ExecutionCleave = "core.skill.execution_cleave";
+    public const string MountainSlam = "core.skill.mountain_slam";
+    public const string AftershockMaul = "core.skill.aftershock_maul";
+    public const string VeinRend = "core.skill.vein_rend";
+    public const string BloodBurst = "core.skill.blood_burst";
+    public const string BloodMarkAxe = "core.skill.blood_mark_axe";
+    public const string IronHook = "core.skill.iron_hook";
+    public const string BreakerCry = "core.skill.breaker_cry";
+    public const string DefiantCry = "core.skill.defiant_cry";
+    public const string IronGuard = "core.skill.iron_guard";
+    public const string VengefulCounter = "core.skill.vengeful_counter";
+    public const string BreachBanner = "core.skill.breach_banner";
+    public const string LeapQuake = "core.skill.leap_quake";
+    public const string FrostShard = "core.skill.frost_shard";
+    public const string ChainLightning = "core.skill.chain_lightning";
+    public const string FlameStep = "core.skill.flame_step";
+    public const string VoidDecayField = "core.skill.void_decay_field";
+    public const string PrismaticGuard = "core.skill.prismatic_guard";
+    public const string ElementalResonance = "core.skill.elemental_resonance";
 }
 
 public enum SkillTargetPolicy
@@ -100,86 +164,25 @@ public sealed record SkillDefinition(
 
 public static class P1Skills
 {
-    public static readonly SkillDefinition HeavyStrike = new(
-        P1SkillIds.HeavyStrike,
-        SkillTag.Attack | SkillTag.Melee | SkillTag.Area | SkillTag.Physical,
-        BaseManaCost: 8,
-        RangeRaw: 1_500,
-        CastTimeTicks: 0,
-        CooldownTicks: 0);
+    private static readonly IReadOnlyDictionary<string, SkillDefinition> Catalog = P17SkillCatalog.Active
+        .Select(item => new SkillDefinition(item.SkillId, item.Tags, item.ManaCost, item.RangeRaw,
+            item.CastTimeTicks, item.CooldownTicks))
+        .ToDictionary(item => item.StableId, StringComparer.Ordinal);
 
-    public static readonly SkillDefinition WarCry = new(
-        P1SkillIds.WarCry,
-        SkillTag.WarCry | SkillTag.Buff | SkillTag.Area,
-        BaseManaCost: 12,
-        RangeRaw: 6_000,
-        CastTimeTicks: 10,
-        CooldownTicks: 120);
+    public static SkillDefinition HeavyStrike => Get(P1SkillIds.HeavyStrike);
+    public static SkillDefinition WarCry => Get(P1SkillIds.WarCry);
+    public static SkillDefinition EarthCleave => Get(P1SkillIds.EarthCleave);
+    public static SkillDefinition SpiritBlade => Get(P1SkillIds.SpiritBlade);
+    public static SkillDefinition SeismicCharge => Get(P1SkillIds.SeismicCharge);
+    public static SkillDefinition BloodTideSpin => Get(P1SkillIds.BloodTideSpin);
+    public static SkillDefinition IronOathBanner => Get(P1SkillIds.IronOathBanner);
+    public static SkillDefinition AshJavelin => Get(P1SkillIds.AshJavelin);
+    public static SkillDefinition EmberNova => Get(P1SkillIds.EmberNova);
+    public static SkillDefinition StormBrand => Get(P1SkillIds.StormBrand);
+    public static IReadOnlyList<SkillDefinition> All { get; } = Catalog.Values.OrderBy(item => item.StableId).ToArray();
 
-    public static readonly SkillDefinition EarthCleave = new(
-        P1SkillIds.EarthCleave,
-        SkillTag.Attack | SkillTag.Melee | SkillTag.Area | SkillTag.Physical,
-        BaseManaCost: 10,
-        RangeRaw: 2_800,
-        CastTimeTicks: 4,
-        CooldownTicks: 24);
-
-    public static readonly SkillDefinition SpiritBlade = new(
-        P1SkillIds.SpiritBlade,
-        SkillTag.Attack | SkillTag.Projectile | SkillTag.Chaining | SkillTag.Physical,
-        BaseManaCost: 9,
-        RangeRaw: 8_000,
-        CastTimeTicks: 3,
-        CooldownTicks: 20);
-
-    public static readonly SkillDefinition SeismicCharge = new(
-        P1SkillIds.SeismicCharge,
-        SkillTag.Attack | SkillTag.Melee | SkillTag.Area | SkillTag.Physical | SkillTag.Movement,
-        BaseManaCost: 14, RangeRaw: 5_000, CastTimeTicks: 5, CooldownTicks: 80);
-
-    public static readonly SkillDefinition BloodTideSpin = new(
-        P1SkillIds.BloodTideSpin,
-        SkillTag.Attack | SkillTag.Melee | SkillTag.Area | SkillTag.Physical | SkillTag.Bleed,
-        BaseManaCost: 12, RangeRaw: 2_500, CastTimeTicks: 5, CooldownTicks: 18);
-
-    public static readonly SkillDefinition IronOathBanner = new(
-        P1SkillIds.IronOathBanner,
-        SkillTag.Buff | SkillTag.Area | SkillTag.Reservation,
-        BaseManaCost: 0, RangeRaw: 8_000, CastTimeTicks: 4, CooldownTicks: 0);
-
-    public static readonly SkillDefinition AshJavelin = new(
-        P1SkillIds.AshJavelin,
-        SkillTag.Attack | SkillTag.Projectile | SkillTag.Physical | SkillTag.Fire,
-        BaseManaCost: 11, RangeRaw: 9_500, CastTimeTicks: 4, CooldownTicks: 18);
-
-    public static readonly SkillDefinition EmberNova = new(
-        P1SkillIds.EmberNova,
-        SkillTag.Spell | SkillTag.Area | SkillTag.Fire,
-        BaseManaCost: 16, RangeRaw: 4_200, CastTimeTicks: 8, CooldownTicks: 32);
-
-    public static readonly SkillDefinition StormBrand = new(
-        P1SkillIds.StormBrand,
-        SkillTag.Spell | SkillTag.Projectile | SkillTag.Chaining | SkillTag.Lightning,
-        BaseManaCost: 14, RangeRaw: 10_000, CastTimeTicks: 7, CooldownTicks: 40);
-
-    public static IReadOnlyList<SkillDefinition> All { get; } =
-    [HeavyStrike, WarCry, EarthCleave, SpiritBlade, SeismicCharge, BloodTideSpin, IronOathBanner,
-        AshJavelin, EmberNova, StormBrand];
-
-    public static SkillDefinition Get(string stableId) => stableId switch
-    {
-        P1SkillIds.HeavyStrike => HeavyStrike,
-        P1SkillIds.WarCry => WarCry,
-        P1SkillIds.EarthCleave => EarthCleave,
-        P1SkillIds.SpiritBlade => SpiritBlade,
-        P1SkillIds.SeismicCharge => SeismicCharge,
-        P1SkillIds.BloodTideSpin => BloodTideSpin,
-        P1SkillIds.IronOathBanner => IronOathBanner,
-        P1SkillIds.AshJavelin => AshJavelin,
-        P1SkillIds.EmberNova => EmberNova,
-        P1SkillIds.StormBrand => StormBrand,
-        _ => throw new KeyNotFoundException($"Unknown skill: {stableId}"),
-    };
+    public static SkillDefinition Get(string stableId) => Catalog.TryGetValue(stableId, out SkillDefinition? definition)
+        ? definition : throw new KeyNotFoundException($"Unknown skill: {stableId}");
 }
 
 public sealed record SkillUseProfile(

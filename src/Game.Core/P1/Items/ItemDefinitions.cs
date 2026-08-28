@@ -32,6 +32,8 @@ public enum ItemCategory
     Boots = 6,
     Belt = 7,
     Amulet = 8,
+    OneHandWeapon = 9,
+    Shield = 10,
 }
 
 public enum ItemRarity
@@ -60,7 +62,7 @@ public sealed record ItemBaseDefinition(
     int ImplicitMinimumValue = 0,
     int ImplicitMaximumValue = 0)
 {
-    public WeaponProfile ToWeaponProfile() => Category == ItemCategory.TwoHandWeapon
+    public WeaponProfile ToWeaponProfile() => Category is ItemCategory.TwoHandWeapon or ItemCategory.OneHandWeapon
         ? new WeaponProfile(
             StableId,
             MinimumPhysicalDamage,
@@ -92,6 +94,10 @@ public static class P1ItemBases
         Weapon("core.base.blood_halberd", "血痕战戟", new WeaponProfile("core.weapon.blood_halberd", 9, 18, 980, 550)),
         Weapon("core.base.glass_greatblade", "琉璃巨刃", new WeaponProfile("core.weapon.glass_greatblade", 11, 24, 900, 750)),
         Weapon("core.base.oathbreaker_axe", "破誓巨斧", new WeaponProfile("core.weapon.oathbreaker_axe", 16, 27, 780, 500)),
+        OneHandWeapon("core.base.rusted_warhammer", "锈蚀战锤",
+            new WeaponProfile("core.weapon.rusted_warhammer", 7, 12, 1_150, 500)),
+        new("core.base.ash_iron_shield", "灰铁塔盾", ItemCategory.Shield, EquipmentSlot.OffHand,
+            Armor: 24, CoreSkillCapacity: 1, SupportLinkCapacity: 2),
         new("core.base.crude_chainmail", "粗制链甲", ItemCategory.BodyArmor, EquipmentSlot.Chest,
             Armor: 30, CoreSkillCapacity: 1, SupportLinkCapacity: 2),
         new("core.base.hide_coat", "兽皮外衣", ItemCategory.BodyArmor, EquipmentSlot.Chest,
@@ -161,6 +167,11 @@ public static class P1ItemBases
         weapon.CriticalChanceBasisPoints,
         CoreSkillCapacity: 1,
         SupportLinkCapacity: 2);
+
+    private static ItemBaseDefinition OneHandWeapon(string id, string name, WeaponProfile weapon) => new(
+        id, name, ItemCategory.OneHandWeapon, EquipmentSlot.MainHand,
+        weapon.MinimumPhysicalDamage, weapon.MaximumPhysicalDamage, weapon.AttacksPerSecondMilli,
+        weapon.CriticalChanceBasisPoints, CoreSkillCapacity: 1, SupportLinkCapacity: 2);
 }
 
 public enum ItemModifierKind

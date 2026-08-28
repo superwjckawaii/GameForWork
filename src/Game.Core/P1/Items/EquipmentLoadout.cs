@@ -27,7 +27,8 @@ public sealed record EquipmentSummary(
     int CoreSkillCapacity,
     int SupportLinkCapacity,
     WeaponProfile? Weapon,
-    LegendaryRule? WeaponLegendaryRule);
+    LegendaryRule? WeaponLegendaryRule,
+    bool HasShield = false);
 
 public sealed class EquipmentLoadout
 {
@@ -39,6 +40,12 @@ public sealed class EquipmentLoadout
     {
         ArgumentNullException.ThrowIfNull(item);
         if (!CanEquip(slot, item.Base.Category))
+        {
+            return false;
+        }
+
+        if (slot == EquipmentSlot.OffHand &&
+            _items.GetValueOrDefault(EquipmentSlot.MainHand)?.Base.Category == ItemCategory.TwoHandWeapon)
         {
             return false;
         }
@@ -121,8 +128,9 @@ public sealed class EquipmentLoadout
             modifiers,
             equipped.Sum(item => item.Base.CoreSkillCapacity),
             equipped.Sum(item => item.Base.SupportLinkCapacity + item.ExtraSupportLinkCapacity),
-            weaponItem?.Base.Category == ItemCategory.TwoHandWeapon ? QualityWeapon(weaponItem) : null,
-            weaponItem?.LegendaryRule);
+            weaponItem?.Base.Category is ItemCategory.TwoHandWeapon or ItemCategory.OneHandWeapon ? QualityWeapon(weaponItem) : null,
+            weaponItem?.LegendaryRule,
+            _items.GetValueOrDefault(EquipmentSlot.OffHand)?.Base.Category == ItemCategory.Shield);
     }
 
     private static int QualityScale(int value, int quality) => checked(value * (100 + Math.Clamp(quality, 0, 30)) / 100);
@@ -140,6 +148,8 @@ public sealed class EquipmentLoadout
     public static bool CanEquip(EquipmentSlot slot, ItemCategory category) => category switch
     {
         ItemCategory.TwoHandWeapon => slot == EquipmentSlot.MainHand,
+        ItemCategory.OneHandWeapon => slot == EquipmentSlot.MainHand,
+        ItemCategory.Shield => slot == EquipmentSlot.OffHand,
         ItemCategory.BodyArmor => slot == EquipmentSlot.Chest,
         ItemCategory.Helmet => slot == EquipmentSlot.Helmet,
         ItemCategory.Gloves => slot == EquipmentSlot.Gloves,
@@ -167,7 +177,7 @@ public static class SkillCapacityRules
         EquipmentSummary equipment)
     {
         int requiredCore = skills.Count;
-        int requiredLinks = skills.Sum(skill => BitOperations.PopCount((uint)skill.Supports));
+        int requiredLinks = skills.Sum(skill => BitOperations.PopCount((ulong)skill.Supports));
         bool enoughCore = requiredCore <= equipment.CoreSkillCapacity;
         bool enoughLinks = requiredLinks <= equipment.SupportLinkCapacity;
         string reason = !enoughCore ? "core_capacity" : !enoughLinks ? "support_capacity" : string.Empty;

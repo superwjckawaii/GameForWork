@@ -1,4 +1,5 @@
 using GameForWork.Core.P1.Combat;
+using GameForWork.Core.P17;
 
 namespace GameForWork.Core.P6;
 
@@ -17,17 +18,29 @@ public sealed record P6ResolvedSkill(
     int LifeLeechBasisPoints,
     int ExecuteThresholdBasisPoints,
     int ExecuteMultiplierBasisPoints,
-    int NonExecuteMultiplierBasisPoints);
+    int NonExecuteMultiplierBasisPoints,
+    P17DamageType DamageType,
+    P17SkillRole Role,
+    P17SkillShape Shape,
+    int BaseDamageBasisPoints,
+    P17Ailment Ailment,
+    int AilmentChanceBasisPoints,
+    int PierceCount,
+    int ForkCount,
+    bool Returns,
+    bool RequiresShield);
 
 public static class P6CombatSkillRules
 {
     public static P6ResolvedSkill Resolve(SkillConfiguration configuration, int maximumLife)
     {
         SkillDefinition definition = P1Skills.Get(configuration.SkillId);
+        P17ActiveSkillDefinition active = P17SkillCatalog.ActiveForSkill(configuration.SkillId);
         int mana = definition.BaseManaCost;
         int life = 0;
         int range = definition.RangeRaw;
         int cooldown = definition.CooldownTicks;
+        int castTime = definition.CastTimeTicks;
         int damage = 10_000;
         int bleed = 0;
         int projectiles = 1;
@@ -37,6 +50,11 @@ public static class P6CombatSkillRules
         int executeThreshold = 0;
         int execute = 10_000;
         int nonExecute = 10_000;
+        int baseDamage = active.DamageBasisPoints;
+        int ailmentChance = active.AilmentChanceBasisPoints;
+        int pierce = 0;
+        int fork = 0;
+        bool returns = active.Tags.HasFlag(SkillTag.Returning);
         damage = checked(damage * (10_000 + (Math.Clamp(configuration.Level, 1, 20) - 1) * 250) / 10_000);
 
         if (configuration.Supports.HasFlag(SkillSupport.IncreasedArea))
@@ -47,9 +65,9 @@ public static class P6CombatSkillRules
         if (configuration.Supports.HasFlag(SkillSupport.Bleed)) bleed += 6_000;
         if (configuration.Supports.HasFlag(SkillSupport.LifeCost))
         {
-            life = Math.Max(1, maximumLife * 800 / 10_000);
+            life = Math.Max(1, (mana * 15 + 9) / 10);
             mana = 0;
-            damage = checked(damage * 13_000 / 10_000);
+            damage = checked(damage * 12_000 / 10_000);
         }
         if (configuration.Supports.HasFlag(SkillSupport.Brutality)) damage = checked(damage * 13_500 / 10_000);
         if (configuration.Supports.HasFlag(SkillSupport.MultipleProjectiles))
@@ -95,8 +113,39 @@ public static class P6CombatSkillRules
         {
             cooldown = Math.Max(1, cooldown * 10_000 / 12_500);
         }
-        return new P6ResolvedSkill(configuration.SkillId, mana, life, range, definition.CastTimeTicks, cooldown,
-            damage, bleed, projectiles, projectileSpeed, chains, leech, executeThreshold, execute, nonExecute);
+        if (configuration.Supports.HasFlag(SkillSupport.HeavyMomentum)) damage = checked(damage * 14_500 / 10_000);
+        if (configuration.Supports.HasFlag(SkillSupport.TripleImpact)) damage = checked(damage * 12_667 / 10_000);
+        if (configuration.Supports.HasFlag(SkillSupport.TremorField))
+        {
+            range = checked(range * 13_000 / 10_000);
+            damage = checked(damage * 12_500 / 10_000);
+            cooldown = Math.Max(1, cooldown * 11_500 / 10_000);
+        }
+        if (configuration.Supports.HasFlag(SkillSupport.Shockwave)) damage = checked(damage * 11_000 / 10_000);
+        if (configuration.Supports.HasFlag(SkillSupport.CloseCombat)) damage = checked(damage * 12_000 / 10_000);
+        if (configuration.Supports.HasFlag(SkillSupport.ArmorShatter)) damage = checked(damage * 9_000 / 10_000);
+        if (configuration.Supports.HasFlag(SkillSupport.Suppression)) damage = checked(damage * 8_500 / 10_000);
+        if (configuration.Supports.HasFlag(SkillSupport.DeepWound))
+        {
+            damage = checked(damage * 9_000 / 10_000);
+            bleed += 5_000;
+        }
+        if (configuration.Supports.HasFlag(SkillSupport.Vengeance)) damage = checked(damage * 14_000 / 10_000);
+        if (configuration.Supports.HasFlag(SkillSupport.BlockTrigger)) damage = checked(damage * 7_500 / 10_000);
+        if (configuration.Supports.HasFlag(SkillSupport.CastWhenDamaged)) damage = checked(damage * 7_000 / 10_000);
+        if (configuration.Supports.HasFlag(SkillSupport.FasterCasting) && definition.Tags.HasFlag(SkillTag.Spell))
+        {
+            castTime = Math.Max(1, castTime * 10_000 / 12_500);
+            mana = checked((mana * 11_000 + 9_999) / 10_000);
+        }
+        if (configuration.Supports.HasFlag(SkillSupport.Pierce)) pierce += 2;
+        if (configuration.Supports.HasFlag(SkillSupport.Fork)) fork += 2;
+        if (configuration.Supports.HasFlag(SkillSupport.Return)) returns = true;
+        ailmentChance = Math.Clamp(ailmentChance + bleed, 0, 10_000);
+        return new P6ResolvedSkill(configuration.SkillId, mana, life, range, castTime, cooldown,
+            damage, bleed, projectiles, projectileSpeed, chains, leech, executeThreshold, execute, nonExecute,
+            active.DamageType, active.Role, active.Shape, baseDamage, active.Ailment, ailmentChance,
+            pierce, fork, returns, active.Capabilities.HasFlag(P17SkillCapability.RequiresShield));
     }
 
     public static bool TryPay(ResourceState resources, P6ResolvedSkill skill) => skill.LifeCost > 0

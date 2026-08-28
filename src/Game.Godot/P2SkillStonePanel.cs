@@ -2,6 +2,7 @@ using GameForWork.Core.P1;
 using GameForWork.Core.P1.Combat;
 using GameForWork.Core.P2;
 using GameForWork.Core.P5;
+using GameForWork.Core.P17;
 using Godot;
 
 namespace GameForWork.GodotClient;
@@ -20,6 +21,8 @@ public partial class P2SkillStonePanel : VBoxContainer
     private bool _compact;
     private string _signature = string.Empty;
     private bool _readOnly;
+    private LineEdit? _search;
+    private OptionButton? _kindFilter;
 
     public void Initialize(Func<P1GameSession> session, Action<string> changed)
     {
@@ -34,6 +37,15 @@ public partial class P2SkillStonePanel : VBoxContainer
         _compactStack.AddThemeConstantOverride("separation", 10);
         AddChild(_compactStack);
         _inventoryColumn = Column(_wideColumns, "技能石背包", 600);
+        var filters = new HBoxContainer();
+        _search = new LineEdit { PlaceholderText = "搜索名称、标签或说明", SizeFlagsHorizontal = SizeFlags.ExpandFill };
+        _search.TextChanged += _ => Invalidate();
+        filters.AddChild(_search);
+        _kindFilter = new OptionButton();
+        foreach (string label in new[] { "全部", "主动", "辅助" }) _kindFilter.AddItem(label);
+        _kindFilter.ItemSelected += _ => Invalidate();
+        filters.AddChild(_kindFilter);
+        _inventoryColumn.AddChild(filters);
         var inventoryScroll = new ScrollContainer { SizeFlagsVertical = SizeFlags.ExpandFill, SizeFlagsHorizontal = SizeFlags.ExpandFill };
         _inventoryColumn.AddChild(FramedScroll(inventoryScroll));
         var inventoryBody = new VBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
@@ -83,7 +95,16 @@ public partial class P2SkillStonePanel : VBoxContainer
             return;
         }
 
-        SkillStoneInstance[] stones = management.UninstalledSkillStones.OrderBy(stone => stone.Definition.Kind)
+        string query = _search?.Text.Trim() ?? string.Empty;
+        int kindFilter = _kindFilter?.Selected ?? 0;
+        SkillStoneInstance[] stones = management.UninstalledSkillStones
+            .Where(stone => kindFilter == 0 || kindFilter == 1 && stone.Definition.Kind == SkillStoneKind.Active ||
+                            kindFilter == 2 && stone.Definition.Kind == SkillStoneKind.Support)
+            .Where(stone => query.Length == 0 || stone.Definition.DisplayName.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+                            stone.Definition.Description.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+                            stone.Definition.Tags.ToString().Contains(query, StringComparison.OrdinalIgnoreCase) ||
+                            stone.Definition.SupportedTags.ToString().Contains(query, StringComparison.OrdinalIgnoreCase))
+            .OrderBy(stone => stone.Definition.Kind)
             .ThenBy(stone => stone.Definition.DisplayName, StringComparer.Ordinal).ToArray();
         foreach (SkillStoneInstance stone in stones)
         {
@@ -262,6 +283,7 @@ public static class P7SkillTooltip
         SkillStoneDefinition definition = stone.Definition;
         string tags = definition.Kind == SkillStoneKind.Active ? definition.Tags.ToString() : definition.SupportedTags.ToString();
         string mechanics = string.Empty;
+        string compatibility = string.Empty;
         if (definition.Kind == SkillStoneKind.Active)
         {
             string skillId = definition.StableId.Replace("core.skill_stone.", "core.skill.", StringComparison.Ordinal);
@@ -269,11 +291,16 @@ public static class P7SkillTooltip
             {
                 SkillDefinition skill = P1Skills.Get(skillId);
                 mechanics = $"\n法力消耗 {skill.BaseManaCost} · 范围 {skill.RangeRaw / 1000.0:0.#}m · 施法 {skill.CastTimeTicks * 50}ms · 冷却 {skill.CooldownTicks * 50}ms";
+                compatibility = $"\n执行能力：{definition.Capabilities}";
             }
             catch (KeyNotFoundException) { }
         }
+        else
+        {
+            compatibility = $"\n辅助条件：全部[{definition.RequiredAllCapabilities}] · 任一[{definition.RequiredAnyCapabilities}] · 排除[{definition.ExcludedCapabilities}]";
+        }
         return $"{definition.DisplayName}\n{(definition.Kind == SkillStoneKind.Active ? "主动" : "辅助")}技能石 · Lv.{stone.Level}/20 · XP {stone.Experience}\n" +
-               $"标签：{tags}{mechanics}\n{definition.Description}\n位置：{location}\n来源：" +
+               $"标签：{tags}{mechanics}{compatibility}\n{definition.Description}\n位置：{location}\n来源：" +
                (stone.InstanceId.StartsWith("starter-", StringComparison.Ordinal) ? "初始技能" : "战斗掉落");
     }
 }

@@ -383,6 +383,7 @@ public sealed class P2CampaignSimulator
             {
                 world.Expedition.AddCombatReport(P6CombatReportBuilder.Build(
                     campaign.ActiveTimeline, $"主线 · {node.DisplayName}", offline));
+                GrantDefeatedEnemyRewards(world, management, node, campaign.ActiveTimeline, seed, "failed");
                 campaign.RecordDefeat($"{node.DisplayName} 战斗失败：{campaign.ActiveTimeline.Outcome}");
                 break;
             }
@@ -424,6 +425,7 @@ public sealed class P2CampaignSimulator
         world.Expedition.AddCombatReport(P6CombatReportBuilder.Build(replay, $"主线重放 · {node.DisplayName}"));
         if (replay.Outcome != P1BattleOutcome.HeroVictory)
         {
+            GrantDefeatedEnemyRewards(world, management, node, replay, seed, "replay-failed");
             return false;
         }
 
@@ -437,6 +439,32 @@ public sealed class P2CampaignSimulator
 
         management.AddHistory($"已重玩 {node.DisplayName}，固定剧情奖励未重复发放。");
         return true;
+    }
+
+    private static void GrantDefeatedEnemyRewards(
+        P1WorldState world,
+        P2ManagementState management,
+        CampaignNodeDefinition node,
+        P3SceneTimeline timeline,
+        ulong seed,
+        string source)
+    {
+        int defeated = timeline.Events.Count(item => item.Kind == P3SceneEventKind.EnemyDefeated);
+        if (defeated <= 0) return;
+        int experience = defeated * (4 + node.Act * 2);
+        world.Hero.Progression.AddExperience(experience);
+        world.Hero.UpdateBuild(world.Hero.Build with
+        {
+            Sheet = world.Hero.Build.Sheet with { Level = world.Hero.Progression.Level },
+        });
+        management.AddSkillExperience(Math.Max(1, defeated * node.Act));
+        int dropCount = Math.Clamp((defeated + 2) / 3, 1, 3);
+        for (int index = 0; index < dropCount; index++)
+        {
+            ItemInstance drop = GenerateDrop(node, seed ^ (0x517cc1b727220a95UL + (ulong)index), $"{source}-{index}");
+            if (!world.Storage.TryStore(drop)) management.AddToRecovery(drop, "失败战斗掉落时仓库已满");
+        }
+        management.AddHistory($"战斗失败，但已结算 {defeated} 个击杀：{experience} 经验、{dropCount} 件物品。");
     }
 
     private static void GrantRewards(

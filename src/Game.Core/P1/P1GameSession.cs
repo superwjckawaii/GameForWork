@@ -10,6 +10,7 @@ using GameForWork.Core.P9;
 using GameForWork.Core.P10;
 using GameForWork.Core.P12;
 using GameForWork.Core.P14;
+using GameForWork.Core.P17;
 
 namespace GameForWork.Core.P1;
 
@@ -1159,7 +1160,9 @@ public sealed class P1GameSession
             new SkillConfiguration(P1SkillIds.EarthCleave, SkillSupport.IncreasedArea),
             new SkillConfiguration(P1SkillIds.SpiritBlade, SkillSupport.Chain),
         ],
-        Flasks: build.Flasks) with
+        Flasks: build.Flasks,
+        HasShield: build.Equipment.HasShield,
+        BlockChanceBasisPoints: build.Equipment.HasShield ? 2_000 : 0) with
         {
             AiSummary = $"{ai.Preset} · {(ai.MatchMode == AiRuleMatchMode.All ? "全部满足" : "任一满足")}：" +
                 $"敌人≥{ai.MinimumEnemyCount}、稀有度 {ai.EnemyRarity}、距离≤{ai.MaximumEnemyDistance}、" +
@@ -1171,7 +1174,8 @@ public sealed class P1GameSession
         .Where(link => !string.IsNullOrEmpty(link.ChainId) && !string.IsNullOrEmpty(link.ActiveStoneInstanceId))
         .OrderBy(link => link.Priority)
         .Select(link => (Link: link, Stone: Management.SkillStones.Single(stone => stone.InstanceId == link.ActiveStoneInstanceId)))
-        .Where(entry => entry.Stone.DefinitionId != "core.skill_stone.iron_oath_banner" || entry.Link.ReservationEnabled)
+        .Where(entry => P17SkillCatalog.Active.First(active => active.StoneId == entry.Stone.DefinitionId).Role !=
+                        P17SkillRole.Reservation || entry.Link.ReservationEnabled)
         .Select(entry => new SkillConfiguration(
             ToCombatSkillId(entry.Stone.DefinitionId),
             SupportsFor(entry.Stone.DefinitionId),
@@ -1199,69 +1203,23 @@ public sealed class P1GameSession
         SkillSupport supports = SkillSupport.None;
         foreach (string supportId in link?.SupportStoneInstanceIds ?? [])
         {
-            string definition = Management.SkillStones.Single(item => item.InstanceId == supportId).DefinitionId;
-            supports |= definition switch
-            {
-                "core.skill_stone.increased_area" => SkillSupport.IncreasedArea,
-                "core.skill_stone.attack_speed" => SkillSupport.AttackSpeed,
-                "core.skill_stone.bleed" => SkillSupport.Bleed,
-                "core.skill_stone.life_cost" => SkillSupport.LifeCost,
-                "core.skill_stone.chain" => SkillSupport.Chain,
-                "core.skill_stone.brutality" => SkillSupport.Brutality,
-                "core.skill_stone.multiple_projectiles" => SkillSupport.MultipleProjectiles,
-                "core.skill_stone.faster_projectiles" => SkillSupport.FasterProjectiles,
-                "core.skill_stone.urgent_war_cry" => SkillSupport.UrgentWarCry,
-                "core.skill_stone.life_leech" => SkillSupport.LifeLeech,
-                "core.skill_stone.execution" => SkillSupport.Execution,
-                "core.skill_stone.spell_echo" => SkillSupport.SpellEcho,
-                "core.skill_stone.elemental_focus" => SkillSupport.ElementalFocus,
-                "core.skill_stone.added_fire" => SkillSupport.AddedFire,
-                "core.skill_stone.added_cold" => SkillSupport.AddedCold,
-                "core.skill_stone.added_lightning" => SkillSupport.AddedLightning,
-                "core.skill_stone.critical_strikes" => SkillSupport.CriticalStrikes,
-                "core.skill_stone.concentrated_effect" => SkillSupport.ConcentratedEffect,
-                _ => SkillSupport.None,
-            };
+            supports |= Management.SkillStones.Single(item => item.InstanceId == supportId).Definition.CombatSupport;
         }
 
         return supports;
     }
 
-    private static string ToCombatSkillId(string definitionId) => definitionId switch
-    {
-        "core.skill_stone.heavy_strike" => P1SkillIds.HeavyStrike,
-        "core.skill_stone.earth_cleave" => P1SkillIds.EarthCleave,
-        "core.skill_stone.spirit_blade" => P1SkillIds.SpiritBlade,
-        "core.skill_stone.war_cry" => P1SkillIds.WarCry,
-        "core.skill_stone.seismic_charge" => P1SkillIds.SeismicCharge,
-        "core.skill_stone.blood_tide_spin" => P1SkillIds.BloodTideSpin,
-        "core.skill_stone.iron_oath_banner" => P1SkillIds.IronOathBanner,
-        "core.skill_stone.ash_javelin" => P1SkillIds.AshJavelin,
-        "core.skill_stone.ember_nova" => P1SkillIds.EmberNova,
-        "core.skill_stone.storm_brand" => P1SkillIds.StormBrand,
-        _ => string.Empty,
-    };
+    private static string ToCombatSkillId(string definitionId) => definitionId.StartsWith("core.skill_stone.", StringComparison.Ordinal)
+        ? definitionId.Replace("core.skill_stone.", "core.skill.", StringComparison.Ordinal)
+        : string.Empty;
 
     private static IEnumerable<string> SupportDefinitionIds(SkillSupport supports)
     {
-        if (supports.HasFlag(SkillSupport.IncreasedArea)) yield return "core.skill_stone.increased_area";
-        if (supports.HasFlag(SkillSupport.AttackSpeed)) yield return "core.skill_stone.attack_speed";
-        if (supports.HasFlag(SkillSupport.Bleed)) yield return "core.skill_stone.bleed";
-        if (supports.HasFlag(SkillSupport.LifeCost)) yield return "core.skill_stone.life_cost";
-        if (supports.HasFlag(SkillSupport.Chain)) yield return "core.skill_stone.chain";
-        if (supports.HasFlag(SkillSupport.Brutality)) yield return "core.skill_stone.brutality";
-        if (supports.HasFlag(SkillSupport.MultipleProjectiles)) yield return "core.skill_stone.multiple_projectiles";
-        if (supports.HasFlag(SkillSupport.FasterProjectiles)) yield return "core.skill_stone.faster_projectiles";
-        if (supports.HasFlag(SkillSupport.UrgentWarCry)) yield return "core.skill_stone.urgent_war_cry";
-        if (supports.HasFlag(SkillSupport.LifeLeech)) yield return "core.skill_stone.life_leech";
-        if (supports.HasFlag(SkillSupport.Execution)) yield return "core.skill_stone.execution";
-        if (supports.HasFlag(SkillSupport.SpellEcho)) yield return "core.skill_stone.spell_echo";
-        if (supports.HasFlag(SkillSupport.ElementalFocus)) yield return "core.skill_stone.elemental_focus";
-        if (supports.HasFlag(SkillSupport.AddedFire)) yield return "core.skill_stone.added_fire";
-        if (supports.HasFlag(SkillSupport.AddedCold)) yield return "core.skill_stone.added_cold";
-        if (supports.HasFlag(SkillSupport.AddedLightning)) yield return "core.skill_stone.added_lightning";
-        if (supports.HasFlag(SkillSupport.CriticalStrikes)) yield return "core.skill_stone.critical_strikes";
-        if (supports.HasFlag(SkillSupport.ConcentratedEffect)) yield return "core.skill_stone.concentrated_effect";
+        foreach (SkillStoneDefinition definition in P2SkillStones.All
+                     .Where(item => item.Kind == SkillStoneKind.Support && item.CombatSupport != SkillSupport.None &&
+                                    supports.HasFlag(item.CombatSupport))
+                     .OrderBy(item => item.StableId, StringComparer.Ordinal))
+            yield return definition.StableId;
     }
 
     private static void SynchronizeLegacyHeavySupports(P2ManagementState management, SkillSupport supports)

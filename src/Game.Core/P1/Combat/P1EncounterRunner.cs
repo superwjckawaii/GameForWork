@@ -50,7 +50,7 @@ public sealed record P1EncounterRequest(
     bool EchoNotableAllocated = false,
     bool DeepWoundAllocated = false,
     bool FasterBleedingAllocated = false,
-    int MaximumTicks = 2_400,
+    int MaximumTicks = 0,
     LifeFlaskDefinition? LifeFlask = null,
     int IncreasedLifeFlaskEffectBasisPoints = 0,
     int LifeFlaskUseThresholdBasisPoints = 5_000,
@@ -100,7 +100,7 @@ public sealed class P1EncounterRunner
         BossPhase? previousBossPhase = null;
         int tick;
 
-        for (tick = 0; tick < request.MaximumTicks; tick++)
+        for (tick = 0; request.MaximumTicks == 0 || tick < request.MaximumTicks; tick++)
         {
             heroResources.AdvanceRegenerationTick(tick);
             warCry.AdvanceTick();
@@ -250,8 +250,9 @@ public sealed class P1EncounterRunner
             }
         }
 
-        int elapsedTicks = Math.Min(tick + 1, request.MaximumTicks);
-        P1BattleOutcome outcome = (heroResources.IsAlive, enemyLife > 0, tick >= request.MaximumTicks) switch
+        int elapsedTicks = request.MaximumTicks == 0 ? tick + 1 : Math.Min(tick + 1, request.MaximumTicks);
+        bool diagnosticLimitReached = request.MaximumTicks > 0 && tick >= request.MaximumTicks;
+        P1BattleOutcome outcome = (heroResources.IsAlive, enemyLife > 0, diagnosticLimitReached) switch
         {
             (_, _, true) => P1BattleOutcome.Timeout,
             (true, false, false) => P1BattleOutcome.HeroVictory,
@@ -355,7 +356,7 @@ public sealed class P1EncounterRunner
 
     private static void Validate(P1EncounterRequest request)
     {
-        if (request.MaximumTicks <= 0 || request.HeavyStrike.SkillId != P1SkillIds.HeavyStrike ||
+        if (request.MaximumTicks < 0 || request.HeavyStrike.SkillId != P1SkillIds.HeavyStrike ||
             request.LifeFlaskUseThresholdBasisPoints is < 0 or > 10_000)
         {
             throw new ArgumentOutOfRangeException(nameof(request), "Encounter request is invalid.");

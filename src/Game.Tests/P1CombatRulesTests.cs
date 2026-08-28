@@ -129,7 +129,7 @@ public sealed class P1CombatRulesTests
         Assert.Equal(6_000, profile.BleedChanceBasisPoints);
         Assert.Equal([14_000, 9_000, 13_000], profile.MoreDamageMultipliersBasisPoints);
         Assert.True(P1Skills.HeavyStrike.Tags.HasFlag(SkillTag.Physical));
-        Assert.True(P1Skills.HeavyStrike.Tags.HasFlag(SkillTag.Area));
+        Assert.True(P1Skills.HeavyStrike.Tags.HasFlag(SkillTag.Strike));
         Assert.True(P1Skills.WarCry.Tags.HasFlag(SkillTag.WarCry));
     }
 

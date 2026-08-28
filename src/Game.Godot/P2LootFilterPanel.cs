@@ -79,10 +79,17 @@ public partial class P2LootFilterPanel : VBoxContainer
             Title = "过滤规则",
             OkButtonText = "保存规则",
             CancelButtonText = "取消",
-            Exclusive = true,
+            Unresizable = false,
         };
         var body = new VBoxContainer { CustomMinimumSize = new Vector2(520, 420) };
-        _editor.AddChild(body);
+        var scroll = new ScrollContainer
+        {
+            CustomMinimumSize = new Vector2(540, 470),
+            SizeFlagsHorizontal = SizeFlags.ExpandFill,
+            SizeFlagsVertical = SizeFlags.ExpandFill,
+        };
+        scroll.AddChild(body);
+        _editor.AddChild(scroll);
         _rarityMode = AddOptions(body, "稀有度 Match", ["任意", "等于", "至少", "至多", "区间"]);
         var rarityRow = new HBoxContainer();
         body.AddChild(rarityRow);

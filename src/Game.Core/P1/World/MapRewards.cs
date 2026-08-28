@@ -4,6 +4,7 @@ using GameForWork.Core.Simulation;
 using GameForWork.Core.P4;
 using GameForWork.Core.P5;
 using GameForWork.Core.P14;
+using GameForWork.Core.P3;
 
 namespace GameForWork.Core.P1.World;
 
@@ -109,6 +110,35 @@ public static class P1MapRewardGenerator
             maps,
             new MapStackableRewards(gold, scraps, MemoryAshes: 1, WardenMarks: 1, skillStones, metals),
             legendary);
+    }
+
+    public static P1MapRewards GeneratePartial(
+        P1MapItem map,
+        MapRoute route,
+        ulong seed,
+        int defeatedEnemies,
+        int totalEnemies,
+        int maximumUnlockedTier = P1MapItem.MaximumTier)
+    {
+        if (defeatedEnemies <= 0 || totalEnemies <= 0) return new P1MapRewards(
+            0, [], [], new MapStackableRewards(0, 0, 0, 0, 0, []), false);
+        P1MapRewards rolled = Generate(map, route, seed, maximumUnlockedTier);
+        int count = Math.Clamp((rolled.Equipment.Count * defeatedEnemies + totalEnemies - 1) / totalEnemies,
+            1, rolled.Equipment.Count);
+        int experience = Math.Max(1, ExperiencePerMap * defeatedEnemies / totalEnemies);
+        ItemInstance[] equipment = rolled.Equipment.Take(count).ToArray();
+        return new P1MapRewards(experience, equipment, [],
+            new MapStackableRewards(0, 0, 0, 0, 0, []),
+            equipment.Any(item => item.Rarity == ItemRarity.Legendary));
+    }
+
+    public static (int Defeated, int Total) CombatProgress(P1MapRunResult run)
+    {
+        int defeated = run.Attempts.Sum(attempt => attempt.Timeline?.Events.Count(item =>
+            item.Kind == P3SceneEventKind.EnemyDefeated) ?? 0);
+        int total = run.Attempts.Sum(attempt => attempt.Timeline?.Events.Where(item =>
+            item.Kind == P3SceneEventKind.WaveStarted).Sum(item => Math.Max(0, item.Value)) ?? 0);
+        return (defeated, Math.Max(defeated, total));
     }
 
     private static P1MapItem CreateDroppedMap(P1MapItem source, Pcg32 random, int ordinal, int maximumUnlockedTier)

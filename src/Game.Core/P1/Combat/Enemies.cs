@@ -106,7 +106,9 @@ public enum EliteAffix
 
 public sealed record ScaledEnemy(EnemyProfile Base, int AreaLevel, EnemyRarity Rarity, int Life,
     int MinimumPhysicalDamage, int MaximumPhysicalDamage, int Armor, int Evasion, int AttacksPerSecondMilli,
-    IReadOnlyList<EliteAffix> EliteAffixes, bool AbyssRoute);
+    IReadOnlyList<EliteAffix> EliteAffixes, bool AbyssRoute,
+    int FireResistanceBasisPoints = 0, int ColdResistanceBasisPoints = 0,
+    int LightningResistanceBasisPoints = 0, int VoidResistanceBasisPoints = 0);
 
 public static class EnemyRules
 {
@@ -139,6 +141,10 @@ public static class EnemyRules
         int maximumDamage = ScaleAtLeastOne(profile.MaximumPhysicalDamage, damageMultiplier);
         int armor = ScaleNonNegative(profile.Armor, defenseMultiplier);
         int evasion = ScaleNonNegative(profile.Evasion, defenseMultiplier);
+        int fireResistance = profile.Family == EnemyFamily.AshenLegion ? 2_000 : 500;
+        int coldResistance = profile.Family == EnemyFamily.FrostwildPack ? 2_000 : 500;
+        int lightningResistance = profile.Family == EnemyFamily.BloodforgeConstruct ? 2_000 : 500;
+        int voidResistance = profile.Family == EnemyFamily.VoidCult ? 2_000 : 500;
         int attackRate = profile.AttacksPerSecondMilli;
         (int rarityLife, int rarityDamage) = rarity.Value switch
         {
@@ -181,13 +187,32 @@ public static class EnemyRules
                     maximumDamage = ScaleAtLeastOne(maximumDamage, 11_000);
                     break;
                 case EliteAffix.FlameTouched:
+                    fireResistance += 1_500;
+                    minimumDamage = ScaleAtLeastOne(minimumDamage, 12_000);
+                    maximumDamage = ScaleAtLeastOne(maximumDamage, 12_000);
+                    break;
                 case EliteAffix.FrostTouched:
+                    coldResistance += 1_500;
+                    minimumDamage = ScaleAtLeastOne(minimumDamage, 12_000);
+                    maximumDamage = ScaleAtLeastOne(maximumDamage, 12_000);
+                    break;
                 case EliteAffix.StormTouched:
+                    lightningResistance += 1_500;
+                    minimumDamage = ScaleAtLeastOne(minimumDamage, 12_000);
+                    maximumDamage = ScaleAtLeastOne(maximumDamage, 12_000);
+                    break;
                 case EliteAffix.VoidTouched:
+                    voidResistance += 1_500;
                     minimumDamage = ScaleAtLeastOne(minimumDamage, 12_000);
                     maximumDamage = ScaleAtLeastOne(maximumDamage, 12_000);
                     break;
                 case EliteAffix.Resistant:
+                    fireResistance += 1_500;
+                    coldResistance += 1_500;
+                    lightningResistance += 1_500;
+                    voidResistance += 1_500;
+                    life = ScaleAtLeastOne(life, 13_000);
+                    break;
                 case EliteAffix.Regenerating: life = ScaleAtLeastOne(life, 13_000); break;
                 case EliteAffix.Lacerating:
                 case EliteAffix.CorpseExplosion:
@@ -197,7 +222,8 @@ public static class EnemyRules
         }
 
         return new ScaledEnemy(profile, monsterLevel, rarity.Value, life, minimumDamage, maximumDamage, armor, evasion,
-            attackRate, affixes, abyssRoute);
+            attackRate, affixes, abyssRoute, Math.Min(7_500, fireResistance), Math.Min(7_500, coldResistance),
+            Math.Min(7_500, lightningResistance), Math.Min(7_500, voidResistance));
     }
 
     public static IReadOnlyList<EliteAffix> RollEliteAffixes(Pcg32 random) =>

@@ -76,6 +76,12 @@ public sealed class P6FeatureTests
         Assert.DoesNotContain(management.UninstalledSkillStones, stone => stone.InstanceId == support.InstanceId);
 
         var other = groups[1];
+        SkillLinkConfiguration? otherLink = management.SkillLinks.FirstOrDefault(link => link.ChainId == other.StableId);
+        if (otherLink?.SocketStoneInstanceIds is not null)
+        {
+            for (int index = 0; index < other.TotalSockets; index++)
+                session.UnsocketSkillStone(other.StableId, index);
+        }
         Assert.True(session.TryPlaceSkillStone(other.StableId, 1, support.InstanceId));
         Assert.Equal(1, management.SkillLinks.Sum(link =>
             (link.SocketStoneInstanceIds ?? []).Count(id => id == support.InstanceId)));

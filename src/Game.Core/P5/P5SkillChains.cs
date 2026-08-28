@@ -30,7 +30,7 @@ public static class P5SkillChainRules
         var chains = new List<P5SkillChainDefinition>();
         EquipmentSlot[] order =
         {
-            EquipmentSlot.MainHand, EquipmentSlot.Chest, EquipmentSlot.Helmet,
+            EquipmentSlot.MainHand, EquipmentSlot.OffHand, EquipmentSlot.Chest, EquipmentSlot.Helmet,
             EquipmentSlot.Gloves, EquipmentSlot.Boots,
         };
         foreach (EquipmentSlot slot in order)
@@ -42,6 +42,7 @@ public static class P5SkillChainRules
             string slotName = slot switch
             {
                 EquipmentSlot.MainHand => "武器",
+                EquipmentSlot.OffHand => "副手",
                 EquipmentSlot.Chest => "胸甲",
                 EquipmentSlot.Helmet => "头盔",
                 EquipmentSlot.Gloves => "手套",

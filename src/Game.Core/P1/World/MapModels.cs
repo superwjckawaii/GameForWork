@@ -331,7 +331,9 @@ public sealed record P1TeamBuild(
     IReadOnlyList<SkillConfiguration>? ActiveSkills = null,
     int PartySize = 1,
     int FrontlineCount = 1,
-    IReadOnlyList<P1FlaskKind>? Flasks = null);
+    IReadOnlyList<P1FlaskKind>? Flasks = null,
+    bool HasShield = false,
+    int BlockChanceBasisPoints = 0);
 
 public sealed record MapNodeResult(
     int NodeIndex,

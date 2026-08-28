@@ -96,7 +96,7 @@ public sealed class P1TeamExpeditionState
         RemainingMapTimeMilliseconds = remainingMilliseconds;
     }
 
-    public void RecordRun(P1MapRunResult run, bool countProgression = true)
+    public void RecordRun(P1MapRunResult run, bool countProgression = true, int defeatedExperience = 0)
     {
         ExpeditionPolicy runPolicy = ActivePolicySnapshot ?? Policy;
         ActiveMap = null;
@@ -118,6 +118,8 @@ public sealed class P1TeamExpeditionState
         }
 
         MapsFailed++;
+        if (countProgression && defeatedExperience > 0)
+            Progression.AddExperience(defeatedExperience);
         ConsecutiveFailures++;
         if (runPolicy.FailureBehavior == QueueFailureBehavior.Stop)
         {
@@ -527,10 +529,23 @@ public sealed class P1WorldSimulator(IP1MapAttemptResolver attemptResolver)
             }
         }
         bool practice = P5ExpeditionDirector.IsPractice(expedition.Map);
-        expedition.Team.RecordRun(run, countProgression: !practice);
+        (int defeated, int total) = P1MapRewardGenerator.CombatProgress(run);
+        P1MapRewards? partial = !run.Succeeded && !practice && defeated > 0
+            ? P1MapRewardGenerator.GeneratePartial(expedition.Map, expedition.Route,
+                seed ^ 0x9e3779b97f4a7c15UL, defeated, total, state.MaximumUnlockedMapTier)
+            : null;
+        expedition.Team.RecordRun(run, countProgression: !practice, defeatedExperience: partial?.Experience ?? 0);
         state.Expedition.RecordResolved(expedition.Map, run.Succeeded);
         if (!run.Succeeded)
         {
+            if (partial is not null)
+            {
+                expedition.Team.Backpack.Replace(partial.Equipment);
+                LootProcessingResult defeatedLoot = LootProcessor.Process(partial.Equipment, state.Storage,
+                    state.Filter, runPolicy.StorageFullBehavior);
+                state.Economy.AddDispositionProceeds(defeatedLoot.GoldGained, defeatedLoot.IronScrapsGained);
+                if (defeatedLoot.ExpeditionMustStop) expedition.Team.Stop("storage_full");
+            }
             return;
         }
 
