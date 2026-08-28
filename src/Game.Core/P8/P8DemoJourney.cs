@@ -3,6 +3,8 @@ using GameForWork.Core.P1.World;
 using GameForWork.Core.P4;
 using GameForWork.Core.P5;
 using GameForWork.Core.P6;
+using GameForWork.Core.P9;
+using GameForWork.Core.P10;
 
 namespace GameForWork.Core.P1;
 
@@ -23,6 +25,14 @@ public enum P8JourneyStep
     CompleteAbyssMap,
     EarnBossTicket,
     DefeatAbyssWarden,
+    CompleteGardenMap,
+    ChooseAltar,
+    CompleteTier16,
+    ReachLevel100,
+    CompleteBreakthrough,
+    CompleteTier20,
+    EnterCitadel,
+    DefeatCitadel,
 }
 
 public enum P8JourneyEvent
@@ -59,7 +69,8 @@ public sealed record P8DemoJourneySnapshot(
     bool CompletionShown,
     long RealPlayMilliseconds,
     long OfflineMilliseconds,
-    IReadOnlyList<P8JourneyStep>? RewardedSteps = null);
+    IReadOnlyList<P8JourneyStep>? RewardedSteps = null,
+    int TutorialReplayCount = 0);
 
 public sealed record P8DemoSummary(
     long RealPlayMilliseconds,
@@ -74,7 +85,12 @@ public sealed record P8DemoSummary(
     int HighestDamage,
     int EquipmentScore,
     int LegendaryItems,
-    string SaveHash);
+    string SaveHash,
+    int HighestMapTier = 0,
+    int MechanicEncounters = 0,
+    int CitadelVictories = 0,
+    int MythicItems = 0,
+    int TownLevelTotal = 0);
 
 public sealed class P8DemoJourney
 {
@@ -109,7 +125,23 @@ public sealed class P8DemoJourney
         new(P8JourneyStep.EarnBossTicket, "获得监守者门票", "完成地图 Boss，集齐四枚碎片并自动合成门票。", P8JourneyDestination.Expedition,
             "每完成三张成功地图获得一枚碎片，四枚碎片自动合成一张门票。"),
         new(P8JourneyStep.DefeatAbyssWarden, "击败深渊监守者", "消耗门票派遣主角挑战深渊监守者，完成 Demo。", P8JourneyDestination.Expedition,
-            "Boss 练习不消耗门票，但练习胜利不会完成 Demo。"),
+            "Boss 练习不消耗门票，但练习胜利不会产生正式奖励。"),
+        new(P8JourneyStep.CompleteGardenMap, "收割命能花园", "完成一张命能花园地图并收割三块苗圃。", P8JourneyDestination.Expedition,
+            "每块苗圃选择敌人与收益；命能可进行保前缀、保后缀和定向加工。"),
+        new(P8JourneyStep.ChooseAltar, "承担一次祭坛代价", "在地图中选择赤誓或苍誓祭坛的风险收益。", P8JourneyDestination.Expedition,
+            "同一张地图只出现一个祭坛阵营，选择效果持续到本图结束。"),
+        new(P8JourneyStep.CompleteTier16, "完成 T16 地图", "使用加工后的构筑击败一名 T16 地图 Boss。", P8JourneyDestination.Expedition,
+            "T16 是常规异界终点；之后需要百级门扉突破。"),
+        new(P8JourneyStep.ReachLevel100, "达到 100 级", "继续地图远征，让主角达到首次等级上限。", P8JourneyDestination.Overview,
+            "达到 100 级后免费开放门扉突破试炼。"),
+        new(P8JourneyStep.CompleteBreakthrough, "完成门扉突破", "击败门扉化身，开放等级 101～120 与 T17～T20。", P8JourneyDestination.Expedition,
+            "失败只损失本次挑战进度；胜利获得 2 个升华点。"),
+        new(P8JourneyStep.CompleteTier20, "完成 T20 地图", "适应终局回响规则并完成一张 T20 地图。", P8JourneyDestination.Expedition,
+            "T17～T20 各有独立终局规则，需要完整攻防构筑。"),
+        new(P8JourneyStep.EnterCitadel, "取得天垒门票", "完成 T11+ 地图，使用 8 枚碎片合成灰烬天垒门票。", P8JourneyDestination.Expedition,
+            "正式模式消耗门票；练习模式免费但没有奖励。"),
+        new(P8JourneyStep.DefeatCitadel, "击败灰烬天垒", "连续突破城墙、双卫和核心，完成 Demo 主旅程。", P8JourneyDestination.Expedition,
+            "三阶段资源连续保留。首杀奖励神话装备、5 个异界点和 2 个升华点。"),
     ];
 
     private readonly HashSet<P8JourneyEvent> _events = [];
@@ -128,6 +160,7 @@ public sealed class P8DemoJourney
     public long OfflineMilliseconds { get; private set; }
     public int CurrentStepIndex { get; private set; }
     public bool DemoCompleted { get; private set; }
+    public int TutorialReplayCount { get; private set; }
     public P8JourneyStepDefinition? CurrentStep => CurrentStepIndex < Definitions.Length ? Definitions[CurrentStepIndex] : null;
     public IReadOnlyList<P8JourneyStepDefinition> AllSteps => Definitions;
 
@@ -160,6 +193,7 @@ public sealed class P8DemoJourney
             CompletionShown = snapshot.CompletionShown,
             RealPlayMilliseconds = snapshot.RealPlayMilliseconds,
             OfflineMilliseconds = snapshot.OfflineMilliseconds,
+            TutorialReplayCount = Math.Max(0, snapshot.TutorialReplayCount),
         };
         result._events.UnionWith(snapshot.Events);
         result._presentedSteps.UnionWith(snapshot.PresentedSteps);
@@ -175,7 +209,13 @@ public sealed class P8DemoJourney
         CompletionShown,
         RealPlayMilliseconds,
         OfflineMilliseconds,
-        _rewardedSteps.Order().ToArray());
+        _rewardedSteps.Order().ToArray(), TutorialReplayCount);
+
+    public void ReplayTutorial()
+    {
+        TutorialReplayCount++;
+        _presentedSteps.Clear();
+    }
 
     public void AddElapsed(long milliseconds, bool offline)
     {
@@ -198,7 +238,7 @@ public sealed class P8DemoJourney
             GrantReward(Definitions[CurrentStepIndex].Step, session);
             CurrentStepIndex++;
         }
-        DemoCompleted = HasBossVictory(session);
+        DemoCompleted = session.Endgame.CitadelDefeated;
     }
 
     public bool TryPresentCurrentStep()
@@ -228,7 +268,11 @@ public sealed class P8DemoJourney
             session.World.Teams.Sum(team => team.MapsCompleted), session.World.Teams.Sum(team => team.MapsFailed),
             session.World.Expedition.Reports.Count(report => report.Context.Contains("深渊监守者", StringComparison.Ordinal)),
             session.World.Hero.Progression.Level,
-            build.MainSkill, build.MainSkillLinks, highestDamage, score, legendary, saveHash);
+            build.MainSkill, build.MainSkillLinks, highestDamage, score, legendary, saveHash,
+            session.Endgame.CompletedTiers.DefaultIfEmpty().Max(),
+            session.Endgame.MechanicEncounters.Values.Sum(), session.Endgame.CitadelVictories,
+            equipment.Concat(session.World.Storage.Items).Count(item => item.LegendaryRule?.StableId == "core.mythic.heart_of_ash"),
+            Enum.GetValues<P9BuildingKind>().Sum(session.Town.Level));
     }
 
     private bool IsSatisfied(P8JourneyStep step, P1GameSession session) => step switch
@@ -250,11 +294,20 @@ public sealed class P8DemoJourney
             report.Outcome == Combat.P1BattleOutcome.HeroVictory && report.Context.Contains(" Abyss", StringComparison.Ordinal) &&
             !report.Context.Contains("深渊监守者", StringComparison.Ordinal)),
         P8JourneyStep.EarnBossTicket => session.World.Expedition.AbyssWardenTickets > 0 || session.World.Expedition.BossSequence > 0,
-        P8JourneyStep.DefeatAbyssWarden => HasBossVictory(session),
+        P8JourneyStep.DefeatAbyssWarden => HasAbyssVictory(session),
+        P8JourneyStep.CompleteGardenMap => session.Endgame.MechanicEncounters.GetValueOrDefault(P10MapMechanic.LifeGarden) > 0,
+        P8JourneyStep.ChooseAltar => session.Endgame.MechanicEncounters.GetValueOrDefault(P10MapMechanic.RedAltar) > 0 ||
+                                     session.Endgame.MechanicEncounters.GetValueOrDefault(P10MapMechanic.BlueAltar) > 0,
+        P8JourneyStep.CompleteTier16 => session.Endgame.CompletedTiers.Contains(16),
+        P8JourneyStep.ReachLevel100 => session.World.Hero.Progression.Level >= 100,
+        P8JourneyStep.CompleteBreakthrough => session.Endgame.FinalBreakthroughCompleted,
+        P8JourneyStep.CompleteTier20 => session.Endgame.CompletedTiers.Contains(20),
+        P8JourneyStep.EnterCitadel => session.Endgame.CitadelTickets > 0 || session.Endgame.CitadelVictories > 0,
+        P8JourneyStep.DefeatCitadel => session.Endgame.CitadelDefeated,
         _ => false,
     };
 
-    private static bool HasBossVictory(P1GameSession session) => session.World.Expedition.Reports.Any(report =>
+    private static bool HasAbyssVictory(P1GameSession session) => session.World.Expedition.Reports.Any(report =>
         report.Outcome == Combat.P1BattleOutcome.HeroVictory && report.Context.Contains("深渊监守者", StringComparison.Ordinal));
 
     private static int CompletedActs(P1GameSession session) => Math.Clamp(session.Campaign.CompletedNodeIds.Count / 6, 0, 5);
@@ -269,6 +322,10 @@ public sealed class P8DemoJourney
             P8JourneyStep.CompleteSafeMap or P8JourneyStep.CompleteAbyssMap => 10,
             P8JourneyStep.EarnBossTicket => 20,
             P8JourneyStep.DefeatAbyssWarden => 50,
+            P8JourneyStep.CompleteGardenMap or P8JourneyStep.ChooseAltar => 30,
+            P8JourneyStep.CompleteTier16 or P8JourneyStep.CompleteBreakthrough => 80,
+            P8JourneyStep.CompleteTier20 or P8JourneyStep.EnterCitadel => 120,
+            P8JourneyStep.DefeatCitadel => 300,
             _ => 5,
         };
         session.World.Economy.AddDispositionProceeds(gold, 0);

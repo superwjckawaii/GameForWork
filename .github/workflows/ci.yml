@@ -1,4 +1,4 @@
-name: P0 Gate
+name: Demo Gate
 
 on:
   push:

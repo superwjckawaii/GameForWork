@@ -1,0 +1,57 @@
+name: Demo Package
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*-demo'
+
+jobs:
+  windows-portable:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          lfs: true
+
+      - name: Set up .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Download Godot 4.7.2 Mono and export templates
+        shell: pwsh
+        run: |
+          $godotArchive = Join-Path $env:RUNNER_TEMP 'godot.zip'
+          $godotRoot = Join-Path $env:RUNNER_TEMP 'godot'
+          $templateArchive = Join-Path $env:RUNNER_TEMP 'templates.tpz'
+          $templateZip = Join-Path $env:RUNNER_TEMP 'templates.zip'
+          $templateRoot = Join-Path $env:RUNNER_TEMP 'templates'
+          Invoke-WebRequest -Uri 'https://github.com/godotengine/godot/releases/download/4.7.2-stable/Godot_v4.7.2-stable_mono_win64.zip' -OutFile $godotArchive
+          Invoke-WebRequest -Uri 'https://github.com/godotengine/godot/releases/download/4.7.2-stable/Godot_v4.7.2-stable_mono_export_templates.tpz' -OutFile $templateArchive
+          Expand-Archive -LiteralPath $godotArchive -DestinationPath $godotRoot
+          Copy-Item -LiteralPath $templateArchive -Destination $templateZip
+          Expand-Archive -LiteralPath $templateZip -DestinationPath $templateRoot
+          $console = Get-ChildItem -LiteralPath $godotRoot -Recurse -Filter '*_console.exe' | Select-Object -First 1
+          if (-not $console) { throw 'Godot console executable was not found.' }
+          $installRoot = Join-Path $env:APPDATA 'Godot\export_templates\4.7.2.stable.mono'
+          New-Item -ItemType Directory -Path $installRoot -Force | Out-Null
+          Copy-Item -Path (Join-Path $templateRoot 'templates\*') -Destination $installRoot -Recurse -Force
+          "GODOT_BIN=$($console.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Verify Release
+        shell: pwsh
+        run: .\scripts\verify.ps1 -Configuration Release
+
+      - name: Build portable ZIP
+        shell: pwsh
+        run: .\scripts\package-demo.ps1 -GodotPath $env:GODOT_BIN -Version '0.1.0-demo'
+
+      - name: Upload portable ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: GameForWork-v0.1.0-demo-win-x64
+          path: artifacts/GameForWork-v0.1.0-demo-win-x64.zip
+          if-no-files-found: error

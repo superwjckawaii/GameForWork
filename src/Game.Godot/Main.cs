@@ -53,6 +53,7 @@ public partial class Main : Node
     private double _performanceAccumulator;
     private double _lastSimulationMilliseconds;
     private Label? _performanceLabel;
+    private long _stabilityDeadlineTimestamp;
     private static bool DeveloperFeaturesEnabled => OS.HasFeature("editor") || OS.HasFeature("debug");
 
     public override void _Ready()
@@ -93,10 +94,28 @@ public partial class Main : Node
         _singleInstance.StartListening(() => Interlocked.Exchange(ref _restoreRequested, 1));
         UpdateWindowModeInterface();
         UpdateTrayState();
+        string[] userArguments = OS.GetCmdlineUserArgs();
+        string? stabilitySeconds = userArguments.FirstOrDefault(argument =>
+            argument.StartsWith("--p15-stability-seconds=", StringComparison.Ordinal));
+        if (stabilitySeconds is not null &&
+            int.TryParse(stabilitySeconds.AsSpan("--p15-stability-seconds=".Length), out int seconds) && seconds >= 10)
+        {
+            _stabilityDeadlineTimestamp = System.Diagnostics.Stopwatch.GetTimestamp() +
+                (long)(seconds * (double)System.Diagnostics.Stopwatch.Frequency);
+        }
+        if (userArguments.Contains("--p15-stability-tray", StringComparer.Ordinal))
+            Callable.From(() => _windowController?.HideToTray()).CallDeferred();
     }
 
     public override void _Process(double delta)
     {
+        if (_stabilityDeadlineTimestamp > 0 &&
+            System.Diagnostics.Stopwatch.GetTimestamp() >= _stabilityDeadlineTimestamp)
+        {
+            _stabilityDeadlineTimestamp = 0;
+            GetTree().Quit();
+            return;
+        }
         PollSaveWorker();
         UpdateGoldDisplay();
         if (_quitAfterSave && !IsSaveWorkerRunning())
@@ -112,7 +131,10 @@ public partial class Main : Node
         }
 
         _windowController?.TickSnapping(delta);
-        Engine.MaxFps = _windowController?.IsHiddenToTray == true
+        bool hiddenToTray = _windowController?.IsHiddenToTray == true;
+        if (RenderingServer.RenderLoopEnabled == hiddenToTray)
+            RenderingServer.RenderLoopEnabled = !hiddenToTray;
+        Engine.MaxFps = hiddenToTray
             ? 5
             : _windowController?.IsMini == true && !DisplayServer.WindowIsFocused() ? 30 : 60;
         if (_session is null)

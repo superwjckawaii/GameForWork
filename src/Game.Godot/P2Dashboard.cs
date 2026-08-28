@@ -241,6 +241,7 @@ public partial class P2Dashboard : VBoxContainer
         journeyBar.AddChild(_journeyStatus);
         _journeyGo = AddButton(journeyBar, "前往", NavigateToCurrentJourney);
         AddButton(journeyBar, "旅程手册", ShowHandbook);
+        AddButton(journeyBar, "重播教学", ReplayTutorial);
         _warningBar = new HBoxContainer { Visible = false };
         root.AddChild(_warningBar);
         _warningText = new Label { SizeFlagsHorizontal = SizeFlags.ExpandFill, AutowrapMode = TextServer.AutowrapMode.WordSmart, Modulate = new Color("f0b36a") };
@@ -1295,17 +1296,27 @@ public partial class P2Dashboard : VBoxContainer
         _handbookDialog!.DialogText = steps +
             "\n\n常用术语\n连接孔：同组主动技能与辅助技能共享效果。\n法术压制：成功时该次法术命中伤害降低 70%。" +
             "\n收益路线：地图中选择的主要风险与奖励方向。" +
-            (session.Journey.TutorialEnabled ? string.Empty : "\n\n本存档创建时已选择跳过强制引导；该选择不能重新开启。");
+            (session.Journey.TutorialEnabled ? string.Empty : "\n\n本存档创建时已跳过强制引导；全部页面保持开放，可用上方‘重播教学’重新查看提示。");
         _handbookDialog.PopupCentered(new Vector2I(720, 560));
     }
 
+    private void ReplayTutorial()
+    {
+        P1GameSession session = RequireSession();
+        session.Journey.ReplayTutorial();
+        _stateChanged?.Invoke();
+        _notice?.Invoke("教学提示已重播；不会重置旅程进度，也不会重新隐藏页面。");
+        ShowHandbook();
+    }
+
     private static string BuildCompletionText(P8DemoSummary summary) =>
-        $"你已经击败深渊监守者，完成首个 Demo 主旅程。之后仍可继续挂机、制作装备和优化构筑。\n\n" +
+        $"你已经击败灰烬天垒，完成首个 Demo 主旅程。之后仍可继续挂机、制作装备和优化构筑。\n\n" +
         $"现实游玩 {TimeText(summary.RealPlayMilliseconds)} · 离线收益 {TimeText(summary.OfflineMilliseconds)}\n" +
         $"完成幕数 {summary.ActsCompleted}/5 · 地图成功 {summary.MapsCompleted} · 失败 {summary.MapsFailed}\n" +
         $"Boss 尝试 {summary.BossAttempts} · 最终等级 {summary.Level}\n" +
         $"主要技能 {summary.MainSkill} · {summary.MainSkillLinks} 连 · 最高技能总伤害 {summary.HighestDamage}\n" +
-        $"装备评分 {summary.EquipmentScore} · 传奇物品 {summary.LegendaryItems}\n" +
+        $"装备评分 {summary.EquipmentScore} · 传奇物品 {summary.LegendaryItems} · 神话物品 {summary.MythicItems}\n" +
+        $"最高地图 T{summary.HighestMapTier} · 机制遭遇 {summary.MechanicEncounters} · 天垒胜利 {summary.CitadelVictories} · 城区总等级 {summary.TownLevelTotal}\n" +
         $"结算存档哈希 {summary.SaveHash[..16]}…";
 
     private static string TimeText(long milliseconds) => TimeSpan.FromMilliseconds(milliseconds) is TimeSpan time
@@ -1342,7 +1353,7 @@ public partial class P2Dashboard : VBoxContainer
         bool townActive = _mainTabs?.GetTabControl(_mainTabs.CurrentTab) == _townPage;
         _worldView!.Session = _session;
         if (overviewActive) _worldView.QueueRedraw();
-        RefreshCharacterSelector();
+        if (characterActive) RefreshCharacterSelector();
         TownEconomyState economy = _session.World.Economy;
         string recoveryWarning = _session.Management.Recovery.Count == 0
             ? string.Empty
@@ -1353,92 +1364,95 @@ public partial class P2Dashboard : VBoxContainer
             $"淬刃铁 {economy.MetalAmount(MetalCurrencyKind.TemperingIron)} · 守壁钢 {economy.MetalAmount(MetalCurrencyKind.WardSteel)} · " +
             $"活血银 {economy.MetalAmount(MetalCurrencyKind.VitalSilver)} · 地图 {_session.World.MapInventory.Count}{recoveryWarning}";
 
-        EquipmentLoadout selectedLoadout = SelectedLoadout();
-        P1TeamExpeditionState selectedTeam = _selectedCharacter == P2CharacterKind.Hero
-            ? _session.World.Hero
-            : _session.World.Mercenaries;
-        EquipmentSummary equipment = selectedLoadout.CalculateSummary();
-        P9MercenaryMember? selectedMercenary = SelectedMercenary();
-        CharacterSheet selectedSheet = selectedTeam.Build.Sheet;
-        if (selectedMercenary is not null)
-        {
-            selectedSheet = CharacterBuildAssembler.Assemble(
-                selectedMercenary.Level,
-                selectedMercenary.Identity.FinalAttributes,
-                selectedMercenary.Equipment,
-                new PassiveTreeAllocation(),
-                new SkillConfiguration(P1SkillIds.HeavyStrike, SkillSupport.Bleed)).Sheet;
-        }
-        _characterStatus!.Text = _selectedCharacter == P2CharacterKind.Hero
-            ? $"{_session.Player.Name} · {_session.Player.Ascendancy} · Lv.{selectedTeam.Progression.Level}"
-            : $"{selectedMercenary?.Identity.Name ?? "佣兵"} · {MercenaryArchetypeName(selectedMercenary?.Identity.Archetype)} · Lv.{selectedMercenary?.Level ?? selectedTeam.Progression.Level}";
-        _storageStatus!.Text =
-            $"生命 {selectedSheet.MaximumLife().Value} · 法力 {selectedSheet.MaximumMana().Value} · 护盾 {selectedSheet.Equipment.Shield}\n" +
-            $"体魄 {selectedSheet.Attributes.Physique} · 灵巧 {selectedSheet.Attributes.Dexterity} · 精神 {selectedSheet.Attributes.Spirit} · 能量 {selectedSheet.Attributes.Energy}\n" +
-            $"核心槽 {equipment.CoreSkillCapacity} · 旧制连接 {equipment.SupportLinkCapacity}\n" +
-            (selectedMercenary is null
-                ? BuildSummaryText(_session.GetBuildSummary())
-                : $"最终属性已公开；内部加点隐藏。\n技能：{selectedMercenary.Identity.SkillSummary}\nAI：{selectedMercenary.Identity.AiSummary}");
-
         RefreshJourneyInterface();
         if (townActive) _townPanel?.Refresh();
-        if (characterActive) _metalPanel?.Refresh();
-        if (string.IsNullOrWhiteSpace(_storageSearch))
+        if (characterActive)
         {
-            _storageGrid!.SetItems(_session.World.Storage.Items);
-        }
+            EquipmentLoadout selectedLoadout = SelectedLoadout();
+            P1TeamExpeditionState selectedTeam = _selectedCharacter == P2CharacterKind.Hero
+                ? _session.World.Hero
+                : _session.World.Mercenaries;
+            EquipmentSummary equipment = selectedLoadout.CalculateSummary();
+            P9MercenaryMember? selectedMercenary = SelectedMercenary();
+            CharacterSheet selectedSheet = selectedTeam.Build.Sheet;
+            if (selectedMercenary is not null)
+            {
+                selectedSheet = CharacterBuildAssembler.Assemble(
+                    selectedMercenary.Level,
+                    selectedMercenary.Identity.FinalAttributes,
+                    selectedMercenary.Equipment,
+                    new PassiveTreeAllocation(),
+                    new SkillConfiguration(P1SkillIds.HeavyStrike, SkillSupport.Bleed)).Sheet;
+            }
+            _characterStatus!.Text = _selectedCharacter == P2CharacterKind.Hero
+                ? $"{_session.Player.Name} · {_session.Player.Ascendancy} · Lv.{selectedTeam.Progression.Level}"
+                : $"{selectedMercenary?.Identity.Name ?? "佣兵"} · {MercenaryArchetypeName(selectedMercenary?.Identity.Archetype)} · Lv.{selectedMercenary?.Level ?? selectedTeam.Progression.Level}";
+            _storageStatus!.Text =
+                $"生命 {selectedSheet.MaximumLife().Value} · 法力 {selectedSheet.MaximumMana().Value} · 护盾 {selectedSheet.Equipment.Shield}\n" +
+                $"体魄 {selectedSheet.Attributes.Physique} · 灵巧 {selectedSheet.Attributes.Dexterity} · 精神 {selectedSheet.Attributes.Spirit} · 能量 {selectedSheet.Attributes.Energy}\n" +
+                $"核心槽 {equipment.CoreSkillCapacity} · 旧制连接 {equipment.SupportLinkCapacity}\n" +
+                (selectedMercenary is null
+                    ? BuildSummaryText(_session.GetBuildSummary())
+                    : $"最终属性已公开；内部加点隐藏。\n技能：{selectedMercenary.Identity.SkillSummary}\nAI：{selectedMercenary.Identity.AiSummary}");
 
-        else
-        {
-            string query = _storageSearch.ToLowerInvariant();
-            _storageGrid!.SetFilteredItems(_session.World.Storage.Items.Select((item, index) => (index, item))
-                .Where(entry => $"{entry.item.Base.DisplayName} {entry.item.Base.Category} {entry.item.Rarity} {entry.item.LinkedSocketCount}连"
-                    .ToLowerInvariant().Contains(query, StringComparison.Ordinal))
-                .ToArray());
-        }
-        _sortingGrid!.SetItems(_session.Management.SortingBag);
-        _recoveryGrid!.SetItems(_session.Management.Recovery.Take(30).ToArray());
-        _buybackGrid!.SetItems(_session.Management.Buyback.Select(entry => entry.Item).ToArray());
-        ItemInstance?[] slots = Enum.GetValues<EquipmentSlot>()
-            .Select(slot => selectedLoadout.Items.GetValueOrDefault(slot))
-            .ToArray();
-        _equipmentGrid!.SetSlots(slots);
-        _passiveTree!.SetState(_session.Passives.Allocated, _session.World.Hero.Progression.EarnedPassivePoints);
-        bool heroSelected = _selectedCharacter == P2CharacterKind.Hero;
-        foreach (BaseButton control in _heroOnlyControls)
-        {
-            control.Disabled = !heroSelected;
-        }
+            _metalPanel?.Refresh();
+            if (string.IsNullOrWhiteSpace(_storageSearch))
+            {
+                _storageGrid!.SetItems(_session.World.Storage.Items);
+            }
 
-        _skillSummary!.Text = heroSelected
-            ? $"技能石 {_session.Management.SkillStones.Count} · 已安装 {_session.Management.InstalledSkillStoneIds.Count} · " +
-              $"仓库 {_session.Management.UninstalledSkillStones.Count} · 当前方案 {_session.Management.ActiveSkillScheme}"
-            : $"佣兵技能、辅助、天赋与 AI 由自主成长生成，玩家不可修改。\n{_session.World.Mercenaries.Build.AiSummary}";
-        _activeSkillSummary!.Text = heroSelected
-            ? "孔组：" + string.Join(" · ", _session.Management.SkillLinks
-                .OrderBy(link => link.Priority)
-                .Select(link =>
-                {
-                    if (string.IsNullOrEmpty(link.ActiveStoneInstanceId))
+            else
+            {
+                string query = _storageSearch.ToLowerInvariant();
+                _storageGrid!.SetFilteredItems(_session.World.Storage.Items.Select((item, index) => (index, item))
+                    .Where(entry => $"{entry.item.Base.DisplayName} {entry.item.Base.Category} {entry.item.Rarity} {entry.item.LinkedSocketCount}连"
+                        .ToLowerInvariant().Contains(query, StringComparison.Ordinal))
+                    .ToArray());
+            }
+            _sortingGrid!.SetItems(_session.Management.SortingBag);
+            _recoveryGrid!.SetItems(_session.Management.Recovery.Take(30).ToArray());
+            _buybackGrid!.SetItems(_session.Management.Buyback.Select(entry => entry.Item).ToArray());
+            ItemInstance?[] slots = Enum.GetValues<EquipmentSlot>()
+                .Select(slot => selectedLoadout.Items.GetValueOrDefault(slot))
+                .ToArray();
+            _equipmentGrid!.SetSlots(slots);
+            _passiveTree!.SetState(_session.Passives.Allocated, _session.World.Hero.Progression.EarnedPassivePoints);
+            bool heroSelected = _selectedCharacter == P2CharacterKind.Hero;
+            foreach (BaseButton control in _heroOnlyControls)
+            {
+                control.Disabled = !heroSelected;
+            }
+
+            _skillSummary!.Text = heroSelected
+                ? $"技能石 {_session.Management.SkillStones.Count} · 已安装 {_session.Management.InstalledSkillStoneIds.Count} · " +
+                  $"仓库 {_session.Management.UninstalledSkillStones.Count} · 当前方案 {_session.Management.ActiveSkillScheme}"
+                : $"佣兵技能、辅助、天赋与 AI 由自主成长生成，玩家不可修改。\n{_session.World.Mercenaries.Build.AiSummary}";
+            _activeSkillSummary!.Text = heroSelected
+                ? "孔组：" + string.Join(" · ", _session.Management.SkillLinks
+                    .OrderBy(link => link.Priority)
+                    .Select(link =>
                     {
-                        return $"{_session.GetSkillChains().FirstOrDefault(item => item.StableId == link.ChainId)?.DisplayName ?? "孔组"} 等待主动";
-                    }
-                    SkillStoneInstance active = _session.Management.SkillStones.Single(stone => stone.InstanceId == link.ActiveStoneInstanceId);
-                    P5SkillChainDefinition? chain = _session.GetSkillChains().FirstOrDefault(item => item.StableId == link.ChainId);
-                    return $"{chain?.DisplayName ?? "未装配"} {active.Definition.DisplayName}+{link.SupportStoneInstanceIds.Count}";
-                }))
-            : "佣兵的主动技能优先级由其 AI 自主配置。";
-        ItemInstance? craftItem = ItemAt(_craftContainer, _craftIndex);
-        _craftingStatus!.Text =
-            $"金属库存：淬刃铁 {economy.MetalAmount(MetalCurrencyKind.TemperingIron)} · " +
-            $"守壁钢 {economy.MetalAmount(MetalCurrencyKind.WardSteel)} · 活血银 {economy.MetalAmount(MetalCurrencyKind.VitalSilver)} · " +
-            $"链铸钢 {economy.MetalAmount(MetalCurrencyKind.ChainSteel)} · 混沌金 {economy.MetalAmount(MetalCurrencyKind.ChaosGold)} · " +
-            $"神铸银 {economy.MetalAmount(MetalCurrencyKind.DivineSilver)} · 破溃钢 {economy.MetalAmount(MetalCurrencyKind.FractureSteel)}\n" +
-            (craftItem is null ? "当前未选择制作目标。" : $"当前目标：{craftItem.Base.DisplayName}（{_craftContainer}）");
-        _skillStonePanel?.SetReadOnly(!heroSelected);
-        if (characterActive) _skillStonePanel?.RefreshState();
-        _history!.Text = string.Join('\n', _session.Management.OperationHistory.TakeLast(200).Select(item => $"• {item}"));
-        if (townActive) _filterPanel?.RefreshRules();
+                        if (string.IsNullOrEmpty(link.ActiveStoneInstanceId))
+                        {
+                            return $"{_session.GetSkillChains().FirstOrDefault(item => item.StableId == link.ChainId)?.DisplayName ?? "孔组"} 等待主动";
+                        }
+                        SkillStoneInstance active = _session.Management.SkillStones.Single(stone => stone.InstanceId == link.ActiveStoneInstanceId);
+                        P5SkillChainDefinition? chain = _session.GetSkillChains().FirstOrDefault(item => item.StableId == link.ChainId);
+                        return $"{chain?.DisplayName ?? "未装配"} {active.Definition.DisplayName}+{link.SupportStoneInstanceIds.Count}";
+                    }))
+                : "佣兵的主动技能优先级由其 AI 自主配置。";
+            ItemInstance? craftItem = ItemAt(_craftContainer, _craftIndex);
+            _craftingStatus!.Text =
+                $"金属库存：淬刃铁 {economy.MetalAmount(MetalCurrencyKind.TemperingIron)} · " +
+                $"守壁钢 {economy.MetalAmount(MetalCurrencyKind.WardSteel)} · 活血银 {economy.MetalAmount(MetalCurrencyKind.VitalSilver)} · " +
+                $"链铸钢 {economy.MetalAmount(MetalCurrencyKind.ChainSteel)} · 混沌金 {economy.MetalAmount(MetalCurrencyKind.ChaosGold)} · " +
+                $"神铸银 {economy.MetalAmount(MetalCurrencyKind.DivineSilver)} · 破溃钢 {economy.MetalAmount(MetalCurrencyKind.FractureSteel)}\n" +
+                (craftItem is null ? "当前未选择制作目标。" : $"当前目标：{craftItem.Base.DisplayName}（{_craftContainer}）");
+            _skillStonePanel?.SetReadOnly(!heroSelected);
+            if (characterActive) _skillStonePanel?.RefreshState();
+            _history!.Text = string.Join('\n', _session.Management.OperationHistory.TakeLast(200).Select(item => $"• {item}"));
+            _filterPanel?.RefreshRules();
+        }
         if (expeditionActive) { _expeditionPanel?.RefreshState(); _endgamePanel?.Refresh(); }
         if (storyActive) _campaignRoute?.RefreshState();
         CampaignNodeDefinition? currentNode = _session.Campaign.CurrentNode;

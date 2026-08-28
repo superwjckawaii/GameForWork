@@ -3,6 +3,7 @@ using GameForWork.Core.P1.World;
 using GameForWork.Core.P2;
 using GameForWork.Core.P3;
 using GameForWork.Core.P4;
+using GameForWork.Core.P12;
 using Godot;
 
 namespace GameForWork.GodotClient;
@@ -26,6 +27,10 @@ public partial class P1WorldView : Control
     private Texture2D? _combatBackground;
     private Texture2D? _characterAtlas;
     private Texture2D? _mercenaryTexture;
+    private Texture2D? _enemyAtlas;
+    private Texture2D? _bossAtlas;
+    private Texture2D? _regionAtlas;
+    private Texture2D? _vfxAtlas;
     private readonly Dictionary<string, P4EnemyFrame> _nextEnemies = new(StringComparer.Ordinal);
     private readonly Dictionary<string, Vector2> _positions = new(StringComparer.Ordinal);
     private readonly List<P3SceneEvent> _recentEvents = [];
@@ -61,8 +66,13 @@ public partial class P1WorldView : Control
         MouseFilter = MouseFilterEnum.Ignore;
         _townBackground = LoadOptional("res://assets/p2/town/military-town.png");
         _combatBackground = LoadOptional("res://assets/p2/combat/gate-ruins.png");
-        _characterAtlas = LoadOptional("res://assets/p2/characters/p2-character-grid.png");
-        _mercenaryTexture = LoadOptional("res://assets/p3/characters/rune-mercenary.png");
+        _characterAtlas = LoadOptional("res://assets/p15/characters/p15-character-directions.png") ??
+                          LoadOptional("res://assets/p2/characters/p2-character-grid.png");
+        _mercenaryTexture = null;
+        _enemyAtlas = LoadOptional("res://assets/p15/enemies/p15-enemy-elite-atlas.png");
+        _bossAtlas = LoadOptional("res://assets/p15/enemies/p15-boss-atlas.png");
+        _regionAtlas = LoadOptional("res://assets/p15/regions/p15-region-atlas.png");
+        _vfxAtlas = LoadOptional("res://assets/p15/vfx/p15-skill-mechanic-atlas.png");
     }
 
     public override void _Process(double delta)
@@ -127,7 +137,14 @@ public partial class P1WorldView : Control
 
     private void DrawActiveBattle(Rect2 bounds)
     {
-        if (_combatBackground is not null)
+        ObservedScene? observed = Observe();
+        P3SceneTimeline? timeline = observed?.Timeline;
+        if (_regionAtlas is not null && timeline is not null && timeline.StableId.StartsWith("map:", StringComparison.Ordinal))
+        {
+            int region = RegionVisualIndex(timeline.StableId);
+            DrawTextureRectRegion(_regionAtlas, bounds, GridCell(_regionAtlas, region, 4, 3));
+        }
+        else if (_combatBackground is not null)
         {
             DrawTextureRect(_combatBackground, bounds, false);
         }
@@ -157,8 +174,6 @@ public partial class P1WorldView : Control
             }
         }
 
-        ObservedScene? observed = Observe();
-        P3SceneTimeline? timeline = observed?.Timeline;
         long elapsed = timeline is null
             ? 0
             : Math.Clamp((long)_visualElapsedMilliseconds, 0, timeline.DurationMilliseconds);
@@ -314,10 +329,9 @@ public partial class P1WorldView : Control
             Vector2 allyPosition = MapPoint(field, ally.Position);
             _positions[ally.EntityId] = allyPosition;
             DrawShadow(allyPosition + new Vector2(0, 5), 7);
-            DrawActor(allyPosition, ally.Frontline ? new Color("9b6f9f") : new Color("6f769f"), false,
-                (float)((_visualClock * 2.3 + ally.EntityId.GetHashCode() * 0.01) % 1));
+            DrawCharacterSprite(allyPosition, 1 + StableVisualIndex(ally.EntityId, 4), 0, new Vector2(34, 42));
         }
-        DrawActor(actor, hero ? new Color("6da9c0") : new Color("a885bd"), hero, (float)(_visualClock * 2.3 % 1));
+        DrawCharacterSprite(actor, hero ? 0 : 1, 0, new Vector2(38, 48));
         DrawBar(new Rect2(actor + new Vector2(-30, 21), new Vector2(60, 5)),
             current.HeroMaximumLife <= 0 ? 0 : (float)current.HeroLife / current.HeroMaximumLife, new Color("a73737"));
         DrawBar(new Rect2(actor + new Vector2(-30, 28), new Vector2(60, 4)),
@@ -333,13 +347,27 @@ public partial class P1WorldView : Control
         DrawCaption(bounds, observed.Title, new Color("e5d7be"));
         int alive = current.Enemies.Count(enemy => enemy.Life > 0);
         string target = current.Enemies.FirstOrDefault(enemy => enemy.EntityId == current.HeroTargetId)?.DisplayName ?? "移动接敌";
+        string mechanic = timeline.Events.TakeWhile(item => item.AtMilliseconds <= elapsed)
+            .LastOrDefault(item => item.NodeIndex == current.NodeIndex && item.Kind is P3SceneEventKind.WaveStarted or P3SceneEventKind.MechanicChoice)?.Detail ?? string.Empty;
         DrawString(ThemeDB.FallbackFont, bounds.Position + new Vector2(16, 59),
-            $"节点 {Math.Max(1, current.NodeIndex)}/{timeline.NodeCount} · 队伍 {(current.Allies?.Count ?? 0) + 1} · 敌人 {alive}/{current.Enemies.Count} · 目标 {target} · {sceneProgress * 100:0.0}%",
+            $"节点 {Math.Max(1, current.NodeIndex)}/{timeline.NodeCount} · {mechanic} · 队伍 {(current.Allies?.Count ?? 0) + 1} · 敌人 {alive}/{current.Enemies.Count} · 目标 {target} · {sceneProgress * 100:0.0}%",
             HorizontalAlignment.Left, -1, 13, new Color("c6bca9"));
     }
 
     private void DrawSpatialEnemy(Vector2 position, P4EnemyFrame enemy, float radius, bool targeted)
     {
+        Texture2D? atlas = enemy.Boss ? _bossAtlas : _enemyAtlas;
+        if (atlas is not null)
+        {
+            int count = enemy.Boss ? 10 : 24;
+            int index = StableVisualIndex(enemy.EnemyStableId, count);
+            DrawGridSprite(atlas, index, enemy.Boss ? 5 : 6, enemy.Boss ? 2 : 5, position,
+                enemy.Boss ? new Vector2(46, 54) : enemy.Elite ? new Vector2(35, 42) : new Vector2(29, 35));
+            if (enemy.Elite || enemy.Boss)
+                DrawArc(position, radius + 7, 0, MathF.Tau, 16, new Color("e2b85d"), enemy.Boss ? 3 : 2);
+            if (targeted) DrawArc(position, radius + 10, 0, MathF.Tau, 20, new Color(1, .85f, .35f, .9f), 2);
+            return;
+        }
         Color color = enemy.Role switch
         {
             P4UnitRole.Melee => new Color("91434b"),
@@ -407,9 +435,35 @@ public partial class P1WorldView : Control
                 DrawLine(source, target, new Color(0.43f, 0.86f, 0.92f, 1 - age * 0.8f), item.Kind == P3SceneEventKind.Chain ? 2 : 4);
                 DrawCircle(source.Lerp(target, age), 4, new Color(0.75f, 0.96f, 1, 1 - age * 0.5f));
             }
+            else if (item.Kind == P3SceneEventKind.AshJavelin)
+            {
+                DrawLine(source, target, new Color(1, .38f, .08f, 1 - age * .65f), 4);
+                Vector2 projectile = source.Lerp(target, age);
+                DrawColoredPolygon([projectile + new Vector2(7, 0), projectile + new Vector2(-5, -3),
+                    projectile + new Vector2(-5, 3)], new Color(1, .72f, .18f, 1 - age * .45f));
+            }
+            else if (item.Kind == P3SceneEventKind.EmberNova)
+            {
+                DrawArc(source, 10 + age * 55, 0, MathF.Tau, 30, new Color(1, .28f, .06f, 1 - age), 6);
+                DrawArc(source, 5 + age * 38, 0, MathF.Tau, 24, new Color(1, .78f, .22f, 1 - age), 2);
+            }
+            else if (item.Kind == P3SceneEventKind.StormBrand)
+            {
+                Vector2 middle = source.Lerp(target, .5f) + new Vector2(0, age < .5f ? -10 : 10);
+                DrawPolyline([source, middle, target], new Color(.32f, .82f, 1, 1 - age * .75f), 4);
+                DrawArc(target, 7 + age * 16, 0, MathF.Tau, 12, new Color(.62f, .92f, 1, 1 - age), 2);
+            }
             else if (item.Kind == P3SceneEventKind.HeavyStrike)
             {
                 DrawArc(target, 8 + age * 20, -1.8f, 0.8f, 12, new Color(1, 0.78f, 0.34f, 1 - age), 4);
+            }
+            else if (item.Kind == P3SceneEventKind.BossPhase)
+            {
+                DrawArc(target, 18 + age * 34, 0, MathF.Tau, 24,
+                    new Color(1, .25f + age * .25f, .12f, 1 - age * .45f), 3);
+                DrawLine(source, target, new Color(1, .7f, .25f, 1 - age), 2);
+                DrawRect(new Rect2(target - new Vector2(22, 22), new Vector2(44, 44)),
+                    new Color(1, .35f, .15f, 1 - age), false, 2);
             }
         }
     }
@@ -423,6 +477,7 @@ public partial class P1WorldView : Control
         var merged = recent.Where(item => item.Value > 0 && item.Kind is
                 P3SceneEventKind.HeavyStrike or P3SceneEventKind.EarthCleave or P3SceneEventKind.SpiritBlade or
                 P3SceneEventKind.Chain or P3SceneEventKind.SeismicCharge or P3SceneEventKind.BloodTideSpin or
+                P3SceneEventKind.AshJavelin or P3SceneEventKind.EmberNova or P3SceneEventKind.StormBrand or
                 P3SceneEventKind.EnemyAttack or P3SceneEventKind.Bleed)
             .GroupBy(item =>
             {
@@ -640,26 +695,59 @@ public partial class P1WorldView : Control
             return;
         }
 
-        int column = hero && _session is not null
-            ? ((int)_session.Player.Gender + (int)_session.Player.SkinTone + (int)_session.Player.HairStyle) % 4
-            : 0;
+        int column = attackCycle is > .18f and < .38f ? 2 : 0;
         float lean = attackCycle is > 0.18f and < 0.38f ? 6 : 0;
-        Rect2 source = AtlasCell(hero ? column : 4, 0);
-        DrawAtlasSprite(position + new Vector2(lean, 0), source, new Vector2(92, 112));
+        DrawCharacterSprite(position + new Vector2(lean, 0), hero ? 0 : 1, column, new Vector2(92, 112));
     }
 
     private void DrawAtlasEnemy(Vector2 position, float mapProgress, float attackCycle)
     {
         float recoil = attackCycle is > 0.25f and < 0.45f ? 4 : 0;
-        (int column, Vector2 maximumSize) = mapProgress switch
+        Texture2D? atlas = mapProgress > .82f ? _bossAtlas : _enemyAtlas;
+        if (atlas is not null)
         {
-            < 0.25f => (0, new Vector2(88, 112)),
-            < 0.5f => (1, new Vector2(116, 94)),
-            < 0.72f => (2, new Vector2(88, 112)),
-            < 0.82f => (3, new Vector2(102, 122)),
-            _ => (4, new Vector2(148, 152)),
-        };
-        DrawAtlasSprite(position + new Vector2(recoil, 0), AtlasCell(column, 1), maximumSize);
+            int index = Math.Clamp((int)(mapProgress * (mapProgress > .82f ? 10 : 24)), 0, mapProgress > .82f ? 9 : 23);
+            DrawGridSprite(atlas, index, mapProgress > .82f ? 5 : 6, mapProgress > .82f ? 2 : 5,
+                position + new Vector2(recoil, 0), mapProgress > .82f ? new Vector2(148, 152) : new Vector2(104, 116));
+        }
+        else DrawEnemy(position, attackCycle);
+    }
+
+    private void DrawCharacterSprite(Vector2 feetPosition, int row, int column, Vector2 maximumSize)
+    {
+        if (_characterAtlas is null) return;
+        DrawGridSprite(_characterAtlas, row * 4 + column, 4, 5, feetPosition, maximumSize);
+    }
+
+    private void DrawGridSprite(Texture2D texture, int index, int columns, int rows, Vector2 feetPosition, Vector2 maximumSize)
+    {
+        Rect2 source = GridCell(texture, index, columns, rows);
+        float scale = Math.Min(maximumSize.X / source.Size.X, maximumSize.Y / source.Size.Y);
+        Vector2 size = source.Size * scale;
+        DrawTextureRectRegion(texture, new Rect2(feetPosition + new Vector2(-size.X / 2, -size.Y), size), source);
+    }
+
+    private static Rect2 GridCell(Texture2D texture, int index, int columns, int rows)
+    {
+        float width = texture.GetWidth() / (float)columns;
+        float height = texture.GetHeight() / (float)rows;
+        int column = Math.Abs(index) % columns;
+        int row = Math.Abs(index) / columns % rows;
+        return new Rect2(column * width + width * .01f, row * height + height * .01f, width * .98f, height * .98f);
+    }
+
+    private static int StableVisualIndex(string value, int count)
+    {
+        uint hash = 2166136261;
+        foreach (char character in value) hash = (hash ^ character) * 16777619;
+        return (int)(hash % (uint)Math.Max(1, count));
+    }
+
+    private static int RegionVisualIndex(string stableId)
+    {
+        for (int index = 0; index < P12MapCatalog.Areas.Count; index++)
+            if (stableId.Contains($":{P12MapCatalog.Areas[index].StableId}:", StringComparison.Ordinal)) return index;
+        return StableVisualIndex(stableId, P12MapCatalog.Areas.Count);
     }
 
     private Rect2 AtlasCell(int column, int row)

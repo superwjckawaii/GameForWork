@@ -86,12 +86,10 @@ public sealed class P8JourneyTests
     }
 
     [Fact]
-    public void RealAbyssWardenVictoryCompletesDemoOnlyOnce()
+    public void RealCitadelVictoryCompletesDemoOnlyOnce()
     {
         P1GameSession session = CreateSession(tutorial: false);
-        session.World.Expedition.AddCombatReport(new P6CombatReport(
-            "p8-boss", "Hero · 深渊监守者 · 尝试 1", P1BattleOutcome.HeroVictory,
-            10_000, 500, 100, [], [], [], 0, 0, 0, 0, 0, 0, [], string.Empty));
+        session.Endgame.RecordCitadelVictory();
 
         session.Journey.Synchronize(session);
 

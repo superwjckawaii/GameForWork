@@ -229,4 +229,4 @@ P10 的周期卡顿与布局修复、1,624 节点主天赋树、专精和记忆�
 
 ### P11～P15 完成定义
 
-首个完整可玩 Demo 的终点、内容目标、测试期存档策略与 P11～P15 阶段依赖见 [`DEMO_ROADMAP.md`](DEMO_ROADMAP.md)。P11、P12 的封版实现规则分别见 [`P11_SPECIFICATION.md`](P11_SPECIFICATION.md) 与 [`P12_SPECIFICATION.md`](P12_SPECIFICATION.md)。
+首个完整可玩 Demo 的终点、内容目标、测试期存档策略与 P11～P15 阶段依赖见 [`DEMO_ROADMAP.md`](DEMO_ROADMAP.md)。P11、P12 的封版实现规则分别见 [`P11_SPECIFICATION.md`](P11_SPECIFICATION.md) 与 [`P12_SPECIFICATION.md`](P12_SPECIFICATION.md)；P14 的异界机制、突破和攻坚规则见 [`P14_SPECIFICATION.md`](P14_SPECIFICATION.md)，P15 的内容封版、稳定性、性能和 Windows 分发规则见 [`P15_SPECIFICATION.md`](P15_SPECIFICATION.md)。

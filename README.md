@@ -2,7 +2,7 @@
 
 一款面向 Windows PC 的单机挂机构筑游戏。玩家培养一名可深度构筑的主角、运营建立在古代门扉旁的城镇，并通过消耗地图持续探索破碎世界；金币是贯穿城镇升级、制作与交易的通用关键资源。
 
-项目已完成 P0～P12，实现五幕主线、确定性空间群战、装备孔组与技能石、双队伍远征、离线结算和持久化 Demo 主旅程。P11 完成八档字体与响应式桌面 UI；P12 将路印升级为包含区域、词缀、品质、腐化和候选路线的正式实体，接入金属加工、批量制图、独立远征方针、T17 门禁和三套异界方案。
+项目已完成 P0～P15 的首个完整可玩 Demo。玩家可以完成五幕主线和七座固定城区建设，进入 T1～T20 异界，体验裂渊、命能花园、赤誓/苍誓祭坛、百级突破与三阶段灰烬天垒攻坚；构筑系统包含 40 种装备底材、12 件规则传奇、1 件神话装备、10 个主动技能、18 个辅助技能、五类药剂、1,624 节点主天赋树和 360 节点异界树。
 
 ## 本地运行与验证
 
@@ -12,9 +12,13 @@
 .\scripts\verify.ps1
 .\scripts\verify.ps1 -Configuration Release
 .\scripts\verify.ps1 -Launch
+.\scripts\stability.ps1 -Mode Offline48h
+.\scripts\package-demo.ps1
 ```
 
 验证脚本依次执行依赖恢复、编译、单元测试、Godot 无界面导入和主场景启动检查。若 .NET SDK 或 Godot 不在已约定的本机位置，可分别通过 `DOTNET_BIN` 或 `GODOT_BIN` 指定可执行程序完整路径。
+
+`stability.ps1` 还支持 `Visible` 与 `Tray` 两种长稳模式，默认运行两小时；`package-demo.ps1` 使用 Godot 的 Windows .NET 导出模板生成自包含 PCK 的便携 ZIP，输出到忽略版本控制的 `artifacts/`。
 
 ## 当前设计支柱
 
@@ -45,4 +49,6 @@
 - [P10 异界终局、复杂天赋树与性能修复规格](docs/P10_SPECIFICATION.md)
 - [P11 响应式桌面 UI 与交互性能规格](docs/P11_SPECIFICATION.md)
 - [P12 正式地图实体、制作与远征方针规格](docs/P12_SPECIFICATION.md)
+- [P14 异界机制、突破与攻坚规格](docs/P14_SPECIFICATION.md)
+- [P15 Demo 封版与分发规格](docs/P15_SPECIFICATION.md)
 - [待讨论与开发决策](docs/OPEN_QUESTIONS.md)
