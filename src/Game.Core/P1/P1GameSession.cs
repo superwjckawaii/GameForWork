@@ -108,7 +108,7 @@ public sealed record P1GameSessionSnapshot(
 
 public sealed class P1GameSession
 {
-    public const int CurrentFormatVersion = 8;
+    public const int CurrentFormatVersion = 9;
     private readonly P1WorldSimulator _simulator = new(new P1MapAttemptResolver());
     private AssembledCharacterBuild _heroBuild;
 
@@ -169,6 +169,7 @@ public sealed class P1GameSession
         EquipStarter(equipment, EquipmentSlot.MainHand, "core.base.rusted_greatsword", seed + 1);
         EquipStarter(equipment, EquipmentSlot.Chest, "core.base.crude_chainmail", seed + 2);
         EquipStarter(equipment, EquipmentSlot.Helmet, "core.base.iron_helmet", seed + 3);
+        EquipStarter(equipment, EquipmentSlot.Gloves, "core.base.iron_gauntlets", seed + 6);
         EquipStarter(equipment, EquipmentSlot.RingLeft, "core.base.life_ring", seed + 4);
         EquipStarter(equipment, EquipmentSlot.Flask1, "core.base.life_flask", seed + 5);
         var passives = new PassiveTreeAllocation();
@@ -396,7 +397,7 @@ public sealed class P1GameSession
         P5SkillChainDefinition? chain = GetSkillChains().FirstOrDefault(item =>
             item.StableId == Management.SkillLinks.First(link => link.ActiveStoneInstanceId == active.InstanceId).ChainId);
         Management.ReplaceSupports(active.InstanceId, supportIds, chain?.SupportCapacity ?? 5);
-        HeavyStrikeSupports = supports;
+        HeavyStrikeSupports = SupportsFor("core.skill_stone.heavy_strike");
         RefreshHeroBuild();
     }
 

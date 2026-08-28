@@ -1,6 +1,7 @@
 using GameForWork.Core.P1.Items;
 using GameForWork.Core.P4;
 using GameForWork.Core.P5;
+using GameForWork.Core.P6;
 
 namespace GameForWork.Core.P1.World;
 
@@ -98,7 +99,7 @@ public static class P1WorldSnapshots
         var storage = new EquipmentStorage(snapshot.Storage.Capacity);
         foreach (ItemInstance item in snapshot.Storage.Items)
         {
-            if (!storage.TryStore(item))
+            if (!storage.TryStore(P6SocketRules.Ensure(item)))
             {
                 throw new InvalidDataException("Storage snapshot exceeds its capacity.");
             }

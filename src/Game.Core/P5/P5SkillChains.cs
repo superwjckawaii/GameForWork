@@ -1,5 +1,6 @@
 using GameForWork.Core.P1.Items;
 using GameForWork.Core.P2;
+using GameForWork.Core.P6;
 
 namespace GameForWork.Core.P5;
 
@@ -16,57 +17,50 @@ public sealed record P5SkillChainDefinition(
     string DisplayName,
     EquipmentSlot SourceSlot,
     int SupportCapacity,
-    bool ToolOnly);
+    bool ToolOnly)
+{
+    public int TotalSockets => SupportCapacity + 1;
+}
 
 public static class P5SkillChainRules
 {
     public static IReadOnlyList<P5SkillChainDefinition> Build(EquipmentLoadout loadout)
     {
         ArgumentNullException.ThrowIfNull(loadout);
-        int links = loadout.CalculateSummary().SupportLinkCapacity;
         var chains = new List<P5SkillChainDefinition>();
-        if (loadout.Items.ContainsKey(EquipmentSlot.MainHand))
+        EquipmentSlot[] order =
         {
-            chains.Add(new P5SkillChainDefinition(P5SkillChainIds.WeaponPrimary, "武器 · 主攻击链",
-                EquipmentSlot.MainHand, 0, false));
-            chains.Add(new P5SkillChainDefinition(P5SkillChainIds.WeaponSecondary, "武器 · 副攻击链",
-                EquipmentSlot.MainHand, 0, false));
-        }
-
-        if (loadout.Items.ContainsKey(EquipmentSlot.Chest))
+            EquipmentSlot.MainHand, EquipmentSlot.Chest, EquipmentSlot.Helmet,
+            EquipmentSlot.Gloves, EquipmentSlot.Boots,
+        };
+        foreach (EquipmentSlot slot in order)
         {
-            chains.Add(new P5SkillChainDefinition(P5SkillChainIds.Chest, "胸甲 · 第三攻击链",
-                EquipmentSlot.Chest, 0, false));
+            if (!loadout.Items.TryGetValue(slot, out ItemInstance? item) || item.LinkedSocketCount <= 0)
+            {
+                continue;
+            }
+            string slotName = slot switch
+            {
+                EquipmentSlot.MainHand => "武器",
+                EquipmentSlot.Chest => "胸甲",
+                EquipmentSlot.Helmet => "头盔",
+                EquipmentSlot.Gloves => "手套",
+                EquipmentSlot.Boots => "鞋",
+                _ => slot.ToString(),
+            };
+            chains.Add(new P5SkillChainDefinition(
+                P6SocketGroupIds.For(slot), $"{slotName} · {ChineseLink(item.LinkedSocketCount)}",
+                slot, item.LinkedSocketCount - 1, false));
         }
-
-        if (loadout.Items.ContainsKey(EquipmentSlot.Helmet))
-        {
-            chains.Add(new P5SkillChainDefinition(P5SkillChainIds.HelmetTool, "头盔 · 工具链",
-                EquipmentSlot.Helmet, 0, true));
-        }
-
-        if (chains.Count == 0)
-        {
-            return chains;
-        }
-
-        int[] capacities = new int[chains.Count];
-        for (int index = 0; index < capacities.Length && links > 0; index++, links--)
-        {
-            capacities[index]++;
-        }
-
-        int cursor = 0;
-        while (links-- > 0)
-        {
-            int index = cursor++ % chains.Count;
-            capacities[index] = Math.Min(5, capacities[index] + 1);
-        }
-
-        return chains.Select((chain, index) => chain with { SupportCapacity = capacities[index] }).ToArray();
+        return chains;
     }
 
     public static bool Accepts(P5SkillChainDefinition chain, SkillStoneDefinition skill) =>
         skill.Kind == SkillStoneKind.Active &&
-        (chain.ToolOnly == (skill.StableId == "core.skill_stone.war_cry"));
+        true;
+
+    private static string ChineseLink(int count) => count switch
+    {
+        2 => "二连", 3 => "三连", 4 => "四连", 5 => "五连", 6 => "六连", _ => $"{count} 连",
+    };
 }

@@ -190,7 +190,9 @@ public sealed record ItemInstance(
     bool IsIdentified = true,
     int ImplicitValue = 0,
     bool IsLocked = false,
-    bool IsCraftingBase = false)
+    bool IsCraftingBase = false,
+    int LinkedSocketCount = 0,
+    string FracturedAffixFamilyId = "")
 {
     public int PrefixCount => Affixes.Count(affix => affix.Definition.Position == AffixPosition.Prefix);
     public int SuffixCount => Affixes.Count(affix => affix.Definition.Position == AffixPosition.Suffix);
@@ -203,6 +205,9 @@ public sealed record ItemInstance(
     public ItemInstance WithLocked(bool locked) => this with { IsLocked = locked };
 
     public ItemInstance WithCraftingBase(bool marked) => this with { IsCraftingBase = marked };
+
+    public bool IsFractured(AffixRoll affix) =>
+        string.Equals(FracturedAffixFamilyId, affix.Definition.StableFamilyId, StringComparison.Ordinal);
 }
 
 public static class P1Legendary
@@ -218,5 +223,6 @@ public static class P1Legendary
         Math.Clamp(itemLevel, 1, 10),
         ItemRarity.Legendary,
         Array.Empty<AffixRoll>(),
-        EchoingOathbreakerRule);
+        EchoingOathbreakerRule,
+        LinkedSocketCount: 5);
 }

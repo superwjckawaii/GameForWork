@@ -75,18 +75,17 @@ public sealed class P5FeatureTests
     }
 
     [Fact]
-    public void StarterEquipmentGeneratesFourCharacterOwnedSkillChains()
+    public void StarterEquipmentGeneratesCharacterOwnedSocketGroups()
     {
         P1GameSession session = CreateSession();
 
         IReadOnlyList<P5SkillChainDefinition> chains = session.GetSkillChains();
 
         Assert.Equal(4, chains.Count);
-        Assert.Equal(5, chains.Sum(chain => chain.SupportCapacity));
         Assert.Equal(4, session.Management.SkillLinks.Count(link => !string.IsNullOrEmpty(link.ChainId)));
-        Assert.Equal("战吼", session.Management.SkillStones.Single(stone => stone.InstanceId ==
-            session.Management.SkillLinks.Single(link => link.ChainId == P5SkillChainIds.HelmetTool)
-                .ActiveStoneInstanceId).Definition.DisplayName);
+        Assert.All(chains, chain => Assert.Equal(
+            session.HeroEquipment.Items[chain.SourceSlot].LinkedSocketCount,
+            chain.TotalSockets));
     }
 
     [Fact]

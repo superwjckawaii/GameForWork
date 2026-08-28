@@ -1,5 +1,6 @@
 using System.Numerics;
 using GameForWork.Core.P1.Combat;
+using GameForWork.Core.P6;
 
 namespace GameForWork.Core.P1.Items;
 
@@ -67,7 +68,7 @@ public sealed class EquipmentLoadout
         var result = new EquipmentLoadout();
         foreach ((EquipmentSlot slot, ItemInstance item) in items)
         {
-            if (!result.TryEquip(slot, item))
+            if (!result.TryEquip(slot, P6SocketRules.Ensure(item)))
             {
                 throw new InvalidDataException($"Item {item.InstanceId} cannot be restored to {slot}.");
             }

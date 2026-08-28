@@ -1,5 +1,6 @@
 using GameForWork.Core.P1.Items;
 using GameForWork.Core.P5;
+using GameForWork.Core.P6;
 
 namespace GameForWork.Core.P2;
 
@@ -129,9 +130,9 @@ public sealed class P2ManagementState
         P2ManagementState state = snapshot is null ? CreateNew() : new P2ManagementState();
         if (snapshot is not null)
         {
-            state._sortingBag.AddRange(snapshot.SortingBag.Take(SortingBagCapacity));
-            state._recovery.AddRange(snapshot.Recovery);
-            state._recovery.AddRange(snapshot.SortingBag.Skip(SortingBagCapacity));
+            state._sortingBag.AddRange(snapshot.SortingBag.Take(SortingBagCapacity).Select(P6SocketRules.Ensure));
+            state._recovery.AddRange(snapshot.Recovery.Select(P6SocketRules.Ensure));
+            state._recovery.AddRange(snapshot.SortingBag.Skip(SortingBagCapacity).Select(P6SocketRules.Ensure));
             state._buyback.AddRange(snapshot.Buyback.TakeLast(BuybackCapacity));
             state._skillStones.AddRange(snapshot.SkillStones);
             state._skillLinks.AddRange(snapshot.SkillLinks);

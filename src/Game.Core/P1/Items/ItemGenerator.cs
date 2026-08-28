@@ -1,4 +1,5 @@
 using GameForWork.Core.Simulation;
+using GameForWork.Core.P6;
 
 namespace GameForWork.Core.P1.Items;
 
@@ -32,7 +33,9 @@ public static class ItemGenerator
         };
 
         string id = instanceId ?? $"generated-{seed:x16}-{baseStableId[(baseStableId.LastIndexOf('.') + 1)..]}";
-        return new ItemInstance(id, itemBase, clampedLevel, rarity, affixes, ImplicitValue: implicitValue);
+        int sockets = P6SocketRules.Roll(itemBase.Category, clampedLevel, seed);
+        return new ItemInstance(id, itemBase, clampedLevel, rarity, affixes,
+            ImplicitValue: implicitValue, LinkedSocketCount: sockets);
     }
 
     private static IReadOnlyList<AffixRoll> RollAffixes(
