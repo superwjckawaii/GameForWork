@@ -55,7 +55,7 @@ public partial class P18AscendancyTreeView : Control
     private Func<P1GameSession>? _session;
     private Action<string>? _changed;
     private Vector2 _pan;
-    private float _zoom = 1f;
+    private float _zoom = .82f;
     private bool _dragging;
     private Vector2 _press;
     private Texture2D? _backdrops;
@@ -77,10 +77,12 @@ public partial class P18AscendancyTreeView : Control
         if (_backdrops is not null && selected != P18Ascendancy.None)
         {
             int index = (int)selected - 1;
-            float side = Math.Min(Size.X, Size.Y) * .92f;
+            float sourceSide = _backdrops.GetWidth() / 3f;
+            const float extent = 240f;
+            float side = extent * 2 * _zoom;
             DrawTextureRectRegion(_backdrops,
                 new Rect2(origin - new Vector2(side, side) / 2, new Vector2(side, side)),
-                new Rect2(index * 384, 0, 384, 384), new Color(1, 1, 1, .38f));
+                new Rect2(index * sourceSide, 0, sourceSide, _backdrops.GetHeight()));
         }
         DrawCircle(origin, 29 * _zoom, new Color("6b5434"));
         DrawString(ThemeDB.FallbackFont, origin + new Vector2(-42, 5),
@@ -96,12 +98,14 @@ public partial class P18AscendancyTreeView : Control
             Vector2 parent = node.PrerequisiteId is null ? origin : Point(P18AscendancyCatalog.Get(node.PrerequisiteId), origin);
             bool allocated = _session().Endgame.AscendancyPassives.Contains(node.StableId);
             bool available = node.PrerequisiteId is null || _session().Endgame.AscendancyPassives.Contains(node.PrerequisiteId);
-            DrawLine(parent, point, allocated ? new Color("b57a37") : new Color("303b48"), allocated ? 3 : 2);
+            if (allocated)
+            {
+                DrawLine(parent, point, new Color("683719"), 6 * _zoom);
+                DrawLine(parent, point, new Color("f1ad43"), 2.5f * _zoom);
+            }
             float radius = (node.Kind == P18NodeKind.Core ? 24 : 16) * _zoom;
             DrawCircle(point, radius, allocated ? new Color("b56b2e") : available ? new Color("436b67") : new Color("29303a"));
             DrawCircle(point, radius, new Color("d2b47a"), false, 1.5f);
-            DrawString(ThemeDB.FallbackFont, point + new Vector2(-65, radius + 15), node.DisplayName,
-                HorizontalAlignment.Center, 130, 12, allocated ? new Color("ffd895") : new Color("c4c9ce"));
         }
     }
 
@@ -136,7 +140,10 @@ public partial class P18AscendancyTreeView : Control
         else if (inputEvent is InputEventMouseButton wheel && wheel.Pressed &&
                  wheel.ButtonIndex is MouseButton.WheelUp or MouseButton.WheelDown)
         {
-            _zoom = Math.Clamp(_zoom + (wheel.ButtonIndex == MouseButton.WheelUp ? .1f : -.1f), .75f, 1.5f);
+            Vector2 origin = Size / 2 + _pan;
+            Vector2 world = (wheel.Position - origin) / _zoom;
+            _zoom = Math.Clamp(_zoom * (wheel.ButtonIndex == MouseButton.WheelUp ? 1.12f : .89f), .5f, 1.6f);
+            _pan = wheel.Position - Size / 2 - world * _zoom;
             QueueRedraw(); AcceptEvent();
         }
     }

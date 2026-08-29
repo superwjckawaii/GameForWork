@@ -12,6 +12,7 @@ public partial class P10AtlasTreeView : Control
     private Func<P1GameSession>? _session;
     private Action<string>? _changed;
     private Vector2 _pan;
+    private float _zoom = .22f;
     private bool _dragging;
     private Vector2 _press;
     private Texture2D? _backdrop;
@@ -30,19 +31,25 @@ public partial class P10AtlasTreeView : Control
         Vector2 origin = Size / 2 + _pan;
         if (_backdrop is not null)
         {
-            float side = Math.Min(Size.X, Size.Y) * .98f;
-            DrawTextureRect(_backdrop, new Rect2(origin - new Vector2(side, side) / 2, new Vector2(side, side)),
-                false, new Color(1, 1, 1, .3f));
+            float side = P10AtlasTree.LayoutExtent * 2 * _zoom;
+            DrawTextureRect(_backdrop, new Rect2(origin - new Vector2(side, side) / 2, new Vector2(side, side)), false);
         }
         foreach (P10AtlasNode node in P10AtlasTree.Nodes)
         {
             Vector2 point = NodePosition(node, origin);
-            if (node.PrerequisiteId is not null) DrawLine(NodePosition(P10AtlasTree.Get(node.PrerequisiteId), origin), point, new Color("354151"), 1);
             bool allocated = _session?.Invoke().Endgame.AtlasPassives.Contains(node.StableId) == true;
             bool available = node.PrerequisiteId is null || _session?.Invoke().Endgame.AtlasPassives.Contains(node.PrerequisiteId) == true;
             Color color = allocated ? new Color("c58b3c") : available ? new Color("477d79") : new Color("303641");
-            DrawCircle(point, node.Notable ? 7 : 4, color);
-            if (node.Notable) DrawCircle(point, 8, color.Lightened(.3f), false, 1.5f);
+            if (allocated && node.PrerequisiteId is not null)
+            {
+                Vector2 parent = NodePosition(P10AtlasTree.Get(node.PrerequisiteId), origin);
+                DrawLine(parent, point, new Color("633c17"), 5);
+                DrawLine(parent, point, new Color("e5a43d"), 2);
+            }
+            float nodeScale = Math.Clamp(_zoom * 2.4f, .45f, 1.3f);
+            float radius = (node.Notable ? 10 : 5) * nodeScale;
+            DrawCircle(point, radius, color);
+            DrawCircle(point, radius + 1.5f, color.Lightened(.3f), false, 1.2f);
         }
         DrawString(ThemeDB.FallbackFont, new Vector2(10, 20), "异界星图 · 360 个功能节点 · 首次完成每个地图阶级获得 1 点", HorizontalAlignment.Left, -1, 12, new Color("d4c6a5"));
     }
@@ -70,12 +77,21 @@ public partial class P10AtlasTreeView : Control
             TooltipText = node is null ? string.Empty : $"{node.DisplayName}\n{ThemeName(node.Theme)}收益提高 {node.RewardBasisPoints / 100.0:0.#}% · 出现权重 +{node.MechanicWeightBasisPoints / 100.0:0.#}%" +
                 (string.IsNullOrEmpty(node.SpecialRule) ? string.Empty : $"\n规则：{node.SpecialRule}");
         }
+        else if (inputEvent is InputEventMouseButton wheel && wheel.Pressed &&
+                 wheel.ButtonIndex is MouseButton.WheelUp or MouseButton.WheelDown)
+        {
+            Vector2 origin = Size / 2 + _pan;
+            Vector2 world = (wheel.Position - origin) / _zoom;
+            _zoom = Math.Clamp(_zoom * (wheel.ButtonIndex == MouseButton.WheelUp ? 1.12f : .89f), .16f, 1.5f);
+            _pan = wheel.Position - Size / 2 - world * _zoom;
+            QueueRedraw(); AcceptEvent();
+        }
     }
 
     private P10AtlasNode? Hit(Vector2 screen) => P10AtlasTree.Nodes.Select(node => (node, distance: NodePosition(node, Size / 2 + _pan).DistanceTo(screen)))
-        .Where(entry => entry.distance <= (entry.node.Notable ? 12 : 9)).OrderBy(entry => entry.distance).Select(entry => entry.node).FirstOrDefault();
-    private static Vector2 NodePosition(P10AtlasNode node, Vector2 origin)
-    { float angle = -MathF.PI / 2 + node.OrbitIndex / 30 * MathF.Tau / 12; float radius = 38 + node.OrbitIndex % 30 * 9.2f; return origin + new Vector2(MathF.Cos(angle), MathF.Sin(angle) * .72f) * radius; }
+        .Where(entry => entry.distance <= (entry.node.Notable ? 13 : 9) * Math.Clamp(_zoom * 2.4f, .55f, 1.3f))
+        .OrderBy(entry => entry.distance).Select(entry => entry.node).FirstOrDefault();
+    private Vector2 NodePosition(P10AtlasNode node, Vector2 origin) => origin + new Vector2(node.X, node.Y) * _zoom;
     private static string ThemeName(P10AtlasTheme theme) => theme switch
     { P10AtlasTheme.MapSupply => "地图续航", P10AtlasTheme.Abyss => "裂渊", P10AtlasTheme.LifeGarden => "命能花园", P10AtlasTheme.RedAltar => "赤誓祭坛", P10AtlasTheme.BlueAltar => "苍誓祭坛", _ => "攻坚" };
 }

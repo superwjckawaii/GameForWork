@@ -324,7 +324,7 @@ public partial class P2Dashboard : VBoxContainer
         _storyLog = new RichTextLabel
         {
             BbcodeEnabled = true,
-            CustomMinimumSize = new Vector2(0, 130),
+            CustomMinimumSize = new Vector2(0, 90),
             ScrollActive = true,
         };
         page.AddChild(_storyLog);
@@ -558,6 +558,7 @@ public partial class P2Dashboard : VBoxContainer
         var search = new LineEdit { PlaceholderText = "搜索天赋名称或效果；规划不会消耗点数" };
         search.TextChanged += query => _passiveTree?.SetSearch(query);
         main.AddChild(search);
+        main.AddChild(new Label { Text = "铁誓星盘 · 1,200 节点 · 左键拖曳 / 滚轮缩放 · 双击分配 · 右键双击洗点" });
         OptionButton? mastery = null;
         _passiveTree = new P1PassiveTreeView();
         _passiveTree.NodeSelected += stableId =>
@@ -712,33 +713,39 @@ public partial class P2Dashboard : VBoxContainer
     private Control BuildTownPage()
     {
         VBoxContainer page = Page("城镇事务");
-        _townPanel = new P9TownPanel { CustomMinimumSize = new Vector2(0, 470), SizeFlagsVertical = SizeFlags.ExpandFill };
+        var tabs = new TabContainer { SizeFlagsVertical = SizeFlags.ExpandFill, SizeFlagsHorizontal = SizeFlags.ExpandFill };
+        page.AddChild(tabs);
+        VBoxContainer management = Page("城区运营");
+        tabs.AddChild(management);
+        _townPanel = new P9TownPanel { SizeFlagsVertical = SizeFlags.ExpandFill, SizeFlagsHorizontal = SizeFlags.ExpandFill };
         _townPanel.Initialize(RequireSession, Changed);
-        page.AddChild(_townPanel);
+        management.AddChild(_townPanel);
+        VBoxContainer loot = Page("掉落与日志");
+        tabs.AddChild(loot);
         var workshop = new HFlowContainer();
-        page.AddChild(workshop);
+        loot.AddChild(workshop);
         OptionButton legendary = AddOptions(workshop, "指定传奇", P20LegendaryDrops.ExchangePool.Select(item => item.DisplayName).ToArray());
         AddButton(workshop, $"{P20LegendaryDrops.PityMarkCost} 印记兑换", () =>
         {
             string id = P20LegendaryDrops.ExchangePool[legendary.Selected].StableId;
             Changed(RequireSession().TryExchangeLegendary(id) ? "指定传奇已存入仓库。" : "印记不足或仓库已满。");
         });
-        page.AddChild(new Label { Text = "掉落过滤器 · 有序规则（从上到下首次匹配）" });
+        loot.AddChild(new Label { Text = "掉落过滤器 · 有序规则（从上到下首次匹配）" });
         _filterPanel = new P2LootFilterPanel();
         _filterPanel.Initialize(
             RequireSession,
             () => _storageGrid?.SelectedItem ?? _sortingGrid?.SelectedItem,
             Changed);
-        page.AddChild(_filterPanel);
-        page.AddChild(new Label { Text = "最近操作与掉落（最多 200 条）" });
+        loot.AddChild(_filterPanel);
+        loot.AddChild(new Label { Text = "最近操作与掉落（最多 200 条）" });
         _history = new RichTextLabel
         {
             BbcodeEnabled = true,
             ScrollActive = true,
             SizeFlagsVertical = SizeFlags.ExpandFill,
         };
-        page.AddChild(_history);
-        return Wrap(page);
+        loot.AddChild(_history);
+        return page;
     }
 
     private P9CraftTarget? CurrentCraftTarget()
@@ -1425,15 +1432,13 @@ public partial class P2Dashboard : VBoxContainer
         _worldView!.Session = _session;
         if (overviewActive) _worldView.QueueRedraw();
         if (characterActive) RefreshCharacterSelector();
-        TownEconomyState economy = _session.World.Economy;
         string recoveryWarning = _session.Management.Recovery.Count == 0
             ? string.Empty
             : $" · ⚠ 恢复箱 {_session.Management.Recovery.Count}";
         _overviewStatus!.Text =
-            $"{_session.Player.Name} Lv.{_session.World.Hero.Progression.Level} · 佣兵队 {_session.Town.ActiveMembers().Count}/{_session.Town.MercenaryCapacity} 人\n" +
-            $"金币 {economy.Gold} · 铁屑 {economy.IronScraps} · " +
-            $"淬刃铁 {economy.MetalAmount(MetalCurrencyKind.TemperingIron)} · 守壁钢 {economy.MetalAmount(MetalCurrencyKind.WardSteel)} · " +
-            $"活血银 {economy.MetalAmount(MetalCurrencyKind.VitalSilver)} · 地图 {_session.World.MapInventory.Count}{recoveryWarning}";
+            $"佣兵队 {_session.Town.ActiveMembers().Count}/{_session.Town.MercenaryCapacity} 人{recoveryWarning}";
+
+        TownEconomyState economy = _session.World.Economy;
 
         RefreshJourneyInterface();
         if (townActive) _townPanel?.Refresh();

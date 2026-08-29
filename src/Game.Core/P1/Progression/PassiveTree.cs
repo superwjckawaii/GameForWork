@@ -195,6 +195,8 @@ public sealed record P205PassiveModifiers(
 
 public static class P1PassiveTree
 {
+    public const float LayoutExtent = 820f;
+
     private static readonly IReadOnlyDictionary<string, PassiveNodeDefinition> NodeMap = P205PassiveTreeCatalog.Build()
         .ToDictionary(node => node.StableId, StringComparer.Ordinal);
 

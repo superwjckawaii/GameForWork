@@ -155,7 +155,7 @@ public sealed class P1SessionTests
         Assert.NotNull(restored.World.Mercenaries.Build.HeavyStrikeProfile);
         Assert.Equal(3, restored.Town.Roster.Count);
         Assert.Equal(3, restored.World.Mercenaries.Build.PartySize);
-        Assert.Equal(107, restored.World.Mercenaries.Build.Sheet.Equipment.Armor);
+        Assert.Equal(67, restored.World.Mercenaries.Build.Sheet.Equipment.Armor);
         Assert.Equal(1_738, restored.World.Mercenaries.Build.Sheet.MaximumLife().Value);
     }
 

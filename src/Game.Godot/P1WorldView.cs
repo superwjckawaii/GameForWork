@@ -200,9 +200,16 @@ public partial class P1WorldView : Control
             ? 0
             : Math.Clamp((float)elapsed / timeline.DurationMilliseconds, 0, 1);
         bool hero = observed?.Hero ?? true;
-        if (timeline.SpatialFrames is { Count: > 0 })
+        P3EncounterSegment? activeEncounter = timeline.Encounters.FirstOrDefault(segment =>
+            elapsed >= segment.StartMilliseconds && elapsed < segment.StartMilliseconds + segment.DurationMilliseconds);
+        if (timeline.SpatialFrames is { Count: > 0 } && activeEncounter is not null)
         {
             DrawSpatialBattle(bounds, observed!, timeline, elapsed, sceneProgress, hero);
+            return;
+        }
+        if (timeline.SpatialFrames is { Count: > 0 })
+        {
+            DrawTravel(bounds, observed!, state, elapsed);
             return;
         }
 
@@ -259,7 +266,6 @@ public partial class P1WorldView : Control
             DrawBar(new Rect2(enemy + new Vector2(-54, 25), new Vector2(108, 7)), enemyLife, new Color("8d2739"));
         }
 
-        DrawBar(new Rect2(bounds.Position + new Vector2(16, 35), new Vector2(bounds.Size.X - 32, 7)), sceneProgress, new Color("bb8442"));
         string title = observed?.Title ?? "等待主线战斗或远征地图";
         DrawCaption(bounds, title, new Color("e5d7be"));
         if (timeline is not null)
@@ -268,8 +274,26 @@ public partial class P1WorldView : Control
                 ? $"移动中 · {state.Value} 格"
                 : $"节点 {Math.Max(1, state?.NodeIndex ?? 1)}/{timeline.NodeCount} · 波次 {Math.Max(1, state?.WaveIndex ?? 1)}";
             DrawString(ThemeDB.FallbackFont, bounds.Position + new Vector2(16, 59),
-                $"{phase} · 场景 {sceneProgress * 100:0.0}%", HorizontalAlignment.Left, -1, 13, new Color("c6bca9"));
+                phase, HorizontalAlignment.Left, -1, 13, new Color("c6bca9"));
         }
+    }
+
+    private void DrawTravel(Rect2 bounds, ObservedScene observed, P3SceneEvent? state, long elapsed)
+    {
+        Rect2 field = new(bounds.Position + new Vector2(18, 54), bounds.Size - new Vector2(36, 82));
+        bool moving = state?.Kind == P3SceneEventKind.TravelStarted;
+        float cycle = moving ? (float)(elapsed % 1_200) / 1_200 : .5f;
+        Vector2 actor = field.Position + new Vector2(
+            field.Size.X * (.18f + cycle * .64f),
+            field.Size.Y * (.62f + MathF.Sin(cycle * MathF.Tau) * .08f));
+        DrawShadow(actor + new Vector2(0, 6), 10);
+        DrawP21Sprite(_actorAnimationAtlas, observed.Hero ? 0 : 1, P21Facing.Right,
+            moving ? P21SpriteAction.Move : P21SpriteAction.Idle, elapsed, actor, new Vector2(44, 56),
+            P21ArtContract.ActorRigCount, P21ArtContract.ActorCellWidth, P21ArtContract.ActorCellHeight);
+        DrawCaption(bounds, observed.Title, new Color("e5d7be"));
+        DrawString(ThemeDB.FallbackFont, bounds.Position + new Vector2(16, 43),
+            moving ? $"前往节点 {Math.Max(1, state?.NodeIndex ?? 1)} · 移动 {state?.Value ?? 0} 格" : "抵达节点，准备接敌",
+            HorizontalAlignment.Left, -1, 13, new Color("c6bca9"));
     }
 
     private void SyncObservation()
@@ -314,7 +338,9 @@ public partial class P1WorldView : Control
             DrawLine(new Vector2(field.Position.X, y), new Vector2(field.End.X, y), new Color(0.33f, 0.38f, 0.44f, 0.12f), 1);
         }
 
-        Vector2 actor = MapPoint(field, Lerp(current.HeroPosition, next.HeroPosition, interpolation));
+        bool heroStanding = current.HeroPosition == next.HeroPosition;
+        Vector2 actor = MapPoint(field, Lerp(current.HeroPosition, next.HeroPosition, interpolation)) +
+                        (heroStanding ? VisualFootwork("hero", elapsed, 3.2f) : Vector2.Zero);
         _nextEnemies.Clear();
         foreach (P4EnemyFrame enemy in next.Enemies) _nextEnemies[enemy.EntityId] = enemy;
         _positions.Clear();
@@ -324,7 +350,9 @@ public partial class P1WorldView : Control
             P4Point position = _nextEnemies.TryGetValue(enemy.EntityId, out P4EnemyFrame? future)
                 ? Lerp(enemy.Position, future.Position, interpolation)
                 : enemy.Position;
-            _positions[enemy.EntityId] = MapPoint(field, position);
+            bool standing = future?.Position == enemy.Position;
+            _positions[enemy.EntityId] = MapPoint(field, position) +
+                                         (standing ? VisualFootwork(enemy.EntityId, elapsed, enemy.Boss ? 2.2f : 3f) : Vector2.Zero);
         }
 
         CollectRecentEvents(timeline.Events, elapsed, _recentEvents);
@@ -358,7 +386,7 @@ public partial class P1WorldView : Control
         P21SpriteAction heroAction = ResolveHeroAction(current, next, _recentEvents);
         foreach (P4AllyFrame ally in current.Allies ?? [])
         {
-            Vector2 allyPosition = MapPoint(field, ally.Position);
+            Vector2 allyPosition = MapPoint(field, ally.Position) + VisualFootwork(ally.EntityId, elapsed, 2.6f);
             _positions[ally.EntityId] = allyPosition;
             DrawShadow(allyPosition + new Vector2(0, 5), 7);
             int rig = 1 + StableVisualIndex(ally.EntityId, 4);
@@ -383,15 +411,32 @@ public partial class P1WorldView : Control
         }
 
         DrawSpatialNumbers(field, _positions, _recentEvents, elapsed);
-        DrawBar(new Rect2(bounds.Position + new Vector2(16, 35), new Vector2(bounds.Size.X - 32, 7)), sceneProgress, new Color("bb8442"));
         DrawCaption(bounds, observed.Title, new Color("e5d7be"));
         int alive = current.Enemies.Count(enemy => enemy.Life > 0);
         string target = current.Enemies.FirstOrDefault(enemy => enemy.EntityId == current.HeroTargetId)?.DisplayName ?? "移动接敌";
         string mechanic = timeline.Events.TakeWhile(item => item.AtMilliseconds <= elapsed)
             .LastOrDefault(item => item.NodeIndex == current.NodeIndex && item.Kind is P3SceneEventKind.WaveStarted or P3SceneEventKind.MechanicChoice)?.Detail ?? string.Empty;
         DrawString(ThemeDB.FallbackFont, bounds.Position + new Vector2(16, 59),
-            $"节点 {Math.Max(1, current.NodeIndex)}/{timeline.NodeCount} · {mechanic} · 队伍 {(current.Allies?.Count ?? 0) + 1} · 敌人 {alive}/{current.Enemies.Count} · 目标 {target} · {sceneProgress * 100:0.0}%",
+            $"节点 {Math.Max(1, current.NodeIndex)}/{timeline.NodeCount} · {mechanic} · 队伍 {(current.Allies?.Count ?? 0) + 1} · 敌人 {alive}/{current.Enemies.Count} · 目标 {target}",
             HorizontalAlignment.Left, -1, 13, new Color("c6bca9"));
+    }
+
+    private static Vector2 VisualFootwork(string stableId, long elapsed, float amplitude)
+    {
+        const long interval = 720;
+        long phase = Math.Max(0, elapsed / interval);
+        float progress = (elapsed % interval) / (float)interval;
+        progress = progress * progress * (3 - 2 * progress);
+        Vector2 from = FootworkTarget(stableId, phase, amplitude);
+        Vector2 to = FootworkTarget(stableId, phase + 1, amplitude);
+        return from.Lerp(to, progress);
+    }
+
+    private static Vector2 FootworkTarget(string stableId, long phase, float amplitude)
+    {
+        int x = StableVisualIndex($"{stableId}|foot-x|{phase}", 7) - 3;
+        int y = StableVisualIndex($"{stableId}|foot-y|{phase}", 7) - 3;
+        return new Vector2(x / 3f * amplitude, y / 3f * amplitude * .55f);
     }
 
     private void DrawSpatialEnemy(Vector2 position, P4EnemyFrame enemy, float radius, bool targeted,

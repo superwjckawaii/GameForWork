@@ -100,7 +100,7 @@ internal static class P205PassiveTreeCatalog
                 start ? $"{StartName(sector.Start)}起点" : $"{sector.Name}之路 {index + 1:00}",
                 sector.Branch, PassiveNodeKind.Small, start ? null : previous,
                 [new PassiveEffect(sector.Attribute, value)], links,
-                MathF.Cos(angle) * radius, MathF.Sin(angle) * radius * .78f,
+                MathF.Cos(angle) * radius, MathF.Sin(angle) * radius,
                 sectorIndex, start ? sector.Start : PassiveStartKind.None));
         }
     }
@@ -112,23 +112,24 @@ internal static class P205PassiveTreeCatalog
         for (int cluster = 0; cluster < 18; cluster++)
         {
             int smallCount = cluster % 2 == 0 ? 3 : 4;
-            int anchorIndex = 1 + cluster * 5 % 10;
-            string previous = TravelOrStartId(sectorIndex, anchorIndex);
             int band = cluster / 6;
             int local = cluster % 6;
-            float centerRadius = 270 + band * 128 + local * 26;
-            float side = (local - 2.5f) * .052f + (band - 1) * .018f;
+            int anchorIndex = Math.Min(11, 2 + band * 4 + local % 2);
+            string previous = TravelOrStartId(sectorIndex, anchorIndex);
+            float centerRadius = 270 + band * 190 + (local % 2) * 10;
+            float[] clusterOffsets = [-.24f, -.16f, -.08f, .08f, .16f, .24f];
+            float side = clusterOffsets[local] + (band - 1) * .004f;
             PassiveEffectKind primary = ClusterEffect(sector.Branch, cluster % 3);
             for (int index = 0; index < smallCount; index++)
             {
                 string id = ClusterSmallId(sectorIndex, cluster, index);
-                float radius = centerRadius + index * 24;
-                float angle = baseAngle + side;
+                float radius = centerRadius + index * 22;
+                float angle = baseAngle + side + (index - (smallCount - 1) / 2f) * .007f;
                 nodes.Add(new PassiveNodeDefinition(id,
                     $"{sector.Name}·{ClusterNames[cluster]}·{index + 1}", sector.Branch,
                     PassiveNodeKind.Small, previous, [new PassiveEffect(primary, SmallValue(primary, index))],
                     [previous, index + 1 < smallCount ? ClusterSmallId(sectorIndex, cluster, index + 1) : ClusterCapId(sectorIndex, cluster)],
-                    MathF.Cos(angle) * radius, MathF.Sin(angle) * radius * .78f,
+                    MathF.Cos(angle) * radius, MathF.Sin(angle) * radius,
                     sectorIndex));
                 previous = id;
             }
@@ -136,15 +137,15 @@ internal static class P205PassiveTreeCatalog
             bool mastery = cluster % 3 == 2;
             PassiveNodeKind kind = mastery ? PassiveNodeKind.Mastery : PassiveNodeKind.Notable;
             PassiveEffectKind secondary = ClusterEffect(sector.Branch, (cluster + 1) % 3);
-            float capRadius = centerRadius + smallCount * 24 + 7;
-            float capAngle = baseAngle + side;
+            float capRadius = centerRadius + smallCount * 22 + 8;
+            float capAngle = baseAngle + side + .012f;
             nodes.Add(new PassiveNodeDefinition(ClusterCapId(sectorIndex, cluster),
                 $"{sector.Name}·{ClusterNames[cluster]}{(mastery ? "专精" : "显著")}", sector.Branch, kind,
                 previous,
                 mastery
                     ? [new PassiveEffect(primary, SmallValue(primary, 1))]
                     : [new PassiveEffect(primary, NotableValue(primary)), new PassiveEffect(secondary, SmallValue(secondary, 1))],
-                [previous], MathF.Cos(capAngle) * capRadius, MathF.Sin(capAngle) * capRadius * .78f,
+                [previous], MathF.Cos(capAngle) * capRadius, MathF.Sin(capAngle) * capRadius,
                 sectorIndex));
         }
     }
@@ -156,14 +157,15 @@ internal static class P205PassiveTreeCatalog
         string[] suffixes = ["逆誓", "孤途", "界限", "终律"];
         for (int index = 0; index < 4; index++)
         {
-            string anchor = TravelOrStartId(sectorIndex, 3 + index * 2);
-            float radius = 340 + index * 73;
-            float offset = index % 2 == 0 ? -.105f : .105f;
+            string anchor = TravelOrStartId(sectorIndex, Math.Min(11, 2 + index * 3));
+            float[] ruleRadii = [230, 420, 610, 790];
+            float radius = ruleRadii[index];
+            float offset = index % 2 == 0 ? -.14f : .14f;
             (IReadOnlyList<PassiveEffect> effects, string rule) = RuleEffects(sectorIndex, index);
             nodes.Add(new PassiveNodeDefinition($"core.passive.v2.rule.{sectorIndex:00}.{index:00}",
                 $"{sector.Name}·{suffixes[index]}", sector.Branch, PassiveNodeKind.Rule, anchor,
                 effects, [anchor], MathF.Cos(angle + offset) * radius,
-                MathF.Sin(angle + offset) * radius * .78f, sectorIndex, SpecialRule: rule));
+                MathF.Sin(angle + offset) * radius, sectorIndex, SpecialRule: rule));
         }
     }
 
@@ -173,13 +175,14 @@ internal static class P205PassiveTreeCatalog
         float angle = SectorAngle(sectorIndex);
         for (int index = 0; index < count; index++)
         {
-            int anchorIndex = 2 + index * 4;
+            int anchorIndex = 3 + index * 4;
             string anchor = TravelOrStartId(sectorIndex, anchorIndex);
-            float radius = 285 + index * 145;
-            float offset = index % 2 == 0 ? .14f : -.14f;
+            float[] jewelRadii = [410, 600, 790];
+            float radius = jewelRadii[index];
+            float offset = index % 2 == 0 ? .065f : -.065f;
             nodes.Add(new PassiveNodeDefinition($"core.passive.v2.jewel.{sectorIndex:00}.{index:00}",
                 "记忆棱孔", Sectors[sectorIndex].Branch, PassiveNodeKind.JewelSocket, anchor, [], [anchor],
-                MathF.Cos(angle + offset) * radius, MathF.Sin(angle + offset) * radius * .78f,
+                MathF.Cos(angle + offset) * radius, MathF.Sin(angle + offset) * radius,
                 sectorIndex));
         }
     }

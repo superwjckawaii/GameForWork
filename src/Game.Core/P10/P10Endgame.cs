@@ -17,12 +17,16 @@ public sealed record P10AtlasNode(
     string? PrerequisiteId,
     int RewardBasisPoints,
     bool Notable,
+    float X,
+    float Y,
     int MechanicWeightBasisPoints = 0,
     bool BlocksCompetingMechanic = false,
     string SpecialRule = "");
 
 public static class P10AtlasTree
 {
+    public const float LayoutExtent = 820f;
+
     private static readonly IReadOnlyDictionary<string, P10AtlasNode> NodeMap = Build()
         .ToDictionary(node => node.StableId, StringComparer.Ordinal);
     public static IReadOnlyCollection<P10AtlasNode> Nodes => NodeMap.Values.ToArray();
@@ -40,6 +44,8 @@ public static class P10AtlasTree
             string id = $"core.atlas.{lane:00}.{index:00}";
             string? prerequisite = index == 0 ? null : $"core.atlas.{lane:00}.{index - 1:00}";
             bool notable = index is 9 or 19 or 29;
+            float angle = -MathF.PI / 2 + lane * MathF.Tau / 12;
+            float radius = 72 + index * 24;
             string special = !notable ? string.Empty : index switch
             {
                 9 => "该机制出现权重提高，并至少生成一个额外节点",
@@ -49,6 +55,7 @@ public static class P10AtlasTree
             result.Add(new P10AtlasNode(id,
                 notable ? $"{themeNames[(int)theme]}·枢纽 {index / 10 + 1}" : $"{themeNames[(int)theme]} {index + 1:00}",
                 theme, index / 10, lane * 30 + index, prerequisite, notable ? 900 : 180, notable,
+                MathF.Cos(angle) * radius, MathF.Sin(angle) * radius,
                 notable ? 2_500 : 150, notable && index == 19, special));
         }
         return result;

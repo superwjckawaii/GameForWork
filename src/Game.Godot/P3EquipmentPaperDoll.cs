@@ -32,25 +32,25 @@ public partial class P3EquipmentPaperDoll : Control
 
     public override void _Ready()
     {
-        CustomMinimumSize = new Vector2(272, 364);
+        CustomMinimumSize = new Vector2(272, 248);
         MouseFilter = MouseFilterEnum.Stop;
         IReadOnlyDictionary<EquipmentSlot, Vector2> positions = new Dictionary<EquipmentSlot, Vector2>
         {
-            [EquipmentSlot.Helmet] = new(113, 4),
-            [EquipmentSlot.Amulet] = new(218, 148),
-            [EquipmentSlot.MainHand] = new(6, 92),
-            [EquipmentSlot.Chest] = new(113, 80),
-            [EquipmentSlot.OffHand] = new(218, 92),
-            [EquipmentSlot.Gloves] = new(18, 170),
-            [EquipmentSlot.Belt] = new(113, 162),
-            [EquipmentSlot.RingLeft] = new(218, 204),
-            [EquipmentSlot.RingRight] = new(218, 258),
-            [EquipmentSlot.Boots] = new(113, 258),
-            [EquipmentSlot.Flask1] = new(25, 322),
-            [EquipmentSlot.Flask2] = new(67, 322),
-            [EquipmentSlot.Flask3] = new(109, 322),
-            [EquipmentSlot.Flask4] = new(151, 322),
-            [EquipmentSlot.Flask5] = new(193, 322),
+            [EquipmentSlot.Helmet] = new(115, 0),
+            [EquipmentSlot.MainHand] = new(8, 55),
+            [EquipmentSlot.Chest] = new(115, 48),
+            [EquipmentSlot.OffHand] = new(230, 24),
+            [EquipmentSlot.Gloves] = new(20, 112),
+            [EquipmentSlot.Belt] = new(115, 96),
+            [EquipmentSlot.Amulet] = new(230, 65),
+            [EquipmentSlot.RingLeft] = new(230, 106),
+            [EquipmentSlot.RingRight] = new(230, 147),
+            [EquipmentSlot.Boots] = new(115, 158),
+            [EquipmentSlot.Flask1] = new(18, 208),
+            [EquipmentSlot.Flask2] = new(58, 208),
+            [EquipmentSlot.Flask3] = new(98, 208),
+            [EquipmentSlot.Flask4] = new(138, 208),
+            [EquipmentSlot.Flask5] = new(178, 208),
         };
         foreach ((EquipmentSlot slot, Vector2 position) in positions)
         {
@@ -62,7 +62,9 @@ public partial class P3EquipmentPaperDoll : Control
                 ExtraTooltip = _extraTooltip,
                 EmptyLabel = ShortSlotName(slot),
             };
-            grid.Configure(1, 1, slot is >= EquipmentSlot.Flask1 and <= EquipmentSlot.Flask5 ? 38 : 46);
+            int cellSize = slot is >= EquipmentSlot.Flask1 and <= EquipmentSlot.Flask5 ? 36 :
+                slot is EquipmentSlot.OffHand or EquipmentSlot.Amulet or EquipmentSlot.RingLeft or EquipmentSlot.RingRight ? 36 : 42;
+            grid.Configure(1, 1, cellSize);
             grid.DropValidator = (source, sourceIndex, targetIndex) =>
                 DropValidator?.Invoke(source, sourceIndex, targetIndex) ?? true;
             grid.ItemSelected += index =>
@@ -84,13 +86,13 @@ public partial class P3EquipmentPaperDoll : Control
     {
         DrawRect(new Rect2(Vector2.Zero, Size), new Color("12161d"), true);
         Color silhouette = new("29313d");
-        DrawCircle(new Vector2(136, 54), 20, silhouette);
-        DrawRect(new Rect2(101, 76, 70, 126), silhouette, true);
-        DrawLine(new Vector2(110, 98), new Vector2(72, 208), silhouette, 22);
-        DrawLine(new Vector2(162, 98), new Vector2(200, 208), silhouette, 22);
-        DrawLine(new Vector2(118, 198), new Vector2(101, 304), silhouette, 24);
-        DrawLine(new Vector2(154, 198), new Vector2(171, 304), silhouette, 24);
-        DrawString(ThemeDB.FallbackFont, new Vector2(100, 316), "药剂腰带", HorizontalAlignment.Center, 72, 11,
+        DrawCircle(new Vector2(136, 38), 16, silhouette);
+        DrawRect(new Rect2(106, 55, 60, 78), silhouette, true);
+        DrawLine(new Vector2(112, 72), new Vector2(77, 151), silhouette, 18);
+        DrawLine(new Vector2(160, 72), new Vector2(195, 151), silhouette, 18);
+        DrawLine(new Vector2(121, 130), new Vector2(108, 200), silhouette, 20);
+        DrawLine(new Vector2(151, 130), new Vector2(164, 200), silhouette, 20);
+        DrawString(ThemeDB.FallbackFont, new Vector2(100, 203), "药剂腰带", HorizontalAlignment.Center, 72, 11,
             new Color("91836c"));
         DrawRect(new Rect2(Vector2.Zero, Size), new Color("665b4c"), false, 2);
     }

@@ -60,6 +60,18 @@ public sealed class P1BuildAndItemTests
     }
 
     [Fact]
+    public void PassiveTreeLayoutFitsItsDeterministicSquareCanvas()
+    {
+        Assert.All(P1PassiveTree.Nodes, node =>
+        {
+            Assert.InRange(node.X, -P1PassiveTree.LayoutExtent, P1PassiveTree.LayoutExtent);
+            Assert.InRange(node.Y, -P1PassiveTree.LayoutExtent, P1PassiveTree.LayoutExtent);
+        });
+        Assert.Equal(P1PassiveTree.Nodes.Count,
+            P1PassiveTree.Nodes.Select(node => (MathF.Round(node.X, 2), MathF.Round(node.Y, 2))).Distinct().Count());
+    }
+
+    [Fact]
     public void P205ClustersHaveRelatedSmallNodesAndFourCareerStarts()
     {
         PassiveNodeDefinition[] clusterSmall = P1PassiveTree.Nodes
@@ -233,7 +245,7 @@ public sealed class P1BuildAndItemTests
             passives,
             new SkillConfiguration(P1SkillIds.HeavyStrike, SkillSupport.None));
 
-        Assert.InRange(build.Sheet.MaximumLife().Value, 250, 260);
+        Assert.InRange(build.Sheet.MaximumLife().Value, 240, 250);
         Assert.Equal(1_600, build.IncreasedAttackDamageBasisPoints);
         Assert.NotNull(build.Equipment.Weapon);
     }

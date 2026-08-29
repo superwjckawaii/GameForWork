@@ -29,6 +29,7 @@ public partial class Main : Node
     private HFlowContainer? _testHarness;
     private Button? _largeWindowButton;
     private CheckButton? _alwaysOnTopToggle;
+    private Label? _characterHeaderLabel;
     private Label? _goldLabel;
     private Label? _noticeLabel;
     private ConfirmationDialog? _closeDialog;
@@ -319,17 +320,25 @@ public partial class Main : Node
         miniOpacity.ValueChanged += value => _windowController?.SetOpacity((int)value);
         _miniToolbar.AddChild(miniOpacity);
 
-        var goldBar = new HBoxContainer
+        var statusMargin = new MarginContainer
         {
-            Alignment = BoxContainer.AlignmentMode.End,
             SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
-            TooltipText = "金币是城镇升级、制作与交易使用的通用关键资源",
+            TooltipText = "当前角色与通用关键资源",
         };
-        goldBar.AddThemeConstantOverride("separation", 5);
-        goldBar.AddChild(new PixelGoldIcon());
+        statusMargin.AddThemeConstantOverride("margin_left", 8);
+        statusMargin.AddThemeConstantOverride("margin_right", 14);
+        var statusBar = new HBoxContainer
+        {
+            SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
+        };
+        statusBar.AddThemeConstantOverride("separation", 5);
+        _characterHeaderLabel = new Label { Text = "尚未创建角色", SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+        statusBar.AddChild(_characterHeaderLabel);
+        statusBar.AddChild(new PixelGoldIcon());
         _goldLabel = new Label { Text = "金币 0" };
-        goldBar.AddChild(_goldLabel);
-        root.AddChild(goldBar);
+        statusBar.AddChild(_goldLabel);
+        statusMargin.AddChild(statusBar);
+        root.AddChild(statusMargin);
 
         _noticeLabel = new Label
         {
@@ -337,13 +346,10 @@ public partial class Main : Node
             AutowrapMode = TextServer.AutowrapMode.WordSmart,
         };
         root.AddChild(_noticeLabel);
-        _dashboard = new P2Dashboard();
-        _dashboard.Initialize(_session, CreateCharacter, OnSessionChanged, ShowNotice, EnsureStandardWindow);
-        root.AddChild(_dashboard);
-
         _testHarness = new HFlowContainer();
         _testHarness.Visible = DeveloperFeaturesEnabled;
-        root.AddChild(_testHarness);
+        _testHarness.CustomMinimumSize = new Vector2(0, 32);
+        _testHarness.SizeFlagsVertical = Control.SizeFlags.ShrinkBegin;
         AddButton(_testHarness, "P2: 模拟48h", RunOfflineBenchmark);
         AddButton(_testHarness, "P2: 备份", CreateBackup);
         AddButton(_testHarness, "打开日志", OpenLogs);
@@ -351,6 +357,11 @@ public partial class Main : Node
         AddButton(_testHarness, "重置关闭询问", ResetCloseChoice);
         _performanceLabel = new Label { Text = "P7 性能：等待采样…", TooltipText = "仅测试栏显示；正式小窗自动隐藏" };
         _testHarness.AddChild(_performanceLabel);
+
+        _dashboard = new P2Dashboard();
+        _dashboard.Initialize(_session, CreateCharacter, OnSessionChanged, ShowNotice, EnsureStandardWindow);
+        root.AddChild(_dashboard);
+        root.AddChild(_testHarness);
 
         _closeDialog = new ConfirmationDialog
         {
@@ -459,14 +470,26 @@ public partial class Main : Node
     private void UpdateGoldDisplay()
     {
         int gold = _session?.World.Economy.Gold ?? 0;
-        if (_goldLabel is null || gold == _displayedGold)
+        if (_goldLabel is null)
         {
             return;
         }
 
-        _displayedGold = gold;
-        _goldLabel.Text = $"金币 {gold:N0}";
+        if (gold != _displayedGold)
+        {
+            _displayedGold = gold;
+            _goldLabel.Text = $"金币 {gold:N0}";
+        }
+        _characterHeaderLabel!.Text = _session is null
+            ? "尚未创建角色"
+            : $"{_session.Player.Name} · Lv.{_session.World.Hero.Progression.Level} · {PlayerClassName(_session.Player.Ascendancy)}";
     }
+
+    private static string PlayerClassName(P1Ascendancy ascendancy) => ascendancy switch
+    {
+        P1Ascendancy.Linebreaker => "破阵者",
+        _ => "铁誓者",
+    };
 
     private void ToggleLargeWindow()
     {

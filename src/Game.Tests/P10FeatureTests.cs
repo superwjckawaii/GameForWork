@@ -14,6 +14,13 @@ public sealed class P10FeatureTests
         Assert.Equal(360, P10AtlasTree.Nodes.Count);
         Assert.Equal(6, P10AtlasTree.Nodes.Select(node => node.Theme).Distinct().Count());
         Assert.Equal(36, P10AtlasTree.Nodes.Count(node => node.Notable));
+        Assert.All(P10AtlasTree.Nodes, node =>
+        {
+            Assert.InRange(node.X, -P10AtlasTree.LayoutExtent, P10AtlasTree.LayoutExtent);
+            Assert.InRange(node.Y, -P10AtlasTree.LayoutExtent, P10AtlasTree.LayoutExtent);
+        });
+        Assert.Equal(P10AtlasTree.Nodes.Count,
+            P10AtlasTree.Nodes.Select(node => (MathF.Round(node.X, 2), MathF.Round(node.Y, 2))).Distinct().Count());
     }
 
     [Fact]

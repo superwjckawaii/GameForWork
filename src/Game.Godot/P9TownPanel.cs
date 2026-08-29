@@ -4,54 +4,6 @@ using Godot;
 
 namespace GameForWork.GodotClient;
 
-public partial class P11TownMap : Control
-{
-    private const float SourceWidth = 430f;
-    private const float SourceHeight = 242f;
-    private readonly List<(Button Button, Vector2 Normalized)> _hotspots = [];
-
-    public override void _Ready()
-    {
-        CustomMinimumSize = new Vector2(SourceWidth, SourceHeight);
-        SizeFlagsHorizontal = SizeFlags.ExpandFill;
-        ClipContents = true;
-        var background = new TextureRect
-        {
-            Texture = GD.Load<Texture2D>(ResourceLoader.Exists("res://assets/p21/town/p21-town-district.png")
-                ? "res://assets/p21/town/p21-town-district.png"
-                : "res://assets/p9/town/p9-town-district.png"),
-            ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,
-            StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered,
-            MouseFilter = MouseFilterEnum.Ignore,
-        };
-        background.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
-        AddChild(background);
-        MoveChild(background, 0);
-        Resized += UpdateLayout;
-        UpdateLayout();
-    }
-
-    public void AddHotspot(Button button, Vector2 logicalPosition)
-    {
-        _hotspots.Add((button, new Vector2(logicalPosition.X / SourceWidth, logicalPosition.Y / SourceHeight)));
-        AddChild(button);
-        UpdateLayout();
-    }
-
-    private void UpdateLayout()
-    {
-        if (Size.X <= 0) return;
-        float desiredHeight = Size.X * SourceHeight / SourceWidth;
-        if (Math.Abs(CustomMinimumSize.Y - desiredHeight) > 1) CustomMinimumSize = new Vector2(SourceWidth, desiredHeight);
-        Vector2 hotspotSize = new(Math.Clamp(Size.X * 116f / SourceWidth, 106, 196), Math.Clamp(Size.Y * 28f / SourceHeight, 28, 48));
-        foreach ((Button button, Vector2 normalized) in _hotspots)
-        {
-            button.Position = new Vector2(normalized.X * Size.X, normalized.Y * Size.Y);
-            button.Size = hotspotSize;
-        }
-    }
-}
-
 public partial class P9TownPanel : VBoxContainer
 {
     private Func<P1GameSession>? _session;
@@ -60,14 +12,12 @@ public partial class P9TownPanel : VBoxContainer
     private GridContainer? _buildings;
     private VBoxContainer? _candidates;
     private VBoxContainer? _roster;
-    private GridContainer? _formation;
     private RichTextLabel? _events;
     private Label? _summary;
     private Label? _tavernRefresh;
     private Texture2D? _mercenaryAtlas;
     private Texture2D? _buildingAtlas;
     private bool _p21MercenaryAtlas;
-    private string _selectedMember = string.Empty;
     private string _signature = string.Empty;
 
     public void Initialize(Func<P1GameSession> session, Action<string> changed)
@@ -98,9 +48,7 @@ public partial class P9TownPanel : VBoxContainer
         tabs.AddChild(leftScroll);
         var left = new VBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
         leftScroll.AddChild(left);
-        var townMap = new P11TownMap();
-        left.AddChild(townMap);
-        left.AddChild(new Label { Text = "城区总览 · 建筑升级统一在下方卡片操作，施工期间保留旧等级效果" });
+        left.AddChild(new Label { Text = "城区总览 · 施工期间保留旧等级效果" });
         _buildings = new GridContainer { Columns = 4 };
         left.AddChild(_buildings);
         var rightScroll = new ScrollContainer { Name = "酒馆名册", SizeFlagsHorizontal = SizeFlags.ExpandFill, SizeFlagsVertical = SizeFlags.ExpandFill };
@@ -115,19 +63,16 @@ public partial class P9TownPanel : VBoxContainer
         _candidates = new VBoxContainer();
         right.AddChild(_candidates);
         right.AddChild(new HSeparator());
-        right.AddChild(new Label { Text = "佣兵名册 · 单击成员后放入阵型；技能、天赋与 AI 自主成长" });
+        right.AddChild(new Label { Text = "佣兵名册 · 编入/撤下出征队伍；站位由职业与 AI 自动安排" });
         _roster = new VBoxContainer();
         right.AddChild(_roster);
-        var formationScroll = new ScrollContainer { Name = "阵型与事件", SizeFlagsHorizontal = SizeFlags.ExpandFill, SizeFlagsVertical = SizeFlags.ExpandFill };
-        tabs.AddChild(formationScroll);
-        var formationBody = new VBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
-        formationScroll.AddChild(formationBody);
-        formationBody.AddChild(new Label { Text = "2×3 阵型 · 上排为前排，下排为后排" });
-        _formation = new GridContainer { Columns = 3 };
-        formationBody.AddChild(_formation);
-        formationBody.AddChild(new Label { Text = "安全城镇事件" });
+        var eventScroll = new ScrollContainer { Name = "城镇事件", SizeFlagsHorizontal = SizeFlags.ExpandFill, SizeFlagsVertical = SizeFlags.ExpandFill };
+        tabs.AddChild(eventScroll);
+        var eventBody = new VBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
+        eventScroll.AddChild(eventBody);
+        eventBody.AddChild(new Label { Text = "安全城镇事件" });
         _events = new RichTextLabel { BbcodeEnabled = true, CustomMinimumSize = new Vector2(0, 260), ScrollActive = true };
-        formationBody.AddChild(_events);
+        eventBody.AddChild(_events);
     }
 
     public void Refresh(bool force = false)
@@ -149,7 +94,6 @@ public partial class P9TownPanel : VBoxContainer
         RebuildBuildings(session);
         RebuildCandidates(session);
         RebuildRoster(session);
-        RebuildFormation(session);
         _events!.Text = string.Join('\n', town.EventLog.TakeLast(12).Select(item => "• " + item));
     }
 
@@ -272,46 +216,24 @@ public partial class P9TownPanel : VBoxContainer
             {
                 Text = $"{(active ? "●" : "○")} {member.Identity.Name} · {Archetype(member.Identity.Archetype)} · Lv.{member.Level} · {Potential(member.Identity.Potential)}",
                 Alignment = HorizontalAlignment.Left,
-                TooltipText = $"{member.Identity.SkillSummary}\n{member.Identity.AiSummary}\n玩家只配置装备与阵位；成长加点不可见。",
+                TooltipText = $"{member.Identity.SkillSummary}\n{member.Identity.AiSummary}\n玩家配置装备和出征名单；战斗站位由职业与 AI 自动安排。",
             };
-            button.Pressed += () => { _selectedMember = member.Identity.StableId; _changed?.Invoke($"已选择 {member.Identity.Name}，点击阵型格放置。"); };
+            button.Pressed += () => _changed?.Invoke($"{member.Identity.Name} · {member.Identity.SkillSummary}");
             row.AddChild(button);
+            AddButton(row, active ? "撤下" : "编入", () =>
+            {
+                bool changed = active
+                    ? session.TryRemoveMercenaryFromParty(member.Identity.StableId)
+                    : session.TryAddMercenaryToParty(member.Identity.StableId);
+                _changed?.Invoke(changed
+                    ? $"{member.Identity.Name}已{(active ? "撤下" : "编入")}出征队伍。"
+                    : "远征中不能调整队伍，或队伍人数已达到传送装置上限。");
+            });
             AddButton(row, "解雇", () =>
             {
                 session.TryDismissMercenary(member.Identity.StableId, out string message);
                 _changed?.Invoke(message);
             });
-        }
-    }
-
-    private void RebuildFormation(P1GameSession session)
-    {
-        foreach (Node child in _formation!.GetChildren()) child.QueueFree();
-        for (int slot = 0; slot < 6; slot++)
-        {
-            int captured = slot;
-            string id = session.Town.Formation[slot];
-            P9MercenaryMember? member = session.Town.Roster.FirstOrDefault(item => item.Identity.StableId == id);
-            var button = new Button
-            {
-                Text = member is null ? $"{(slot < 3 ? "前" : "后")}{slot % 3 + 1}\n空" : $"{(slot < 3 ? "前" : "后")}{slot % 3 + 1}\n{member.Identity.Name}",
-                CustomMinimumSize = new Vector2(110, 62),
-                Disabled = slot >= session.Town.MercenaryCapacity,
-                TooltipText = slot >= session.Town.MercenaryCapacity ? "升级传送装置后开放" : "选择名册成员后点击放置；右键移出阵型",
-            };
-            button.Pressed += () =>
-            {
-                if (string.IsNullOrEmpty(_selectedMember)) { _changed?.Invoke("请先选择一名佣兵。"); return; }
-                _changed?.Invoke(session.TryPlaceMercenary(_selectedMember, captured) ? "佣兵阵型已更新。" : "远征中不能调整阵型，或目标格尚未开放。");
-            };
-            button.GuiInput += input =>
-            {
-                if (input is not InputEventMouseButton { ButtonIndex: MouseButton.Right, Pressed: true }) return;
-                _changed?.Invoke(session.TryClearMercenarySlot(captured)
-                    ? "佣兵已移出阵型。" : "远征中不能调整阵型，且至少保留三名上阵佣兵。");
-                button.AcceptEvent();
-            };
-            _formation.AddChild(button);
         }
     }
 

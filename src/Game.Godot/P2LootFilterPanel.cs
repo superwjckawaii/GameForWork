@@ -85,11 +85,13 @@ public partial class P2LootFilterPanel : VBoxContainer
             OkButtonText = "保存规则",
             CancelButtonText = "取消",
             Unresizable = false,
+            Exclusive = false,
+            Transient = true,
         };
         var body = new VBoxContainer { CustomMinimumSize = new Vector2(520, 420) };
         var scroll = new ScrollContainer
         {
-            CustomMinimumSize = new Vector2(540, 470),
+            CustomMinimumSize = new Vector2(540, 420),
             SizeFlagsHorizontal = SizeFlags.ExpandFill,
             SizeFlagsVertical = SizeFlags.ExpandFill,
         };
@@ -173,7 +175,7 @@ public partial class P2LootFilterPanel : VBoxContainer
             : null;
         LoadEditor(rule);
         _editor.Title = rule is null ? "新增过滤规则" : "编辑过滤规则";
-        _editor.PopupCentered(new Vector2I(600, 620));
+        _editor.PopupCentered(new Vector2I(600, 560));
     }
 
     private void LoadEditor(LootFilterRule? rule)

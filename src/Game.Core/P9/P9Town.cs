@@ -266,6 +266,24 @@ public sealed class P9TownState
         return true;
     }
 
+    public bool TryAddPartyMember(string stableId)
+    {
+        if (_formation.Contains(stableId) || _roster.All(member => member.Identity.StableId != stableId)) return false;
+        int slot = Array.FindIndex(_formation, 0, MercenaryCapacity, string.IsNullOrEmpty);
+        if (slot < 0) return false;
+        _formation[slot] = stableId;
+        return true;
+    }
+
+    public bool TryRemovePartyMember(string stableId)
+    {
+        int slot = Array.IndexOf(_formation, stableId);
+        if (slot < 0 || ActiveMembers().Count <= 3) return false;
+        _formation[slot] = string.Empty;
+        CompactParty();
+        return true;
+    }
+
     public IReadOnlyList<P9MercenaryMember> ActiveMembers() => _formation.Where(id => !string.IsNullOrEmpty(id))
         .Select(id => _roster.First(member => member.Identity.StableId == id)).ToArray();
 
@@ -292,7 +310,7 @@ public sealed class P9TownState
                 new PassiveTreeAllocation(), skill);
             extraLife = checked(extraLife + other.Sheet.MaximumLife().Value);
         }
-        int frontline = _formation.Take(3).Count(id => !string.IsNullOrEmpty(id));
+        int frontline = Math.Clamp(active.Count(member => member.Identity.Archetype == P9MercenaryArchetype.Guardian), 1, active.Count);
         DefensiveEquipment formationDefense = assembled.Sheet.Equipment with
         {
             Armor = checked(assembled.Sheet.Equipment.Armor + frontline * 20),
@@ -312,7 +330,7 @@ public sealed class P9TownState
             IncreasedCriticalChanceBasisPoints: assembled.IncreasedCriticalChanceBasisPoints,
             IncreasedBleedChanceBasisPoints: assembled.IncreasedBleedChanceBasisPoints,
             UseWarCry: true,
-            AiSummary: $"{active.Count} 人佣兵队；前排 {frontline} 人；技能和目标由成员自主决定。",
+            AiSummary: $"{active.Count} 人佣兵队；AI 自动安排 {frontline} 名前排；技能和目标由成员自主决定。",
             LifeFlask: new LifeFlaskDefinition(40, 30, 10),
             IncreasedLifeFlaskEffectBasisPoints: assembled.Equipment.Modifiers.IncreasedLifeFlaskEffectBasisPoints,
             AddedPhysicalDamage: checked(assembled.AddedPhysicalDamage + (active.Count - 1) * 2),
@@ -324,6 +342,13 @@ public sealed class P9TownState
             HasShield: assembled.Equipment.HasShield,
             BlockChanceBasisPoints: assembled.Equipment.HasShield ? 2_000 : 0,
             HasUsableWeapon: assembled.HasUsableWeapon);
+    }
+
+    private void CompactParty()
+    {
+        string[] active = _formation.Where(id => !string.IsNullOrEmpty(id)).Take(MercenaryCapacity).ToArray();
+        Array.Clear(_formation);
+        for (int index = 0; index < active.Length; index++) _formation[index] = active[index];
     }
 
     public bool TryTransmute(TownEconomyState economy, MetalCurrencyKind output)

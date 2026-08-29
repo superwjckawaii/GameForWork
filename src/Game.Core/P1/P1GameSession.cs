@@ -766,6 +766,22 @@ public sealed class P1GameSession
         return changed;
     }
 
+    public bool TryAddMercenaryToParty(string stableId)
+    {
+        if (World.Mercenaries.ActiveMap is not null) return false;
+        bool changed = Town.TryAddPartyMember(stableId);
+        if (changed) RefreshMercenaryPartyBuild();
+        return changed;
+    }
+
+    public bool TryRemoveMercenaryFromParty(string stableId)
+    {
+        if (World.Mercenaries.ActiveMap is not null) return false;
+        bool changed = Town.TryRemovePartyMember(stableId);
+        if (changed) RefreshMercenaryPartyBuild();
+        return changed;
+    }
+
     public bool TryRefundPassive(string stableId)
     {
         bool changed = Passives.TryRefund(stableId);

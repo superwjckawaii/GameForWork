@@ -53,9 +53,10 @@ public partial class P1PassiveTreeView : Control
         DrawRect(new Rect2(Vector2.Zero, Size), new Color("11151d"), true);
         if (_backdrop is not null)
         {
-            float side = Math.Min(Size.X, Size.Y) * .98f;
-            DrawTextureRect(_backdrop, new Rect2((Size - new Vector2(side, side)) / 2, new Vector2(side, side)),
-                false, new Color(1, 1, 1, .26f));
+            float extent = P1PassiveTree.LayoutExtent;
+            DrawTextureRect(_backdrop,
+                new Rect2(ToScreen(new Vector2(-extent, -extent)), new Vector2(extent * 2 * _zoom, extent * 2 * _zoom)),
+                false);
         }
         var drawnEdges = new HashSet<string>(StringComparer.Ordinal);
         foreach (PassiveNodeDefinition node in _nodes)
@@ -67,7 +68,9 @@ public partial class P1PassiveTreeView : Control
                 string edge = string.CompareOrdinal(node.StableId, neighbor) < 0 ? node.StableId + '|' + neighbor : neighbor + '|' + node.StableId;
                 if (!drawnEdges.Add(edge) || !_centers.TryGetValue(neighbor, out Vector2 linked)) continue;
                 bool active = _allocated.Contains(node.StableId) && _allocated.Contains(neighbor);
-                DrawLine(to, ToScreen(linked), active ? new Color("98713b") : new Color("303946"), active ? 2.2f : 1f, true);
+                if (!active) continue;
+                DrawLine(to, ToScreen(linked), new Color("6e3f16"), 5.2f, true);
+                DrawLine(to, ToScreen(linked), new Color("f0b84e"), 2.2f, true);
             }
         }
 
@@ -75,15 +78,6 @@ public partial class P1PassiveTreeView : Control
         {
             DrawCircle(ToScreen(_centers[selectedId]), 150f * _zoom, new Color("6b84ad44"));
             DrawCircle(ToScreen(_centers[selectedId]), 150f * _zoom, new Color("86a3cf"), false, 1.5f);
-        }
-
-        foreach (IGrouping<PassiveBranch, PassiveNodeDefinition> sector in _nodes.GroupBy(node => node.Branch))
-        {
-            PassiveNodeDefinition marker = sector.OrderByDescending(node => node.X * node.X + node.Y * node.Y).First();
-            Vector2 position = ToScreen(new Vector2(marker.X, marker.Y) * 1.12f);
-            if (VisibleWithMargin(position, 80))
-                DrawString(ThemeDB.FallbackFont, position, SectorName(sector.Key), HorizontalAlignment.Center,
-                    72, Math.Max(9, (int)(14 * Math.Clamp(_zoom, .7f, 1.1f))), new Color("837b69"));
         }
 
         foreach (PassiveNodeDefinition node in _nodes)
@@ -112,9 +106,6 @@ public partial class P1PassiveTreeView : Control
             }
         }
 
-        DrawString(ThemeDB.FallbackFont, new Vector2(12, 22),
-            $"铁誓星盘 · {_nodes.Length:N0} 节点 · 左键拖曳 / 滚轮缩放 · 双击分配 · 右键双击洗点",
-            HorizontalAlignment.Left, -1, 13, new Color("cbbd9d"));
         DrawMiniMap();
     }
 
@@ -277,14 +268,6 @@ public partial class P1PassiveTreeView : Control
         _ => "core.passive.start.physique",
     };
 
-    private static string SectorName(PassiveBranch branch) => branch switch
-    {
-        PassiveBranch.HeavyWeapon => "重兵", PassiveBranch.Bleed => "流血", PassiveBranch.Defense => "防御",
-        PassiveBranch.Mobility => "机动", PassiveBranch.Critical => "暴击", PassiveBranch.Accuracy => "命中",
-        PassiveBranch.Mana => "法力", PassiveBranch.WarCry => "战吼", PassiveBranch.Flask => "药剂",
-        PassiveBranch.Elemental => "元素", PassiveBranch.Void => "虚空", _ => "护盾",
-    };
-
     private static bool TryParseJewel(Variant data, out PassiveJewelKind jewel)
     {
         jewel = default;
@@ -303,7 +286,7 @@ public partial class P1PassiveTreeView : Control
         DrawRect(area, new Color("596473"), false, 1);
         foreach (PassiveNodeDefinition node in _nodes.Where(node => node.Kind != PassiveNodeKind.Small || node.Start != PassiveStartKind.None))
         {
-            Vector2 point = area.GetCenter() + new Vector2(node.X / 1700f * area.Size.X * .45f, node.Y / 1350f * area.Size.Y * .45f);
+            Vector2 point = area.GetCenter() + new Vector2(node.X, node.Y) / P1PassiveTree.LayoutExtent * area.Size * .44f;
             DrawCircle(point, node.Start == PassiveStartKind.None ? 1.2f : 2.4f, _allocated.Contains(node.StableId) ? AllocatedColor : LockedColor.Lightened(.25f));
         }
     }

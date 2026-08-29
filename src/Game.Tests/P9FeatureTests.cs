@@ -89,6 +89,24 @@ public sealed class P9FeatureTests
     }
 
     [Fact]
+    public void RosterCanAddAndRemoveMembersWithoutManualFormationSlots()
+    {
+        P1GameSession session = CreateSession();
+        session.World.Economy.AddDispositionProceeds(20_000, 2_000);
+        Assert.True(session.TryUpgradeTownBuilding(P9BuildingKind.Teleporter, out _));
+        session.AdvanceTownOnly(10_000_000);
+
+        string candidateId = session.Town.Candidates[0].StableId;
+        Assert.True(session.TryRecruitMercenary(candidateId, out _));
+        Assert.True(session.TryAddMercenaryToParty(candidateId));
+        Assert.Contains(candidateId, session.Town.ActiveMembers().Select(member => member.Identity.StableId));
+
+        Assert.True(session.TryRemoveMercenaryFromParty(candidateId));
+        Assert.DoesNotContain(candidateId, session.Town.ActiveMembers().Select(member => member.Identity.StableId));
+        Assert.Equal(3, session.World.Mercenaries.Build.PartySize);
+    }
+
+    [Fact]
     public void CartographyIdsRemainUniqueAcrossSaveRestore()
     {
         P1GameSession session = CreateSession();
