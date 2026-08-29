@@ -20,6 +20,7 @@ public enum PassiveBranch
 
 public enum PassiveNodeKind
 {
+    Start,
     Small,
     Notable,
     Mastery,
@@ -86,13 +87,35 @@ public enum PassiveEffectKind
     BleedMastery,
     DefenseMastery,
     WarCryMastery,
+    IncreasedOneHandDamageBasisPoints,
+    IncreasedSwordDamageBasisPoints,
+    IncreasedAxeDamageBasisPoints,
+    IncreasedMaceDamageBasisPoints,
+    IncreasedDaggerDamageBasisPoints,
+    IncreasedBowDamageBasisPoints,
+    IncreasedWandDamageBasisPoints,
+    IncreasedUnarmedDamageBasisPoints,
+    IncreasedShieldAttackDamageBasisPoints,
+    IncreasedDualWieldDamageBasisPoints,
+    IncreasedLifeLeechRateBasisPoints,
+    IncreasedManaLeechRateBasisPoints,
+    IncreasedShieldLeechRateBasisPoints,
+    LifeOnHit,
+    ManaOnHit,
+    IncreasedMinionDamageBasisPoints,
+    IncreasedCompanionDamageBasisPoints,
+    IncreasedConstructDamageBasisPoints,
+    IncreasedTrapDamageBasisPoints,
+    IncreasedAuraEffectBasisPoints,
+    IncreasedCurseEffectBasisPoints,
+    IncreasedEnergyShieldRechargeBasisPoints,
 }
 
 public sealed record PassiveEffect(PassiveEffectKind Kind, int Value = 0);
 
 public enum PassiveJewelKind { CrimsonMemory, VerdantMemory, AzureMemory }
 
-public enum PassiveStartKind { None, Physique, Dexterity, Spirit, Energy }
+public enum PassiveStartKind { None, Physique, Dexterity, Spirit, Energy, DexteritySpirit, PhysiqueEnergy }
 
 public sealed record PassiveNodeDefinition(
     string StableId,
@@ -106,7 +129,8 @@ public sealed record PassiveNodeDefinition(
     float Y = 0,
     int ThemeGroup = 0,
     PassiveStartKind Start = PassiveStartKind.None,
-    string SpecialRule = "")
+    string SpecialRule = "",
+    string MasteryGroup = "")
 {
     public IReadOnlyList<string> LinkedNodes => Connections ??
         (PrerequisiteId is null ? Array.Empty<string>() : [PrerequisiteId]);
@@ -172,7 +196,8 @@ public sealed record P205PassiveModifiers(
     int MoreDamageBasisPoints,
     bool ResoluteTechnique,
     bool IronReflexes,
-    bool Flaskless)
+    bool Flaskless,
+    IReadOnlyDictionary<PassiveEffectKind, int>? Specialized = null)
 {
     public static P205PassiveModifiers Empty { get; } = new(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, false, false, false);
@@ -191,11 +216,13 @@ public sealed record P205PassiveModifiers(
         if (tags.HasFlag(SkillTag.Duration) || tags.HasFlag(SkillTag.Bleed)) value += IncreasedDamageOverTimeBasisPoints;
         return value;
     }
+
+    public int SpecializedValue(PassiveEffectKind kind) => Specialized?.GetValueOrDefault(kind) ?? 0;
 }
 
 public static class P1PassiveTree
 {
-    public const float LayoutExtent = 820f;
+    public const float LayoutExtent = 900f;
 
     private static readonly IReadOnlyDictionary<string, PassiveNodeDefinition> NodeMap = P205PassiveTreeCatalog.Build()
         .ToDictionary(node => node.StableId, StringComparer.Ordinal);
@@ -212,25 +239,10 @@ public static class P1PassiveTree
     public static IReadOnlyList<string> Neighbors(string stableId) =>
         AdjacencyMap.TryGetValue(stableId, out IReadOnlyList<string>? result) ? result : [];
 
-    public static IReadOnlyList<PassiveEffect> MasteryOptions(PassiveNodeDefinition node)
-    {
-        if (node.Kind != PassiveNodeKind.Mastery) return [];
-        return node.Branch switch
-        {
-            PassiveBranch.HeavyWeapon => [new(PassiveEffectKind.IncreasedAttackSkillDamageBasisPoints, 2_000), new(PassiveEffectKind.IncreasedMeleeDamageBasisPoints, 2_000), new(PassiveEffectKind.IncreasedTwoHandDamageBasisPoints, 2_000), new(PassiveEffectKind.IncreasedAttackSpeedBasisPoints, 800), new(PassiveEffectKind.FlatAccuracy, 60), new(PassiveEffectKind.IncreasedPhysicalDamageBasisPoints, 2_000)],
-            PassiveBranch.Bleed => [new(PassiveEffectKind.IncreasedBleedDamageBasisPoints, 2_000), new(PassiveEffectKind.IncreasedPhysicalDamageOverTimeBasisPoints, 2_000), new(PassiveEffectKind.IncreasedBleedChanceBasisPoints, 1_500), new(PassiveEffectKind.IncreasedBleedDurationBasisPoints, 2_000), new(PassiveEffectKind.IncreasedDamageOverTimeBasisPoints, 2_000), new(PassiveEffectKind.IncreasedPhysicalDamageBasisPoints, 2_000)],
-            PassiveBranch.Defense => [new(PassiveEffectKind.IncreasedMaximumLifeBasisPoints, 800), new(PassiveEffectKind.IncreasedArmorBasisPoints, 2_000), new(PassiveEffectKind.FlatMaximumLife, 25), new(PassiveEffectKind.FlatLifeRegeneration, 18), new(PassiveEffectKind.BlockChanceBasisPoints, 300), new(PassiveEffectKind.VoidResistanceBasisPoints, 500)],
-            PassiveBranch.Mobility => [new(PassiveEffectKind.IncreasedMovementSpeedBasisPoints, 500), new(PassiveEffectKind.IncreasedAttackSpeedBasisPoints, 800), new(PassiveEffectKind.IncreasedEvasionBasisPoints, 2_000), new(PassiveEffectKind.SpellSuppressionBasisPoints, 500), new(PassiveEffectKind.IncreasedProjectileDamageBasisPoints, 2_000), new(PassiveEffectKind.FlatDexterity, 20)],
-            PassiveBranch.Critical => [new(PassiveEffectKind.IncreasedCriticalChanceBasisPoints, 2_500), new(PassiveEffectKind.IncreasedCriticalMultiplierBasisPoints, 2_000), new(PassiveEffectKind.IncreasedAttackSkillDamageBasisPoints, 2_000), new(PassiveEffectKind.IncreasedSpellDamageBasisPoints, 2_000), new(PassiveEffectKind.FlatAccuracy, 60), new(PassiveEffectKind.IncreasedAttackSpeedBasisPoints, 800)],
-            PassiveBranch.Accuracy => [new(PassiveEffectKind.FlatAccuracy, 100), new(PassiveEffectKind.IncreasedProjectileDamageBasisPoints, 2_000), new(PassiveEffectKind.IncreasedAttackSkillDamageBasisPoints, 2_000), new(PassiveEffectKind.IncreasedAttackSpeedBasisPoints, 800), new(PassiveEffectKind.IncreasedCriticalChanceBasisPoints, 2_000), new(PassiveEffectKind.IncreasedSkillRangeBasisPoints, 1_500)],
-            PassiveBranch.Mana => [new(PassiveEffectKind.FlatMaximumMana, 35), new(PassiveEffectKind.IncreasedManaRegenerationBasisPoints, 2_500), new(PassiveEffectKind.ReducedSkillCostBasisPoints, 800), new(PassiveEffectKind.IncreasedSpellDamageBasisPoints, 2_000), new(PassiveEffectKind.IncreasedCooldownRecoveryBasisPoints, 800), new(PassiveEffectKind.FlatSpirit, 20)],
-            PassiveBranch.WarCry => [new(PassiveEffectKind.IncreasedWarCryCooldownRecoveryBasisPoints, 2_000), new(PassiveEffectKind.IncreasedWarCryRangeBasisPoints, 2_000), new(PassiveEffectKind.IncreasedAreaDamageBasisPoints, 2_000), new(PassiveEffectKind.IncreasedAttackSkillDamageBasisPoints, 2_000), new(PassiveEffectKind.IncreasedMaximumLifeBasisPoints, 800), new(PassiveEffectKind.FlatSpirit, 20)],
-            PassiveBranch.Flask => [new(PassiveEffectKind.IncreasedLifeFlaskEffectBasisPoints, 2_000), new(PassiveEffectKind.FlatLifeRegeneration, 20), new(PassiveEffectKind.IncreasedMaximumLifeBasisPoints, 800), new(PassiveEffectKind.IncreasedMovementSpeedBasisPoints, 500), new(PassiveEffectKind.VoidResistanceBasisPoints, 500), new(PassiveEffectKind.ReducedSkillCostBasisPoints, 800)],
-            PassiveBranch.Elemental => [new(PassiveEffectKind.IncreasedElementalDamageBasisPoints, 2_000), new(PassiveEffectKind.IncreasedSpellDamageBasisPoints, 2_000), new(PassiveEffectKind.IncreasedAreaDamageBasisPoints, 2_000), new(PassiveEffectKind.FireResistanceBasisPoints, 500), new(PassiveEffectKind.ColdResistanceBasisPoints, 500), new(PassiveEffectKind.LightningResistanceBasisPoints, 500)],
-            PassiveBranch.Void => [new(PassiveEffectKind.IncreasedVoidDamageBasisPoints, 2_000), new(PassiveEffectKind.IncreasedDamageOverTimeBasisPoints, 2_000), new(PassiveEffectKind.IncreasedSpellDamageBasisPoints, 2_000), new(PassiveEffectKind.ReducedSkillCostBasisPoints, 800), new(PassiveEffectKind.IncreasedShieldBasisPoints, 2_000), new(PassiveEffectKind.VoidResistanceBasisPoints, 500)],
-            _ => [new(PassiveEffectKind.IncreasedShieldBasisPoints, 2_000), new(PassiveEffectKind.SpellSuppressionBasisPoints, 500), new(PassiveEffectKind.BlockChanceBasisPoints, 300), new(PassiveEffectKind.FlatEnergy, 20), new(PassiveEffectKind.IncreasedSpellDamageBasisPoints, 2_000), new(PassiveEffectKind.IncreasedArmorBasisPoints, 2_000)],
-        };
-    }
+    public static string StartNode(PassiveStartKind start) => P205PassiveTreeCatalog.StartNode(start);
+
+    public static IReadOnlyList<PassiveEffect> MasteryOptions(PassiveNodeDefinition node) =>
+        P205PassiveTreeCatalog.MasteryOptions(node);
 
     public static IReadOnlyList<string> FindShortestPath(string targetId, IReadOnlySet<string> allocated, PassiveStartKind start)
     {
@@ -258,7 +270,12 @@ public static class P1PassiveTree
         }
         if (!previous.ContainsKey(targetId)) return [];
         var path = new List<string>();
-        for (string? current = targetId; current is not null && !allocated.Contains(current); current = previous[current]) path.Add(current);
+        string root = P205PassiveTreeCatalog.StartNode(start);
+        for (string? current = targetId; current is not null && !allocated.Contains(current); current = previous[current])
+        {
+            if (current == root) break;
+            path.Add(current);
+        }
         path.Reverse();
         return path;
     }
@@ -575,15 +592,13 @@ public sealed class PassiveTreeAllocation
             return false;
         }
 
-        if (node.Start != PassiveStartKind.None && node.Start != StartKind)
+        if (node.Kind == PassiveNodeKind.Start || node.Start != PassiveStartKind.None)
         {
             return false;
         }
-        if (_allocated.Count == 0 && stableId != P205PassiveTreeCatalog.StartNode(StartKind))
-        {
-            return false;
-        }
-        if (_allocated.Count > 0 && !P1PassiveTree.Neighbors(stableId).Any(_allocated.Contains))
+        string root = P205PassiveTreeCatalog.StartNode(StartKind);
+        if (!P1PassiveTree.Neighbors(root).Contains(stableId) &&
+            !P1PassiveTree.Neighbors(stableId).Any(_allocated.Contains))
         {
             return false;
         }
@@ -633,7 +648,7 @@ public sealed class PassiveTreeAllocation
 
         var reachable = new HashSet<string>(StringComparer.Ordinal);
         string root = P205PassiveTreeCatalog.StartNode(StartKind);
-        var pending = new Queue<string>(remaining.Contains(root) ? [root] : []);
+        var pending = new Queue<string>(P1PassiveTree.Neighbors(root).Where(remaining.Contains));
         while (pending.TryDequeue(out string? current))
         {
             if (!reachable.Add(current))
@@ -681,7 +696,8 @@ public sealed class PassiveTreeAllocation
     {
         PassiveNodeDefinition node = P1PassiveTree.Get(stableId);
         if (!_allocated.Contains(stableId) || node.Kind != PassiveNodeKind.Mastery || option < 0 || option >= P1PassiveTree.MasteryOptions(node).Count) return false;
-        if (_masterySelections.Any(pair => pair.Key != stableId && P1PassiveTree.Get(pair.Key).Branch == node.Branch && pair.Value == option)) return false;
+        if (_masterySelections.Any(pair => pair.Key != stableId &&
+            P1PassiveTree.Get(pair.Key).MasteryGroup == node.MasteryGroup && pair.Value == option)) return false;
         _masterySelections[stableId] = option;
         return true;
     }
@@ -732,8 +748,8 @@ public sealed class PassiveTreeAllocation
             {
                 PassiveNodeDefinition node = P1PassiveTree.Get(stableId);
                 return result._allocated.Count == 0
-                    ? stableId == P205PassiveTreeCatalog.StartNode(start)
-                    : (node.Start is PassiveStartKind.None || node.Start == start) &&
+                    ? P1PassiveTree.Neighbors(P205PassiveTreeCatalog.StartNode(start)).Contains(stableId)
+                    : node.Start is PassiveStartKind.None &&
                       P1PassiveTree.Neighbors(stableId).Any(result._allocated.Contains);
             }).ToArray();
             if (connected.Length == 0)
@@ -825,6 +841,8 @@ public sealed class PassiveTreeAllocation
                 sums[(int)PassiveEffectKind.ReducedSkillCostBasisPoints], sums[(int)PassiveEffectKind.IncreasedSkillRangeBasisPoints],
                 sums[(int)PassiveEffectKind.IncreasedCooldownRecoveryBasisPoints], sums[(int)PassiveEffectKind.MoreDamageBasisPoints],
                 sums[(int)PassiveEffectKind.RuleResoluteTechnique] > 0, sums[(int)PassiveEffectKind.RuleIronReflexes] > 0,
-                sums[(int)PassiveEffectKind.RuleFlaskless] > 0));
+                sums[(int)PassiveEffectKind.RuleFlaskless] > 0,
+                Enum.GetValues<PassiveEffectKind>().Where(kind => (int)kind >= (int)PassiveEffectKind.IncreasedOneHandDamageBasisPoints)
+                    .Where(kind => sums[(int)kind] != 0).ToDictionary(kind => kind, kind => sums[(int)kind])));
     }
 }

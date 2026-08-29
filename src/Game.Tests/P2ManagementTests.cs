@@ -86,7 +86,7 @@ public sealed class P2ManagementTests
             CharacterGender.Androgynous,
             CharacterSkinTone.Umber,
             CharacterHairStyle.Cropped,
-            P1Ascendancy.IronOath), 77);
+            P23BaseClass.Fighter), 77);
         P1GameSessionSnapshot legacy = current.Capture() with { FormatVersion = 3, Management = null };
 
         Assert.Throws<InvalidDataException>(() => P1GameSession.Restore(legacy));
@@ -311,5 +311,5 @@ public sealed class P2ManagementTests
         CharacterGender.Androgynous,
         CharacterSkinTone.Umber,
         CharacterHairStyle.Cropped,
-        P1Ascendancy.IronOath), 88);
+        P23BaseClass.Fighter), 88);
 }

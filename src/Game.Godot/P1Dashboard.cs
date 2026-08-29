@@ -4,6 +4,8 @@ using GameForWork.Core.P1.Combat;
 using GameForWork.Core.P1.Items;
 using GameForWork.Core.P1.Progression;
 using GameForWork.Core.P1.World;
+using GameForWork.Core.P18;
+using GameForWork.Core.P23;
 using Godot;
 
 namespace GameForWork.GodotClient;
@@ -137,17 +139,26 @@ public partial class P1Dashboard : VBoxContainer
         title.AddThemeFontSizeOverride("font_size", 24);
         card.AddChild(title);
         card.AddChild(new Label { Text = "P1B 精细像素角色支持肤色、发型与装备组合。" });
-        var name = new LineEdit { PlaceholderText = "角色名（2～16 字）", Text = "铁誓者" };
+        var name = new LineEdit { PlaceholderText = "角色名（2～16 字）", Text = "冒险者" };
         card.AddChild(name);
         OptionButton gender = AddOptions(card, "性别", ["女性", "男性", "中性"]);
         OptionButton skin = AddOptions(card, "肤色", ["苍白", "浅色", "棕褐", "深色"]);
         OptionButton hair = AddOptions(card, "发型", ["短发", "长发", "编发", "剃发"]);
-        OptionButton ascendancy = AddOptions(card, "进阶", ["铁誓者", "破阵者"]);
-        card.AddChild(new Label
+        P23ClassDefinition[] classes = P23ClassCatalog.All.ToArray();
+        OptionButton baseClass = AddOptions(card, "基础职业", classes.Select(value => value.DisplayName).ToArray());
+        var classSummary = new Label
         {
-            Text = "铁誓者：稳定的双手武器与防御起点。\n破阵者：P1 开放身份选择，专属分支将在后续内容扩展。",
             AutowrapMode = TextServer.AutowrapMode.WordSmart,
-        });
+        };
+        card.AddChild(classSummary);
+        void RefreshClassSummary(long index)
+        {
+            P23ClassDefinition definition = classes[(int)index];
+            classSummary.Text = $"{definition.DisplayName}：{definition.Summary}\n升华：" +
+                                string.Join("、", definition.Ascendancies.Select(P18AscendancyCatalog.DisplayName));
+        }
+        baseClass.ItemSelected += RefreshClassSummary;
+        RefreshClassSummary(0);
         AddButton(card, "确认创建并进入军锋镇", () =>
         {
             try
@@ -157,7 +168,7 @@ public partial class P1Dashboard : VBoxContainer
                     (CharacterGender)gender.Selected,
                     (CharacterSkinTone)skin.Selected,
                     (CharacterHairStyle)hair.Selected,
-                    (P1Ascendancy)ascendancy.Selected).Validate();
+                    classes[baseClass.Selected].Id).Validate();
                 _createCharacter?.Invoke(identity);
             }
             catch (Exception exception)
@@ -508,7 +519,7 @@ public partial class P1Dashboard : VBoxContainer
             $"\n地图库存 {_session.World.MapInventory.Count} · 模拟速度 {_session.SimulationSpeed}×";
         EquipmentSummary equipment = _session.HeroBuild.Equipment;
         _buildStatus!.Text =
-            $"{_session.Player.Name} · {_session.Player.Ascendancy} · Lv.{_session.World.Hero.Progression.Level} " +
+            $"{_session.Player.Name} · {P23ClassCatalog.Get(_session.Player.BaseClass).DisplayName} · Lv.{_session.World.Hero.Progression.Level} " +
             $"XP {_session.World.Hero.Progression.Experience}/{CharacterProgression.TotalExperienceToCap}\n" +
             $"体魄 {_session.HeroBuild.Sheet.Attributes.Physique} · 灵巧 {_session.HeroBuild.Sheet.Attributes.Dexterity} · " +
             $"精神 {_session.HeroBuild.Sheet.Attributes.Spirit} · 能量 {_session.HeroBuild.Sheet.Attributes.Energy}\n" +

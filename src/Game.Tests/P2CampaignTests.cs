@@ -120,5 +120,5 @@ public sealed class P2CampaignTests
         CharacterGender.Androgynous,
         CharacterSkinTone.Umber,
         CharacterHairStyle.Braided,
-        P1Ascendancy.IronOath), 4_242);
+        P23BaseClass.Fighter), 4_242);
 }

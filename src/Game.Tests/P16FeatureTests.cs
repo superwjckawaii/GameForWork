@@ -114,7 +114,7 @@ public sealed class P16FeatureTests
 
     private static P1GameSession Session() => P1GameSession.CreateNew(new PlayerIdentity(
         "P16测试者", CharacterGender.Androgynous, CharacterSkinTone.Umber,
-        CharacterHairStyle.Braided, P1Ascendancy.IronOath), 16);
+        CharacterHairStyle.Braided, P23BaseClass.Fighter), 16);
 
     private static P1TeamBuild StrongBuild() => new(
         new CharacterSheet(100, new CharacterAttributes(600, 300, 300, 200),

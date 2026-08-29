@@ -15,7 +15,7 @@ public sealed class P18FeatureTests
     public void ThreeAscendanciesHaveSixTwoNodeDirections()
     {
         Assert.Equal(36, P18AscendancyCatalog.Nodes.Count);
-        foreach (P18Ascendancy path in Enum.GetValues<P18Ascendancy>().Where(value => value != P18Ascendancy.None))
+        foreach (P18Ascendancy path in Enum.GetValues<P18Ascendancy>().Where(P18AscendancyCatalog.IsImplemented))
         {
             IReadOnlyList<P18AscendancyNode> nodes = P18AscendancyCatalog.For(path);
             Assert.Equal(12, nodes.Count);
@@ -33,7 +33,7 @@ public sealed class P18FeatureTests
     public void SixBenchmarkBuildsCoverEntryAndEndgameForEveryPath()
     {
         Assert.Equal(6, P18BenchmarkBuilds.All.Count);
-        foreach (P18Ascendancy path in Enum.GetValues<P18Ascendancy>().Where(value => value != P18Ascendancy.None))
+        foreach (P18Ascendancy path in Enum.GetValues<P18Ascendancy>().Where(P18AscendancyCatalog.IsImplemented))
         {
             P18BenchmarkBuild[] builds = P18BenchmarkBuilds.All.Where(build => build.Ascendancy == path).ToArray();
             Assert.Equal(2, builds.Length);
@@ -53,7 +53,7 @@ public sealed class P18FeatureTests
         state.AwardBreakthroughPoint(2);
         state.AwardBreakthroughPoint(10);
         Assert.Equal(8, state.BreakthroughPoints);
-        Assert.True(state.TrySelectAscendancy(P18Ascendancy.BastionEnvoy));
+        Assert.True(state.TrySelectAscendancy(P18Ascendancy.IronGuardian));
         Assert.True(state.TryAllocateAscendancy(P18NodeIds.BastionArmorSmall));
         Assert.True(state.TryAllocateAscendancy(P18NodeIds.BastionArmorCore));
         Assert.False(state.TryAllocateAscendancy(P18NodeIds.BloodLifeSmall));
@@ -64,12 +64,12 @@ public sealed class P18FeatureTests
     {
         var state = new P10EndgameState();
         state.AwardBreakthroughPoint(4);
-        Assert.True(state.TrySelectAscendancy(P18Ascendancy.Linebreaker));
+        Assert.True(state.TrySelectAscendancy(P18Ascendancy.Warbreaker));
         Assert.True(state.TryAllocateAscendancy(P18NodeIds.BreakerAftershockSmall));
         Assert.True(state.TryAllocateAscendancy(P18NodeIds.BreakerAftershockCore));
 
         P10EndgameState restored = P10EndgameState.Restore(state.Capture());
-        Assert.Equal(P18Ascendancy.Linebreaker, restored.SelectedAscendancy);
+        Assert.Equal(P18Ascendancy.Warbreaker, restored.SelectedAscendancy);
         Assert.Equal(state.AscendancyPassives.Order(), restored.AscendancyPassives.Order());
     }
 
@@ -96,7 +96,7 @@ public sealed class P18FeatureTests
     [Fact]
     public void BloodContractUsesLifeWithoutAnAiSafetyFloor()
     {
-        P18CombatProfile profile = new(P18Ascendancy.BloodConqueror,
+        P18CombatProfile profile = new(P18Ascendancy.BloodFighter,
             [P18NodeIds.BloodLifeSmall, P18NodeIds.BloodLifeCore]);
         P6ResolvedSkill original = P6CombatSkillRules.Resolve(new SkillConfiguration(P1SkillIds.HeavyStrike, SkillSupport.None), 1_000);
         P6ResolvedSkill result = P18AscendancyRules.ApplySkillCost(original, P1Skills.HeavyStrike.Tags, 1_000, profile);
@@ -110,7 +110,7 @@ public sealed class P18FeatureTests
     [Fact]
     public void BastionLayersUseUnblockedAttackAndClearOnBlock()
     {
-        var runtime = new P18CombatRuntime(new(P18Ascendancy.BastionEnvoy,
+        var runtime = new P18CombatRuntime(new(P18Ascendancy.IronGuardian,
             [P18NodeIds.BastionLayersSmall, P18NodeIds.BastionLayersCore]));
         for (int index = 0; index < 5; index++) runtime.OnUnblockedAttack();
         Assert.Equal(5, runtime.BastionLayers);
@@ -122,7 +122,7 @@ public sealed class P18FeatureTests
     [Fact]
     public void MarchRequiresSixMetersAndNextSlamConsumesIt()
     {
-        var runtime = new P18CombatRuntime(new(P18Ascendancy.Linebreaker,
+        var runtime = new P18CombatRuntime(new(P18Ascendancy.Warbreaker,
             [P18NodeIds.BreakerMarchSmall, P18NodeIds.BreakerMarchCore]));
         runtime.Moved(5_999); Assert.False(runtime.MarchReady);
         runtime.Moved(1); Assert.True(runtime.MarchReady);
@@ -143,7 +143,7 @@ public sealed class P18FeatureTests
 
     private static P1GameSession NewSession() => P1GameSession.CreateNew(new PlayerIdentity(
         "升华测试", CharacterGender.Androgynous, CharacterSkinTone.Umber, CharacterHairStyle.Cropped,
-        P1Ascendancy.IronOath), 1801);
+        P23BaseClass.Fighter), 1801);
 
     private static P1TeamBuild PowerfulBuild() => new(
         new CharacterSheet(80, new CharacterAttributes(300, 180, 160, 120), new DefensiveEquipment(900, 200, 0), FlatMaximumLife: 2_000),

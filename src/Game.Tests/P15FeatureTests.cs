@@ -48,5 +48,5 @@ public sealed class P15FeatureTests
 
     private static P1GameSession Session(ulong seed, bool tutorial = true) => P1GameSession.CreateNew(new PlayerIdentity(
         "封版铁誓", CharacterGender.Androgynous, CharacterSkinTone.Fair, CharacterHairStyle.Cropped,
-        P1Ascendancy.IronOath), seed, tutorial);
+        P23BaseClass.Fighter), seed, tutorial);
 }

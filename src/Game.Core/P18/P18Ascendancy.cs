@@ -5,9 +5,24 @@ namespace GameForWork.Core.P18;
 public enum P18Ascendancy
 {
     None,
-    BloodConqueror,
-    BastionEnvoy,
-    Linebreaker,
+    BloodFighter,
+    IronGuardian,
+    Warbreaker,
+    Marksman,
+    Shadowblade,
+    Venomist,
+    SoulShepherd,
+    SpiritCantor,
+    Hexbinder,
+    Elementalist,
+    VoidScholar,
+    AegisMage,
+    MartialMonk,
+    BeastKeeper,
+    PhantomMaster,
+    Runecarver,
+    Spellarmor,
+    IdolForger,
 }
 
 public enum P18NodeKind { Reinforcement, Core }
@@ -77,6 +92,8 @@ public static class P18AscendancyCatalog
         .ToDictionary(node => node.StableId, StringComparer.Ordinal);
 
     public static IReadOnlyCollection<P18AscendancyNode> Nodes => NodeMap.Values.ToArray();
+    public static bool IsImplemented(P18Ascendancy ascendancy) => ascendancy is
+        P18Ascendancy.BloodFighter or P18Ascendancy.IronGuardian or P18Ascendancy.Warbreaker;
     public static IReadOnlyList<P18AscendancyNode> For(P18Ascendancy ascendancy) => NodeMap.Values
         .Where(node => node.Ascendancy == ascendancy).OrderBy(node => node.Direction).ThenBy(node => node.Kind).ToArray();
     public static P18AscendancyNode Get(string id) => NodeMap.TryGetValue(id, out P18AscendancyNode? node)
@@ -84,69 +101,84 @@ public static class P18AscendancyCatalog
 
     public static string DisplayName(P18Ascendancy ascendancy) => ascendancy switch
     {
-        P18Ascendancy.BloodConqueror => "血征者",
-        P18Ascendancy.BastionEnvoy => "壁垒使",
-        P18Ascendancy.Linebreaker => "破阵者",
+        P18Ascendancy.BloodFighter => "血战士",
+        P18Ascendancy.IronGuardian => "铁壁卫",
+        P18Ascendancy.Warbreaker => "破军者",
+        P18Ascendancy.Marksman => "神射手",
+        P18Ascendancy.Shadowblade => "影刃客",
+        P18Ascendancy.Venomist => "毒术师",
+        P18Ascendancy.SoulShepherd => "牧魂师",
+        P18Ascendancy.SpiritCantor => "颂灵师",
+        P18Ascendancy.Hexbinder => "咒契师",
+        P18Ascendancy.Elementalist => "元素使",
+        P18Ascendancy.VoidScholar => "虚空学者",
+        P18Ascendancy.AegisMage => "秘盾师",
+        P18Ascendancy.MartialMonk => "行武僧",
+        P18Ascendancy.BeastKeeper => "灵兽使",
+        P18Ascendancy.PhantomMaster => "幻身宗师",
+        P18Ascendancy.Runecarver => "刻印师",
+        P18Ascendancy.Spellarmor => "魔铠师",
+        P18Ascendancy.IdolForger => "铸像师",
         _ => "尚未升华",
     };
 
     private static IReadOnlyList<P18AscendancyNode> Build()
     {
         var result = new List<P18AscendancyNode>(36);
-        AddBranch(result, P18Ascendancy.BloodConqueror, 0, P18NodeIds.BloodLifeSmall, "血肉薪火",
+        AddBranch(result, P18Ascendancy.BloodFighter, 0, P18NodeIds.BloodLifeSmall, "血肉薪火",
             "最大生命提高5%；技能生命消耗降低10%", P18NodeIds.BloodLifeCore, "血铸契约",
             "攻击技能改用生命；生命消耗至少为最大生命2%，支付生命的攻击命中与流血造成50%更多伤害");
-        AddBranch(result, P18Ascendancy.BloodConqueror, 1, P18NodeIds.BloodTwinSmall, "深红刀口",
+        AddBranch(result, P18Ascendancy.BloodFighter, 1, P18NodeIds.BloodTwinSmall, "深红刀口",
             "流血概率提高25%；流血伤害提高15%", P18NodeIds.BloodTwinCore, "双痕法则",
             "最强两条流血同时生效，每条造成原伤害80%");
-        AddBranch(result, P18Ascendancy.BloodConqueror, 2, P18NodeIds.BloodRuptureSmall, "急血奔流",
+        AddBranch(result, P18Ascendancy.BloodFighter, 2, P18NodeIds.BloodRuptureSmall, "急血奔流",
             "流血造成伤害速度提高15%，持续时间缩短10%", P18NodeIds.BloodRuptureCore, "裂创连击",
             "命中流血敌人施加裂创，最多3层；每层使流血造成伤害速度提高15%");
-        AddBranch(result, P18Ascendancy.BloodConqueror, 3, P18NodeIds.BloodRageSmall, "沸血战意",
+        AddBranch(result, P18Ascendancy.BloodFighter, 3, P18NodeIds.BloodRageSmall, "沸血战意",
             "最近3秒支付过生命时攻击速度提高8%", P18NodeIds.BloodRageCore, "血怒不息",
             "支付生命、施加流血和击杀流血敌人积累血怒；满层提供40%更多物理与流血伤害和10%攻击速度");
-        AddBranch(result, P18Ascendancy.BloodConqueror, 4, P18NodeIds.BloodLowLifeSmall, "濒战本能",
+        AddBranch(result, P18Ascendancy.BloodFighter, 4, P18NodeIds.BloodLowLifeSmall, "濒战本能",
             "低生命时生命偷取和药剂生命恢复提高25%，攻击速度提高8%", P18NodeIds.BloodLowLifeCore, "死战不退",
             "低生命时物理命中与流血造成60%更多伤害，受到击中伤害降低25%，免疫眩晕");
-        AddBranch(result, P18Ascendancy.BloodConqueror, 5, P18NodeIds.BloodTideSmall, "饮血收割",
+        AddBranch(result, P18Ascendancy.BloodFighter, 5, P18NodeIds.BloodTideSmall, "饮血收割",
             "物理攻击伤害的1%转化为生命偷取", P18NodeIds.BloodTideCore, "赤潮归身",
             "流血击杀传播120%最强剩余流血并回复4%最大生命；持续伤害稀有怪或Boss时每秒回复4%最大生命；触发恢复后2秒内受到击中伤害降低20%");
 
-        AddBranch(result, P18Ascendancy.BastionEnvoy, 0, P18NodeIds.BastionArmorSmall, "层叠甲幕",
+        AddBranch(result, P18Ascendancy.IronGuardian, 0, P18NodeIds.BastionArmorSmall, "层叠甲幕",
             "护甲提高25%；最大生命提高5%", P18NodeIds.BastionArmorCore, "百炼甲幕",
             "30%护甲参与元素击中减伤；元素击中伤害降低20%");
-        AddBranch(result, P18Ascendancy.BastionEnvoy, 1, P18NodeIds.BastionAttackBlockSmall, "盾列操练",
+        AddBranch(result, P18Ascendancy.IronGuardian, 1, P18NodeIds.BastionAttackBlockSmall, "盾列操练",
             "装备盾牌时攻击格挡率额外提高8%；盾牌护甲提高25%", P18NodeIds.BastionAttackBlockCore, "绝对盾面",
             "攻击格挡率额外提高12%、上限提高至80%；未格挡攻击击中伤害降低20%");
-        AddBranch(result, P18Ascendancy.BastionEnvoy, 2, P18NodeIds.BastionCounterSmall, "回震刃缘",
+        AddBranch(result, P18Ascendancy.IronGuardian, 2, P18NodeIds.BastionCounterSmall, "回震刃缘",
             "反击伤害提高30%、冷却恢复提高20%、范围提高15%", P18NodeIds.BastionCounterCore, "复仇壁垒",
             "格挡积累复仇；满3层反击造成180%更多伤害并回复6%最大生命");
-        AddBranch(result, P18Ascendancy.BastionEnvoy, 3, P18NodeIds.BastionLayersSmall, "受击成垒",
+        AddBranch(result, P18Ascendancy.IronGuardian, 3, P18NodeIds.BastionLayersSmall, "受击成垒",
             "受到未格挡攻击后，2秒内护甲提高20%", P18NodeIds.BastionLayersCore, "不破阵地",
             "未格挡攻击积累壁垒；满层降低25%击中伤害、反击造成50%更多伤害并每秒回复4%最大生命；格挡攻击后清空");
-        AddBranch(result, P18Ascendancy.BastionEnvoy, 4, P18NodeIds.BastionGuardSmall, "守护轮转",
+        AddBranch(result, P18Ascendancy.IronGuardian, 4, P18NodeIds.BastionGuardSmall, "守护轮转",
             "护卫冷却恢复提高25%、持续时间提高20%", P18NodeIds.BastionGuardCore, "守誓疆域",
             "最大生命提高20%；战旗保留降低50%、效果提高30%；护卫期间额外降低25%击中伤害并每秒回复5%最大生命");
-        AddBranch(result, P18Ascendancy.BastionEnvoy, 5, P18NodeIds.BastionSpellBlockSmall, "咒击偏转",
+        AddBranch(result, P18Ascendancy.IronGuardian, 5, P18NodeIds.BastionSpellBlockSmall, "咒击偏转",
             "装备盾牌时获得8%法术格挡率", P18NodeIds.BastionSpellBlockCore, "镜铁守誓",
             "获得攻击格挡率60%的额外法术格挡；法术格挡降低70%伤害，未格挡法术击中伤害降低25%");
 
-        AddBranch(result, P18Ascendancy.Linebreaker, 0, P18NodeIds.BreakerTwoHandSmall, "巨兵驾驭",
+        AddBranch(result, P18Ascendancy.Warbreaker, 0, P18NodeIds.BreakerTwoHandSmall, "巨兵驾驭",
             "双手武器伤害提高15%；双手攻击速度提高8%", P18NodeIds.BreakerTwoHandCore, "重兵裁决",
             "双手攻击击中造成60%更多伤害，但攻击速度降低10%");
-        AddBranch(result, P18Ascendancy.Linebreaker, 1, P18NodeIds.BreakerAftershockSmall, "震域扩张",
+        AddBranch(result, P18Ascendancy.Warbreaker, 1, P18NodeIds.BreakerAftershockSmall, "震域扩张",
             "猛击范围提高20%；猛击伤害提高15%", P18NodeIds.BreakerAftershockCore, "震岳余势",
             "猛击命中0.5秒后产生造成原始击中实际伤害100%的余震");
-        AddBranch(result, P18Ascendancy.Linebreaker, 2, P18NodeIds.BreakerMarchSmall, "踏阵而行",
+        AddBranch(result, P18Ascendancy.Warbreaker, 2, P18NodeIds.BreakerMarchSmall, "踏阵而行",
             "移动技能冷却恢复提高25%；移动技能和猛击范围提高15%", P18NodeIds.BreakerMarchCore, "裂阵行军",
             "累计实际移动6米获得行军势；下一次猛击范围提高50%、造成60%更多伤害，击杀可重置移动技能冷却");
-        AddBranch(result, P18Ascendancy.Linebreaker, 3, P18NodeIds.BreakerStunSmall, "撼魂重势",
+        AddBranch(result, P18Ascendancy.Warbreaker, 3, P18NodeIds.BreakerStunSmall, "撼魂重势",
             "眩晕积累提高40%；眩晕持续时间提高25%", P18NodeIds.BreakerStunCore, "山崩之王",
             "稀有怪和Boss可完整眩晕；眩晕期间承受100%更多伤害，触发时产生150%击中伤害的震波");
-        AddBranch(result, P18Ascendancy.Linebreaker, 4, P18NodeIds.BreakerArmorBreakSmall, "碎甲专断",
+        AddBranch(result, P18Ascendancy.Warbreaker, 4, P18NodeIds.BreakerArmorBreakSmall, "碎甲专断",
             "物理攻击每次技能使用有25%概率额外施加1层破甲", P18NodeIds.BreakerArmorBreakCore, "碎城铁律",
             "破甲上限提高至8层、每层降低12%护甲；满层额外承受50%更多物理伤害");
-        AddBranch(result, P18Ascendancy.Linebreaker, 5, P18NodeIds.BreakerWarCrySmall, "号令回响",
+        AddBranch(result, P18Ascendancy.Warbreaker, 5, P18NodeIds.BreakerWarCrySmall, "号令回响",
             "战吼冷却恢复提高30%、持续时间提高25%", P18NodeIds.BreakerWarCryCore, "号令无尽",
             "战吼不占用攻击动作时间，并使接下来4次近战攻击造成50%更多伤害");
         return result;
@@ -347,27 +379,27 @@ public static class P18BenchmarkBuilds
 {
     public static IReadOnlyList<P18BenchmarkBuild> All { get; } =
     [
-        Build("blood.entry", "血征者·开荒流血", P18Ascendancy.BloodConqueror, false,
+        Build("blood.entry", "血战士·开荒流血", P18Ascendancy.BloodFighter, false,
             [P18NodeIds.BloodLifeSmall, P18NodeIds.BloodLifeCore, P18NodeIds.BloodTwinSmall, P18NodeIds.BloodTwinCore,
              P18NodeIds.BloodRuptureSmall, P18NodeIds.BloodRuptureCore, P18NodeIds.BloodTideSmall, P18NodeIds.BloodTideCore],
             [P1SkillIds.HeavyStrike, P1SkillIds.BloodTideSpin], "低装备门槛、流血清图与自回复"),
-        Build("blood.endgame", "血征者·终局死战", P18Ascendancy.BloodConqueror, true,
+        Build("blood.endgame", "血战士·终局死战", P18Ascendancy.BloodFighter, true,
             [P18NodeIds.BloodLifeSmall, P18NodeIds.BloodLifeCore, P18NodeIds.BloodRageSmall, P18NodeIds.BloodRageCore,
              P18NodeIds.BloodLowLifeSmall, P18NodeIds.BloodLowLifeCore, P18NodeIds.BloodTideSmall, P18NodeIds.BloodTideCore],
             [P1SkillIds.HeavyStrike, P1SkillIds.BloodBurst], "低生命攻坚与恢复保护"),
-        Build("bastion.entry", "壁垒使·开荒盾列", P18Ascendancy.BastionEnvoy, false,
+        Build("bastion.entry", "铁壁卫·开荒盾列", P18Ascendancy.IronGuardian, false,
             [P18NodeIds.BastionArmorSmall, P18NodeIds.BastionArmorCore, P18NodeIds.BastionAttackBlockSmall, P18NodeIds.BastionAttackBlockCore,
              P18NodeIds.BastionCounterSmall, P18NodeIds.BastionCounterCore, P18NodeIds.BastionLayersSmall, P18NodeIds.BastionLayersCore],
             [P1SkillIds.HeavyStrike, P1SkillIds.VengefulCounter], "廉价盾牌、格挡与反击"),
-        Build("bastion.endgame", "壁垒使·终局守誓", P18Ascendancy.BastionEnvoy, true,
+        Build("bastion.endgame", "铁壁卫·终局守誓", P18Ascendancy.IronGuardian, true,
             [P18NodeIds.BastionAttackBlockSmall, P18NodeIds.BastionAttackBlockCore, P18NodeIds.BastionSpellBlockSmall, P18NodeIds.BastionSpellBlockCore,
              P18NodeIds.BastionGuardSmall, P18NodeIds.BastionGuardCore, P18NodeIds.BastionLayersSmall, P18NodeIds.BastionLayersCore],
             [P1SkillIds.VengefulCounter, P1SkillIds.IronOathBanner], "双格挡、护卫和天垒存活"),
-        Build("breaker.entry", "破阵者·开荒重兵", P18Ascendancy.Linebreaker, false,
+        Build("breaker.entry", "破军者·开荒重兵", P18Ascendancy.Warbreaker, false,
             [P18NodeIds.BreakerTwoHandSmall, P18NodeIds.BreakerTwoHandCore, P18NodeIds.BreakerAftershockSmall, P18NodeIds.BreakerAftershockCore,
              P18NodeIds.BreakerWarCrySmall, P18NodeIds.BreakerWarCryCore, P18NodeIds.BreakerArmorBreakSmall, P18NodeIds.BreakerArmorBreakCore],
             [P1SkillIds.EarthCleave, P1SkillIds.WarCry], "双手猛击、余震与破甲"),
-        Build("breaker.endgame", "破阵者·终局山崩", P18Ascendancy.Linebreaker, true,
+        Build("breaker.endgame", "破军者·终局山崩", P18Ascendancy.Warbreaker, true,
             [P18NodeIds.BreakerAftershockSmall, P18NodeIds.BreakerAftershockCore, P18NodeIds.BreakerMarchSmall, P18NodeIds.BreakerMarchCore,
              P18NodeIds.BreakerStunSmall, P18NodeIds.BreakerStunCore, P18NodeIds.BreakerArmorBreakSmall, P18NodeIds.BreakerArmorBreakCore],
             [P1SkillIds.SeismicCharge, P1SkillIds.EarthCleave], "移动蓄势、完整眩晕与高层破甲"),

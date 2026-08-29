@@ -96,7 +96,7 @@ public sealed class P22FeatureTests
 
     private static P1GameSession Session(bool tutorialEnabled) => P1GameSession.CreateNew(new PlayerIdentity(
         "P22 封版巡行者", CharacterGender.Androgynous, CharacterSkinTone.Fair, CharacterHairStyle.Cropped,
-        P1Ascendancy.IronOath), 0x220022UL, tutorialEnabled);
+        P23BaseClass.Fighter), 0x220022UL, tutorialEnabled);
 
     private static P1GameSession CompleteCampaignCheckpoint(P1GameSession session)
     {

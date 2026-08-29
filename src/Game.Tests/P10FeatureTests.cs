@@ -48,7 +48,7 @@ public sealed class P10FeatureTests
         state.RecordCitadelVictory();
         Assert.True(state.CitadelDefeated);
         Assert.Equal(2, state.BreakthroughPoints);
-        Assert.True(state.TrySelectAscendancy(P18Ascendancy.BloodConqueror));
+        Assert.True(state.TrySelectAscendancy(P18Ascendancy.BloodFighter));
         Assert.True(state.TryAllocateAscendancy(P18NodeIds.BloodLifeSmall));
     }
 
@@ -56,13 +56,17 @@ public sealed class P10FeatureTests
     public void MasteryChoiceAndRadiusJewelAffectModifiersAndRestore()
     {
         var allocation = new PassiveTreeAllocation();
-        Assert.True(allocation.TryAllocatePath("core.passive.v2.cluster.00.02.cap", 120));
-        Assert.True(allocation.TrySelectMastery("core.passive.v2.cluster.00.02.cap", 0));
-        Assert.True(allocation.TryAllocatePath("core.passive.v2.jewel.00.00", 120));
-        Assert.True(allocation.TrySocketJewel("core.passive.v2.jewel.00.00", PassiveJewelKind.CrimsonMemory));
+        Assert.True(allocation.TryAllocatePath("core.passive.v3.cluster.00.00.mastery", 120));
+        Assert.True(allocation.TrySelectMastery("core.passive.v3.cluster.00.00.mastery", 0));
+        Assert.True(allocation.TryAllocatePath("core.passive.v3.jewel.00.00", 120));
+        Assert.True(allocation.TrySocketJewel("core.passive.v3.jewel.00.00", PassiveJewelKind.CrimsonMemory));
 
         PassiveTreeAllocation restored = PassiveTreeAllocation.Restore(allocation.Allocated, 5, allocation.MasterySelections, allocation.SocketedJewels);
-        Assert.Equal(allocation.CalculateModifiers(), restored.CalculateModifiers());
+        PassiveBuildModifiers expected = allocation.CalculateModifiers();
+        PassiveBuildModifiers actual = restored.CalculateModifiers();
+        Assert.Equal(expected with { Advanced = null }, actual with { Advanced = null });
+        Assert.Equal(expected.Advanced! with { Specialized = null }, actual.Advanced! with { Specialized = null });
+        Assert.Equal(expected.Advanced.Specialized!.OrderBy(pair => pair.Key), actual.Advanced.Specialized!.OrderBy(pair => pair.Key));
     }
 
     [Fact]
@@ -70,10 +74,9 @@ public sealed class P10FeatureTests
     {
         string[] capturedOrder =
         [
-            "core.passive.v2.travel.00.08",
-            "core.passive.start.physique",
-            "core.passive.v2.travel.00.10",
-            "core.passive.v2.travel.00.09",
+            "core.passive.v3.travel.00.13",
+            "core.passive.v3.travel.00.15",
+            "core.passive.v3.travel.00.14",
         ];
 
         PassiveTreeAllocation restored = PassiveTreeAllocation.Restore(capturedOrder, 0);
@@ -85,19 +88,18 @@ public sealed class P10FeatureTests
     public void ShortestPathIsAtomicAndMasteryAndJewelChoicesAreUnique()
     {
         var allocation = new PassiveTreeAllocation();
-        string farMastery = "core.passive.v2.cluster.00.02.cap";
+        string farMastery = "core.passive.v3.cluster.00.00.mastery";
         Assert.False(allocation.TryAllocatePath(farMastery, 2));
         Assert.Empty(allocation.Allocated);
         Assert.True(allocation.TryAllocatePath(farMastery, 120));
-        Assert.True(allocation.TryAllocatePath("core.passive.v2.cluster.00.05.cap", 120));
+        Assert.True(allocation.TryAllocatePath("core.passive.v3.cluster.00.01.mastery", 120));
         Assert.True(allocation.TrySelectMastery(farMastery, 0));
-        Assert.False(allocation.TrySelectMastery("core.passive.v2.cluster.00.05.cap", 0));
-        Assert.True(allocation.TrySelectMastery("core.passive.v2.cluster.00.05.cap", 1));
+        Assert.True(allocation.TrySelectMastery("core.passive.v3.cluster.00.01.mastery", 0));
 
-        Assert.True(allocation.TryAllocatePath("core.passive.v2.jewel.00.00", 120));
-        Assert.True(allocation.TryAllocatePath("core.passive.v2.jewel.00.01", 120));
-        Assert.True(allocation.TrySocketJewel("core.passive.v2.jewel.00.00", PassiveJewelKind.CrimsonMemory));
-        Assert.False(allocation.TrySocketJewel("core.passive.v2.jewel.00.01", PassiveJewelKind.CrimsonMemory));
+        Assert.True(allocation.TryAllocatePath("core.passive.v3.jewel.00.00", 120));
+        Assert.True(allocation.TryAllocatePath("core.passive.v3.jewel.00.01", 120));
+        Assert.True(allocation.TrySocketJewel("core.passive.v3.jewel.00.00", PassiveJewelKind.CrimsonMemory));
+        Assert.False(allocation.TrySocketJewel("core.passive.v3.jewel.00.01", PassiveJewelKind.CrimsonMemory));
     }
 
     [Fact]
@@ -118,7 +120,7 @@ public sealed class P10FeatureTests
     public void CitadelTicketSchedulesARealHeroMap()
     {
         P1GameSession session = P1GameSession.CreateNew(new PlayerIdentity("攻坚测试", CharacterGender.Androgynous,
-            CharacterSkinTone.Umber, CharacterHairStyle.Cropped, P1Ascendancy.IronOath), 101);
+            CharacterSkinTone.Umber, CharacterHairStyle.Cropped, P23BaseClass.Fighter), 101);
         for (int index = 0; index < P10EndgameState.CitadelFragmentsPerTicket; index++)
             session.Endgame.RecordMapCompletion(new P1MapItem($"ticket-{index}", 20), MapRoute.Abyss, (ulong)index + 1);
 

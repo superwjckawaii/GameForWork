@@ -1,5 +1,6 @@
 using GameForWork.Core.P1;
 using GameForWork.Core.P18;
+using GameForWork.Core.P23;
 using Godot;
 
 namespace GameForWork.GodotClient;
@@ -10,6 +11,8 @@ public partial class P18AscendancyPanel : Control
     private Action<string>? _changed;
     private Label? _summary;
     private OptionButton? _path;
+    private Button? _select;
+    private P23BaseClass? _pathClass;
     private P18AscendancyTreeView? _tree;
 
     public void Initialize(Func<P1GameSession> session, Action<string> changed)
@@ -31,12 +34,12 @@ public partial class P18AscendancyPanel : Control
         var bar = new HFlowContainer();
         top.AddChild(bar);
         _path = new OptionButton();
-        foreach (P18Ascendancy value in Enum.GetValues<P18Ascendancy>().Where(value => value != P18Ascendancy.None))
-            _path.AddItem(P18AscendancyCatalog.DisplayName(value), (int)value);
+        _path.Disabled = true;
         bar.AddChild(_path);
-        var select = new Button { Text = "选择升华" }; bar.AddChild(select);
-        select.Pressed += () =>
+        _select = new Button { Text = "选择升华", Disabled = true }; bar.AddChild(_select);
+        _select.Pressed += () =>
         {
+            if (_path.Selected < 0 || _path.Selected >= _path.ItemCount) return;
             P18Ascendancy value = (P18Ascendancy)_path.GetItemId(_path.Selected);
             changed(session().TrySelectAscendancy(value) ? $"已选择升华：{P18AscendancyCatalog.DisplayName(value)}。" : "需要至少1点升华点，且已选路线只能通过重置更换。");
             Refresh();
@@ -57,9 +60,26 @@ public partial class P18AscendancyPanel : Control
     public void Refresh()
     {
         if (_session is null) return;
-        var state = _session().Endgame;
-        _summary!.Text = $"{P18AscendancyCatalog.DisplayName(state.SelectedAscendancy)} · 已用 {state.AscendancyPassives.Count}/{state.BreakthroughPoints}（上限8） · 金币 {_session().World.Economy.Gold}";
+        P1GameSession current = _session();
+        RefreshPaths(current);
+        var state = current.Endgame;
+        _summary!.Text = $"{P18AscendancyCatalog.DisplayName(state.SelectedAscendancy)} · 已用 {state.AscendancyPassives.Count}/{state.BreakthroughPoints}（上限8） · 金币 {current.World.Economy.Gold}";
         _tree?.QueueRedraw();
+    }
+
+    private void RefreshPaths(P1GameSession session)
+    {
+        if (_pathClass == session.Player.BaseClass) return;
+        _pathClass = session.Player.BaseClass;
+        _path!.Clear();
+        P18Ascendancy[] available = P23ClassCatalog.Get(session.Player.BaseClass).Ascendancies
+            .Where(P18AscendancyCatalog.IsImplemented).ToArray();
+        foreach (P18Ascendancy value in available)
+            _path.AddItem(P18AscendancyCatalog.DisplayName(value), (int)value);
+        if (available.Length == 0)
+            _path.AddItem("P23.1 开放", (int)P18Ascendancy.None);
+        _path.Disabled = available.Length == 0;
+        _select!.Disabled = available.Length == 0;
     }
 
     private static PanelContainer Hud(Control content)
@@ -117,7 +137,13 @@ public partial class P18AscendancyTreeView : Control
             P18AscendancyCatalog.DisplayName(selected), HorizontalAlignment.Center, 84, 13, new Color("f0d394"));
         if (selected == P18Ascendancy.None)
         {
-            DrawString(ThemeDB.FallbackFont, origin + new Vector2(-160, 65), "先在上方选择血征者、壁垒使或破阵者", HorizontalAlignment.Center, 320, 15, new Color("a8b0ba"));
+            P18Ascendancy[] available = P23ClassCatalog.Get(_session().Player.BaseClass).Ascendancies
+                .Where(P18AscendancyCatalog.IsImplemented).ToArray();
+            string prompt = available.Length == 0
+                ? "该职业的三套升华将在 P23.1 开放"
+                : $"先在上方选择{string.Join('、', available.Select(P18AscendancyCatalog.DisplayName))}";
+            DrawString(ThemeDB.FallbackFont, origin + new Vector2(-190, 65), prompt,
+                HorizontalAlignment.Center, 380, 15, new Color("a8b0ba"));
             return;
         }
         foreach (P18AscendancyNode node in P18AscendancyCatalog.For(selected))

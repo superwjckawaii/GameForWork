@@ -10,7 +10,7 @@ namespace GameForWork.Core.P22;
 public static class P22ReleaseTargets
 {
     public const string Version = "0.2.0";
-    public const int SaveFormatVersion = 18;
+    public const int SaveFormatVersion = 19;
     public const long MaximumWorkingSetBytes = 700L * 1024 * 1024;
     public const long MaximumTwoHourGrowthBytes = 80L * 1024 * 1024;
     public const double MaximumTrayCpuPercent = 2.0;
@@ -42,7 +42,7 @@ public static class P22ReleaseTargets
     {
         var failures = new List<string>();
         if (P18BenchmarkBuilds.All.Count != 6) failures.Add("升华基准构筑必须恰好为六套。");
-        foreach (P18Ascendancy ascendancy in Enum.GetValues<P18Ascendancy>().Where(value => value != P18Ascendancy.None))
+        foreach (P18Ascendancy ascendancy in Enum.GetValues<P18Ascendancy>().Where(P18AscendancyCatalog.IsImplemented))
         {
             P18BenchmarkBuild[] builds = P18BenchmarkBuilds.All.Where(build => build.Ascendancy == ascendancy).ToArray();
             if (builds.Length != 2 || builds.Count(build => build.EndgameGear) != 1)
@@ -85,7 +85,7 @@ public static class P22ReleaseTargets
     private static P1TeamBuild CreateCombatBuild(P18BenchmarkBuild definition)
     {
         bool endgame = definition.EndgameGear;
-        bool bastion = definition.Ascendancy == P18Ascendancy.BastionEnvoy;
+        bool bastion = definition.Ascendancy == P18Ascendancy.IronGuardian;
         CharacterSheet sheet = new(endgame ? 120 : 80,
             endgame ? new CharacterAttributes(520, 300, 260, 220) : new CharacterAttributes(300, 180, 160, 120),
             endgame ? new DefensiveEquipment(bastion ? 8_000 : 4_500, 1_200, bastion ? 2_400 : 600)
@@ -101,9 +101,9 @@ public static class P22ReleaseTargets
         WeaponProfile weapon = endgame
             ? new WeaponProfile($"{definition.StableId}.weapon", 760, 1_080, 1_650, 800)
             : new WeaponProfile($"{definition.StableId}.weapon", 250, 360, 1_450, 650);
-        SkillSupport supports = definition.Ascendancy == P18Ascendancy.BloodConqueror
+        SkillSupport supports = definition.Ascendancy == P18Ascendancy.BloodFighter
             ? SkillSupport.Bleed | SkillSupport.DeepWound | SkillSupport.LifeLeech
-            : definition.Ascendancy == P18Ascendancy.Linebreaker
+            : definition.Ascendancy == P18Ascendancy.Warbreaker
                 ? SkillSupport.Brutality | SkillSupport.Shockwave | SkillSupport.ArmorShatter
                 : SkillSupport.Fortification | SkillSupport.BlockTrigger | SkillSupport.Vengeance;
         SkillConfiguration[] skills = definition.Skills
@@ -115,7 +115,7 @@ public static class P22ReleaseTargets
             FlatAccuracy: endgame ? 5_000 : 2_500,
             IncreasedDamageBasisPoints: endgame ? 18_000 : 9_000,
             IncreasedCriticalChanceBasisPoints: endgame ? 6_000 : 2_000,
-            IncreasedBleedChanceBasisPoints: definition.Ascendancy == P18Ascendancy.BloodConqueror ? 8_000 : 0,
+            IncreasedBleedChanceBasisPoints: definition.Ascendancy == P18Ascendancy.BloodFighter ? 8_000 : 0,
             LifeFlask: new LifeFlaskDefinition(endgame ? 1_600 : 700, 40, 10),
             AddedPhysicalDamage: endgame ? 260 : 80,
             MovementSpeedBasisPoints: endgame ? 13_000 : 11_000,

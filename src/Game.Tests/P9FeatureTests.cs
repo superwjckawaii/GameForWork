@@ -122,5 +122,5 @@ public sealed class P9FeatureTests
 
     private static P1GameSession CreateSession() => P1GameSession.CreateNew(new PlayerIdentity(
         "铸城者", CharacterGender.Androgynous, CharacterSkinTone.Umber,
-        CharacterHairStyle.Braided, P1Ascendancy.IronOath), 0x9090, tutorialEnabled: false);
+        CharacterHairStyle.Braided, P23BaseClass.Fighter), 0x9090, tutorialEnabled: false);
 }

@@ -129,11 +129,11 @@ public sealed class P5FeatureTests
     public void RefundChecksRemainingGraphConnectivity()
     {
         var allocation = new PassiveTreeAllocation(memoryAshes: 5);
-        Assert.True(allocation.TryAllocate("core.passive.start.physique", 2));
-        Assert.True(allocation.TryAllocate("core.passive.v2.travel.00.10", 2));
+        Assert.True(allocation.TryAllocate("core.passive.v3.travel.00.15", 2));
+        Assert.True(allocation.TryAllocate("core.passive.v3.travel.00.14", 2));
 
-        Assert.False(allocation.TryRefund("core.passive.start.physique"));
-        Assert.True(allocation.TryRefund("core.passive.v2.travel.00.10"));
+        Assert.False(allocation.TryRefund("core.passive.v3.travel.00.15"));
+        Assert.True(allocation.TryRefund("core.passive.v3.travel.00.14"));
         Assert.Equal(4, allocation.MemoryAshes);
     }
 
@@ -152,5 +152,5 @@ public sealed class P5FeatureTests
         CharacterGender.Androgynous,
         CharacterSkinTone.Umber,
         CharacterHairStyle.Cropped,
-        P1Ascendancy.IronOath), 5_005);
+        P23BaseClass.Fighter), 5_005);
 }

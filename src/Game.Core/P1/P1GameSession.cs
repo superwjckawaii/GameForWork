@@ -12,6 +12,7 @@ using GameForWork.Core.P12;
 using GameForWork.Core.P14;
 using GameForWork.Core.P17;
 using GameForWork.Core.P18;
+using GameForWork.Core.P23;
 
 namespace GameForWork.Core.P1;
 
@@ -38,18 +39,12 @@ public enum CharacterHairStyle
     Shaved,
 }
 
-public enum P1Ascendancy
-{
-    IronOath,
-    Linebreaker,
-}
-
 public sealed record PlayerIdentity(
     string Name,
     CharacterGender Gender,
     CharacterSkinTone SkinTone,
     CharacterHairStyle HairStyle,
-    P1Ascendancy Ascendancy)
+    P23BaseClass BaseClass)
 {
     public PlayerIdentity Validate()
     {
@@ -120,7 +115,7 @@ public sealed record P1GameSessionSnapshot(
 
 public sealed class P1GameSession
 {
-    public const int CurrentFormatVersion = 18;
+    public const int CurrentFormatVersion = 19;
     private readonly P1WorldSimulator _simulator = new(new P1MapAttemptResolver());
     private readonly P2CampaignSimulator _campaignSimulator = new();
     private AssembledCharacterBuild _heroBuild;
@@ -191,18 +186,19 @@ public sealed class P1GameSession
 
     public static P1GameSession CreateNew(PlayerIdentity player, ulong seed, bool tutorialEnabled = true)
     {
+        P23ClassDefinition classDefinition = P23ClassCatalog.Get(player.BaseClass);
         var equipment = new EquipmentLoadout();
-        EquipStarter(equipment, EquipmentSlot.MainHand, "core.base.rusted_greatsword", seed + 1);
-        EquipStarter(equipment, EquipmentSlot.Chest, "core.base.crude_chainmail", seed + 2);
-        EquipStarter(equipment, EquipmentSlot.Helmet, "core.base.iron_helmet", seed + 3);
+        EquipStarter(equipment, EquipmentSlot.MainHand, classDefinition.StarterWeaponBaseId, seed + 1);
+        EquipStarter(equipment, EquipmentSlot.Chest, classDefinition.StarterChestBaseId, seed + 2);
+        EquipStarter(equipment, EquipmentSlot.Helmet, classDefinition.StarterHelmetBaseId, seed + 3);
         EquipStarter(equipment, EquipmentSlot.Gloves, "core.base.iron_gauntlets", seed + 6);
         EquipStarter(equipment, EquipmentSlot.RingLeft, "core.base.life_ring", seed + 4);
         EquipStarter(equipment, EquipmentSlot.Flask1, "core.base.life_flask", seed + 5);
         EquipStarter(equipment, EquipmentSlot.Flask2, "core.base.mana_flask", seed + 7);
-        var passives = new PassiveTreeAllocation();
+        var passives = new PassiveTreeAllocation(start: classDefinition.PassiveStart);
         AssembledCharacterBuild build = CharacterBuildAssembler.Assemble(
             1,
-            CharacterAttributes.IronOathStarting,
+            classDefinition.StartingAttributes,
             equipment,
             passives,
             new SkillConfiguration(P1SkillIds.HeavyStrike, SkillSupport.Bleed));
@@ -225,8 +221,8 @@ public sealed class P1GameSession
             mercenary.Equipment,
             passives,
             SkillSupport.Bleed,
-            HeroAiConfiguration.Balanced,
-            P2ManagementState.CreateNew(),
+            HeroAiConfiguration.Balanced with { Preset = classDefinition.AiPreset },
+            P2ManagementState.CreateNew(player.BaseClass),
             P2CampaignState.CreateNew(),
             P8DemoJourney.CreateNew(tutorialEnabled),
             town,
@@ -239,7 +235,8 @@ public sealed class P1GameSession
     public static P1GameSession Restore(P1GameSessionSnapshot snapshot)
     {
         ArgumentNullException.ThrowIfNull(snapshot);
-        if (snapshot.FormatVersion != CurrentFormatVersion || snapshot.SimulationSequence < 0)
+        bool migratingV18 = snapshot.FormatVersion == 18;
+        if ((!migratingV18 && snapshot.FormatVersion != CurrentFormatVersion) || snapshot.SimulationSequence < 0)
         {
             throw new InvalidDataException(
                 $"P1 session snapshot version {snapshot.FormatVersion} is unsupported; expected {CurrentFormatVersion}.");
@@ -253,26 +250,36 @@ public sealed class P1GameSession
             ? restoredMercenary.Equipment
             : EquipmentLoadout.Restore(snapshot.MercenaryEquipment.Select(entry =>
                 new KeyValuePair<EquipmentSlot, ItemInstance>(entry.Slot, entry.Item)));
-        PassiveTreeAllocation passives = PassiveTreeAllocation.Restore(snapshot.AllocatedPassives, snapshot.MemoryAshes,
-            snapshot.MasterySelections, snapshot.SocketedJewels);
+        P23BaseClass baseClass = migratingV18 ? P23BaseClass.Fighter : snapshot.Player.BaseClass;
+        P23ClassDefinition classDefinition = P23ClassCatalog.Get(baseClass);
+        PlayerIdentity player = snapshot.Player with { BaseClass = baseClass };
+        PassiveTreeAllocation passives = migratingV18
+            ? new PassiveTreeAllocation(snapshot.MemoryAshes, classDefinition.PassiveStart)
+            : PassiveTreeAllocation.Restore(snapshot.AllocatedPassives, snapshot.MemoryAshes,
+                snapshot.MasterySelections, snapshot.SocketedJewels, classDefinition.PassiveStart);
         P1WorldState world = P1WorldSnapshots.Restore(snapshot.World);
         P9TownState town = P9TownState.Restore(snapshot.Town, snapshot.Seed ^ 0x7039746f776eUL, mercenaryEquipment);
         if (town.Roster.Count > 0) mercenaryEquipment = town.Roster[0].Equipment;
-        P2ManagementState management = P2ManagementState.Restore(snapshot.Management, legacyMigration: false);
+        P2ManagementState management = P2ManagementState.Restore(snapshot.Management, legacyMigration: migratingV18);
+        P10EndgameState endgame = P10EndgameState.Restore(snapshot.Endgame);
+        if (endgame.SelectedAscendancy != P18Ascendancy.None &&
+            (!P23ClassCatalog.Allows(baseClass, endgame.SelectedAscendancy) ||
+             !P18AscendancyCatalog.IsImplemented(endgame.SelectedAscendancy)))
+            throw new InvalidDataException("Saved ascendancy does not belong to the selected base class.");
         var session = new P1GameSession(
-            snapshot.Player,
+            player,
             snapshot.MercenaryName,
             world,
             equipment,
             mercenaryEquipment,
             passives,
             snapshot.HeavyStrikeSupports,
-            snapshot.HeroAi ?? HeroAiConfiguration.Balanced,
+            snapshot.HeroAi ?? HeroAiConfiguration.Balanced with { Preset = classDefinition.AiPreset },
             management,
             P2CampaignState.Restore(snapshot.Campaign, legacyMigration: false),
             P8DemoJourney.Restore(snapshot.Journey, legacy: false),
             town,
-            P10EndgameState.Restore(snapshot.Endgame),
+            endgame,
             snapshot.Seed,
             snapshot.SimulationSequence,
             snapshot.DebugTwentyTimes);
@@ -537,13 +544,20 @@ public sealed class P1GameSession
     {
         SkillStoneInstance active = Management.SkillStones.Single(
             item => item.DefinitionId == "core.skill_stone.heavy_strike");
+        SkillLinkConfiguration? activeLink = Management.SkillLinks.FirstOrDefault(
+            link => link.ActiveStoneInstanceId == active.InstanceId);
+        if (activeLink is null)
+        {
+            HeavyStrikeSupports = SkillSupport.None;
+            RefreshHeroBuild();
+            return;
+        }
         string[] supportIds = SupportDefinitionIds(supports)
             .Select(definition => Management.SkillStones.FirstOrDefault(item => item.DefinitionId == definition)?.InstanceId)
             .Where(id => id is not null)
             .Cast<string>()
             .ToArray();
-        P5SkillChainDefinition? chain = GetSkillChains().FirstOrDefault(item =>
-            item.StableId == Management.SkillLinks.First(link => link.ActiveStoneInstanceId == active.InstanceId).ChainId);
+        P5SkillChainDefinition? chain = GetSkillChains().FirstOrDefault(item => item.StableId == activeLink.ChainId);
         Management.ReplaceSupports(active.InstanceId, supportIds, chain?.SupportCapacity ?? 5);
         HeavyStrikeSupports = SupportsFor("core.skill_stone.heavy_strike");
         RefreshHeroBuild();
@@ -551,7 +565,8 @@ public sealed class P1GameSession
 
     public void SyncHeavyStrikeFromSkillStones()
     {
-        SetHeavyStrikeSupports(SupportsFor("core.skill_stone.heavy_strike"));
+        HeavyStrikeSupports = SupportsFor("core.skill_stone.heavy_strike");
+        RefreshHeroBuild();
     }
 
     public IReadOnlyList<P5SkillChainDefinition> GetSkillChains() => P5SkillChainRules.Build(HeroEquipment);
@@ -1012,7 +1027,7 @@ public sealed class P1GameSession
 
         AssembledCharacterBuild proposed = CharacterBuildAssembler.Assemble(
             World.Hero.Progression.Level,
-            CharacterAttributes.IronOathStarting,
+            P23ClassCatalog.Get(Player.BaseClass).StartingAttributes,
             hypothetical,
             Passives,
             new SkillConfiguration(P1SkillIds.HeavyStrike, HeavyStrikeSupports));
@@ -1065,7 +1080,7 @@ public sealed class P1GameSession
     {
         AssembledCharacterBuild build = CharacterBuildAssembler.Assemble(
             World.Hero.Progression.Level,
-            CharacterAttributes.IronOathStarting,
+            P23ClassCatalog.Get(Player.BaseClass).StartingAttributes,
             HeroEquipment,
             Passives,
             new SkillConfiguration(P1SkillIds.HeavyStrike, HeavyStrikeSupports));
@@ -1128,6 +1143,8 @@ public sealed class P1GameSession
 
     public bool TrySelectAscendancy(P18Ascendancy ascendancy)
     {
+        if (!P23ClassCatalog.Allows(Player.BaseClass, ascendancy) || !P18AscendancyCatalog.IsImplemented(ascendancy))
+            return false;
         bool changed = Endgame.TrySelectAscendancy(ascendancy);
         if (changed) RefreshHeroBuild();
         return changed;

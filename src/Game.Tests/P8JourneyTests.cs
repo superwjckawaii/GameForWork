@@ -110,5 +110,5 @@ public sealed class P8JourneyTests
 
     private static P1GameSession CreateSession(bool tutorial) => P1GameSession.CreateNew(new PlayerIdentity(
         "引路者", CharacterGender.Androgynous, CharacterSkinTone.Umber,
-        CharacterHairStyle.Braided, P1Ascendancy.IronOath), 0x8080, tutorial);
+        CharacterHairStyle.Braided, P23BaseClass.Fighter), 0x8080, tutorial);
 }

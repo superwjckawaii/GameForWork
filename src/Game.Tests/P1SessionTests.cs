@@ -160,5 +160,5 @@ public sealed class P1SessionTests
         CharacterGender.Androgynous,
         CharacterSkinTone.Umber,
         CharacterHairStyle.Braided,
-        P1Ascendancy.IronOath);
+        P23BaseClass.Fighter);
 }

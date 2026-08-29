@@ -151,7 +151,7 @@ public partial class P1PassiveTreeView : Control
 
     public void CenterOnStart()
     {
-        PassiveNodeDefinition start = P1PassiveTree.Get(P205StartNode(_start));
+        PassiveNodeDefinition start = P1PassiveTree.Get(P1PassiveTree.StartNode(_start));
         _zoom = .72f;
         _pan = -new Vector2(start.X, start.Y) * _zoom;
         QueueRedraw();
@@ -248,8 +248,9 @@ public partial class P1PassiveTreeView : Control
     private void SelectNode(string? stableId)
     { SelectedStableId = stableId; if (stableId is not null) NodeSelected?.Invoke(stableId); QueueRedraw(); }
 
-    private bool IsAvailable(PassiveNodeDefinition node) => !_allocated.Contains(node.StableId) &&
-        (node.Start == _start && _allocated.Count == 0 || P1PassiveTree.Neighbors(node.StableId).Any(_allocated.Contains)) &&
+    private bool IsAvailable(PassiveNodeDefinition node) => node.Kind != PassiveNodeKind.Start && !_allocated.Contains(node.StableId) &&
+        (P1PassiveTree.Neighbors(P1PassiveTree.StartNode(_start)).Contains(node.StableId) ||
+         P1PassiveTree.Neighbors(node.StableId).Any(_allocated.Contains)) &&
         _allocated.Count < Math.Min(_earnedPoints, PassiveTreeAllocation.MaximumAllocatedPoints);
     private bool SearchMatch(PassiveNodeDefinition node) => _search.Length > 0 &&
         (node.DisplayName.Contains(_search, StringComparison.OrdinalIgnoreCase) || node.Effects.Any(effect => P1UiText.PassiveEffect(effect).Contains(_search, StringComparison.OrdinalIgnoreCase)));
@@ -257,15 +258,7 @@ public partial class P1PassiveTreeView : Control
     private Vector2 ToWorld(Vector2 screen) => (screen - Size / 2 - _pan) / _zoom;
     private bool VisibleWithMargin(Vector2 point, float margin) => point.X >= -margin && point.Y >= -margin && point.X <= Size.X + margin && point.Y <= Size.Y + margin;
     private static float NodeRadius(PassiveNodeDefinition node) => node.Kind switch
-    { PassiveNodeKind.Small when node.Start != PassiveStartKind.None => 16, PassiveNodeKind.Small => 7, PassiveNodeKind.Notable => 11, PassiveNodeKind.Mastery => 13, PassiveNodeKind.Rule => 15, _ => 12 };
-
-    private static string P205StartNode(PassiveStartKind start) => start switch
-    {
-        PassiveStartKind.Dexterity => "core.passive.start.dexterity",
-        PassiveStartKind.Spirit => "core.passive.start.spirit",
-        PassiveStartKind.Energy => "core.passive.start.energy",
-        _ => "core.passive.start.physique",
-    };
+    { PassiveNodeKind.Start => 16, PassiveNodeKind.Small => 7, PassiveNodeKind.Notable => 11, PassiveNodeKind.Mastery => 13, PassiveNodeKind.Rule => 15, _ => 12 };
 
     private static bool TryParseJewel(Variant data, out PassiveJewelKind jewel)
     {
@@ -283,10 +276,11 @@ public partial class P1PassiveTreeView : Control
         Rect2 area = new(Size.X - 132, Math.Max(86, Size.Y - 198), 120, 86);
         DrawRect(area, new Color("0b0e14cc"), true);
         DrawRect(area, new Color("596473"), false, 1);
-        foreach (PassiveNodeDefinition node in _nodes.Where(node => node.Kind != PassiveNodeKind.Small || node.Start != PassiveStartKind.None))
+        foreach (PassiveNodeDefinition node in _nodes.Where(node => node.Kind != PassiveNodeKind.Small))
         {
             Vector2 point = area.GetCenter() + new Vector2(node.X, node.Y) / P1PassiveTree.LayoutExtent * area.Size * .44f;
-            DrawCircle(point, node.Start == PassiveStartKind.None ? 1.2f : 2.4f, _allocated.Contains(node.StableId) ? AllocatedColor : LockedColor.Lightened(.25f));
+            DrawCircle(point, node.Kind == PassiveNodeKind.Start ? 2.4f : 1.2f,
+                node.Kind == PassiveNodeKind.Start ? AvailableColor : _allocated.Contains(node.StableId) ? AllocatedColor : LockedColor.Lightened(.25f));
         }
     }
 }

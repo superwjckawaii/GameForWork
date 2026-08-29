@@ -73,7 +73,7 @@ public sealed class P4SpatialCombatTests
     {
         P1GameSession session = P1GameSession.CreateNew(new PlayerIdentity(
             "铸行者", CharacterGender.Androgynous, CharacterSkinTone.Umber,
-            CharacterHairStyle.Braided, P1Ascendancy.IronOath), 17);
+            CharacterHairStyle.Braided, P23BaseClass.Fighter), 17);
         session.World.Economy.AddMetal(MetalCurrencyKind.ChaosGold, 4);
 
         P1GameSession restored = P1GameSession.Restore(session.Capture());

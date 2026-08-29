@@ -13,6 +13,7 @@ using GameForWork.Core.P10;
 using GameForWork.Core.P16;
 using GameForWork.Core.P18;
 using GameForWork.Core.P20;
+using GameForWork.Core.P23;
 using Godot;
 using System.Security.Cryptography;
 using System.Text.Json;
@@ -206,12 +207,26 @@ public partial class P2Dashboard : VBoxContainer
         title.AddThemeFontSizeOverride("font_size", 24);
         card.AddChild(title);
         card.AddChild(new Label { Text = "新角色将从第一幕“余烬营地”开始挂机推进。" });
-        var name = new LineEdit { PlaceholderText = "角色名（2～16 字）", Text = "铁誓者" };
+        var name = new LineEdit { PlaceholderText = "角色名（2～16 字）", Text = "冒险者" };
         card.AddChild(name);
         OptionButton gender = AddOptions(card, "性别", ["女性", "男性", "中性"]);
         OptionButton skin = AddOptions(card, "肤色", ["苍白", "浅色", "棕褐", "深色"]);
         OptionButton hair = AddOptions(card, "发型", ["短发", "长发", "编发", "剃发"]);
-        card.AddChild(new Label { Text = "Demo 职业：铁誓者（破阵者将在后续版本完成后开放）" });
+        P23ClassDefinition[] classes = P23ClassCatalog.All.ToArray();
+        OptionButton baseClass = AddOptions(card, "基础职业", classes.Select(value => value.DisplayName).ToArray());
+        var classSummary = new Label { AutowrapMode = TextServer.AutowrapMode.WordSmart };
+        card.AddChild(classSummary);
+        void RefreshClassSummary(long index)
+        {
+            P23ClassDefinition definition = classes[(int)index];
+            classSummary.Text = $"{definition.DisplayName}：{definition.Summary}\n" +
+                                $"初始属性 {definition.StartingAttributes.Physique}/{definition.StartingAttributes.Dexterity}/" +
+                                $"{definition.StartingAttributes.Spirit}/{definition.StartingAttributes.Energy} · " +
+                                $"升华：{string.Join("、", definition.Ascendancies.Select(P18AscendancyCatalog.DisplayName))}\n" +
+                                "基础职业创建后不能更换；升华在旅程中选择。";
+        }
+        baseClass.ItemSelected += RefreshClassSummary;
+        RefreshClassSummary(0);
         var skipTutorial = new CheckBox
         {
             Text = "跳过首次引导（创建后不能重新开启）",
@@ -227,7 +242,7 @@ public partial class P2Dashboard : VBoxContainer
                     (CharacterGender)gender.Selected,
                     (CharacterSkinTone)skin.Selected,
                     (CharacterHairStyle)hair.Selected,
-                    P1Ascendancy.IronOath).Validate(), !skipTutorial.ButtonPressed);
+                    classes[baseClass.Selected].Id).Validate(), !skipTutorial.ButtonPressed);
             }
             catch (Exception exception)
             {
@@ -1473,7 +1488,7 @@ public partial class P2Dashboard : VBoxContainer
                     new SkillConfiguration(P1SkillIds.HeavyStrike, SkillSupport.Bleed)).Sheet;
             }
             _characterStatus!.Text = _selectedCharacter == P2CharacterKind.Hero
-                ? $"{_session.Player.Name} · {_session.Player.Ascendancy} · Lv.{selectedTeam.Progression.Level}"
+                ? $"{_session.Player.Name} · {P23ClassCatalog.Get(_session.Player.BaseClass).DisplayName} · Lv.{selectedTeam.Progression.Level}"
                 : $"{selectedMercenary?.Identity.Name ?? "佣兵"} · {MercenaryArchetypeName(selectedMercenary?.Identity.Archetype)} · Lv.{selectedMercenary?.Level ?? selectedTeam.Progression.Level}";
             _storageStatus!.Text =
                 $"生命 {selectedSheet.MaximumLife().Value} · 法力 {selectedSheet.MaximumMana().Value} · 护盾 {selectedSheet.Equipment.Shield}\n" +

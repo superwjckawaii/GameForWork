@@ -311,5 +311,5 @@ public sealed class P6FeatureTests
 
     private static P1GameSession CreateSession() => P1GameSession.CreateNew(new PlayerIdentity(
         "孔铸者", CharacterGender.Androgynous, CharacterSkinTone.Umber,
-        CharacterHairStyle.Braided, P1Ascendancy.IronOath), 0x6060);
+        CharacterHairStyle.Braided, P23BaseClass.Fighter), 0x6060);
 }

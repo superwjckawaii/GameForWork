@@ -5,6 +5,7 @@ using GameForWork.Core.P1.Combat;
 using GameForWork.Core.Simulation;
 using GameForWork.Core.P1.World;
 using GameForWork.Core.P17;
+using GameForWork.Core.P23;
 
 namespace GameForWork.Core.P2;
 
@@ -152,7 +153,7 @@ public sealed class P2ManagementState
     public P6SkillSchemeKind ActiveSkillScheme { get; private set; } = P6SkillSchemeKind.Clear;
     public IReadOnlyDictionary<P6SkillSchemeKind, IReadOnlyList<SkillLinkConfiguration>> SkillSchemes => _skillSchemes;
 
-    public static P2ManagementState CreateNew()
+    public static P2ManagementState CreateNew(P23BaseClass baseClass = P23BaseClass.Fighter)
     {
         var state = new P2ManagementState();
         foreach (SkillStoneDefinition definition in P2SkillStones.All.Where(item => item.StarterGranted)
@@ -173,8 +174,31 @@ public sealed class P2ManagementState
         state._skillLinks.Add(new SkillLinkConfiguration(earthCleave, [], 2, P5SkillChainIds.WeaponSecondary));
         state._skillLinks.Add(new SkillLinkConfiguration(spiritBlade, [chain], 3, P5SkillChainIds.Chest));
         state._skillLinks.Add(new SkillLinkConfiguration(warCry, [], 4, P5SkillChainIds.HelmetTool));
+        state.ConfigureStarterSkill(baseClass);
         state.SaveAllSchemesFromCurrent();
         return state;
+    }
+
+    private void ConfigureStarterSkill(P23BaseClass baseClass)
+    {
+        if (baseClass == P23BaseClass.Fighter) return;
+        P23ClassDefinition definition = P23ClassCatalog.Get(baseClass);
+        string stoneId = definition.StarterSkillId.Replace("core.skill.", "core.skill_stone.", StringComparison.Ordinal);
+        SkillStoneInstance? stone = _skillStones.FirstOrDefault(item => item.DefinitionId == stoneId);
+        if (stone is null)
+        {
+            _ = P2SkillStones.Get(stoneId);
+            stone = new SkillStoneInstance($"starter-p23-{definition.StableId.Split('.').Last()}", stoneId);
+            _skillStones.Add(stone);
+        }
+        SkillLinkConfiguration primary = _skillLinks.Single(link => link.ChainId == P5SkillChainIds.WeaponPrimary);
+        int index = _skillLinks.IndexOf(primary);
+        _skillLinks[index] = primary with
+        {
+            ActiveStoneInstanceId = stone.InstanceId,
+            SupportStoneInstanceIds = [],
+            SocketStoneInstanceIds = null,
+        };
     }
 
     public static P2ManagementState Restore(P2ManagementSnapshot? snapshot, bool legacyMigration)

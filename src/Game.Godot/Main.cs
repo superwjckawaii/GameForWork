@@ -4,6 +4,7 @@ using GameForWork.Core.Offline;
 using GameForWork.Core.P1;
 using GameForWork.Core.P1.World;
 using GameForWork.Core.Persistence;
+using GameForWork.Core.P23;
 using Godot;
 
 namespace GameForWork.GodotClient;
@@ -85,12 +86,21 @@ public partial class Main : Node
         string[] userArguments = OS.GetCmdlineUserArgs();
         bool stabilityRun = userArguments.Any(argument =>
             argument is "--p22-stability-visible" or "--p22-stability-tray");
-        _savesRoot = stabilityRun
+        string displayDriver = DisplayServer.GetName();
+        bool headlessRun = displayDriver.Equals("headless", StringComparison.OrdinalIgnoreCase) ||
+                           OS.HasFeature("headless");
+        _savesRoot = stabilityRun || headlessRun
             ? Path.Combine(Path.GetTempPath(), "GameForWork", "stability", System.Environment.ProcessId.ToString())
             : Path.Combine(userDirectory, "saves");
         TryInitializeSave(_activeSlot);
         BuildInterface();
 
+        if (headlessRun)
+        {
+            GD.Print($"[startup] display={displayDriver}; interface initialized; exiting headless check.");
+            GetTree().Quit();
+            return;
+        }
         GetTree().AutoAcceptQuit = false;
         GetWindow().CloseRequested += OnCloseRequested;
         _windowController = new WindowController(GetWindow(), _settingsStore, TogglePause, OpenLogs, QuitApplication);
@@ -566,14 +576,8 @@ public partial class Main : Node
         }
         _characterHeaderLabel!.Text = _session is null
             ? "尚未创建角色"
-            : $"{_session.Player.Name} · Lv.{_session.World.Hero.Progression.Level} · {PlayerClassName(_session.Player.Ascendancy)}";
+            : $"{_session.Player.Name} · Lv.{_session.World.Hero.Progression.Level} · {P23ClassCatalog.Get(_session.Player.BaseClass).DisplayName}";
     }
-
-    private static string PlayerClassName(P1Ascendancy ascendancy) => ascendancy switch
-    {
-        P1Ascendancy.Linebreaker => "破阵者",
-        _ => "铁誓者",
-    };
 
     private void ToggleLargeWindow()
     {

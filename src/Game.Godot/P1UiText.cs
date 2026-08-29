@@ -109,7 +109,9 @@ internal static class P1UiText
         bool available)
     {
         string state = allocated ? "已分配" : available ? "可分配" : "尚未连通或点数不足";
-        string prerequisite = node.PrerequisiteId is null
+        string prerequisite = node.Kind == PassiveNodeKind.Start
+            ? "免费职业锚点，不消耗天赋点"
+            : node.PrerequisiteId is null
             ? "职业起点可直接连接"
             : $"前置：{P1PassiveTree.Get(node.PrerequisiteId).DisplayName}";
         string special = string.IsNullOrWhiteSpace(node.SpecialRule) ? string.Empty : $"\n规则：{node.SpecialRule}";
@@ -140,6 +142,8 @@ internal static class P1UiText
         PassiveEffectKind.FlatSpirit => $"精神 +{effect.Value}",
         PassiveEffectKind.FlatEnergy => $"能量 +{effect.Value}",
         PassiveEffectKind.FlatLifeRegeneration => $"每秒生命恢复 +{effect.Value}",
+        PassiveEffectKind.LifeOnHit => $"击中回复生命 +{effect.Value}",
+        PassiveEffectKind.ManaOnHit => $"击中回复法力 +{effect.Value}",
         PassiveEffectKind.RuleResoluteTechnique => "必中誓约：攻击必定命中，但无法暴击",
         PassiveEffectKind.RuleIronReflexes => "钢铁反射：闪避转化为护甲",
         PassiveEffectKind.RuleFlaskless => "无药之誓：不能使用药剂",
@@ -215,6 +219,16 @@ internal static class P1UiText
         PassiveEffectKind.IncreasedAttackDamageBasisPoints => "攻击伤害增加",
         PassiveEffectKind.IncreasedAttackSpeedBasisPoints => "攻击速度增加",
         PassiveEffectKind.IncreasedTwoHandDamageBasisPoints => "双手武器伤害增加",
+        PassiveEffectKind.IncreasedOneHandDamageBasisPoints => "单手武器伤害增加",
+        PassiveEffectKind.IncreasedSwordDamageBasisPoints => "剑类伤害增加",
+        PassiveEffectKind.IncreasedAxeDamageBasisPoints => "斧类伤害增加",
+        PassiveEffectKind.IncreasedMaceDamageBasisPoints => "锤类伤害增加",
+        PassiveEffectKind.IncreasedDaggerDamageBasisPoints => "匕首伤害增加",
+        PassiveEffectKind.IncreasedBowDamageBasisPoints => "弓类伤害增加",
+        PassiveEffectKind.IncreasedWandDamageBasisPoints => "法杖伤害增加",
+        PassiveEffectKind.IncreasedUnarmedDamageBasisPoints => "徒手伤害增加",
+        PassiveEffectKind.IncreasedShieldAttackDamageBasisPoints => "盾牌攻击伤害增加",
+        PassiveEffectKind.IncreasedDualWieldDamageBasisPoints => "双持伤害增加",
         PassiveEffectKind.IncreasedBleedDamageBasisPoints => "流血伤害增加",
         PassiveEffectKind.IncreasedBleedChanceBasisPoints => "流血概率增加",
         PassiveEffectKind.IncreasedBleedDurationBasisPoints => "流血持续时间增加",
@@ -245,6 +259,16 @@ internal static class P1UiText
         PassiveEffectKind.IncreasedElementalDamageBasisPoints => "元素伤害增加",
         PassiveEffectKind.IncreasedVoidDamageBasisPoints => "虚空伤害增加",
         PassiveEffectKind.IncreasedDamageOverTimeBasisPoints => "持续伤害增加",
+        PassiveEffectKind.IncreasedLifeLeechRateBasisPoints => "生命偷取速率增加",
+        PassiveEffectKind.IncreasedManaLeechRateBasisPoints => "法力偷取速率增加",
+        PassiveEffectKind.IncreasedShieldLeechRateBasisPoints => "护盾吸收速率增加",
+        PassiveEffectKind.IncreasedMinionDamageBasisPoints => "召唤物伤害增加",
+        PassiveEffectKind.IncreasedCompanionDamageBasisPoints => "伙伴伤害增加",
+        PassiveEffectKind.IncreasedConstructDamageBasisPoints => "构装体伤害增加",
+        PassiveEffectKind.IncreasedTrapDamageBasisPoints => "陷阱伤害增加",
+        PassiveEffectKind.IncreasedAuraEffectBasisPoints => "光环效果增加",
+        PassiveEffectKind.IncreasedCurseEffectBasisPoints => "诅咒效果增加",
+        PassiveEffectKind.IncreasedEnergyShieldRechargeBasisPoints => "能量护盾充能速度增加",
         PassiveEffectKind.ReducedSkillCostBasisPoints => "技能消耗降低",
         PassiveEffectKind.IncreasedSkillRangeBasisPoints => "技能范围增加",
         PassiveEffectKind.IncreasedCooldownRecoveryBasisPoints => "冷却恢复速度增加",
@@ -278,6 +302,7 @@ internal static class P1UiText
     private static string PositionName(AffixPosition position) => position == AffixPosition.Prefix ? "前缀" : "后缀";
     private static string NodeKind(PassiveNodeKind kind) => kind switch
     {
+        PassiveNodeKind.Start => "职业起点",
         PassiveNodeKind.Small => "小型天赋",
         PassiveNodeKind.Notable => "显著天赋",
         PassiveNodeKind.Mastery => "集群专精",

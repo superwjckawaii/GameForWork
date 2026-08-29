@@ -6,7 +6,7 @@
 
 - [游戏设计基线](shared/GAME_DESIGN_BASELINE.md)
 - [技术架构](shared/TECHNICAL_ARCHITECTURE.md)
-- [P0～P22 开发计划](shared/DEVELOPMENT_PLAN.md)
+- [P0～P25 开发计划](shared/DEVELOPMENT_PLAN.md)
 - [待讨论与开发决策](shared/OPEN_QUESTIONS.md)
 
 ## v0.1
@@ -31,3 +31,8 @@
 - [P22 经济蒙特卡洛审计](v0.2/P22_ECONOMY_AUDIT.md)
 - [P22 六构筑空间战斗审计](v0.2/P22_COMBAT_AUDIT.md)
 - [v0.2.0 版本说明](v0.2/V0_2_RELEASE_NOTES.md)
+
+## v0.3
+
+- [v0.3 六职业、十八升华与主天赋树 V3 总规格](v0.3/V0_3_SPECIFICATION.md)
+- [P23 六职业底层与主天赋树 V3 实现规格](v0.3/P23_SPECIFICATION.md)

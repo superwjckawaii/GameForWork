@@ -136,7 +136,7 @@ public sealed class P12FeatureTests
     public void BatchCraftNeverExceedsPerMapBudget()
     {
         P1GameSession session = P1GameSession.CreateNew(new PlayerIdentity("制图测试", CharacterGender.Androgynous,
-            CharacterSkinTone.Umber, CharacterHairStyle.Cropped, P1Ascendancy.IronOath), 12);
+            CharacterSkinTone.Umber, CharacterHairStyle.Cropped, P23BaseClass.Fighter), 12);
         session.World.MapInventory.Add(new P1MapItem("p12-batch", 4));
         session.World.Economy.AddMetal(MetalCurrencyKind.PolishingCobalt, 10);
         session.World.Economy.AddMetal(MetalCurrencyKind.AlchemicalGold, 10);
