@@ -9,6 +9,7 @@ using GameForWork.Core.P6;
 using GameForWork.Core.P14;
 using GameForWork.Core.P17;
 using GameForWork.Core.P18;
+using GameForWork.Core.P23;
 
 namespace GameForWork.Core.P4;
 
@@ -480,9 +481,11 @@ public sealed class P4SpatialCombatRunner
                     else if (chosen == P1SkillIds.SpiritBlade && P6CombatSkillRules.TryPay(hero, blade!))
                     {
                         P6ResolvedSkill bladeSkill = blade!;
-                        P4EnemyUnit[] projectileTargets = enemies.Where(enemy => enemy.Life > 0)
-                            .OrderBy(enemy => P4Point.DistanceSquared(heroPosition, enemy.Position))
-                            .Take(bladeSkill.ProjectileCount).ToArray();
+                        P4EnemyUnit[] projectileTargets = P231AscendancyRules.Projectile(ascendancy).CanRepeatHitSameTarget
+                            ? Enumerable.Repeat(target, bladeSkill.ProjectileCount).ToArray()
+                            : enemies.Where(enemy => enemy.Life > 0)
+                                .OrderBy(enemy => P4Point.DistanceSquared(heroPosition, enemy.Position))
+                                .Take(bladeSkill.ProjectileCount).ToArray();
                         foreach (P4EnemyUnit projectileTarget in projectileTargets)
                         {
                             int travelTicks = TravelTicks(heroPosition, projectileTarget.Position, bladeSkill.ProjectileSpeedRawPerSecond);

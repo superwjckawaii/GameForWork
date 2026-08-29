@@ -1,4 +1,5 @@
 using GameForWork.Core.P1.Combat;
+using GameForWork.Core.P23;
 
 namespace GameForWork.Core.P18;
 
@@ -89,11 +90,11 @@ public static class P18NodeIds
 public static class P18AscendancyCatalog
 {
     private static readonly IReadOnlyDictionary<string, P18AscendancyNode> NodeMap = Build()
+        .Concat(P231AscendancyCatalog.Nodes)
         .ToDictionary(node => node.StableId, StringComparer.Ordinal);
 
     public static IReadOnlyCollection<P18AscendancyNode> Nodes => NodeMap.Values.ToArray();
-    public static bool IsImplemented(P18Ascendancy ascendancy) => ascendancy is
-        P18Ascendancy.BloodFighter or P18Ascendancy.IronGuardian or P18Ascendancy.Warbreaker;
+    public static bool IsImplemented(P18Ascendancy ascendancy) => ascendancy != P18Ascendancy.None;
     public static IReadOnlyList<P18AscendancyNode> For(P18Ascendancy ascendancy) => NodeMap.Values
         .Where(node => node.Ascendancy == ascendancy).OrderBy(node => node.Direction).ThenBy(node => node.Kind).ToArray();
     public static P18AscendancyNode Get(string id) => NodeMap.TryGetValue(id, out P18AscendancyNode? node)
@@ -213,14 +214,19 @@ public static class P18AscendancyRules
     public static P6.P6ResolvedSkill ApplySkillCost(P6.P6ResolvedSkill skill, SkillTag tags,
         int maximumLife, P18CombatProfile profile)
     {
+        P6.P6ResolvedSkill result;
         if (!profile.Has(P18NodeIds.BloodLifeCore) || !tags.HasFlag(SkillTag.Attack) || tags.HasFlag(SkillTag.Spell))
-            return profile.Has(P18NodeIds.BloodLifeSmall) && skill.LifeCost > 0
+            result = profile.Has(P18NodeIds.BloodLifeSmall) && skill.LifeCost > 0
                 ? skill with { LifeCost = Math.Max(1, skill.LifeCost * 9 / 10) }
                 : skill;
-        int originalMana = skill.ManaCost;
-        int cost = Math.Max(Math.Max(1, maximumLife * 200 / 10_000), originalMana * 2);
-        if (profile.Has(P18NodeIds.BloodLifeSmall)) cost = Math.Max(1, cost * 9 / 10);
-        return skill with { ManaCost = 0, LifeCost = Math.Max(skill.LifeCost, cost) };
+        else
+        {
+            int originalMana = skill.ManaCost;
+            int cost = Math.Max(Math.Max(1, maximumLife * 200 / 10_000), originalMana * 2);
+            if (profile.Has(P18NodeIds.BloodLifeSmall)) cost = Math.Max(1, cost * 9 / 10);
+            result = skill with { ManaCost = 0, LifeCost = Math.Max(skill.LifeCost, cost) };
+        }
+        return P23.P231AscendancyRules.ApplyResolvedSkill(result, tags, profile);
     }
 
     public static SkillUseProfile ApplyHeavyStrikeCost(SkillUseProfile skill, int maximumLife,

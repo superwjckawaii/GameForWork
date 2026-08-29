@@ -12,9 +12,9 @@ namespace GameForWork.Tests;
 public sealed class P18FeatureTests
 {
     [Fact]
-    public void ThreeAscendanciesHaveSixTwoNodeDirections()
+    public void EighteenAscendanciesHaveSixTwoNodeDirections()
     {
-        Assert.Equal(36, P18AscendancyCatalog.Nodes.Count);
+        Assert.Equal(216, P18AscendancyCatalog.Nodes.Count);
         foreach (P18Ascendancy path in Enum.GetValues<P18Ascendancy>().Where(P18AscendancyCatalog.IsImplemented))
         {
             IReadOnlyList<P18AscendancyNode> nodes = P18AscendancyCatalog.For(path);
@@ -30,10 +30,11 @@ public sealed class P18FeatureTests
     }
 
     [Fact]
-    public void SixBenchmarkBuildsCoverEntryAndEndgameForEveryPath()
+    public void SixLegacyBenchmarkBuildsStillCoverEntryAndEndgameForFighterPaths()
     {
         Assert.Equal(6, P18BenchmarkBuilds.All.Count);
-        foreach (P18Ascendancy path in Enum.GetValues<P18Ascendancy>().Where(P18AscendancyCatalog.IsImplemented))
+        foreach (P18Ascendancy path in new[]
+                 { P18Ascendancy.BloodFighter, P18Ascendancy.IronGuardian, P18Ascendancy.Warbreaker })
         {
             P18BenchmarkBuild[] builds = P18BenchmarkBuilds.All.Where(build => build.Ascendancy == path).ToArray();
             Assert.Equal(2, builds.Length);

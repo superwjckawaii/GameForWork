@@ -99,17 +99,23 @@ public sealed class P23EnergyShieldState
     public const int RechargeDelayTicks = 40;
     public const int RechargeBasisPointsPerSecond = 2_000;
 
-    public P23EnergyShieldState(int maximum)
+    public P23EnergyShieldState(int maximum, P18CombatProfile? ascendancy = null)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(maximum);
-        Maximum = maximum;
-        Current = maximum;
+        P231EnergyShieldProfile profile = P231AscendancyRules.EnergyShield(ascendancy ?? P18CombatProfile.Empty);
+        Maximum = P231ModifierMath.ApplyMore(maximum, profile.MoreMaximumBasisPoints);
+        RechargeDelay = profile.RechargeDelayTicks;
+        RechargeRateBasisPointsPerSecond = P231ModifierMath.ApplyIncreased(
+            RechargeBasisPointsPerSecond, profile.IncreasedRechargeRateBasisPoints);
+        Current = Maximum;
     }
 
     public int Maximum { get; }
     public int Current { get; private set; }
+    public int RechargeDelay { get; }
+    public int RechargeRateBasisPointsPerSecond { get; }
     public int TicksSinceDamage { get; private set; } = RechargeDelayTicks;
-    public bool IsRecharging => Current < Maximum && TicksSinceDamage >= RechargeDelayTicks;
+    public bool IsRecharging => Current < Maximum && TicksSinceDamage >= RechargeDelay;
 
     public int AbsorbHit(int damage)
     {
@@ -124,7 +130,7 @@ public sealed class P23EnergyShieldState
     {
         TicksSinceDamage++;
         if (!IsRecharging || Maximum == 0) return;
-        int perTick = Math.Max(1, checked(Maximum * RechargeBasisPointsPerSecond / 10_000 / 20));
+        int perTick = Math.Max(1, checked(Maximum * RechargeRateBasisPointsPerSecond / 10_000 / 20));
         Current = Math.Min(Maximum, checked(Current + perTick));
     }
 }

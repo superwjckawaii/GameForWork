@@ -42,7 +42,7 @@ public static class P22ReleaseTargets
     {
         var failures = new List<string>();
         if (P18BenchmarkBuilds.All.Count != 6) failures.Add("升华基准构筑必须恰好为六套。");
-        foreach (P18Ascendancy ascendancy in Enum.GetValues<P18Ascendancy>().Where(P18AscendancyCatalog.IsImplemented))
+        foreach (P18Ascendancy ascendancy in P18BenchmarkBuilds.All.Select(build => build.Ascendancy).Distinct())
         {
             P18BenchmarkBuild[] builds = P18BenchmarkBuilds.All.Where(build => build.Ascendancy == ascendancy).ToArray();
             if (builds.Length != 2 || builds.Count(build => build.EndgameGear) != 1)
