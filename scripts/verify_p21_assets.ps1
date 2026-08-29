@@ -101,7 +101,11 @@ function Assert-UniqueCells {
             $graphics.Dispose()
             $stream = [System.IO.MemoryStream]::new()
             $cell.Save($stream, [System.Drawing.Imaging.ImageFormat]::Png)
-            $hash = [Convert]::ToHexString([System.Security.Cryptography.SHA256]::HashData($stream.ToArray()))
+            $sha256 = [System.Security.Cryptography.SHA256]::Create()
+            try {
+                $hashBytes = $sha256.ComputeHash($stream.ToArray())
+                $hash = [BitConverter]::ToString($hashBytes).Replace('-', '')
+            } finally { $sha256.Dispose() }
             $stream.Dispose(); $cell.Dispose()
             if (-not $hashes.Add($hash)) { throw "Duplicate icon cell in $RelativePath at index $index" }
         }
@@ -146,7 +150,7 @@ Assert-CellOccupancy 'ui\p21-unique-items.png' 5 25 32 55
 Assert-CellOccupancy 'ui\p21-skill-gems.png' 10 78 32 90
 
 function Assert-ItemVisualTiers {
-    $catalog = Get-Content -LiteralPath (Join-Path $RepositoryRoot 'src\Game.Core\P19\Data\p19_catalog.json') -Raw | ConvertFrom-Json
+    $catalog = Get-Content -LiteralPath (Join-Path $RepositoryRoot 'src\Game.Core\P19\Data\p19_catalog.json') -Raw -Encoding UTF8 | ConvertFrom-Json
     $bases = @($catalog.bases | Sort-Object StableId)
     $bitmap = [System.Drawing.Bitmap]::FromFile((Join-Path $assetRoot 'ui\p21-item-bases.png'))
     $gold = [System.Drawing.ColorTranslator]::FromHtml('#d9bd72').ToArgb()
@@ -179,7 +183,7 @@ if (-not (Test-Path -LiteralPath $iconPath) -or (Get-Item -LiteralPath $iconPath
 }
 
 $manifestPath = Join-Path $assetRoot 'p21-assets.json'
-$manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
+$manifest = Get-Content -LiteralPath $manifestPath -Raw -Encoding UTF8 | ConvertFrom-Json
 if ($manifest.counts.itemBases -ne 80 -or $manifest.counts.skillGems -ne 78 -or
     $manifest.counts.enemyTypes -ne 48 -or $manifest.animation.columns -ne 31) {
     throw 'P21 asset manifest counts do not match the frozen content contract.'

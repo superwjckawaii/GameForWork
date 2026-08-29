@@ -31,7 +31,10 @@ function New-Graphics([System.Drawing.Image]$image) {
 
 function Get-Hash([string]$value) {
     $bytes = [System.Text.Encoding]::UTF8.GetBytes($value)
-    return [BitConverter]::ToUInt32([System.Security.Cryptography.SHA256]::HashData($bytes), 0)
+    $sha256 = [System.Security.Cryptography.SHA256]::Create()
+    try {
+        return [BitConverter]::ToUInt32($sha256.ComputeHash($bytes), 0)
+    } finally { $sha256.Dispose() }
 }
 
 function Get-Color([string]$hex) { return [System.Drawing.ColorTranslator]::FromHtml($hex) }
