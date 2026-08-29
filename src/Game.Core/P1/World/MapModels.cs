@@ -2,6 +2,7 @@ using GameForWork.Core.P1.Combat;
 using GameForWork.Core.P1.Items;
 using GameForWork.Core.P3;
 using GameForWork.Core.P12;
+using GameForWork.Core.P18;
 using GameForWork.Core.Simulation;
 using System.Text.Json.Serialization;
 
@@ -333,7 +334,8 @@ public sealed record P1TeamBuild(
     int FrontlineCount = 1,
     IReadOnlyList<P1FlaskKind>? Flasks = null,
     bool HasShield = false,
-    int BlockChanceBasisPoints = 0);
+    int BlockChanceBasisPoints = 0,
+    P18CombatProfile? Ascendancy = null);
 
 public sealed record MapNodeResult(
     int NodeIndex,

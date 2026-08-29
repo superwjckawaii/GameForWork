@@ -36,7 +36,7 @@ public static class P6CombatSkillRules
     {
         SkillDefinition definition = P1Skills.Get(configuration.SkillId);
         P17ActiveSkillDefinition active = P17SkillCatalog.ActiveForSkill(configuration.SkillId);
-        int mana = definition.BaseManaCost;
+        int mana = P18.P18AscendancyRules.AttackManaCost(definition.BaseManaCost, definition.Tags);
         int life = 0;
         int range = definition.RangeRaw;
         int cooldown = definition.CooldownTicks;

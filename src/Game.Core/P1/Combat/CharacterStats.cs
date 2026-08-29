@@ -95,11 +95,11 @@ public sealed record CharacterSheet(
     public CalculatedValue ManaRegenerationPerSecond()
     {
         int maximumMana = MaximumMana().Value;
-        int baseRegeneration = checked(maximumMana * 500 / 10_000);
+        int baseRegeneration = checked(maximumMana * 600 / 10_000);
         int value = ApplyIncreased(baseRegeneration, IncreasedManaRegenerationBasisPoints);
         return CalculatedValue.Single(
             "每秒法力恢复",
-            $"{maximumMana} × 5% × (10000 + {IncreasedManaRegenerationBasisPoints}) / 10000",
+            $"{maximumMana} × 6% × (10000 + {IncreasedManaRegenerationBasisPoints}) / 10000",
             value);
     }
 

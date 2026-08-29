@@ -258,7 +258,7 @@ public static class SkillRules
         }
 
         int range = P1Skills.HeavyStrike.RangeRaw;
-        int manaCost = P1Skills.HeavyStrike.BaseManaCost;
+        int manaCost = P18.P18AscendancyRules.AttackManaCost(P1Skills.HeavyStrike.BaseManaCost, P1Skills.HeavyStrike.Tags);
         int lifeCost = 0;
         int bleedChance = 0;
         int increasedAttackSpeed = additionalIncreasedAttackSpeedBasisPoints;

@@ -1,5 +1,6 @@
 using GameForWork.Core.P1.World;
 using GameForWork.Core.P12;
+using GameForWork.Core.P18;
 
 namespace GameForWork.Core.P10;
 
@@ -53,27 +54,6 @@ public static class P10AtlasTree
     }
 }
 
-public sealed record P10AscendancyNode(string StableId, string DisplayName, string? PrerequisiteId, string Effect);
-
-public static class P10IronOathAscendancy
-{
-    public static IReadOnlyList<P10AscendancyNode> Nodes { get; } =
-    [
-        new("core.ascendancy.iron_oath.01", "铸铁宣誓", null, "护甲提高 20%，近战伤害提高 10%"),
-        new("core.ascendancy.iron_oath.02", "不退阵线", "core.ascendancy.iron_oath.01", "移动接敌期间承伤降低 8%"),
-        new("core.ascendancy.iron_oath.03", "震令回响", "core.ascendancy.iron_oath.01", "战吼冷却恢复提高 25%"),
-        new("core.ascendancy.iron_oath.04", "血火锻身", "core.ascendancy.iron_oath.02", "流血伤害提高 25%"),
-        new("core.ascendancy.iron_oath.05", "重岳落势", "core.ascendancy.iron_oath.03", "双手攻击伤害提高 25%"),
-        new("core.ascendancy.iron_oath.06", "钢魂", "core.ascendancy.iron_oath.04", "最大生命提高 12%"),
-        new("core.ascendancy.iron_oath.07", "军锋号令", "core.ascendancy.iron_oath.05", "队伍攻击速度提高 8%"),
-        new("core.ascendancy.iron_oath.08", "永续铁誓", "core.ascendancy.iron_oath.06", "重伤时药剂效果提高 35%"),
-        new("core.ascendancy.iron_oath.09", "破阵者", "core.ascendancy.iron_oath.07", "对 Boss 伤害提高 20%"),
-        new("core.ascendancy.iron_oath.10", "余烬甲胄", "core.ascendancy.iron_oath.08", "元素承伤降低 8%"),
-        new("core.ascendancy.iron_oath.11", "百战锋芒", "core.ascendancy.iron_oath.09", "击败精英后获得锋芒"),
-        new("core.ascendancy.iron_oath.12", "铁誓不灭", "core.ascendancy.iron_oath.10", "濒死时每场战斗触发一次不灭"),
-    ];
-}
-
 public sealed record P10EndgameSnapshot(
     IReadOnlyList<int> CompletedTiers,
     IReadOnlyList<string> AtlasPassives,
@@ -94,7 +74,10 @@ public sealed record P10EndgameSnapshot(
     bool MythicGranted = false,
     int BreakthroughAttempts = 0,
     int BreakthroughVictories = 0,
-    int BonusAtlasPoints = 0);
+    int BonusAtlasPoints = 0,
+    P18Ascendancy SelectedAscendancy = P18Ascendancy.None,
+    bool Act3AscendancyAwarded = false,
+    bool Act5AscendancyAwarded = false);
 
 public sealed record P12AtlasSchemeSnapshot(string Name, IReadOnlyList<string> AllocatedPassives);
 
@@ -134,6 +117,10 @@ public sealed class P10EndgameState
     public int BreakthroughAttempts { get; private set; }
     public int BreakthroughVictories { get; private set; }
     public int BonusAtlasPoints { get; private set; }
+    public P18Ascendancy SelectedAscendancy { get; private set; }
+    public bool Act3AscendancyAwarded { get; private set; }
+    public bool Act5AscendancyAwarded { get; private set; }
+    public const int MaximumAscendancyPoints = 8;
 
     public IReadOnlyList<P10MapMechanic> RecordMapCompletion(P1MapItem map, MapRoute route, ulong seed)
     {
@@ -203,14 +190,53 @@ public sealed class P10EndgameState
         return true;
     }
 
+    public bool TrySelectAscendancy(P18Ascendancy ascendancy)
+    {
+        if (ascendancy == P18Ascendancy.None || SelectedAscendancy != P18Ascendancy.None || BreakthroughPoints <= 0)
+            return false;
+        SelectedAscendancy = ascendancy;
+        return true;
+    }
+
     public bool TryAllocateAscendancy(string id)
     {
-        P10AscendancyNode node = P10IronOathAscendancy.Nodes.Single(item => item.StableId == id);
+        P18AscendancyNode node = P18AscendancyCatalog.Get(id);
+        if (SelectedAscendancy == P18Ascendancy.None || node.Ascendancy != SelectedAscendancy) return false;
         if (_ascendancy.Contains(id) || _ascendancy.Count >= BreakthroughPoints || node.PrerequisiteId is not null && !_ascendancy.Contains(node.PrerequisiteId)) return false;
         return _ascendancy.Add(id);
     }
 
-    public void AwardBreakthroughPoint(int count = 1) => BreakthroughPoints = Math.Min(6, BreakthroughPoints + Math.Max(0, count));
+    public bool TryRefundAscendancy(string id)
+    {
+        if (!_ascendancy.Contains(id) || P18AscendancyCatalog.For(SelectedAscendancy)
+                .Any(node => node.PrerequisiteId == id && _ascendancy.Contains(node.StableId))) return false;
+        return _ascendancy.Remove(id);
+    }
+
+    public void ResetAscendancy(bool clearSelection)
+    {
+        _ascendancy.Clear();
+        if (clearSelection) SelectedAscendancy = P18Ascendancy.None;
+    }
+
+    public bool AwardCampaignAscendancyPoints(int act)
+    {
+        if (act == 3 && !Act3AscendancyAwarded)
+        {
+            Act3AscendancyAwarded = true;
+            AwardBreakthroughPoint(2);
+            return true;
+        }
+        if (act == 5 && !Act5AscendancyAwarded)
+        {
+            Act5AscendancyAwarded = true;
+            AwardBreakthroughPoint(2);
+            return true;
+        }
+        return false;
+    }
+
+    public void AwardBreakthroughPoint(int count = 1) => BreakthroughPoints = Math.Min(MaximumAscendancyPoints, BreakthroughPoints + Math.Max(0, count));
     public bool TrySpendLifeForce(int amount)
     {
         if (amount <= 0 || LifeForce < amount) return false;
@@ -260,7 +286,8 @@ public sealed class P10EndgameState
         FinalBreakthroughCompleted,
         _atlasSchemes.Select(scheme => new P12AtlasSchemeSnapshot(scheme.Name, scheme.Nodes.Order().ToArray())).ToArray(),
         ActiveAtlasSchemeIndex, CitadelVictories, MythicReforgeMaterials, MythicGranted,
-        BreakthroughAttempts, BreakthroughVictories, BonusAtlasPoints);
+        BreakthroughAttempts, BreakthroughVictories, BonusAtlasPoints, SelectedAscendancy,
+        Act3AscendancyAwarded, Act5AscendancyAwarded);
 
     public static P10EndgameState Restore(P10EndgameSnapshot? snapshot)
     {
@@ -268,9 +295,9 @@ public sealed class P10EndgameState
         if (snapshot is null) return state;
         if (snapshot.CompletedTiers.Any(tier => tier is < 1 or > 20) || snapshot.AtlasPassives.Count > 25 ||
             snapshot.CitadelFragments is < 0 or >= CitadelFragmentsPerTicket || snapshot.CitadelTickets < 0 ||
-            snapshot.BreakthroughPoints is < 0 or > 6 || snapshot.AscendancyPassives.Count > snapshot.BreakthroughPoints ||
+            snapshot.BreakthroughPoints is < 0 or > MaximumAscendancyPoints || snapshot.AscendancyPassives.Count > snapshot.BreakthroughPoints ||
             snapshot.CitadelVictories < 0 || snapshot.MythicReforgeMaterials < 0 || snapshot.BreakthroughAttempts < 0 ||
-            snapshot.BreakthroughVictories < 0 || snapshot.BonusAtlasPoints is < 0 or > 5)
+            snapshot.BreakthroughVictories < 0 || snapshot.BonusAtlasPoints is < 0 or > 5 || !Enum.IsDefined(snapshot.SelectedAscendancy))
             throw new InvalidDataException("P10 endgame snapshot is invalid.");
         foreach (int tier in snapshot.CompletedTiers) state._completedTiers.Add(tier);
         IReadOnlyList<P12AtlasSchemeSnapshot> schemes = snapshot.AtlasSchemes ??
@@ -294,7 +321,16 @@ public sealed class P10EndgameState
         state.BreakthroughAttempts = snapshot.BreakthroughAttempts;
         state.BreakthroughVictories = snapshot.BreakthroughVictories;
         state.BonusAtlasPoints = snapshot.BonusAtlasPoints > 0 ? snapshot.BonusAtlasPoints : snapshot.CitadelDefeated ? 5 : 0;
-        foreach (string id in snapshot.AscendancyPassives) { _ = P10IronOathAscendancy.Nodes.Single(node => node.StableId == id); state._ascendancy.Add(id); }
+        state.SelectedAscendancy = snapshot.SelectedAscendancy;
+        state.Act3AscendancyAwarded = snapshot.Act3AscendancyAwarded;
+        state.Act5AscendancyAwarded = snapshot.Act5AscendancyAwarded;
+        foreach (string id in snapshot.AscendancyPassives)
+        {
+            if (id.StartsWith("core.ascendancy.iron_oath.", StringComparison.Ordinal)) continue;
+            P18AscendancyNode node = P18AscendancyCatalog.Get(id);
+            if (node.Ascendancy != state.SelectedAscendancy) throw new InvalidDataException("P18 ascendancy node belongs to another path.");
+            state._ascendancy.Add(id);
+        }
         return state;
     }
 }

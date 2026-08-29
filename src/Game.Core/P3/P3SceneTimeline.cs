@@ -41,6 +41,8 @@ public enum P3SceneEventKind
     Ailment,
     Block,
     Guard,
+    Ascendancy,
+    FlaskCharge,
 }
 
 public sealed record P3GridPosition(int X, int Y);
@@ -308,6 +310,8 @@ public static class P3SceneTimelineBuilder
                 P4SpatialEventKind.Ailment => P3SceneEventKind.Ailment,
                 P4SpatialEventKind.Block => P3SceneEventKind.Block,
                 P4SpatialEventKind.Guard => P3SceneEventKind.Guard,
+                P4SpatialEventKind.Ascendancy => P3SceneEventKind.Ascendancy,
+                P4SpatialEventKind.FlaskCharge => P3SceneEventKind.FlaskCharge,
                 P4SpatialEventKind.EnemyAttack => P3SceneEventKind.EnemyAttack,
                 P4SpatialEventKind.Bleed => P3SceneEventKind.Bleed,
                 P4SpatialEventKind.Flask => P3SceneEventKind.Flask,

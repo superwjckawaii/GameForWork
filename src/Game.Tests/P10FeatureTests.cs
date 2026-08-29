@@ -2,6 +2,7 @@ using GameForWork.Core.P1.Progression;
 using GameForWork.Core.P1.World;
 using GameForWork.Core.P10;
 using GameForWork.Core.P1;
+using GameForWork.Core.P18;
 
 namespace GameForWork.Tests;
 
@@ -40,7 +41,8 @@ public sealed class P10FeatureTests
         state.RecordCitadelVictory();
         Assert.True(state.CitadelDefeated);
         Assert.Equal(2, state.BreakthroughPoints);
-        Assert.True(state.TryAllocateAscendancy("core.ascendancy.iron_oath.01"));
+        Assert.True(state.TrySelectAscendancy(P18Ascendancy.BloodConqueror));
+        Assert.True(state.TryAllocateAscendancy(P18NodeIds.BloodLifeSmall));
     }
 
     [Fact]

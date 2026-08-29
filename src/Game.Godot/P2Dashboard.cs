@@ -11,6 +11,7 @@ using GameForWork.Core.P6;
 using GameForWork.Core.P9;
 using GameForWork.Core.P10;
 using GameForWork.Core.P16;
+using GameForWork.Core.P18;
 using Godot;
 using System.Security.Cryptography;
 using System.Text.Json;
@@ -77,6 +78,7 @@ public partial class P2Dashboard : VBoxContainer
     private P9MetalPanel? _metalPanel;
     private P9TownPanel? _townPanel;
     private P10EndgamePanel? _endgamePanel;
+    private P18AscendancyPanel? _ascendancyPanel;
     private OptionButton? _characterSelector;
     private PopupMenu? _itemMenu;
     private ConfirmationDialog? _confirmDialog;
@@ -536,9 +538,13 @@ public partial class P2Dashboard : VBoxContainer
     private Control BuildPassiveMode()
     {
         VBoxContainer page = Page("天赋");
+        var tabs = new TabContainer { SizeFlagsVertical = SizeFlags.ExpandFill };
+        page.AddChild(tabs);
+        VBoxContainer main = Page("主天赋");
+        tabs.AddChild(main);
         var search = new LineEdit { PlaceholderText = "搜索天赋名称或效果；规划不会消耗点数" };
         search.TextChanged += query => _passiveTree?.SetSearch(query);
-        page.AddChild(search);
+        main.AddChild(search);
         _passiveTree = new P1PassiveTreeView();
         _passiveTree.NodeSelected += stableId =>
         {
@@ -569,9 +575,9 @@ public partial class P2Dashboard : VBoxContainer
                 ? "天赋已退还。"
                 : "洗点会切断已分配路径，或记忆灰烬不足。");
         };
-        page.AddChild(_passiveTree);
+        main.AddChild(_passiveTree);
         var row = new HBoxContainer();
-        page.AddChild(row);
+        main.AddChild(row);
         _selectedPassive = new Label
         {
             Text = "单击查看 · 左键双击加点 · 右键双击洗点（不会切断已分配路径）",
@@ -591,7 +597,7 @@ public partial class P2Dashboard : VBoxContainer
         Button reset = AddButton(row, "完整重置", ResetPassives);
         _heroOnlyControls.AddRange([allocate, refund, reset]);
         var specialization = new HFlowContainer();
-        page.AddChild(specialization);
+        main.AddChild(specialization);
         var mastery = new OptionButton { TooltipText = "分配专精节点后，从三个互斥效果中选择一个。" };
         mastery.AddItem("攻坚 / 生命 / 机动选项一", 0);
         mastery.AddItem("攻坚 / 生命 / 机动选项二", 1);
@@ -615,6 +621,9 @@ public partial class P2Dashboard : VBoxContainer
                 ? "记忆珠宝已镶嵌，半径主题效果已生效。" : "请先分配并选中记忆棱孔。");
         });
         _heroOnlyControls.AddRange([chooseMastery, socketJewel]);
+        _ascendancyPanel = new P18AscendancyPanel { Name = "升华", SizeFlagsVertical = SizeFlags.ExpandFill };
+        _ascendancyPanel.Initialize(RequireSession, Changed);
+        tabs.AddChild(_ascendancyPanel);
         return Wrap(page);
     }
 
@@ -1430,6 +1439,7 @@ public partial class P2Dashboard : VBoxContainer
                 .ToArray();
             _equipmentGrid!.SetSlots(slots);
             _passiveTree!.SetState(_session.Passives.Allocated, _session.World.Hero.Progression.EarnedPassivePoints);
+            _ascendancyPanel?.Refresh();
             bool heroSelected = _selectedCharacter == P2CharacterKind.Hero;
             foreach (BaseButton control in _heroOnlyControls)
             {

@@ -28,7 +28,8 @@ public sealed record P6CombatReport(
     IReadOnlyList<string> LastFiveSeconds,
     string TimeoutReason,
     bool Offline = false,
-    P14DeathReport? DeathReport = null);
+    P14DeathReport? DeathReport = null,
+    int FlaskChargesGained = 0);
 
 public static class P6CombatReportBuilder
 {
@@ -46,6 +47,7 @@ public static class P6CombatReportBuilder
             [P3SceneEventKind.EmberNova] = "余烬新星",
             [P3SceneEventKind.StormBrand] = "风暴烙印",
             [P3SceneEventKind.Bleed] = "流血",
+            [P3SceneEventKind.Ascendancy] = "升华效果",
         };
 
     public static P6CombatReport Build(P3SceneTimeline timeline, string context, bool offline = false)
@@ -74,6 +76,7 @@ public static class P6CombatReportBuilder
             (int)Math.Clamp((timeline.DurationMilliseconds - banner.AtMilliseconds) * 10_000 / timeline.DurationMilliseconds, 0, 10_000);
         int failures = timeline.Events.Count(item => item.Kind == P3SceneEventKind.SkillFailed);
         P3SceneEvent[] flasks = timeline.Events.Where(item => item.Kind == P3SceneEventKind.Flask).ToArray();
+        int flaskCharges = timeline.Events.Where(item => item.Kind == P3SceneEventKind.FlaskCharge).Sum(item => Math.Max(0, item.Value));
         int shieldCoverage = timeline.Events.Count == 0 ? 0 :
             timeline.Events.Count(item => item.HeroShield > 0) * 10_000 / timeline.Events.Count;
         long cutoff = Math.Max(0, timeline.DurationMilliseconds - 5_000);
@@ -101,7 +104,8 @@ public static class P6CombatReportBuilder
             last,
             TimeoutReason(timeline, dealt, failures),
             offline,
-            P14DeathReports.Build(timeline));
+            P14DeathReports.Build(timeline),
+            flaskCharges);
     }
 
     private static P6SupportCombatStat[] BuildSupportStats(IEnumerable<P3SceneEvent> outgoing)

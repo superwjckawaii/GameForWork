@@ -191,7 +191,7 @@ public partial class P5ExpeditionPanel : VBoxContainer
                 {
                     Text = $"输出 {report.DamageDealt}：{skills}\n辅助：{supports}\n承伤 {report.DamageTaken}：{sources}\n" +
                            $"战吼覆盖 {report.WarCryCoverageBasisPoints / 100.0:0.#}% · 战旗覆盖 {report.BannerCoverageBasisPoints / 100.0:0.#}% · " +
-                           $"护盾覆盖 {report.ShieldCoverageBasisPoints / 100.0:0.#}% · 药剂 {report.FlaskUses}次/+{report.FlaskRecovery} · 资源失败 {report.ResourceFailureCount}" +
+                           $"护盾覆盖 {report.ShieldCoverageBasisPoints / 100.0:0.#}% · 药剂 {report.FlaskUses}次/+{report.FlaskRecovery} · 击杀充能 +{report.FlaskChargesGained} · 资源失败 {report.ResourceFailureCount}" +
                            (string.IsNullOrEmpty(report.TimeoutReason) ? string.Empty : $"\n超时归因：{report.TimeoutReason}") +
                            $"\n最后 5 秒：{string.Join("；", report.LastFiveSeconds.TakeLast(12))}",
                     AutowrapMode = TextServer.AutowrapMode.WordSmart,

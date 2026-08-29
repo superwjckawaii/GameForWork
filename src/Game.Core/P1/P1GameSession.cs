@@ -11,6 +11,7 @@ using GameForWork.Core.P10;
 using GameForWork.Core.P12;
 using GameForWork.Core.P14;
 using GameForWork.Core.P17;
+using GameForWork.Core.P18;
 
 namespace GameForWork.Core.P1;
 
@@ -160,6 +161,7 @@ public sealed class P1GameSession
         DebugTwentyTimes = debugTwentyTimes;
         Management.NormalizeSkillChains(P5SkillChainRules.Build(HeroEquipment));
         HeavyStrikeSupports = SupportsFor("core.skill_stone.heavy_strike");
+        SynchronizeCampaignAscendancyPoints();
         _heroBuild = AssembleHero();
         RefreshHeroTeamBuild();
         RefreshMercenaryPartyBuild();
@@ -196,6 +198,7 @@ public sealed class P1GameSession
         EquipStarter(equipment, EquipmentSlot.Gloves, "core.base.iron_gauntlets", seed + 6);
         EquipStarter(equipment, EquipmentSlot.RingLeft, "core.base.life_ring", seed + 4);
         EquipStarter(equipment, EquipmentSlot.Flask1, "core.base.life_flask", seed + 5);
+        EquipStarter(equipment, EquipmentSlot.Flask2, "core.base.mana_flask", seed + 7);
         var passives = new PassiveTreeAllocation();
         AssembledCharacterBuild build = CharacterBuildAssembler.Assemble(
             1,
@@ -400,6 +403,7 @@ public sealed class P1GameSession
                 Seed,
                 offline,
                 asyncPreparation);
+            SynchronizeCampaignAscendancyPoints();
             SimulationSequence = checked(SimulationSequence + campaignResult.NodesCompleted);
             if (campaignResult.NodesCompleted > 0) RefreshHeroBuild();
             return new P1OfflineResult(
@@ -484,6 +488,14 @@ public sealed class P1GameSession
         int storageCapacity = Town.Level(P9BuildingKind.Storage) switch { 1 => 100, 2 => 150, 3 => 225, _ => 325 };
         World.Storage.TrySetCapacity(Math.Max(storageCapacity, World.Storage.Count));
         World.Teleporter.TrySetLevel(Town.Level(P9BuildingKind.Teleporter));
+    }
+
+    private void SynchronizeCampaignAscendancyPoints()
+    {
+        if (Campaign.CompletedNodeIds.Contains("core.campaign.act3.node6"))
+            Endgame.AwardCampaignAscendancyPoints(3);
+        if (Campaign.CompletedNodeIds.Contains("core.campaign.act5.node6"))
+            Endgame.AwardCampaignAscendancyPoints(5);
     }
 
     public bool TryUpgradeTownBuilding(P9BuildingKind kind, out string message) =>
@@ -1049,12 +1061,16 @@ public sealed class P1GameSession
         RefreshHeroTeamBuild();
     }
 
-    private AssembledCharacterBuild AssembleHero() => CharacterBuildAssembler.Assemble(
-        World.Hero.Progression.Level,
-        CharacterAttributes.IronOathStarting,
-        HeroEquipment,
-        Passives,
-        new SkillConfiguration(P1SkillIds.HeavyStrike, HeavyStrikeSupports));
+    private AssembledCharacterBuild AssembleHero()
+    {
+        AssembledCharacterBuild build = CharacterBuildAssembler.Assemble(
+            World.Hero.Progression.Level,
+            CharacterAttributes.IronOathStarting,
+            HeroEquipment,
+            Passives,
+            new SkillConfiguration(P1SkillIds.HeavyStrike, HeavyStrikeSupports));
+        return build with { Sheet = P18AscendancyRules.ApplySheet(build.Sheet, AscendancyProfile()) };
+    }
 
     private static CombatPreview Preview(AssembledCharacterBuild build) => CombatPreviewRules.Calculate(
         build.Sheet,
@@ -1070,7 +1086,10 @@ public sealed class P1GameSession
         increasedBleedChanceBasisPoints: build.IncreasedBleedChanceBasisPoints);
 
     private void RefreshHeroTeamBuild() => World.Hero.UpdateBuild(
-        ToTeamBuild(_heroBuild, HeavyStrikeSupports, HeroAi, BuildActiveSkills()));
+        ToTeamBuild(_heroBuild, HeavyStrikeSupports, HeroAi, BuildActiveSkills(), AscendancyProfile()));
+
+    private P18CombatProfile AscendancyProfile() => new(Endgame.SelectedAscendancy,
+        Endgame.AscendancyPassives.Order(StringComparer.Ordinal).ToArray());
 
     private void RefreshMercenaryBuild()
     {
@@ -1098,6 +1117,35 @@ public sealed class P1GameSession
         bool changed = Endgame.TryAllocateAscendancy(stableId);
         if (changed) RefreshHeroBuild();
         return changed;
+    }
+
+    public bool TrySelectAscendancy(P18Ascendancy ascendancy)
+    {
+        bool changed = Endgame.TrySelectAscendancy(ascendancy);
+        if (changed) RefreshHeroBuild();
+        return changed;
+    }
+
+    public bool TryRefundAscendancyPassive(string stableId)
+    {
+        P18AscendancyNode node = P18AscendancyCatalog.Get(stableId);
+        int cost = node.Kind == P18NodeKind.Core ? 10_000 : 2_000;
+        if (!Endgame.AscendancyPassives.Contains(stableId) || World.Economy.Gold < cost ||
+            !Endgame.TryRefundAscendancy(stableId)) return false;
+        _ = World.Economy.TrySpendGold(cost);
+        RefreshHeroBuild();
+        return true;
+    }
+
+    public bool TryResetAscendancy(bool changePath)
+    {
+        int cost = changePath ? 100_000 : 50_000;
+        if ((!changePath && Endgame.AscendancyPassives.Count == 0) ||
+            (changePath && Endgame.SelectedAscendancy == P18Ascendancy.None) ||
+            !World.Economy.TrySpendGold(cost)) return false;
+        Endgame.ResetAscendancy(changePath);
+        RefreshHeroBuild();
+        return true;
     }
 
     public bool TryChallengeCitadel()
@@ -1131,7 +1179,8 @@ public sealed class P1GameSession
         AssembledCharacterBuild build,
         SkillSupport supports,
         HeroAiConfiguration ai,
-        IReadOnlyList<SkillConfiguration>? activeSkills = null) => new P1TeamBuild(
+        IReadOnlyList<SkillConfiguration>? activeSkills = null,
+        P18CombatProfile? ascendancy = null) => new P1TeamBuild(
         build.Sheet,
         build.Equipment.Weapon ?? throw new InvalidOperationException("Hero weapon is missing."),
         new SkillConfiguration(P1SkillIds.HeavyStrike, supports),
@@ -1162,7 +1211,8 @@ public sealed class P1GameSession
         ],
         Flasks: build.Flasks,
         HasShield: build.Equipment.HasShield,
-        BlockChanceBasisPoints: build.Equipment.HasShield ? 2_000 : 0) with
+        BlockChanceBasisPoints: build.Equipment.HasShield ? 2_000 : 0,
+        Ascendancy: ascendancy) with
         {
             AiSummary = $"{ai.Preset} · {(ai.MatchMode == AiRuleMatchMode.All ? "全部满足" : "任一满足")}：" +
                 $"敌人≥{ai.MinimumEnemyCount}、稀有度 {ai.EnemyRarity}、距离≤{ai.MaximumEnemyDistance}、" +
