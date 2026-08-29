@@ -42,6 +42,11 @@ if ((Get-Content -LiteralPath $combatAudit -Raw) -ne
     throw 'Generated P22 combat audit differs from the committed release audit.'
 }
 Invoke-NativeChecked -FilePath $godotBinary -Arguments @('--headless', '--path', $godotProject, '--editor', '--quit') -Label 'Godot import check' -RejectGodotErrors
+if ($Configuration -ne 'Debug') {
+    Invoke-NativeChecked -FilePath $dotnetBinary -Arguments @(
+        'build', (Join-Path $godotProject 'GameForWork.csproj'), '--no-restore', '--configuration', 'Debug'
+    ) -Label 'Build Godot startup assembly'
+}
 Invoke-NativeChecked -FilePath $godotBinary -Arguments @('--headless', '--path', $godotProject, '--quit-after', '10') -Label 'Godot startup check' -RejectGodotErrors
 
 Write-Host '[verify] PASS: assets, restore, build, tests, audits, Godot import and startup all succeeded.'
