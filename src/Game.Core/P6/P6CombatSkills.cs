@@ -1,4 +1,5 @@
 using GameForWork.Core.P1.Combat;
+using GameForWork.Core.P1.Progression;
 using GameForWork.Core.P17;
 
 namespace GameForWork.Core.P6;
@@ -32,7 +33,7 @@ public sealed record P6ResolvedSkill(
 
 public static class P6CombatSkillRules
 {
-    public static P6ResolvedSkill Resolve(SkillConfiguration configuration, int maximumLife)
+    public static P6ResolvedSkill Resolve(SkillConfiguration configuration, int maximumLife, P205PassiveModifiers? passive = null)
     {
         SkillDefinition definition = P1Skills.Get(configuration.SkillId);
         P17ActiveSkillDefinition active = P17SkillCatalog.ActiveForSkill(configuration.SkillId);
@@ -141,6 +142,11 @@ public static class P6CombatSkillRules
         if (configuration.Supports.HasFlag(SkillSupport.Pierce)) pierce += 2;
         if (configuration.Supports.HasFlag(SkillSupport.Fork)) fork += 2;
         if (configuration.Supports.HasFlag(SkillSupport.Return)) returns = true;
+        passive ??= P205PassiveModifiers.Empty;
+        mana = Math.Max(0, checked(mana * Math.Max(0, 10_000 - passive.ReducedSkillCostBasisPoints) / 10_000));
+        life = Math.Max(0, checked(life * Math.Max(0, 10_000 - passive.ReducedSkillCostBasisPoints) / 10_000));
+        range = Math.Max(1, checked(range * (10_000 + passive.IncreasedSkillRangeBasisPoints) / 10_000));
+        cooldown = Math.Max(1, checked(cooldown * 10_000 / Math.Max(1, 10_000 + passive.IncreasedCooldownRecoveryBasisPoints)));
         ailmentChance = Math.Clamp(ailmentChance + bleed, 0, 10_000);
         return new P6ResolvedSkill(configuration.SkillId, mana, life, range, castTime, cooldown,
             damage, bleed, projectiles, projectileSpeed, chains, leech, executeThreshold, execute, nonExecute,

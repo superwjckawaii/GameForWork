@@ -550,11 +550,16 @@ public partial class P2Dashboard : VBoxContainer
         var search = new LineEdit { PlaceholderText = "搜索天赋名称或效果；规划不会消耗点数" };
         search.TextChanged += query => _passiveTree?.SetSearch(query);
         main.AddChild(search);
+        OptionButton? mastery = null;
         _passiveTree = new P1PassiveTreeView();
         _passiveTree.NodeSelected += stableId =>
         {
             PassiveNodeDefinition node = P1PassiveTree.Get(stableId);
             _selectedPassive!.Text = $"已选择：{node.DisplayName} · {string.Join("；", node.Effects.Select(P1UiText.PassiveEffect))}";
+            mastery!.Clear();
+            IReadOnlyList<PassiveEffect> options = P1PassiveTree.MasteryOptions(node);
+            for (int index = 0; index < options.Count; index++) mastery.AddItem(P1UiText.PassiveEffect(options[index]), index);
+            mastery.Disabled = options.Count == 0;
         };
         _passiveTree.NodeAllocateRequested += stableId =>
         {
@@ -581,7 +586,7 @@ public partial class P2Dashboard : VBoxContainer
                 : "洗点会切断已分配路径，或记忆灰烬不足。");
         };
         main.AddChild(_passiveTree);
-        var row = new HBoxContainer();
+        var row = new HFlowContainer();
         main.AddChild(row);
         _selectedPassive = new Label
         {
@@ -591,8 +596,21 @@ public partial class P2Dashboard : VBoxContainer
         row.AddChild(_selectedPassive);
         Button allocate = AddButton(row, "分配", AllocateSelectedPassive);
         AddButton(row, "规划最短路径", () => Changed(_passiveTree?.PlanPathToSelected() == true
-            ? "已规划到目标节点的最短路径；未消耗天赋点。"
+            ? $"已规划最短路径，共需 {_passiveTree.PlannedCost} 点；未消耗天赋点。"
             : "请先选择目标节点。"));
+        Button allocatePath = AddButton(row, "按规划分配", () =>
+        {
+            if (_selectedCharacter != P2CharacterKind.Hero)
+            {
+                Changed("佣兵天赋由自主成长决定，不能手动分配。");
+                return;
+            }
+            string? id = _passiveTree?.SelectedStableId;
+            Changed(id is not null && RequireSession().TryAllocatePassivePath(id)
+                ? "最短路径已一次性分配。" : "可用点数不足，或目标已分配。");
+        });
+        AddButton(row, "回到起点", () => _passiveTree?.CenterOnStart());
+        AddButton(row, "全图", () => _passiveTree?.FitAll());
         AddButton(row, "清除规划", () =>
         {
             _passiveTree?.ClearPlan();
@@ -600,13 +618,10 @@ public partial class P2Dashboard : VBoxContainer
         });
         Button refund = AddButton(row, "退还", RefundSelectedPassive);
         Button reset = AddButton(row, "完整重置", ResetPassives);
-        _heroOnlyControls.AddRange([allocate, refund, reset]);
+        _heroOnlyControls.AddRange([allocate, allocatePath, refund, reset]);
         var specialization = new HFlowContainer();
         main.AddChild(specialization);
-        var mastery = new OptionButton { TooltipText = "分配专精节点后，从三个互斥效果中选择一个。" };
-        mastery.AddItem("攻坚 / 生命 / 机动选项一", 0);
-        mastery.AddItem("攻坚 / 生命 / 机动选项二", 1);
-        mastery.AddItem("攻坚 / 生命 / 机动选项三", 2);
+        mastery = new OptionButton { TooltipText = "分配专精节点后，从该类别六个效果中选择一个；同类专精效果全局唯一。", Disabled = true };
         specialization.AddChild(mastery);
         Button chooseMastery = AddButton(specialization, "选择专精效果", () =>
         {
@@ -625,7 +640,12 @@ public partial class P2Dashboard : VBoxContainer
             Changed(id is not null && RequireSession().TrySocketJewel(id, (PassiveJewelKind)jewel.GetItemId(jewel.Selected))
                 ? "记忆珠宝已镶嵌，半径主题效果已生效。" : "请先分配并选中记忆棱孔。");
         });
-        _heroOnlyControls.AddRange([chooseMastery, socketJewel]);
+        Button unsocketJewel = AddButton(specialization, "取下珠宝", () =>
+        {
+            string? id = _passiveTree?.SelectedStableId;
+            Changed(id is not null && RequireSession().TryUnsocketJewel(id) ? "记忆珠宝已取下。" : "该棱孔没有珠宝。");
+        });
+        _heroOnlyControls.AddRange([chooseMastery, socketJewel, unsocketJewel]);
         _ascendancyPanel = new P18AscendancyPanel { Name = "升华", SizeFlagsVertical = SizeFlags.ExpandFill };
         _ascendancyPanel.Initialize(RequireSession, Changed);
         tabs.AddChild(_ascendancyPanel);

@@ -120,7 +120,7 @@ public sealed record P1GameSessionSnapshot(
 
 public sealed class P1GameSession
 {
-    public const int CurrentFormatVersion = 16;
+    public const int CurrentFormatVersion = 17;
     private readonly P1WorldSimulator _simulator = new(new P1MapAttemptResolver());
     private readonly P2CampaignSimulator _campaignSimulator = new();
     private AssembledCharacterBuild _heroBuild;
@@ -252,11 +252,10 @@ public sealed class P1GameSession
             ? restoredMercenary.Equipment
             : EquipmentLoadout.Restore(snapshot.MercenaryEquipment.Select(entry =>
                 new KeyValuePair<EquipmentSlot, ItemInstance>(entry.Slot, entry.Item)));
-        PassiveTreeAllocation passives = PassiveTreeAllocation.Restore(
-            snapshot.AllocatedPassives,
-            snapshot.MemoryAshes,
-            snapshot.MasterySelections,
-            snapshot.SocketedJewels);
+        PassiveTreeAllocation passives = snapshot.FormatVersion < 17
+            ? new PassiveTreeAllocation(snapshot.MemoryAshes)
+            : PassiveTreeAllocation.Restore(snapshot.AllocatedPassives, snapshot.MemoryAshes,
+                snapshot.MasterySelections, snapshot.SocketedJewels);
         P1WorldState world = P1WorldSnapshots.Restore(snapshot.World);
         P9TownState town = P9TownState.Restore(snapshot.Town, snapshot.Seed ^ 0x7039746f776eUL, mercenaryEquipment);
         if (town.Roster.Count > 0) mercenaryEquipment = town.Roster[0].Equipment;
@@ -756,6 +755,17 @@ public sealed class P1GameSession
         return changed;
     }
 
+    public bool TryAllocatePassivePath(string stableId)
+    {
+        bool changed = Passives.TryAllocatePath(stableId, World.Hero.Progression.EarnedPassivePoints);
+        if (changed)
+        {
+            RefreshHeroBuild();
+            Journey.Synchronize(this);
+        }
+        return changed;
+    }
+
     public bool TryRefundPassive(string stableId)
     {
         bool changed = Passives.TryRefund(stableId);
@@ -1116,6 +1126,13 @@ public sealed class P1GameSession
         return changed;
     }
 
+    public bool TryUnsocketJewel(string stableId)
+    {
+        bool changed = Passives.TryUnsocketJewel(stableId);
+        if (changed) RefreshHeroBuild();
+        return changed;
+    }
+
     public bool TryAllocateAscendancyPassive(string stableId)
     {
         bool changed = Endgame.TryAllocateAscendancy(stableId);
@@ -1217,9 +1234,15 @@ public sealed class P1GameSession
         Flasks: build.Flasks,
         HasShield: build.Equipment.HasShield,
         BlockChanceBasisPoints: checked(build.Equipment.BaseBlockChanceBasisPoints +
-            build.Equipment.Modifiers.BlockChanceBasisPoints),
+            build.Equipment.Modifiers.BlockChanceBasisPoints + (build.Passives.Advanced?.BlockChanceBasisPoints ?? 0)),
         Ascendancy: ascendancy,
-        HasUsableWeapon: build.HasUsableWeapon) with
+        HasUsableWeapon: build.HasUsableWeapon,
+        PassiveProfile: build.Passives.Advanced,
+        CriticalMultiplierBasisPoints: checked(15_000 + (build.Passives.Advanced?.IncreasedCriticalMultiplierBasisPoints ?? 0)),
+        AlwaysHit: build.Passives.Advanced?.ResoluteTechnique == true,
+        CannotCrit: build.Passives.Advanced?.ResoluteTechnique == true,
+        IncreasedWarCryCooldownRecoveryBasisPoints: build.Passives.IncreasedWarCryCooldownRecoveryBasisPoints,
+        IncreasedWarCryRangeBasisPoints: build.Passives.IncreasedWarCryRangeBasisPoints) with
         {
             AiSummary = $"{ai.Preset} · {(ai.MatchMode == AiRuleMatchMode.All ? "全部满足" : "任一满足")}：" +
                 $"敌人≥{ai.MinimumEnemyCount}、稀有度 {ai.EnemyRarity}、距离≤{ai.MaximumEnemyDistance}、" +

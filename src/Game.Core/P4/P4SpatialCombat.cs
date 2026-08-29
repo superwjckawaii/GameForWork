@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using System.Text;
 using GameForWork.Core.P1.Combat;
 using GameForWork.Core.P1.Items;
+using GameForWork.Core.P1.Progression;
 using GameForWork.Core.P1.World;
 using GameForWork.Core.Simulation;
 using GameForWork.Core.P6;
@@ -219,14 +220,24 @@ public sealed class P4SpatialCombatRunner
         Dictionary<string, P6ResolvedSkill> p17Skills = skills
             .Where(pair => !legacySkills.Contains(pair.Key))
             .ToDictionary(pair => pair.Key, pair => ApplyAscendancyCost(
-                P6CombatSkillRules.Resolve(pair.Value, hero.MaximumLife), pair.Value, hero.MaximumLife, ascendancy), StringComparer.Ordinal);
+                P6CombatSkillRules.Resolve(pair.Value, hero.MaximumLife, request.Build.PassiveProfile), pair.Value, hero.MaximumLife, ascendancy), StringComparer.Ordinal);
         Dictionary<string, int> p17ReadyTicks = p17Skills.Keys.ToDictionary(key => key, _ => 0, StringComparer.Ordinal);
         Dictionary<string, int> p17UseCounts = p17Skills.Keys.ToDictionary(key => key, _ => 0, StringComparer.Ordinal);
         P6ResolvedSkill? shieldCounter = p17Skills.GetValueOrDefault(P1SkillIds.VengefulCounter);
         SkillConfiguration? shieldCounterConfiguration = skills.GetValueOrDefault(P1SkillIds.VengefulCounter);
         int shieldCounterReadyTick = 0;
-        P6ResolvedSkill? Asc(string id) => Resolve(skills, id, hero.MaximumLife) is { } resolved
-            ? ApplyAscendancyCost(resolved, skills[id], hero.MaximumLife, ascendancy) : null;
+        P6ResolvedSkill? Asc(string id)
+        {
+            if (Resolve(skills, id, hero.MaximumLife, request.Build.PassiveProfile) is not { } resolved) return null;
+            resolved = ApplyAscendancyCost(resolved, skills[id], hero.MaximumLife, ascendancy);
+            if (id != P1SkillIds.WarCry) return resolved;
+            return resolved with
+            {
+                RangeRaw = checked(resolved.RangeRaw * (10_000 + request.Build.IncreasedWarCryRangeBasisPoints) / 10_000),
+                CooldownTicks = Math.Max(1, checked(resolved.CooldownTicks * 10_000 /
+                    Math.Max(1, 10_000 + request.Build.IncreasedWarCryCooldownRecoveryBasisPoints))),
+            };
+        }
         P6ResolvedSkill? cleave = Asc(P1SkillIds.EarthCleave);
         P6ResolvedSkill? blade = Asc(P1SkillIds.SpiritBlade);
         P6ResolvedSkill? charge = Asc(P1SkillIds.SeismicCharge);
@@ -779,12 +790,18 @@ public sealed class P4SpatialCombatRunner
         int raw = skill.Role == P17SkillRole.DamageOverTime && skill.Shape == P17SkillShape.GroundArea
             ? Math.Max(1, request.AreaLevel * 5 + weaponRoll / 2)
             : Math.Max(1, weaponRoll + request.Build.AddedPhysicalDamage);
-        raw = checked(raw * (10_000 + request.Build.IncreasedDamageBasisPoints) / 10_000);
+        P205PassiveModifiers profile = request.Build.PassiveProfile ?? P205PassiveModifiers.Empty;
+        raw = checked(raw * (10_000 + request.Build.IncreasedDamageBasisPoints + profile.DamageFor(tags)) / 10_000);
+        raw = checked(raw * (10_000 + profile.MoreDamageBasisPoints) / 10_000);
         raw = checked(raw * skill.BaseDamageBasisPoints / 10_000);
         raw = checked(raw * P6CombatSkillRules.DamageMultiplier(skill, enemy.Life, enemy.MaximumLife) / 10_000);
         raw = checked(raw * multiplier / 10_000);
         raw = checked(raw * ascendancyMultiplier / 10_000);
         raw = checked(raw * (10_000 + enemy.ShockStacks * 500) / 10_000);
+        int criticalChance = request.Build.CannotCrit ? 0 : checked(
+            request.Build.Weapon.CriticalChanceBasisPoints + request.Build.IncreasedCriticalChanceBasisPoints);
+        if (skill.Role != P17SkillRole.DamageOverTime && random.NextUInt() % 10_000 < Math.Clamp(criticalChance, 0, 10_000))
+            raw = checked(raw * request.Build.CriticalMultiplierBasisPoints / 10_000);
         int armor = enemy.Scaled.Armor * Math.Max(0, 10_000 - enemy.ArmorBreakStacks * runtime.ArmorBreakPerStackBasisPoints) / 10_000;
         if (configuration.Supports.HasFlag(SkillSupport.ArmorPierce)) armor = armor * 7_000 / 10_000;
         P17DamageBreakdown damage = P17DamageRules.Resolve(raw, skill.DamageType, configuration.Supports,
@@ -1064,11 +1081,12 @@ public sealed class P4SpatialCombatRunner
             request.Build.Weapon,
             request.Build.AddedPhysicalDamage,
             request.Build.AddedPhysicalDamage,
-            request.Build.IncreasedDamageBasisPoints,
-            [skillMultiplier, ascendancyMultiplier],
-            checked(request.Build.Weapon.CriticalChanceBasisPoints + request.Build.IncreasedCriticalChanceBasisPoints),
+            checked(request.Build.IncreasedDamageBasisPoints + (request.Build.PassiveProfile ?? P205PassiveModifiers.Empty).DamageFor(tags)),
+            [skillMultiplier, ascendancyMultiplier, 10_000 + (request.Build.PassiveProfile?.MoreDamageBasisPoints ?? 0)],
+            request.Build.CannotCrit ? 0 : checked(request.Build.Weapon.CriticalChanceBasisPoints + request.Build.IncreasedCriticalChanceBasisPoints),
+            request.Build.CriticalMultiplierBasisPoints,
             TargetArmor: enemy.Scaled.Armor,
-            TargetEvasion: enemy.Scaled.Evasion,
+            TargetEvasion: request.Build.AlwaysHit ? 0 : enemy.Scaled.Evasion,
             Accuracy: request.Build.Sheet.Accuracy(request.Build.FlatAccuracy).Value,
             IsSpell: kind is P4SpatialEventKind.SpiritBladeHit or P4SpatialEventKind.ChainHit,
             BleedChanceBasisPoints: checked(bleedChance + runtime.AdditionalBleedChance)), random);
@@ -1430,8 +1448,9 @@ public sealed class P4SpatialCombatRunner
     private static P6ResolvedSkill? Resolve(
         IReadOnlyDictionary<string, SkillConfiguration> skills,
         string skillId,
-        int maximumLife) => skills.TryGetValue(skillId, out SkillConfiguration? configuration)
-        ? P6CombatSkillRules.Resolve(configuration, maximumLife)
+        int maximumLife,
+        P205PassiveModifiers? passive) => skills.TryGetValue(skillId, out SkillConfiguration? configuration)
+        ? P6CombatSkillRules.Resolve(configuration, maximumLife, passive)
         : null;
 
     private static string? Candidate(string skillId, bool available) => available ? skillId : null;

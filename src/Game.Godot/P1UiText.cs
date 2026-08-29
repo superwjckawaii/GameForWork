@@ -102,8 +102,13 @@ internal static class P1UiText
         string prerequisite = node.PrerequisiteId is null
             ? "职业起点可直接连接"
             : $"前置：{P1PassiveTree.Get(node.PrerequisiteId).DisplayName}";
+        string special = string.IsNullOrWhiteSpace(node.SpecialRule) ? string.Empty : $"\n规则：{node.SpecialRule}";
+        string mastery = node.Kind == PassiveNodeKind.Mastery
+            ? "\n专精候选：\n" + string.Join('\n', P1PassiveTree.MasteryOptions(node).Select(PassiveEffect))
+            : string.Empty;
+        string jewel = node.Kind == PassiveNodeKind.JewelSocket ? "\n珠宝半径：150（按半径内已分配节点增幅）" : string.Empty;
         return $"{node.DisplayName} · {NodeKind(node.Kind)}\n{BranchName(node.Branch)} · {state}\n{prerequisite}\n" +
-            string.Join('\n', node.Effects.Select(PassiveEffect));
+            string.Join('\n', node.Effects.Select(PassiveEffect)) + special + mastery + jewel;
     }
 
     public static string PassiveEffect(PassiveEffect effect) => effect.Kind switch
@@ -120,6 +125,14 @@ internal static class P1UiText
         PassiveEffectKind.FlatAccuracy => $"命中值 +{effect.Value}",
         PassiveEffectKind.FlatMaximumLife => $"最大生命 +{effect.Value}",
         PassiveEffectKind.FlatMaximumMana => $"最大法力 +{effect.Value}",
+        PassiveEffectKind.FlatPhysique => $"体魄 +{effect.Value}",
+        PassiveEffectKind.FlatDexterity => $"灵巧 +{effect.Value}",
+        PassiveEffectKind.FlatSpirit => $"精神 +{effect.Value}",
+        PassiveEffectKind.FlatEnergy => $"能量 +{effect.Value}",
+        PassiveEffectKind.FlatLifeRegeneration => $"每秒生命恢复 +{effect.Value}",
+        PassiveEffectKind.RuleResoluteTechnique => "必中誓约：攻击必定命中，但无法暴击",
+        PassiveEffectKind.RuleIronReflexes => "钢铁反射：闪避转化为护甲",
+        PassiveEffectKind.RuleFlaskless => "无药之誓：不能使用药剂",
         _ => $"{PassiveEffectName(effect.Kind)} +{effect.Value / 100.0:0.#}%",
     };
 
@@ -203,6 +216,29 @@ internal static class P1UiText
         PassiveEffectKind.IncreasedManaRegenerationBasisPoints => "法力恢复增加",
         PassiveEffectKind.IncreasedWarCryRangeBasisPoints => "战吼范围增加",
         PassiveEffectKind.IncreasedMovementSpeedBasisPoints => "移动速度增加",
+        PassiveEffectKind.IncreasedCriticalChanceBasisPoints => "暴击率增加",
+        PassiveEffectKind.IncreasedCriticalMultiplierBasisPoints => "暴击伤害倍率增加",
+        PassiveEffectKind.IncreasedEvasionBasisPoints => "闪避增加",
+        PassiveEffectKind.IncreasedShieldBasisPoints => "护盾增加",
+        PassiveEffectKind.BlockChanceBasisPoints => "格挡概率",
+        PassiveEffectKind.SpellSuppressionBasisPoints => "法术压制概率",
+        PassiveEffectKind.FireResistanceBasisPoints => "火焰抗性",
+        PassiveEffectKind.ColdResistanceBasisPoints => "冰霜抗性",
+        PassiveEffectKind.LightningResistanceBasisPoints => "闪电抗性",
+        PassiveEffectKind.VoidResistanceBasisPoints => "虚空抗性",
+        PassiveEffectKind.IncreasedAttackSkillDamageBasisPoints => "攻击技能伤害增加",
+        PassiveEffectKind.IncreasedSpellDamageBasisPoints => "法术伤害增加",
+        PassiveEffectKind.IncreasedMeleeDamageBasisPoints => "近战伤害增加",
+        PassiveEffectKind.IncreasedProjectileDamageBasisPoints => "投射物伤害增加",
+        PassiveEffectKind.IncreasedAreaDamageBasisPoints => "范围伤害增加",
+        PassiveEffectKind.IncreasedPhysicalDamageBasisPoints => "物理伤害增加",
+        PassiveEffectKind.IncreasedElementalDamageBasisPoints => "元素伤害增加",
+        PassiveEffectKind.IncreasedVoidDamageBasisPoints => "虚空伤害增加",
+        PassiveEffectKind.IncreasedDamageOverTimeBasisPoints => "持续伤害增加",
+        PassiveEffectKind.ReducedSkillCostBasisPoints => "技能消耗降低",
+        PassiveEffectKind.IncreasedSkillRangeBasisPoints => "技能范围增加",
+        PassiveEffectKind.IncreasedCooldownRecoveryBasisPoints => "冷却恢复速度增加",
+        PassiveEffectKind.MoreDamageBasisPoints => "伤害总增",
         _ => kind.ToString(),
     };
 
@@ -246,6 +282,14 @@ internal static class P1UiText
         PassiveBranch.Bleed => "流血分支",
         PassiveBranch.Defense => "防御分支",
         PassiveBranch.WarCry => "战吼分支",
+        PassiveBranch.Mobility => "机动分支",
+        PassiveBranch.Critical => "暴击分支",
+        PassiveBranch.Accuracy => "命中分支",
+        PassiveBranch.Mana => "法力分支",
+        PassiveBranch.Shield => "护盾分支",
+        PassiveBranch.Flask => "药剂分支",
+        PassiveBranch.Elemental => "元素分支",
+        PassiveBranch.Void => "虚空分支",
         _ => branch.ToString(),
     };
 }

@@ -7,16 +7,13 @@ namespace GameForWork.Tests;
 public sealed class P1BuildAndItemTests
 {
     [Fact]
-    public void P3PassiveTreeContainsTenOriginalClustersAndMovementGrowth()
+    public void P205PassiveTreeContainsTwelveThematicSectorsAndMovementGrowth()
     {
-        Assert.True(P1PassiveTree.Nodes.Count >= 1_500);
-        Assert.Equal(10, P1PassiveTree.Nodes.Select(node => node.Branch).Distinct().Count());
+        Assert.Equal(1_200, P1PassiveTree.Nodes.Count);
+        Assert.Equal(12, P1PassiveTree.Nodes.Select(node => node.Branch).Distinct().Count());
 
-        var allocation = new PassiveTreeAllocation();
-        for (int index = 1; index <= 3; index++)
-        {
-            Assert.True(allocation.TryAllocate($"core.passive.mobility.{index}", 70));
-        }
+        var allocation = new PassiveTreeAllocation(start: PassiveStartKind.Dexterity);
+        Assert.True(allocation.TryAllocatePath("core.passive.v2.cluster.03.01.cap", 70));
 
         Assert.True(allocation.CalculateModifiers().IncreasedMovementSpeedBasisPoints > 0);
     }
@@ -53,13 +50,50 @@ public sealed class P1BuildAndItemTests
     [Fact]
     public void PassiveTreeHasP3NodeCounts()
     {
-        Assert.Equal(1_624, P1PassiveTree.Nodes.Count);
-        Assert.Equal(1_400, P1PassiveTree.Nodes.Count(node => node.Kind == PassiveNodeKind.Small));
-        Assert.True(P1PassiveTree.Nodes.Count(node => node.Kind == PassiveNodeKind.Notable) >= 120);
-        Assert.True(P1PassiveTree.Nodes.Count(node => node.Kind == PassiveNodeKind.Rule) >= 24);
-        Assert.True(P1PassiveTree.Nodes.Count(node => node.Kind == PassiveNodeKind.Mastery) >= 30);
-        Assert.Equal(16, P1PassiveTree.Nodes.Count(node => node.Kind == PassiveNodeKind.JewelSocket));
+        Assert.Equal(1_200, P1PassiveTree.Nodes.Count);
+        Assert.Equal(904, P1PassiveTree.Nodes.Count(node => node.Kind == PassiveNodeKind.Small));
+        Assert.Equal(144, P1PassiveTree.Nodes.Count(node => node.Kind == PassiveNodeKind.Notable));
+        Assert.Equal(48, P1PassiveTree.Nodes.Count(node => node.Kind == PassiveNodeKind.Rule));
+        Assert.Equal(72, P1PassiveTree.Nodes.Count(node => node.Kind == PassiveNodeKind.Mastery));
+        Assert.Equal(32, P1PassiveTree.Nodes.Count(node => node.Kind == PassiveNodeKind.JewelSocket));
         Assert.Equal(120, PassiveTreeAllocation.MaximumAllocatedPoints);
+    }
+
+    [Fact]
+    public void P205ClustersHaveRelatedSmallNodesAndFourCareerStarts()
+    {
+        PassiveNodeDefinition[] clusterSmall = P1PassiveTree.Nodes
+            .Where(node => node.Kind == PassiveNodeKind.Small && node.StableId.Contains(".v2.cluster.", StringComparison.Ordinal))
+            .ToArray();
+        IGrouping<string, PassiveNodeDefinition>[] clusters = clusterSmall
+            .GroupBy(node => string.Join('.', node.StableId.Split('.')[..^1]))
+            .ToArray();
+
+        Assert.Equal(216, clusters.Length);
+        Assert.All(clusters, cluster => Assert.InRange(cluster.Count(), 3, 4));
+        Assert.Equal(4, P1PassiveTree.Nodes.Count(node => node.Start != PassiveStartKind.None));
+        Assert.All(P1PassiveTree.Nodes.Where(node => node.Start != PassiveStartKind.None), node =>
+            Assert.Equal(20, Assert.Single(node.Effects).Value));
+    }
+
+    [Fact]
+    public void DamageClusterSmallNodesUseSixteenToTwentyPercentIncreased()
+    {
+        PassiveEffectKind[] damageKinds =
+        [
+            PassiveEffectKind.IncreasedTwoHandDamageBasisPoints, PassiveEffectKind.IncreasedMeleeDamageBasisPoints,
+            PassiveEffectKind.IncreasedBleedDamageBasisPoints, PassiveEffectKind.IncreasedPhysicalDamageOverTimeBasisPoints,
+            PassiveEffectKind.IncreasedAttackSkillDamageBasisPoints, PassiveEffectKind.IncreasedProjectileDamageBasisPoints,
+            PassiveEffectKind.IncreasedAreaDamageBasisPoints, PassiveEffectKind.IncreasedElementalDamageBasisPoints,
+            PassiveEffectKind.IncreasedSpellDamageBasisPoints, PassiveEffectKind.IncreasedVoidDamageBasisPoints,
+            PassiveEffectKind.IncreasedDamageOverTimeBasisPoints,
+        ];
+        PassiveEffect[] effects = P1PassiveTree.Nodes
+            .Where(node => node.Kind == PassiveNodeKind.Small && node.StableId.Contains(".v2.cluster.", StringComparison.Ordinal))
+            .SelectMany(node => node.Effects).Where(effect => damageKinds.Contains(effect.Kind)).ToArray();
+
+        Assert.NotEmpty(effects);
+        Assert.All(effects, effect => Assert.InRange(effect.Value, 1_600, 2_000));
     }
 
     [Fact]
@@ -67,12 +101,12 @@ public sealed class P1BuildAndItemTests
     {
         var allocation = new PassiveTreeAllocation();
 
-        Assert.False(allocation.TryAllocate("core.passive.heavy.2", 10));
-        Assert.True(allocation.TryAllocate("core.passive.heavy.1", 1));
-        Assert.False(allocation.TryAllocate("core.passive.heavy.2", 1));
-        Assert.True(allocation.TryAllocate("core.passive.heavy.2", 2));
-        Assert.False(allocation.TryRefund("core.passive.heavy.1"));
-        Assert.True(allocation.TryRefund("core.passive.heavy.2"));
+        Assert.False(allocation.TryAllocate("core.passive.v2.travel.00.10", 10));
+        Assert.True(allocation.TryAllocate("core.passive.start.physique", 1));
+        Assert.False(allocation.TryAllocate("core.passive.v2.travel.00.10", 1));
+        Assert.True(allocation.TryAllocate("core.passive.v2.travel.00.10", 2));
+        Assert.False(allocation.TryRefund("core.passive.start.physique"));
+        Assert.True(allocation.TryRefund("core.passive.v2.travel.00.10"));
         Assert.Equal(4, allocation.MemoryAshes);
     }
 
@@ -80,7 +114,7 @@ public sealed class P1BuildAndItemTests
     public void PassiveResetCostsTenMemoryAshes()
     {
         var allocation = new PassiveTreeAllocation(10);
-        Assert.True(allocation.TryAllocate("core.passive.defense.1", 1));
+        Assert.True(allocation.TryAllocate("core.passive.start.physique", 1));
 
         Assert.True(allocation.TryReset());
 
@@ -190,7 +224,7 @@ public sealed class P1BuildAndItemTests
         Assert.True(loadout.TryEquip(EquipmentSlot.MainHand, Basic("core.base.rusted_greatsword")));
         Assert.True(loadout.TryEquip(EquipmentSlot.RingLeft, Basic("core.base.life_ring")));
         var passives = new PassiveTreeAllocation();
-        Assert.True(passives.TryAllocate("core.passive.heavy.1", 1));
+        Assert.True(passives.TryAllocatePath("core.passive.v2.cluster.00.00.00", 20));
 
         AssembledCharacterBuild build = CharacterBuildAssembler.Assemble(
             1,
@@ -199,8 +233,8 @@ public sealed class P1BuildAndItemTests
             passives,
             new SkillConfiguration(P1SkillIds.HeavyStrike, SkillSupport.None));
 
-        Assert.InRange(build.Sheet.MaximumLife().Value, 128, 138);
-        Assert.Equal(500, build.IncreasedAttackDamageBasisPoints);
+        Assert.InRange(build.Sheet.MaximumLife().Value, 250, 260);
+        Assert.Equal(1_600, build.IncreasedAttackDamageBasisPoints);
         Assert.NotNull(build.Equipment.Weapon);
     }
 

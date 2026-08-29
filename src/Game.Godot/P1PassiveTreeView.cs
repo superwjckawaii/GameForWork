@@ -19,6 +19,7 @@ public partial class P1PassiveTreeView : Control
     private PassiveNodeDefinition[] _nodes = [];
     private IReadOnlySet<string> _allocated = new HashSet<string>();
     private int _earnedPoints;
+    private PassiveStartKind _start = PassiveStartKind.Physique;
     private string _search = string.Empty;
     private Vector2 _pan;
     private float _zoom = 0.42f;
@@ -59,10 +60,27 @@ public partial class P1PassiveTreeView : Control
             }
         }
 
+        if (SelectedStableId is { } selectedId && P1PassiveTree.Get(selectedId).Kind == PassiveNodeKind.JewelSocket)
+        {
+            DrawCircle(ToScreen(_centers[selectedId]), 150f * _zoom, new Color("6b84ad44"));
+            DrawCircle(ToScreen(_centers[selectedId]), 150f * _zoom, new Color("86a3cf"), false, 1.5f);
+        }
+
+        foreach (IGrouping<PassiveBranch, PassiveNodeDefinition> sector in _nodes.GroupBy(node => node.Branch))
+        {
+            PassiveNodeDefinition marker = sector.OrderByDescending(node => node.X * node.X + node.Y * node.Y).First();
+            Vector2 position = ToScreen(new Vector2(marker.X, marker.Y) * 1.12f);
+            if (VisibleWithMargin(position, 80))
+                DrawString(ThemeDB.FallbackFont, position, SectorName(sector.Key), HorizontalAlignment.Center,
+                    72, Math.Max(9, (int)(14 * Math.Clamp(_zoom, .7f, 1.1f))), new Color("837b69"));
+        }
+
         foreach (PassiveNodeDefinition node in _nodes)
         {
             Vector2 center = ToScreen(_centers[node.StableId]);
             if (!VisibleWithMargin(center, 30)) continue;
+            if (_zoom < .28f && node.Kind == PassiveNodeKind.Small && node.Start == PassiveStartKind.None &&
+                !_allocated.Contains(node.StableId) && !_planned.Contains(node.StableId)) continue;
             float radius = NodeRadius(node) * Math.Clamp(_zoom, 0.62f, 1.25f);
             bool allocated = _allocated.Contains(node.StableId);
             bool available = IsAvailable(node);
@@ -72,10 +90,10 @@ public partial class P1PassiveTreeView : Control
             Color border = selected || search ? SelectedColor : _planned.Contains(node.StableId) ? PlannedColor : fill.Lightened(0.3f);
             DrawCircle(center, radius, fill);
             DrawCircle(center, radius, border, false, selected || search ? 3 : 1.5f);
-            if (node.Kind != PassiveNodeKind.Small && radius >= 5)
+            if ((node.Kind != PassiveNodeKind.Small || node.Start != PassiveStartKind.None) && radius >= 5)
             {
                 string glyph = node.Kind switch
-                { PassiveNodeKind.Notable => "◆", PassiveNodeKind.Mastery => "专", PassiveNodeKind.Rule => "律", PassiveNodeKind.JewelSocket => "◇", _ => string.Empty };
+                { PassiveNodeKind.Notable => "◆", PassiveNodeKind.Mastery => "专", PassiveNodeKind.Rule => "律", PassiveNodeKind.JewelSocket => "◇", _ => "始" };
                 DrawString(ThemeDB.FallbackFont, center + new Vector2(-radius * .55f, radius * .4f), glyph,
                     HorizontalAlignment.Center, radius * 1.1f, Math.Max(8, (int)(radius * .9f)), new Color("f2e3bd"));
             }
@@ -84,6 +102,7 @@ public partial class P1PassiveTreeView : Control
         DrawString(ThemeDB.FallbackFont, new Vector2(12, 22),
             $"铁誓星盘 · {_nodes.Length:N0} 节点 · 左键拖曳 / 滚轮缩放 · 双击分配 · 右键双击洗点",
             HorizontalAlignment.Left, -1, 13, new Color("cbbd9d"));
+        DrawMiniMap();
     }
 
     public override void _GuiInput(InputEvent inputEvent)
@@ -102,11 +121,11 @@ public partial class P1PassiveTreeView : Control
         }
     }
 
-    public void SetState(IReadOnlySet<string> allocated, int earnedPoints)
+    public void SetState(IReadOnlySet<string> allocated, int earnedPoints, PassiveStartKind start = PassiveStartKind.Physique)
     {
-        string signature = earnedPoints + "|" + string.Join('|', allocated.OrderBy(id => id, StringComparer.Ordinal));
+        string signature = earnedPoints + "|" + start + "|" + string.Join('|', allocated.OrderBy(id => id, StringComparer.Ordinal));
         if (signature == _stateSignature) return;
-        _stateSignature = signature; _allocated = allocated; _earnedPoints = earnedPoints; QueueRedraw();
+        _stateSignature = signature; _allocated = allocated; _earnedPoints = earnedPoints; _start = start; QueueRedraw();
     }
 
     public void SetSearch(string query) { _search = query?.Trim() ?? string.Empty; QueueRedraw(); }
@@ -114,12 +133,24 @@ public partial class P1PassiveTreeView : Control
     public bool PlanPathToSelected()
     {
         if (SelectedStableId is null) return false;
-        string? current = SelectedStableId;
-        var visited = new HashSet<string>(StringComparer.Ordinal);
-        while (current is not null && !_allocated.Contains(current) && visited.Add(current))
-        { _planned.Add(current); current = P1PassiveTree.Get(current).PrerequisiteId; }
+        IReadOnlyList<string> path = P1PassiveTree.FindShortestPath(SelectedStableId, _allocated, _start);
+        if (path.Count == 0) return false;
+        _planned.Clear();
+        foreach (string id in path) _planned.Add(id);
         QueueRedraw(); return true;
     }
+
+    public int PlannedCost => _planned.Count;
+
+    public void CenterOnStart()
+    {
+        PassiveNodeDefinition start = P1PassiveTree.Get(P205StartNode(_start));
+        _zoom = .72f;
+        _pan = -new Vector2(start.X, start.Y) * _zoom;
+        QueueRedraw();
+    }
+
+    public void FitAll() { _zoom = .27f; _pan = Vector2.Zero; QueueRedraw(); }
 
     public void ClearPlan() { _planned.Clear(); QueueRedraw(); }
 
@@ -200,7 +231,7 @@ public partial class P1PassiveTreeView : Control
     { SelectedStableId = stableId; if (stableId is not null) NodeSelected?.Invoke(stableId); QueueRedraw(); }
 
     private bool IsAvailable(PassiveNodeDefinition node) => !_allocated.Contains(node.StableId) &&
-        (node.PrerequisiteId is null || P1PassiveTree.Neighbors(node.StableId).Any(_allocated.Contains)) &&
+        (node.Start == _start && _allocated.Count == 0 || P1PassiveTree.Neighbors(node.StableId).Any(_allocated.Contains)) &&
         _allocated.Count < Math.Min(_earnedPoints, PassiveTreeAllocation.MaximumAllocatedPoints);
     private bool SearchMatch(PassiveNodeDefinition node) => _search.Length > 0 &&
         (node.DisplayName.Contains(_search, StringComparison.OrdinalIgnoreCase) || node.Effects.Any(effect => P1UiText.PassiveEffect(effect).Contains(_search, StringComparison.OrdinalIgnoreCase)));
@@ -208,5 +239,33 @@ public partial class P1PassiveTreeView : Control
     private Vector2 ToWorld(Vector2 screen) => (screen - Size / 2 - _pan) / _zoom;
     private bool VisibleWithMargin(Vector2 point, float margin) => point.X >= -margin && point.Y >= -margin && point.X <= Size.X + margin && point.Y <= Size.Y + margin;
     private static float NodeRadius(PassiveNodeDefinition node) => node.Kind switch
-    { PassiveNodeKind.Small => 7, PassiveNodeKind.Notable => 11, PassiveNodeKind.Mastery => 13, PassiveNodeKind.Rule => 15, _ => 12 };
+    { PassiveNodeKind.Small when node.Start != PassiveStartKind.None => 16, PassiveNodeKind.Small => 7, PassiveNodeKind.Notable => 11, PassiveNodeKind.Mastery => 13, PassiveNodeKind.Rule => 15, _ => 12 };
+
+    private static string P205StartNode(PassiveStartKind start) => start switch
+    {
+        PassiveStartKind.Dexterity => "core.passive.start.dexterity",
+        PassiveStartKind.Spirit => "core.passive.start.spirit",
+        PassiveStartKind.Energy => "core.passive.start.energy",
+        _ => "core.passive.start.physique",
+    };
+
+    private static string SectorName(PassiveBranch branch) => branch switch
+    {
+        PassiveBranch.HeavyWeapon => "重兵", PassiveBranch.Bleed => "流血", PassiveBranch.Defense => "防御",
+        PassiveBranch.Mobility => "机动", PassiveBranch.Critical => "暴击", PassiveBranch.Accuracy => "命中",
+        PassiveBranch.Mana => "法力", PassiveBranch.WarCry => "战吼", PassiveBranch.Flask => "药剂",
+        PassiveBranch.Elemental => "元素", PassiveBranch.Void => "虚空", _ => "护盾",
+    };
+
+    private void DrawMiniMap()
+    {
+        Rect2 area = new(Size.X - 132, Size.Y - 98, 120, 86);
+        DrawRect(area, new Color("0b0e14cc"), true);
+        DrawRect(area, new Color("596473"), false, 1);
+        foreach (PassiveNodeDefinition node in _nodes.Where(node => node.Kind != PassiveNodeKind.Small || node.Start != PassiveStartKind.None))
+        {
+            Vector2 point = area.GetCenter() + new Vector2(node.X / 1700f * area.Size.X * .45f, node.Y / 1350f * area.Size.Y * .45f);
+            DrawCircle(point, node.Start == PassiveStartKind.None ? 1.2f : 2.4f, _allocated.Contains(node.StableId) ? AllocatedColor : LockedColor.Lightened(.25f));
+        }
+    }
 }

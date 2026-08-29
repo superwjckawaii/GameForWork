@@ -129,31 +129,22 @@ public sealed class P5FeatureTests
     public void RefundChecksRemainingGraphConnectivity()
     {
         var allocation = new PassiveTreeAllocation(memoryAshes: 5);
-        Assert.True(allocation.TryAllocate("core.passive.heavy.1", 2));
-        Assert.True(allocation.TryAllocate("core.passive.heavy.2", 2));
+        Assert.True(allocation.TryAllocate("core.passive.start.physique", 2));
+        Assert.True(allocation.TryAllocate("core.passive.v2.travel.00.10", 2));
 
-        Assert.False(allocation.TryRefund("core.passive.heavy.1"));
-        Assert.True(allocation.TryRefund("core.passive.heavy.2"));
+        Assert.False(allocation.TryRefund("core.passive.start.physique"));
+        Assert.True(allocation.TryRefund("core.passive.v2.travel.00.10"));
         Assert.Equal(4, allocation.MemoryAshes);
     }
 
     [Fact]
     public void FirstFourMasteriesProvideBuildDefiningEffects()
     {
-        PassiveNodeDefinition[] masteries = P1PassiveTree.Nodes
-            .Where(node => node.Kind == PassiveNodeKind.Mastery && node.Effects.Count >= 2)
-            .ToArray();
+        PassiveNodeDefinition[] masteries = P1PassiveTree.Nodes.Where(node => node.Kind == PassiveNodeKind.Mastery).ToArray();
 
-        Assert.Equal(4, masteries.Length);
-        Assert.All(masteries, mastery => Assert.True(mastery.Effects.Count >= 2));
-        Assert.Contains(masteries, mastery => mastery.Effects.Any(effect =>
-            effect.Kind == PassiveEffectKind.HeavyWeaponMastery));
-        Assert.Contains(masteries, mastery => mastery.Effects.Any(effect =>
-            effect.Kind == PassiveEffectKind.BleedMastery));
-        Assert.Contains(masteries, mastery => mastery.Effects.Any(effect =>
-            effect.Kind == PassiveEffectKind.DefenseMastery));
-        Assert.Contains(masteries, mastery => mastery.Effects.Any(effect =>
-            effect.Kind == PassiveEffectKind.WarCryMastery));
+        Assert.Equal(72, masteries.Length);
+        Assert.All(masteries, mastery => Assert.Equal(6, P1PassiveTree.MasteryOptions(mastery).Count));
+        Assert.Equal(12, masteries.Select(mastery => mastery.Branch).Distinct().Count());
     }
 
     private static P1GameSession CreateSession() => P1GameSession.CreateNew(new PlayerIdentity(

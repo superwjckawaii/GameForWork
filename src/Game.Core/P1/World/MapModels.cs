@@ -1,5 +1,6 @@
 using GameForWork.Core.P1.Combat;
 using GameForWork.Core.P1.Items;
+using GameForWork.Core.P1.Progression;
 using GameForWork.Core.P3;
 using GameForWork.Core.P12;
 using GameForWork.Core.P18;
@@ -336,7 +337,13 @@ public sealed record P1TeamBuild(
     bool HasShield = false,
     int BlockChanceBasisPoints = 0,
     P18CombatProfile? Ascendancy = null,
-    bool HasUsableWeapon = true);
+    bool HasUsableWeapon = true,
+    P205PassiveModifiers? PassiveProfile = null,
+    int CriticalMultiplierBasisPoints = 15_000,
+    bool AlwaysHit = false,
+    bool CannotCrit = false,
+    int IncreasedWarCryCooldownRecoveryBasisPoints = 0,
+    int IncreasedWarCryRangeBasisPoints = 0);
 
 public sealed record MapNodeResult(
     int NodeIndex,

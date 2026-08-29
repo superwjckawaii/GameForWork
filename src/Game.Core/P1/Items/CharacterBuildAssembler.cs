@@ -57,29 +57,38 @@ public static class CharacterBuildAssembler
         WeaponProfile weapon = equipment.Weapon ?? P1Weapons.Unequipped;
         EquipmentModifiers item = equipment.Modifiers;
         PassiveBuildModifiers passive = passiveTree.CalculateModifiers();
+        P205PassiveModifiers advanced = passive.Advanced ?? P205PassiveModifiers.Empty;
         var attributes = new CharacterAttributes(
-            checked(baseAttributes.Physique + item.Physique),
-            checked(baseAttributes.Dexterity + item.Dexterity),
-            checked(baseAttributes.Spirit + item.Spirit),
-            checked(baseAttributes.Energy + item.Energy));
+            checked(baseAttributes.Physique + item.Physique + advanced.Physique),
+            checked(baseAttributes.Dexterity + item.Dexterity + advanced.Dexterity),
+            checked(baseAttributes.Spirit + item.Spirit + advanced.Spirit),
+            checked(baseAttributes.Energy + item.Energy + advanced.Energy));
+        DefensiveEquipment defense = equipment.Defense;
+        int evasionIncrease = checked(item.IncreasedEvasionBasisPoints + advanced.IncreasedEvasionBasisPoints);
+        if (advanced.IronReflexes)
+        {
+            int converted = checked((defense.Evasion + attributes.Dexterity) * (10_000 + evasionIncrease) / 10_000);
+            defense = new DefensiveEquipment(checked(defense.Armor + converted), 0, defense.Shield);
+            evasionIncrease = -10_000;
+        }
         var sheet = new CharacterSheet(
             level,
             attributes,
-            equipment.Defense,
+            defense,
             checked(item.FlatMaximumLife + passive.FlatMaximumLife),
             passive.IncreasedMaximumLifeBasisPoints,
             checked(item.FlatMaximumMana + passive.FlatMaximumMana),
             checked(item.IncreasedArmorBasisPoints + passive.IncreasedArmorBasisPoints),
-            item.IncreasedEvasionBasisPoints,
-            item.IncreasedShieldBasisPoints,
+            evasionIncrease,
+            checked(item.IncreasedShieldBasisPoints + advanced.IncreasedShieldBasisPoints),
             checked(item.IncreasedManaRegenerationBasisPoints + passive.IncreasedManaRegenerationBasisPoints),
-            item.FireResistanceBasisPoints,
-            item.ColdResistanceBasisPoints,
-            item.LightningResistanceBasisPoints,
-            item.VoidResistanceBasisPoints,
-            item.BlockChanceBasisPoints,
-            item.SpellSuppressionBasisPoints,
-            item.FlatLifeRegeneration,
+            checked(item.FireResistanceBasisPoints + advanced.FireResistanceBasisPoints),
+            checked(item.ColdResistanceBasisPoints + advanced.ColdResistanceBasisPoints),
+            checked(item.LightningResistanceBasisPoints + advanced.LightningResistanceBasisPoints),
+            checked(item.VoidResistanceBasisPoints + advanced.VoidResistanceBasisPoints),
+            checked(item.BlockChanceBasisPoints + advanced.BlockChanceBasisPoints),
+            checked(item.SpellSuppressionBasisPoints + advanced.SpellSuppressionBasisPoints),
+            checked(item.FlatLifeRegeneration + advanced.FlatLifeRegeneration),
             item.IncreasedMovementSpeedBasisPoints);
         SkillUseProfile heavyStrike = SkillRules.BuildHeavyStrike(
             heavyStrikeConfiguration,
@@ -99,13 +108,13 @@ public static class CharacterBuildAssembler
                 passive.IncreasedAttackDamageBasisPoints +
                 passive.IncreasedTwoHandDamageBasisPoints),
             item.AddedPhysicalDamage,
-            item.IncreasedCriticalChanceBasisPoints,
+            checked(item.IncreasedCriticalChanceBasisPoints + advanced.IncreasedCriticalChanceBasisPoints),
             checked(item.IncreasedBleedChanceBasisPoints + passive.IncreasedBleedChanceBasisPoints),
             warCry,
             passive.ChargedHeavyStrike ? new ChargedHeavyStrikeState() : null,
-            loadout.Items.Where(pair => pair.Key is >= EquipmentSlot.Flask1 and <= EquipmentSlot.Flask5)
+            (advanced.Flaskless ? [] : loadout.Items.Where(pair => pair.Key is >= EquipmentSlot.Flask1 and <= EquipmentSlot.Flask5)
                 .Select(pair => P1FlaskRules.KindForBase(pair.Value.Base.StableId)).Where(kind => kind.HasValue)
-                .Select(kind => kind!.Value).Distinct().ToArray(),
+                .Select(kind => kind!.Value).Distinct().ToArray()),
             weapon);
     }
 }
