@@ -188,7 +188,22 @@ public sealed record AffixDefinition(
     }
 }
 
-public sealed record AffixRoll(AffixDefinition Definition, int Value, bool Crafted = false);
+public sealed record AffixRoll(AffixDefinition Definition, int Value, bool Crafted = false)
+{
+    private bool IsLegacyUnderscaledAttribute =>
+        Definition.StableFamilyId.StartsWith("core.affix.", StringComparison.Ordinal) &&
+        Definition.ModifierKind is ItemModifierKind.Physique or ItemModifierKind.Dexterity or
+            ItemModifierKind.Spirit or ItemModifierKind.Energy &&
+        Value <= 3;
+
+    public int EffectiveValue => IsLegacyUnderscaledAttribute
+        ? Definition.Tier == 1 ? 51 + Math.Max(0, Value - 2) * 4 : 8 + Math.Max(0, Value - 1) * 4
+        : Value;
+
+    public int EffectiveMinimumValue => IsLegacyUnderscaledAttribute ? Definition.Tier == 1 ? 51 : 8 : Definition.MinimumValue;
+
+    public int EffectiveMaximumValue => IsLegacyUnderscaledAttribute ? Definition.Tier == 1 ? 55 : 12 : Definition.MaximumValue;
+}
 
 public sealed record ItemEnchantment(
     string StableId,
@@ -228,7 +243,7 @@ public sealed record ItemInstance(
     public int SuffixCount => Affixes.Count(affix => affix.Definition.Position == AffixPosition.Suffix);
     public int ExtraSupportLinkCapacity => Affixes
         .Where(affix => affix.Definition.ModifierKind == ItemModifierKind.ExtraSupportLinkCapacity)
-        .Select(affix => affix.Value)
+        .Select(affix => affix.EffectiveValue)
         .DefaultIfEmpty()
         .Max();
 

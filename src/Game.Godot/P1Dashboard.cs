@@ -329,7 +329,7 @@ public partial class P1Dashboard : VBoxContainer
             Changed(RequireSession().TryExchangeLegendary() ? "传奇已存入仓库。" : "印记不足或仓库已满。"));
 
         page.AddChild(new HSeparator());
-        page.AddChild(new Label { Text = "过滤器首条自定义规则（首次底材与首次传奇始终强制保留）" });
+        page.AddChild(new Label { Text = "过滤器首条自定义规则（首次传奇、任务物品、锁定物品与五连以上始终保留）" });
         var filterRow = new HFlowContainer();
         page.AddChild(filterRow);
         OptionButton rarity = AddOptions(filterRow, "稀有度", ["任意", "基础", "魔法", "稀有", "传奇"]);

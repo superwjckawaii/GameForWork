@@ -20,6 +20,8 @@ public sealed class P14FeatureTests
         Assert.Equal(80, P1ItemBases.All.Count);
         Assert.Equal(24, P14UniqueItems.All.Count(item => !item.Mythic));
         Assert.Single(P14UniqueItems.All, item => item.Mythic);
+        Assert.All(P14UniqueItems.All, item => Assert.False(string.IsNullOrWhiteSpace(item.RuleText)));
+        Assert.Equal(P14UniqueItems.All.Count, P14UniqueItems.All.Select(item => item.RuleText).Distinct().Count());
         Assert.Equal(5, P14Flasks.All.Count);
         Assert.All(P14Flasks.All, flask =>
         {

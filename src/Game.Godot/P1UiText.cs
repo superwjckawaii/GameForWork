@@ -49,11 +49,12 @@ internal static class P1UiText
 
         foreach (AffixRoll affix in item.Affixes)
         {
+            int tier = P1Affixes.TierFor(item.Base, affix.Definition);
             string markers = (affix.Crafted ? "（工匠）" : string.Empty) + (item.IsFractured(affix) ? "（破溃）" : string.Empty);
             string source = affix.Crafted ? "工匠" : affix.Definition.Source == "Natural" ? "自然" : affix.Definition.Source;
-            text.AppendLine($"[TIER:{affix.Definition.Tier}]{PositionName(affix.Definition.Position)} T{affix.Definition.Tier} " +
-                $"{affix.Definition.DisplayName}{markers}：{Modifier(affix.Definition.ModifierKind, affix.Value)} " +
-                $"[{affix.Definition.MinimumValue}–{affix.Definition.MaximumValue}] · {source}");
+            text.AppendLine($"[TIER:{tier}]{PositionName(affix.Definition.Position)} T{tier} " +
+                $"{affix.Definition.DisplayName}{markers}：{Modifier(affix.Definition.ModifierKind, affix.EffectiveValue)} " +
+                $"[{affix.EffectiveMinimumValue}–{affix.EffectiveMaximumValue}] · {source}");
         }
 
         if (P1FlaskRules.KindForBase(item.Base.StableId) is { } flaskKind)
@@ -72,8 +73,17 @@ internal static class P1UiText
 
         if (item.LegendaryRule is not null)
         {
-            text.AppendLine("传奇规则：重击总攻击速度降低 30%");
-            text.AppendLine("重击在目标身后产生一次 70% 伤害的余震");
+            P14UniqueDefinition? unique = P14UniqueItems.All.FirstOrDefault(definition =>
+                definition.StableId == item.LegendaryRule.StableId);
+            if (unique is not null)
+            {
+                text.AppendLine($"传奇规则：{unique.RuleText}");
+            }
+            else if (item.LegendaryRule.StableId == P1Legendary.EchoingOathbreakerRule.StableId)
+            {
+                text.AppendLine("传奇规则：重击总攻击速度降低 30%");
+                text.AppendLine("重击在目标身后产生一次 70% 伤害的余震");
+            }
         }
 
         text.Append(item.IsIdentified ? "已鉴定" : "未鉴定");

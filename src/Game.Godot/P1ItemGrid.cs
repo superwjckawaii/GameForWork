@@ -114,7 +114,7 @@ public partial class P1ItemGrid : GridContainer
 
     private static string ItemSignature(ItemInstance item) =>
         $"{item.InstanceId}:{item.IsLocked}:{item.IsCraftingBase}:{item.Rarity}:{item.LinkedSocketCount}:" +
-        string.Join(',', item.Affixes.Select(affix => $"{affix.Definition.StableFamilyId}:{affix.Value}:{affix.Crafted}"));
+        string.Join(',', item.Affixes.Select(affix => $"{affix.Definition.StableFamilyId}:{affix.EffectiveValue}:{affix.Crafted}"));
 
     public int ToExternalIndex(int index) => index >= 0 && index < _externalIndices.Count
         ? _externalIndices[index]

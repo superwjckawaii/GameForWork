@@ -42,7 +42,8 @@ public static class P16ItemSorting
         return level != 0 ? level : string.Compare(left.Base.DisplayName, right.Base.DisplayName, StringComparison.Ordinal);
     }
 
-    private static int BestTier(ItemInstance item) => item.Affixes.Select(affix => affix.Definition.Tier).DefaultIfEmpty(int.MaxValue).Min();
+    private static int BestTier(ItemInstance item) => item.Affixes
+        .Select(affix => P1Affixes.TierFor(item.Base, affix.Definition)).DefaultIfEmpty(int.MaxValue).Min();
 }
 
 public sealed record LootFilterRule(
@@ -97,9 +98,9 @@ public sealed record LootFilterRule(
 
         return item.Affixes.Any(affix =>
             (AffixFamilyId is null || affix.Definition.StableFamilyId == AffixFamilyId) &&
-            (MinimumAffixValue is null || affix.Value >= MinimumAffixValue) &&
-            (MinimumAffixTier is null || affix.Definition.Tier >= MinimumAffixTier) &&
-            (MaximumAffixTier is null || affix.Definition.Tier <= MaximumAffixTier));
+            (MinimumAffixValue is null || affix.EffectiveValue >= MinimumAffixValue) &&
+            (MinimumAffixTier is null || P1Affixes.TierFor(item.Base, affix.Definition) >= MinimumAffixTier) &&
+            (MaximumAffixTier is null || P1Affixes.TierFor(item.Base, affix.Definition) <= MaximumAffixTier));
     }
 }
 
@@ -173,7 +174,6 @@ public sealed class EquipmentStorage
     }
 
     public bool IsFirstDiscovery(ItemInstance item) =>
-        !_discoveredBases.Contains(item.Base.StableId) ||
         item.LegendaryRule is not null && !_discoveredLegendaryRules.Contains(item.LegendaryRule.StableId);
 
     public bool TryStore(ItemInstance item)
@@ -319,7 +319,7 @@ public static class LootProcessor
                 notable.Add(item);
                 if (firstDiscovery)
                 {
-                    discoveries.Add(item.Base.StableId);
+                    discoveries.Add(item.LegendaryRule?.StableId ?? item.Base.StableId);
                 }
 
                 continue;

@@ -50,14 +50,38 @@ public partial class P2ItemCell : Button
             return default;
         }
 
-        var preview = new Label
+        Control preview;
+        if (Icon is not null)
         {
-            Text = Text.Length == 0 ? "◆" : Text,
-            CustomMinimumSize = new Vector2(34, 34),
-            HorizontalAlignment = HorizontalAlignment.Center,
-            VerticalAlignment = VerticalAlignment.Center,
-            Modulate = new Color(1, 1, 1, 0.86f),
-        };
+            var frame = new PanelContainer { CustomMinimumSize = new Vector2(42, 42), MouseFilter = MouseFilterEnum.Ignore };
+            frame.AddThemeStyleboxOverride("panel", new StyleBoxFlat
+            {
+                BgColor = new Color("11151de6"), BorderColor = TooltipRarityColor,
+                BorderWidthLeft = 2, BorderWidthTop = 2, BorderWidthRight = 2, BorderWidthBottom = 2,
+                CornerRadiusTopLeft = 3, CornerRadiusTopRight = 3, CornerRadiusBottomLeft = 3, CornerRadiusBottomRight = 3,
+            });
+            frame.AddChild(new TextureRect
+            {
+                Texture = Icon,
+                CustomMinimumSize = new Vector2(38, 38),
+                ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,
+                StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered,
+                MouseFilter = MouseFilterEnum.Ignore,
+            });
+            preview = frame;
+        }
+        else
+        {
+            preview = new Label
+            {
+                Text = Text.Length == 0 ? "◆" : Text,
+                CustomMinimumSize = new Vector2(38, 38),
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center,
+                Modulate = new Color(1, 1, 1, 0.9f),
+            };
+        }
+        preview.Position = new Vector2(-20, -20);
         SetDragPreview(preview);
         return Variant.From($"p2-item|{(int)Grid.ContainerKind}|{Grid.ToExternalIndex(CellIndex)}");
     }

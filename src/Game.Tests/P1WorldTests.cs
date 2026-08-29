@@ -116,7 +116,7 @@ public sealed class P1WorldTests
     }
 
     [Fact]
-    public void FirstDiscoveryOverridesDefaultDismantleFilter()
+    public void BasicFirstDiscoveryDoesNotOverrideFilter()
     {
         var storage = new EquipmentStorage();
         var filter = new LootFilter();
@@ -130,10 +130,26 @@ public sealed class P1WorldTests
         LootProcessingResult secondResult = LootProcessor.Process(
             [second], storage, filter, StorageFullBehavior.AcceptStackablesOnly);
 
-        Assert.Equal(1, firstResult.Stored);
-        Assert.Contains("core.base.iron_ring", firstResult.ForcedFirstDiscoveries);
+        Assert.Equal(1, firstResult.Dismantled);
+        Assert.Empty(firstResult.ForcedFirstDiscoveries);
         Assert.Equal(1, secondResult.Dismantled);
         Assert.Equal(1, secondResult.IronScrapsGained);
+    }
+
+    [Fact]
+    public void FirstLegendaryDiscoveryStillOverridesFilterOnce()
+    {
+        var storage = new EquipmentStorage();
+        var filter = new LootFilter([new LootFilterRule("all.dismantle", LootDisposition.Dismantle)]);
+        ItemInstance first = P1Legendary.Create(10) with { InstanceId = "first-legendary", LinkedSocketCount = 0 };
+        ItemInstance second = P1Legendary.Create(10) with { InstanceId = "second-legendary", LinkedSocketCount = 0 };
+
+        LootProcessingResult firstResult = LootProcessor.Process([first], storage, filter, StorageFullBehavior.AcceptStackablesOnly);
+        LootProcessingResult secondResult = LootProcessor.Process([second], storage, filter, StorageFullBehavior.AcceptStackablesOnly);
+
+        Assert.Equal(1, firstResult.Stored);
+        Assert.Contains(P1Legendary.EchoingOathbreakerRule.StableId, firstResult.ForcedFirstDiscoveries);
+        Assert.Equal(1, secondResult.Dismantled);
     }
 
     [Fact]
@@ -211,8 +227,8 @@ public sealed class P1WorldTests
         Assert.Equal(2, second.TotalMapsCompleted);
         Assert.Equal(2, state.Hero.MapsCompleted);
         Assert.Equal(2, state.Mercenaries.MapsCompleted);
-        Assert.NotEmpty(state.Hero.Backpack.Items);
-        Assert.NotEmpty(state.Mercenaries.Backpack.Items);
+        Assert.InRange(state.Hero.Backpack.Count, 0, ExpeditionBackpack.Capacity);
+        Assert.InRange(state.Mercenaries.Backpack.Count, 0, ExpeditionBackpack.Capacity);
     }
 
     [Fact]

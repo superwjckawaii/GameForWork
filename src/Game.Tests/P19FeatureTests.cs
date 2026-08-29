@@ -57,6 +57,28 @@ public sealed class P19FeatureTests
     }
 
     [Fact]
+    public void RingTopPhysiqueTierUsesFormalRangeAndLegacyRollIsNormalized()
+    {
+        ItemBaseDefinition ring = P1ItemBases.Get("core.base.iron_ring");
+        AffixDefinition top = P1Affixes.For(ring, 120)
+            .Where(affix => affix.ModifierKind == ItemModifierKind.Physique)
+            .OrderBy(affix => P1Affixes.TierFor(ring, affix))
+            .First();
+        Assert.Equal(1, P1Affixes.TierFor(ring, top));
+        Assert.InRange(top.MinimumValue, 40, 60);
+        Assert.InRange(top.MaximumValue, 40, 60);
+        Assert.DoesNotContain(P1Affixes.All, affix =>
+            affix.StableFamilyId == "core.affix.ring.physique");
+
+        var legacy = new AffixDefinition("core.affix.ring.physique", "体魄", ItemCategory.Ring,
+            AffixPosition.Suffix, 1, 6, 2, 3, 300, ItemModifierKind.Physique);
+        var legacyRoll = new AffixRoll(legacy, 3);
+        Assert.Equal(55, legacyRoll.EffectiveValue);
+        Assert.Equal(51, legacyRoll.EffectiveMinimumValue);
+        Assert.Equal(55, legacyRoll.EffectiveMaximumValue);
+    }
+
+    [Fact]
     public void OneHundredThousandGeneratedItemsAreLegal()
     {
         ItemBaseDefinition[] bases = P19Catalog.Bases.ToArray();

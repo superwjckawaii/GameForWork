@@ -369,9 +369,9 @@ public static class P20ItemValue
         int rarity = item.Rarity switch { ItemRarity.Basic => 0, ItemRarity.Magic => 35, ItemRarity.Rare => 120, _ => 600 };
         int affixes = item.Affixes.Sum(affix =>
         {
-            int tier = Math.Max(1, 12 - affix.Definition.Tier) * 5;
-            int span = Math.Max(1, affix.Definition.MaximumValue - affix.Definition.MinimumValue);
-            int roll = Math.Clamp((affix.Value - affix.Definition.MinimumValue) * 20 / span, 0, 20);
+            int tier = Math.Max(1, 12 - P1Affixes.TierFor(item.Base, affix.Definition)) * 5;
+            int span = Math.Max(1, affix.EffectiveMaximumValue - affix.EffectiveMinimumValue);
+            int roll = Math.Clamp((affix.EffectiveValue - affix.EffectiveMinimumValue) * 20 / span, 0, 20);
             return tier + roll;
         });
         int links = LinkValues[Math.Clamp(item.LinkedSocketCount, 0, 6)];

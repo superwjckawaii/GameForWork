@@ -5,6 +5,7 @@ namespace GameForWork.Core.P1.Items;
 public static class P1Affixes
 {
     private static readonly IReadOnlyList<AffixDefinition> Catalog = Build();
+    private static readonly IReadOnlyDictionary<string, int> ContextTierMap = BuildContextTierMap();
 
     public static IReadOnlyList<AffixDefinition> All => Catalog;
 
@@ -15,6 +16,30 @@ public static class P1Affixes
 
     public static IReadOnlyList<AffixDefinition> For(ItemBaseDefinition itemBase, int itemLevel) =>
         Catalog.Where(affix => affix.MinimumItemLevel <= itemLevel && affix.Supports(itemBase)).ToArray();
+
+    public static int TierFor(ItemBaseDefinition itemBase, AffixDefinition affix)
+    {
+        if (!affix.StableFamilyId.StartsWith("p19.affix.", StringComparison.Ordinal)) return affix.Tier;
+        return ContextTierMap.GetValueOrDefault(ContextTierKey(itemBase.StableId, affix.StableFamilyId, affix.SourceId), affix.Tier);
+    }
+
+    private static IReadOnlyDictionary<string, int> BuildContextTierMap()
+    {
+        var result = new Dictionary<string, int>(StringComparer.Ordinal);
+        foreach (ItemBaseDefinition itemBase in P19Catalog.Bases)
+        foreach (IGrouping<string, AffixDefinition> family in Catalog
+                     .Where(affix => affix.StableFamilyId.StartsWith("p19.affix.", StringComparison.Ordinal) && affix.Supports(itemBase))
+                     .GroupBy(affix => affix.StableFamilyId, StringComparer.Ordinal))
+        {
+            AffixDefinition[] applicable = family.OrderByDescending(affix => affix.MinimumItemLevel)
+                .ThenByDescending(affix => affix.MaximumValue).ToArray();
+            for (int index = 0; index < applicable.Length; index++)
+                result[ContextTierKey(itemBase.StableId, applicable[index].StableFamilyId, applicable[index].SourceId)] = index + 1;
+        }
+        return result;
+    }
+
+    private static string ContextTierKey(string baseId, string familyId, string sourceId) => baseId + '|' + familyId + '|' + sourceId;
 
     private static IReadOnlyList<AffixDefinition> Build()
     {
@@ -31,8 +56,6 @@ public static class P1Affixes
             ItemModifierKind.IncreasedCriticalChanceBasisPoints, 500, 1_000, 1_100, 1_800, 700);
         AddTwoTiers(result, ItemCategory.TwoHandWeapon, "weapon.bleed", "流血概率", AffixPosition.Suffix,
             ItemModifierKind.IncreasedBleedChanceBasisPoints, 500, 800, 900, 1_500, 700);
-        AddTwoTiers(result, ItemCategory.TwoHandWeapon, "weapon.physique", "体魄", AffixPosition.Suffix,
-            ItemModifierKind.Physique, 1, 1, 2, 3, 600);
         AddExtraLink(result, ItemCategory.TwoHandWeapon, "weapon.extra_link");
 
         foreach (ItemCategory category in new[] { ItemCategory.BodyArmor, ItemCategory.Helmet })
@@ -48,10 +71,6 @@ public static class P1Affixes
                 ItemModifierKind.IncreasedEvasionBasisPoints, 1_000, 2_000, 2_100, 3_500, 900);
             AddTwoTiers(result, category, $"{prefix}.shield", "护盾增加", AffixPosition.Prefix,
                 ItemModifierKind.IncreasedShieldBasisPoints, 1_000, 2_000, 2_100, 3_500, 900);
-            AddTwoTiers(result, category, $"{prefix}.physique", "体魄", AffixPosition.Suffix,
-                ItemModifierKind.Physique, 1, 1, 2, 3, 600);
-            AddTwoTiers(result, category, $"{prefix}.spirit", "精神", AffixPosition.Suffix,
-                ItemModifierKind.Spirit, 1, 1, 2, 3, 600);
             AddTwoTiers(result, category, $"{prefix}.flask", "生命药剂效果", AffixPosition.Suffix,
                 ItemModifierKind.IncreasedLifeFlaskEffectBasisPoints, 500, 1_000, 1_100, 1_800, 500);
             AddExtraLink(result, category, $"{prefix}.extra_link");
@@ -70,8 +89,6 @@ public static class P1Affixes
                 ItemModifierKind.IncreasedShieldBasisPoints, 800, 1_600, 1_700, 2_800, 900);
             AddTwoTiers(result, category, $"{prefix}.accuracy", "命中", AffixPosition.Suffix,
                 ItemModifierKind.FlatAccuracy, 6, 12, 13, 22, 800);
-            AddTwoTiers(result, category, $"{prefix}.physique", "体魄", AffixPosition.Suffix,
-                ItemModifierKind.Physique, 1, 1, 2, 3, 600);
         }
 
         foreach (ItemCategory category in new[] { ItemCategory.Belt, ItemCategory.Amulet })
@@ -83,10 +100,6 @@ public static class P1Affixes
                 ItemModifierKind.FlatMaximumMana, 5, 10, 11, 18, 800);
             AddTwoTiers(result, category, $"{prefix}.physical", "附加物理伤害", AffixPosition.Prefix,
                 ItemModifierKind.AddedPhysicalDamage, 1, 2, 3, 4, 700);
-            AddTwoTiers(result, category, $"{prefix}.physique", "体魄", AffixPosition.Suffix,
-                ItemModifierKind.Physique, 1, 1, 2, 3, 700);
-            AddTwoTiers(result, category, $"{prefix}.spirit", "精神", AffixPosition.Suffix,
-                ItemModifierKind.Spirit, 1, 1, 2, 3, 700);
             AddTwoTiers(result, category, $"{prefix}.flask", "生命药剂效果", AffixPosition.Suffix,
                 ItemModifierKind.IncreasedLifeFlaskEffectBasisPoints, 400, 800, 900, 1_500, 600);
         }
@@ -99,8 +112,6 @@ public static class P1Affixes
             ItemModifierKind.FlatMaximumMana, 4, 8, 9, 15, 800);
         AddTwoTiers(result, ItemCategory.Ring, "ring.accuracy", "命中", AffixPosition.Suffix,
             ItemModifierKind.FlatAccuracy, 8, 16, 17, 30, 1_000);
-        AddTwoTiers(result, ItemCategory.Ring, "ring.physique", "体魄", AffixPosition.Suffix,
-            ItemModifierKind.Physique, 1, 1, 2, 3, 600);
         AddTwoTiers(result, ItemCategory.Ring, "ring.mana_regeneration", "法力恢复", AffixPosition.Suffix,
             ItemModifierKind.IncreasedManaRegenerationBasisPoints, 500, 1_000, 1_100, 2_000, 700);
         AddTwoTiers(result, ItemCategory.Ring, "ring.critical", "暴击率增加", AffixPosition.Suffix,

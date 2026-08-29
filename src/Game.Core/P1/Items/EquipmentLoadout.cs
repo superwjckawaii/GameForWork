@@ -108,7 +108,7 @@ public sealed class EquipmentLoadout
             foreach (AffixRoll affix in item.Affixes)
             {
                 sums[(int)affix.Definition.ModifierKind] = checked(
-                    sums[(int)affix.Definition.ModifierKind] + affix.Value);
+                    sums[(int)affix.Definition.ModifierKind] + affix.EffectiveValue);
             }
             if (item.Enchantment is not null)
             {

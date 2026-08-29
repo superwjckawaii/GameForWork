@@ -51,6 +51,8 @@ public partial class P2Dashboard : VBoxContainer
     private Control? _passiveMode;
     private Control? _aiMode;
     private Control? _metalMode;
+    private TabContainer? _characterSidebar;
+    private P205JewelStashPanel? _jewelStashPanel;
     private Label? _miniStatus;
     private Label? _overviewStatus;
     private Label? _characterStatus;
@@ -418,8 +420,11 @@ public partial class P2Dashboard : VBoxContainer
                 _stateChanged?.Invoke();
                 Refresh();
             }
+            if (_passiveMode is not null && _characterModes.GetTabControl((int)index) == _passiveMode && _characterSidebar is not null)
+                _characterSidebar.CurrentTab = 2;
         };
         var sidebar = new TabContainer { CustomMinimumSize = new Vector2(304, 0), SizeFlagsVertical = SizeFlags.ExpandFill };
+        _characterSidebar = sidebar;
         workspace.AddChild(sidebar);
         var equipmentScroll = new ScrollContainer { Name = "装备", SizeFlagsVertical = SizeFlags.ExpandFill, SizeFlagsHorizontal = SizeFlags.ExpandFill };
         sidebar.AddChild(equipmentScroll);
@@ -428,6 +433,9 @@ public partial class P2Dashboard : VBoxContainer
         _metalMode = BuildMetalMode();
         _metalMode.Name = "金属";
         sidebar.AddChild(_metalMode);
+        _jewelStashPanel = new P205JewelStashPanel { Name = "珠宝", SizeFlagsVertical = SizeFlags.ExpandFill };
+        _jewelStashPanel.Initialize(RequireSession);
+        sidebar.AddChild(_jewelStashPanel);
         collapseSidebar.Pressed += () =>
         {
             sidebar.Visible = !sidebar.Visible;
@@ -585,6 +593,10 @@ public partial class P2Dashboard : VBoxContainer
                 ? "天赋已退还。"
                 : "洗点会切断已分配路径，或记忆灰烬不足。");
         };
+        _passiveTree.JewelDropRequested += (stableId, jewelKind) => Changed(
+            RequireSession().TrySocketJewel(stableId, jewelKind)
+                ? "记忆珠宝已从珠宝仓拖入棱孔。"
+                : "该孔未分配，或同名珠宝已经镶嵌。");
         main.AddChild(_passiveTree);
         var row = new HFlowContainer();
         main.AddChild(row);
@@ -1475,7 +1487,9 @@ public partial class P2Dashboard : VBoxContainer
                 .Select(slot => selectedLoadout.Items.GetValueOrDefault(slot))
                 .ToArray();
             _equipmentGrid!.SetSlots(slots);
-            _passiveTree!.SetState(_session.Passives.Allocated, _session.World.Hero.Progression.EarnedPassivePoints);
+            _passiveTree!.SetState(_session.Passives.Allocated, _session.World.Hero.Progression.EarnedPassivePoints,
+                _session.Passives.StartKind, _session.Passives.SocketedJewels);
+            _jewelStashPanel?.RefreshState();
             _ascendancyPanel?.Refresh();
             _affixPanel?.Refresh();
             bool heroSelected = _selectedCharacter == P2CharacterKind.Hero;

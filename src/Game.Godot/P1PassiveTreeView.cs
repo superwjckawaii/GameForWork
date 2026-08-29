@@ -18,6 +18,7 @@ public partial class P1PassiveTreeView : Control
     private readonly HashSet<string> _planned = new(StringComparer.Ordinal);
     private PassiveNodeDefinition[] _nodes = [];
     private IReadOnlySet<string> _allocated = new HashSet<string>();
+    private IReadOnlyDictionary<string, PassiveJewelKind> _socketedJewels = new Dictionary<string, PassiveJewelKind>();
     private int _earnedPoints;
     private PassiveStartKind _start = PassiveStartKind.Physique;
     private string _search = string.Empty;
@@ -32,6 +33,7 @@ public partial class P1PassiveTreeView : Control
     public event Action<string>? NodeSelected;
     public event Action<string>? NodeAllocateRequested;
     public event Action<string>? NodeRefundRequested;
+    public event Action<string, PassiveJewelKind>? JewelDropRequested;
     public string? SelectedStableId { get; private set; }
 
     public override void _Ready()
@@ -87,6 +89,8 @@ public partial class P1PassiveTreeView : Control
             bool selected = SelectedStableId == node.StableId;
             bool search = SearchMatch(node);
             Color fill = allocated ? AllocatedColor : available ? AvailableColor : LockedColor;
+            if (_socketedJewels.TryGetValue(node.StableId, out PassiveJewelKind socketedJewel))
+                fill = P205JewelVisual.ColorFor(socketedJewel).Darkened(.2f);
             Color border = selected || search ? SelectedColor : _planned.Contains(node.StableId) ? PlannedColor : fill.Lightened(0.3f);
             DrawCircle(center, radius, fill);
             DrawCircle(center, radius, border, false, selected || search ? 3 : 1.5f);
@@ -121,11 +125,15 @@ public partial class P1PassiveTreeView : Control
         }
     }
 
-    public void SetState(IReadOnlySet<string> allocated, int earnedPoints, PassiveStartKind start = PassiveStartKind.Physique)
+    public void SetState(IReadOnlySet<string> allocated, int earnedPoints, PassiveStartKind start = PassiveStartKind.Physique,
+        IReadOnlyDictionary<string, PassiveJewelKind>? socketedJewels = null)
     {
-        string signature = earnedPoints + "|" + start + "|" + string.Join('|', allocated.OrderBy(id => id, StringComparer.Ordinal));
+        socketedJewels ??= new Dictionary<string, PassiveJewelKind>();
+        string signature = earnedPoints + "|" + start + "|" + string.Join('|', allocated.OrderBy(id => id, StringComparer.Ordinal)) +
+                           "|" + string.Join('|', socketedJewels.OrderBy(pair => pair.Key).Select(pair => $"{pair.Key}:{pair.Value}"));
         if (signature == _stateSignature) return;
-        _stateSignature = signature; _allocated = allocated; _earnedPoints = earnedPoints; _start = start; QueueRedraw();
+        _stateSignature = signature; _allocated = allocated; _earnedPoints = earnedPoints; _start = start;
+        _socketedJewels = socketedJewels; QueueRedraw();
     }
 
     public void SetSearch(string query) { _search = query?.Trim() ?? string.Empty; QueueRedraw(); }
@@ -153,6 +161,17 @@ public partial class P1PassiveTreeView : Control
     public void FitAll() { _zoom = .27f; _pan = Vector2.Zero; QueueRedraw(); }
 
     public void ClearPlan() { _planned.Clear(); QueueRedraw(); }
+
+    public override bool _CanDropData(Vector2 atPosition, Variant data) =>
+        TryParseJewel(data, out _) && HitTest(atPosition) is { Kind: PassiveNodeKind.JewelSocket } node &&
+        _allocated.Contains(node.StableId);
+
+    public override void _DropData(Vector2 atPosition, Variant data)
+    {
+        if (TryParseJewel(data, out PassiveJewelKind jewel) &&
+            HitTest(atPosition) is { Kind: PassiveNodeKind.JewelSocket } node && _allocated.Contains(node.StableId))
+            JewelDropRequested?.Invoke(node.StableId, jewel);
+    }
 
     private void HandleLeft(InputEventMouseButton input)
     {
@@ -256,6 +275,17 @@ public partial class P1PassiveTreeView : Control
         PassiveBranch.Mana => "法力", PassiveBranch.WarCry => "战吼", PassiveBranch.Flask => "药剂",
         PassiveBranch.Elemental => "元素", PassiveBranch.Void => "虚空", _ => "护盾",
     };
+
+    private static bool TryParseJewel(Variant data, out PassiveJewelKind jewel)
+    {
+        jewel = default;
+        if (data.VariantType != Variant.Type.String) return false;
+        string[] parts = data.AsString().Split('|');
+        if (parts.Length != 2 || parts[0] != "p205-jewel" || !int.TryParse(parts[1], out int raw) ||
+            !Enum.IsDefined(typeof(PassiveJewelKind), raw)) return false;
+        jewel = (PassiveJewelKind)raw;
+        return true;
+    }
 
     private void DrawMiniMap()
     {
