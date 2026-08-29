@@ -45,7 +45,8 @@ function New-Pen([System.Drawing.Color]$color, [int]$width) {
 }
 
 function Draw-ItemGlyph {
-    param([System.Drawing.Graphics]$Graphics, [int]$X, [int]$Y, [string]$Category, [uint32]$Hash, [int]$Index, [switch]$Unique)
+    param([System.Drawing.Graphics]$Graphics, [int]$X, [int]$Y, [string]$Category, [uint32]$Hash,
+        [int]$Index, [ValidateRange(0,2)][int]$VisualTier = 0, [switch]$Unique)
     $palette = @('#aeb7c2', '#b88a54', '#6ca8bd', '#c65d42', '#8d6ac0', '#7fb076', '#d1aa43')
     $main = Get-Color $palette[$Hash % $palette.Count]
     if ($Unique) { $main = Get-Color '#d4a642' }
@@ -105,6 +106,29 @@ function Draw-ItemGlyph {
             $Graphics.FillRectangle($brush,$X+10,$Y+16,12,8); $Graphics.FillRectangle($lightBrush,$X+11,$Y+14,3,9)
         }
     }
+    # Base-item progression must be readable even at taskbar size. Mid-tier
+    # items receive worked-metal rivets; endgame bases receive a second bright
+    # contour and an ember/arcane inlay without changing the stable 32px cell.
+    if ($VisualTier -ge 1) {
+        $worked = if ($VisualTier -eq 2) { Get-Color '#d9bd72' } else { Get-Color '#879bad' }
+        $workedBrush = [System.Drawing.SolidBrush]::new($worked)
+        $Graphics.FillRectangle($workedBrush, $X + 4, $Y + 5, 2, 2)
+        $Graphics.FillRectangle($workedBrush, $X + 26, $Y + 23, 2, 2)
+        $Graphics.FillRectangle($workedBrush, $X + 6, $Y + 26, 2, 1)
+        if ($VisualTier -eq 2) {
+            $arcane = Get-Color $(if (($Hash -band 1) -eq 0) { '#67c7d8' } else { '#e08b43' })
+            $royalPen = New-Pen $worked 1
+            $arcaneBrush = [System.Drawing.SolidBrush]::new($arcane)
+            $Graphics.DrawLine($royalPen, $X + 3, $Y + 3, $X + 9, $Y + 3)
+            $Graphics.DrawLine($royalPen, $X + 3, $Y + 3, $X + 3, $Y + 9)
+            $Graphics.DrawLine($royalPen, $X + 23, $Y + 3, $X + 29, $Y + 3)
+            $Graphics.DrawLine($royalPen, $X + 29, $Y + 3, $X + 29, $Y + 9)
+            $Graphics.FillRectangle($arcaneBrush, $X + 15, $Y + 3, 3, 2)
+            $Graphics.FillRectangle($arcaneBrush, $X + 27, $Y + 14, 2, 3)
+            $royalPen.Dispose(); $arcaneBrush.Dispose()
+        }
+        $workedBrush.Dispose()
+    }
     $markerX = $X + 3 + [int]($Hash % 5); $markerY = $Y + 26 - [int](($Hash / 7) % 5)
     $Graphics.FillRectangle($lightBrush, $markerX, $markerY, 2, 2)
     for ($bit = 0; $bit -lt 7; $bit++) {
@@ -119,14 +143,16 @@ function Build-ItemAtlases {
     $bases = @($catalog.bases | Sort-Object StableId)
     $atlas = New-Bitmap 320 256; $graphics = New-Graphics $atlas
     for($index=0;$index -lt $bases.Count;$index++){
-        Draw-ItemGlyph $graphics (($index%10)*32) ([math]::Floor($index/10)*32) ([string]$bases[$index].Category) (Get-Hash ([string]$bases[$index].StableId)) $index
+        $requiredLevel = [int]$bases[$index].requiredLevel
+        $visualTier = if ($requiredLevel -ge 60) { 2 } elseif ($requiredLevel -ge 30) { 1 } else { 0 }
+        Draw-ItemGlyph $graphics (($index%10)*32) ([math]::Floor($index/10)*32) ([string]$bases[$index].Category) (Get-Hash ([string]$bases[$index].StableId)) $index $visualTier
     }
     $graphics.Dispose(); $atlas.Save((Join-Path $uiRoot 'p21-item-bases.png'),[System.Drawing.Imaging.ImageFormat]::Png); $atlas.Dispose()
 
     $unique = New-Bitmap 160 160; $graphics = New-Graphics $unique
     $categories = @('TwoHandWeapon','Shield','Helmet','BodyArmor','Gloves','Boots','Belt','Amulet','Ring','LifeFlask')
     for($index=0;$index -lt 25;$index++){
-        Draw-ItemGlyph $graphics (($index%5)*32) ([math]::Floor($index/5)*32) $categories[$index%$categories.Count] (Get-Hash "unique-$index") $index -Unique
+        Draw-ItemGlyph $graphics (($index%5)*32) ([math]::Floor($index/5)*32) $categories[$index%$categories.Count] (Get-Hash "unique-$index") $index 2 -Unique
     }
     $graphics.Dispose(); $unique.Save((Join-Path $uiRoot 'p21-unique-items.png'),[System.Drawing.Imaging.ImageFormat]::Png); $unique.Dispose()
 }

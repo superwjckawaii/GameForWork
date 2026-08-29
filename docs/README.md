@@ -25,4 +25,7 @@
 - [P20 经济蒙特卡洛审计](v0.2/P20_ECONOMY_AUDIT.md)
 - [P20.5 主天赋树 V2 规格](v0.2/P20_5_PASSIVE_TREE_SPECIFICATION.md)
 - [P21 像素美术、逐帧动画与稳定图集规格](v0.2/P21_SPECIFICATION.md)
-- 后续 P22 的阶段规格在进入对应阶段时建立于 `v0.2/`。
+- [P22 整合、平衡与 v0.2 封版规格](v0.2/P22_SPECIFICATION.md)
+- [P22 经济蒙特卡洛审计](v0.2/P22_ECONOMY_AUDIT.md)
+- [P22 六构筑空间战斗审计](v0.2/P22_COMBAT_AUDIT.md)
+- [v0.2.0 版本说明](v0.2/V0_2_RELEASE_NOTES.md)

@@ -31,7 +31,7 @@ public sealed class P6FeatureTests
     }
 
     [Fact]
-    public void LegacyItemsReceiveStableSocketGroupsDuringRestore()
+    public void LegacySocketSnapshotsAreRejectedAtSessionBoundary()
     {
         P1GameSession session = CreateSession();
         P1GameSessionSnapshot legacy = session.Capture() with
@@ -42,13 +42,7 @@ public sealed class P6FeatureTests
                 .ToArray(),
         };
 
-        P1GameSession first = P1GameSession.Restore(legacy);
-        P1GameSession second = P1GameSession.Restore(legacy);
-
-        Assert.All(first.GetSkillChains(), chain => Assert.InRange(chain.TotalSockets, 2, 6));
-        Assert.Equal(
-            first.GetSkillChains().Select(chain => chain.TotalSockets),
-            second.GetSkillChains().Select(chain => chain.TotalSockets));
+        Assert.Throws<InvalidDataException>(() => P1GameSession.Restore(legacy));
     }
 
     [Fact]

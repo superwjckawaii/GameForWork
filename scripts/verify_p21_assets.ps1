@@ -145,6 +145,34 @@ Assert-CellOccupancy 'ui\p21-item-bases.png' 10 80 32 55
 Assert-CellOccupancy 'ui\p21-unique-items.png' 5 25 32 55
 Assert-CellOccupancy 'ui\p21-skill-gems.png' 10 78 32 90
 
+function Assert-ItemVisualTiers {
+    $catalog = Get-Content -LiteralPath (Join-Path $RepositoryRoot 'src\Game.Core\P19\Data\p19_catalog.json') -Raw | ConvertFrom-Json
+    $bases = @($catalog.bases | Sort-Object StableId)
+    $bitmap = [System.Drawing.Bitmap]::FromFile((Join-Path $assetRoot 'ui\p21-item-bases.png'))
+    $gold = [System.Drawing.ColorTranslator]::FromHtml('#d9bd72').ToArgb()
+    try {
+        $highTierCount = 0
+        for ($index = 0; $index -lt $bases.Count; $index++) {
+            $left = ($index % 10) * 32
+            $top = [math]::Floor($index / 10) * 32
+            # PixelOffsetMode.Half rasterizes the 1px corner stroke one pixel
+            # toward the cell origin.
+            $hasRoyalCorner = $bitmap.GetPixel($left + 3, $top + 2).ToArgb() -eq $gold
+            if ([int]$bases[$index].requiredLevel -ge 60) {
+                $highTierCount++
+                if (-not $hasRoyalCorner) {
+                    throw "High-tier base lacks advanced pixel treatment: $($bases[$index].stableId)"
+                }
+            } elseif ($hasRoyalCorner) {
+                throw "Low/mid-tier base incorrectly uses the endgame treatment: $($bases[$index].stableId)"
+            }
+        }
+        if ($highTierCount -lt 8) { throw "Expected at least eight endgame base icons, found $highTierCount" }
+    } finally { $bitmap.Dispose() }
+}
+
+Assert-ItemVisualTiers
+
 $iconPath = Join-Path $assetRoot 'brand\p21-app-icon.ico'
 if (-not (Test-Path -LiteralPath $iconPath) -or (Get-Item -LiteralPath $iconPath).Length -lt 1kb) {
     throw 'Missing or invalid multi-size Windows application icon.'
@@ -157,4 +185,4 @@ if ($manifest.counts.itemBases -ne 80 -or $manifest.counts.skillGems -ne 78 -or
     throw 'P21 asset manifest counts do not match the frozen content contract.'
 }
 
-Write-Host '[p21-assets] PASS: dimensions, transparent gutters, stable counts and unique icons.'
+Write-Host '[p21-assets] PASS: dimensions, transparent gutters, stable counts, visual tiers and unique icons.'

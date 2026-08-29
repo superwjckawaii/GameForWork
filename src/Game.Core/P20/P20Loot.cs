@@ -58,6 +58,7 @@ public static class P20DropFormula
     public const int BaseMapReturnBasisPoints = 10_800;
     public const int RegularLegendaryChanceBasisPoints = 333;
     public const int BossLegendaryChanceBasisPoints = 800;
+    public const int PinnacleMapReturnBasisPoints = 9_000;
     private const int EquipmentCost = 2_400;
     private const int MetalCost = 6_000;
     private const int SkillStoneCost = 80_000;
@@ -198,7 +199,7 @@ public static class P20DropFormula
         int maps = 0;
         if (context.AllowMaps && context.Completed && !context.Practice)
         {
-            long expected = (long)BaseMapReturnBasisPoints * context.QuantityBasisPoints / 10_000 *
+            long expected = (long)MapReturnBasisPoints(context.SourceTier) * context.QuantityBasisPoints / 10_000 *
                             (10_000 + context.Danger * 20) / 10_000;
             maps = Math.Min(4, RollRatio(random, expected, 10_000));
         }
@@ -267,7 +268,7 @@ public static class P20DropFormula
 
     private static IReadOnlyList<P1MapItem> RollMaps(P20LootContext context, Pcg32 random)
     {
-        long expected = (long)BaseMapReturnBasisPoints * context.QuantityBasisPoints / 10_000 *
+        long expected = (long)MapReturnBasisPoints(context.SourceTier) * context.QuantityBasisPoints / 10_000 *
                         (10_000 + context.Danger * 20) / 10_000;
         int count = Math.Min(4, RollRatio(random, expected, 10_000));
         var result = new List<P1MapItem>(count);
@@ -281,6 +282,9 @@ public static class P20DropFormula
         }
         return result;
     }
+
+    private static int MapReturnBasisPoints(int sourceTier) =>
+        sourceTier >= 16 ? PinnacleMapReturnBasisPoints : BaseMapReturnBasisPoints;
 
     private static IReadOnlyList<MetalCurrencyStack> RollMetals(Pcg32 random, int count, MapRoute route)
     {

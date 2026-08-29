@@ -120,7 +120,7 @@ public sealed record P1GameSessionSnapshot(
 
 public sealed class P1GameSession
 {
-    public const int CurrentFormatVersion = 17;
+    public const int CurrentFormatVersion = 18;
     private readonly P1WorldSimulator _simulator = new(new P1MapAttemptResolver());
     private readonly P2CampaignSimulator _campaignSimulator = new();
     private AssembledCharacterBuild _heroBuild;
@@ -239,9 +239,10 @@ public sealed class P1GameSession
     public static P1GameSession Restore(P1GameSessionSnapshot snapshot)
     {
         ArgumentNullException.ThrowIfNull(snapshot);
-        if (snapshot.FormatVersion is < 1 or > CurrentFormatVersion || snapshot.SimulationSequence < 0)
+        if (snapshot.FormatVersion != CurrentFormatVersion || snapshot.SimulationSequence < 0)
         {
-            throw new InvalidDataException("P1 session snapshot version is unsupported.");
+            throw new InvalidDataException(
+                $"P1 session snapshot version {snapshot.FormatVersion} is unsupported; expected {CurrentFormatVersion}.");
         }
 
         EquipmentLoadout equipment = EquipmentLoadout.Restore(
@@ -252,43 +253,12 @@ public sealed class P1GameSession
             ? restoredMercenary.Equipment
             : EquipmentLoadout.Restore(snapshot.MercenaryEquipment.Select(entry =>
                 new KeyValuePair<EquipmentSlot, ItemInstance>(entry.Slot, entry.Item)));
-        PassiveTreeAllocation passives = snapshot.FormatVersion < 17
-            ? new PassiveTreeAllocation(snapshot.MemoryAshes)
-            : PassiveTreeAllocation.Restore(snapshot.AllocatedPassives, snapshot.MemoryAshes,
-                snapshot.MasterySelections, snapshot.SocketedJewels);
+        PassiveTreeAllocation passives = PassiveTreeAllocation.Restore(snapshot.AllocatedPassives, snapshot.MemoryAshes,
+            snapshot.MasterySelections, snapshot.SocketedJewels);
         P1WorldState world = P1WorldSnapshots.Restore(snapshot.World);
         P9TownState town = P9TownState.Restore(snapshot.Town, snapshot.Seed ^ 0x7039746f776eUL, mercenaryEquipment);
         if (town.Roster.Count > 0) mercenaryEquipment = town.Roster[0].Equipment;
-        if (snapshot.FormatVersion == 1)
-        {
-            P1MercenaryProfile upgradedMercenary = P1MercenaryFactory.GenerateCantor(snapshot.Seed ^ 0xa5a5a5a5UL);
-            world.Mercenaries.UpdateBuild(upgradedMercenary.CreateTeamBuild(world.Mercenaries.Progression.Level));
-        }
-
-        if (snapshot.FormatVersion < CurrentFormatVersion)
-        {
-            world.Hero.Progression.MigrateToMinimumLevel(60);
-            world.Mercenaries.Progression.MigrateToMinimumLevel(60);
-            if (snapshot.FormatVersion < 7)
-            {
-                world.Economy.AddMetal(MetalCurrencyKind.TemperingIron, 3);
-                world.Economy.AddMetal(MetalCurrencyKind.WardSteel, 3);
-                world.Economy.AddMetal(MetalCurrencyKind.VitalSilver, 3);
-            }
-
-            if (snapshot.FormatVersion < 8)
-            {
-                MigrateLegacyDispatch(world, world.Hero);
-                MigrateLegacyDispatch(world, world.Mercenaries);
-            }
-        }
-
-        bool legacyP1Migration = snapshot.FormatVersion < 5;
-        P2ManagementState management = P2ManagementState.Restore(snapshot.Management, legacyP1Migration);
-        if (snapshot.FormatVersion < 8)
-        {
-            SynchronizeLegacyHeavySupports(management, snapshot.HeavyStrikeSupports);
-        }
+        P2ManagementState management = P2ManagementState.Restore(snapshot.Management, legacyMigration: false);
         var session = new P1GameSession(
             snapshot.Player,
             snapshot.MercenaryName,
@@ -299,8 +269,8 @@ public sealed class P1GameSession
             snapshot.HeavyStrikeSupports,
             snapshot.HeroAi ?? HeroAiConfiguration.Balanced,
             management,
-            P2CampaignState.Restore(legacyP1Migration ? null : snapshot.Campaign, legacyP1Migration),
-            P8DemoJourney.Restore(snapshot.Journey, snapshot.FormatVersion < 10),
+            P2CampaignState.Restore(snapshot.Campaign, legacyMigration: false),
+            P8DemoJourney.Restore(snapshot.Journey, legacy: false),
             town,
             P10EndgameState.Restore(snapshot.Endgame),
             snapshot.Seed,
@@ -1318,18 +1288,6 @@ public sealed class P1GameSession
             yield return definition.StableId;
     }
 
-    private static void SynchronizeLegacyHeavySupports(P2ManagementState management, SkillSupport supports)
-    {
-        SkillStoneInstance active = management.SkillStones.Single(
-            item => item.DefinitionId == "core.skill_stone.heavy_strike");
-        string[] supportIds = SupportDefinitionIds(supports)
-            .Select(definition => management.SkillStones.FirstOrDefault(item => item.DefinitionId == definition)?.InstanceId)
-            .Where(id => id is not null)
-            .Cast<string>()
-            .ToArray();
-        management.ReplaceSupports(active.InstanceId, supportIds);
-    }
-
     private P1TeamExpeditionState Team(ExpeditionTeamKind kind) =>
         kind == ExpeditionTeamKind.Hero ? World.Hero : World.Mercenaries;
 
@@ -1345,16 +1303,4 @@ public sealed class P1GameSession
         }
     }
 
-    private static void MigrateLegacyDispatch(P1WorldState world, P1TeamExpeditionState team)
-    {
-        if (team.ActiveMap is null && team.Queue.Count == 0)
-        {
-            return;
-        }
-
-        P5ExpeditionTarget target = team.Policy.PreferredRoute == MapRoute.Safe
-            ? P5ExpeditionTarget.SafeMaps
-            : P5ExpeditionTarget.AbyssMaps;
-        world.Expedition.Assign(team.Kind, target, P5DispatchMode.Repeat);
-    }
 }

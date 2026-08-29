@@ -94,7 +94,10 @@ public static class P20EconomyAudit
         text.AppendLine().AppendLine("## 审计结论").AppendLine();
         P20AuditResult? t1 = results.FirstOrDefault(result => result.Bracket.Name == "T1");
         P20AuditResult? boss = results.FirstOrDefault(result => result.Bracket.Name == "Boss");
-        text.AppendLine($"- 基础地图续航目标为 1.08；T1 实测 {t1?.AverageMaps:F4}，危险度会再提供小幅提升。");
+        P20AuditResult? t16 = results.FirstOrDefault(result => result.Bracket.Name == "T16");
+        P20AuditResult? t20 = results.FirstOrDefault(result => result.Bracket.Name == "T20");
+        text.AppendLine($"- T1～T10 基础地图续航目标不低于 1.05；T1 实测 {t1?.AverageMaps:F4}。" +
+            $"T16～T20 目标为 0.90～1.05；本次 T16/T20 实测 {t16?.AverageMaps:F4}/{t20?.AverageMaps:F4}。");
         text.AppendLine($"- 普通地图传奇基准为 3.33%（约 1/30）；Boss 直掉基准为 8%，本次 Boss 实测 {boss?.LegendaryRate:P3}。");
         text.AppendLine("- 地图数量、金币、装备、金属、技能石、完成奖励与固定 Boss 碎片均读取地图数量加成；连接数独立抽取。");
         text.AppendLine("- 金币出售已改为公开估值的 5%。按 T1 标准约 1,097 金币/小时，现有建筑升级与附魔价格分档保持不变；P22 只根据完整构筑长稳结果做末次微调。");

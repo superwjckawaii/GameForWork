@@ -1,10 +1,10 @@
-name: Demo Package
+name: v0.2 Portable Package
 
 on:
   workflow_dispatch:
   push:
     tags:
-      - 'v*-demo'
+      - 'v0.2.*'
 
 jobs:
   windows-portable:
@@ -47,11 +47,11 @@ jobs:
 
       - name: Build portable ZIP
         shell: pwsh
-        run: .\scripts\package-demo.ps1 -GodotPath $env:GODOT_BIN -Version '0.1.0-demo'
+        run: .\scripts\package-demo.ps1 -GodotPath $env:GODOT_BIN -Version '0.2.0'
 
       - name: Upload portable ZIP
         uses: actions/upload-artifact@v4
         with:
-          name: GameForWork-v0.1.0-demo-win-x64
-          path: artifacts/GameForWork-v0.1.0-demo-win-x64.zip
+          name: GameForWork-v0.2.0-win-x64
+          path: artifacts/GameForWork-v0.2.0-win-x64.zip
           if-no-files-found: error

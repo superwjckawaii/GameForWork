@@ -79,7 +79,7 @@ public sealed class P2ManagementTests
     }
 
     [Fact]
-    public void LegacySessionMigratesToLevelSixtyAndFreeRespec()
+    public void LegacyManagementSnapshotIsRejectedAtSessionBoundary()
     {
         P1GameSession current = P1GameSession.CreateNew(new PlayerIdentity(
             "迁移者",
@@ -89,11 +89,7 @@ public sealed class P2ManagementTests
             P1Ascendancy.IronOath), 77);
         P1GameSessionSnapshot legacy = current.Capture() with { FormatVersion = 3, Management = null };
 
-        P1GameSession migrated = P1GameSession.Restore(legacy);
-
-        Assert.Equal(60, migrated.World.Hero.Progression.Level);
-        Assert.True(migrated.Management.FreeFullRespecAvailable);
-        Assert.Equal(9, migrated.Management.SkillStones.Count);
+        Assert.Throws<InvalidDataException>(() => P1GameSession.Restore(legacy));
     }
 
     [Fact]

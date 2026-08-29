@@ -145,18 +145,12 @@ public sealed class P1SessionTests
     }
 
     [Fact]
-    public void VersionOneSnapshotUpgradesMercenaryStarterLoadout()
+    public void TestEraSnapshotIsRejectedInsteadOfMigrated()
     {
         P1GameSessionSnapshot legacy = CreateSession().Capture() with { FormatVersion = 1 };
 
-        P1GameSession restored = P1GameSession.Restore(legacy);
-
-        Assert.NotNull(restored.World.Mercenaries.Build.LifeFlask);
-        Assert.NotNull(restored.World.Mercenaries.Build.HeavyStrikeProfile);
-        Assert.Equal(3, restored.Town.Roster.Count);
-        Assert.Equal(3, restored.World.Mercenaries.Build.PartySize);
-        Assert.Equal(67, restored.World.Mercenaries.Build.Sheet.Equipment.Armor);
-        Assert.Equal(1_738, restored.World.Mercenaries.Build.Sheet.MaximumLife().Value);
+        InvalidDataException error = Assert.Throws<InvalidDataException>(() => P1GameSession.Restore(legacy));
+        Assert.Contains($"expected {P1GameSession.CurrentFormatVersion}", error.Message);
     }
 
     private static P1GameSession CreateSession() => P1GameSession.CreateNew(Identity("阿斯特"), 1234);

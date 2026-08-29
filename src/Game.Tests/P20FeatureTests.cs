@@ -26,8 +26,12 @@ public sealed class P20FeatureTests
 
         Assert.Equal(first, replay);
         P20AuditResult t1 = first.Single(result => result.Bracket.Name == "T1");
+        P20AuditResult t16 = first.Single(result => result.Bracket.Name == "T16");
+        P20AuditResult t20 = first.Single(result => result.Bracket.Name == "T20");
         P20AuditResult boss = first.Single(result => result.Bracket.Name == "Boss");
         Assert.InRange(t1.AverageMaps, 1.05, 1.14);
+        Assert.InRange(t16.AverageMaps, 0.90, 1.05);
+        Assert.InRange(t20.AverageMaps, 0.90, 1.05);
         Assert.InRange(t1.LegendaryRate, 0.02, 0.05);
         Assert.InRange(boss.LegendaryRate, 0.06, 0.10);
     }

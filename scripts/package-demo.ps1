@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
     [string]$GodotPath = $env:GODOT_BIN,
-    [string]$Version = '0.1.0-demo'
+    [string]$Version = '0.2.0'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -41,5 +41,9 @@ if (-not (Test-Path -LiteralPath $executable) -or (Get-Item -LiteralPath $execut
 
 $readme = Join-Path $repositoryRoot 'README.md'
 if (Test-Path -LiteralPath $readme) { Copy-Item -LiteralPath $readme -Destination $outputDirectory }
+$releaseNotes = Join-Path $repositoryRoot 'docs\v0.2\V0_2_RELEASE_NOTES.md'
+if (Test-Path -LiteralPath $releaseNotes) {
+    Copy-Item -LiteralPath $releaseNotes -Destination (Join-Path $outputDirectory 'VERSION.md')
+}
 Compress-Archive -Path (Join-Path $outputDirectory '*') -DestinationPath $archivePath -CompressionLevel Optimal
 Write-Host "[package] $archivePath"

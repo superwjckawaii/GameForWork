@@ -58,18 +58,13 @@ public sealed class P8JourneyTests
     }
 
     [Fact]
-    public void VersionNineSaveMigratesWithoutReplayingForcedGuide()
+    public void VersionNineJourneySaveIsRejectedAtSessionBoundary()
     {
         P1GameSession current = CreateSession(tutorial: true);
         current.Advance(1_000);
         P1GameSessionSnapshot legacy = current.Capture() with { FormatVersion = 9, Journey = null };
 
-        P1GameSession restored = P1GameSession.Restore(legacy);
-
-        Assert.False(restored.Journey.TutorialEnabled);
-        Assert.False(restored.Journey.TryPresentCurrentStep());
-        Assert.NotEqual(P8JourneyStep.EquipItem, restored.Journey.CurrentStep?.Step);
-        Assert.Equal(current.World.Economy.Gold, restored.World.Economy.Gold);
+        Assert.Throws<InvalidDataException>(() => P1GameSession.Restore(legacy));
     }
 
     [Fact]

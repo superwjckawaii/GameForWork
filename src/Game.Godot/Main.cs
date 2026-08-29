@@ -55,6 +55,13 @@ public partial class Main : Node
     private double _lastSimulationMilliseconds;
     private Label? _performanceLabel;
     private long _stabilityDeadlineTimestamp;
+    private long _stabilityStartTimestamp;
+    private long _stabilityInitialWorkingSet;
+    private long _stabilityPeakWorkingSet;
+    private TimeSpan _stabilityStartCpu;
+    private string _stabilityMode = string.Empty;
+    private string _stabilityReportPath = string.Empty;
+    private double _peakSimulationMilliseconds;
     private static bool DeveloperFeaturesEnabled => OS.HasFeature("editor") || OS.HasFeature("debug");
 
     public override void _Ready()
@@ -97,14 +104,25 @@ public partial class Main : Node
         UpdateTrayState();
         string[] userArguments = OS.GetCmdlineUserArgs();
         string? stabilitySeconds = userArguments.FirstOrDefault(argument =>
-            argument.StartsWith("--p15-stability-seconds=", StringComparison.Ordinal));
+            argument.StartsWith("--p22-stability-seconds=", StringComparison.Ordinal));
         if (stabilitySeconds is not null &&
-            int.TryParse(stabilitySeconds.AsSpan("--p15-stability-seconds=".Length), out int seconds) && seconds >= 10)
+            int.TryParse(stabilitySeconds.AsSpan("--p22-stability-seconds=".Length), out int seconds) && seconds >= 10)
         {
-            _stabilityDeadlineTimestamp = System.Diagnostics.Stopwatch.GetTimestamp() +
+            _stabilityStartTimestamp = System.Diagnostics.Stopwatch.GetTimestamp();
+            _stabilityDeadlineTimestamp = _stabilityStartTimestamp +
                 (long)(seconds * (double)System.Diagnostics.Stopwatch.Frequency);
+            using System.Diagnostics.Process process = System.Diagnostics.Process.GetCurrentProcess();
+            _stabilityInitialWorkingSet = process.WorkingSet64;
+            _stabilityPeakWorkingSet = _stabilityInitialWorkingSet;
+            _stabilityStartCpu = process.TotalProcessorTime;
+            _stabilityMode = userArguments.Contains("--p22-stability-tray", StringComparer.Ordinal)
+                ? "Tray" : "Visible";
+            const string reportPrefix = "--p22-stability-report=";
+            _stabilityReportPath = userArguments.FirstOrDefault(argument =>
+                    argument.StartsWith(reportPrefix, StringComparison.Ordinal))?[reportPrefix.Length..]
+                ?? string.Empty;
         }
-        if (userArguments.Contains("--p15-stability-tray", StringComparer.Ordinal))
+        if (userArguments.Contains("--p22-stability-tray", StringComparer.Ordinal))
             Callable.From(() => _windowController?.HideToTray()).CallDeferred();
     }
 
@@ -114,8 +132,13 @@ public partial class Main : Node
             System.Diagnostics.Stopwatch.GetTimestamp() >= _stabilityDeadlineTimestamp)
         {
             _stabilityDeadlineTimestamp = 0;
-            GetTree().Quit();
+            GetTree().Quit(WriteStabilityReport() ? 0 : 1);
             return;
+        }
+        if (_stabilityDeadlineTimestamp > 0)
+        {
+            using System.Diagnostics.Process process = System.Diagnostics.Process.GetCurrentProcess();
+            _stabilityPeakWorkingSet = Math.Max(_stabilityPeakWorkingSet, process.WorkingSet64);
         }
         PollSaveWorker();
         UpdateGoldDisplay();
@@ -161,6 +184,7 @@ public partial class Main : Node
                     _session.AdvanceResponsive(SimulationStepMilliseconds);
                 }
                 _lastSimulationMilliseconds = System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds;
+                _peakSimulationMilliseconds = Math.Max(_peakSimulationMilliseconds, _lastSimulationMilliseconds);
             }
             catch (Exception exception)
             {
@@ -182,6 +206,42 @@ public partial class Main : Node
         {
             _autoSaveAccumulator = 0;
             SaveP1State(showNotice: false);
+        }
+    }
+
+    private bool WriteStabilityReport()
+    {
+        if (string.IsNullOrWhiteSpace(_stabilityReportPath)) return true;
+        try
+        {
+            using System.Diagnostics.Process process = System.Diagnostics.Process.GetCurrentProcess();
+            long finalWorkingSet = process.WorkingSet64;
+            _stabilityPeakWorkingSet = Math.Max(_stabilityPeakWorkingSet, finalWorkingSet);
+            double elapsedSeconds = Math.Max(0.001,
+                System.Diagnostics.Stopwatch.GetElapsedTime(_stabilityStartTimestamp).TotalSeconds);
+            double cpuPercent = (process.TotalProcessorTime - _stabilityStartCpu).TotalSeconds /
+                elapsedSeconds / Math.Max(1, System.Environment.ProcessorCount) * 100.0;
+            string? directory = Path.GetDirectoryName(_stabilityReportPath);
+            if (!string.IsNullOrWhiteSpace(directory)) Directory.CreateDirectory(directory);
+            File.WriteAllText(_stabilityReportPath, JsonSerializer.Serialize(new
+            {
+                Version = "0.2.0",
+                Mode = _stabilityMode,
+                ElapsedSeconds = elapsedSeconds,
+                InitialWorkingSetBytes = _stabilityInitialWorkingSet,
+                PeakWorkingSetBytes = _stabilityPeakWorkingSet,
+                FinalWorkingSetBytes = finalWorkingSet,
+                WorkingSetGrowthBytes = finalWorkingSet - _stabilityInitialWorkingSet,
+                AverageCpuPercent = cpuPercent,
+                PeakSimulationMilliseconds = _peakSimulationMilliseconds,
+                LastBackgroundSaveMilliseconds = _lastSaveMilliseconds,
+            }, SaveJsonOptions));
+            return true;
+        }
+        catch (Exception exception)
+        {
+            ReportError("p22.stability_report_failed", "Writing the P22 stability report failed.", exception);
+            return false;
         }
     }
 
@@ -387,7 +447,11 @@ public partial class Main : Node
         closeContent.AddChild(_rememberCloseChoice);
         _closeDialog.AddChild(closeContent);
         _closeDialog.Confirmed += () => CompleteCloseChoice(closeToTray: false);
-        _closeDialog.Canceled += () => CompleteCloseChoice(closeToTray: true);
+        // ConfirmationDialog.Canceled is also emitted by the title-bar close button.
+        // Keep the explicit cancel button as "minimize to tray", while closing the
+        // question itself must be a true no-op.
+        _closeDialog.GetCancelButton().Pressed += () => CompleteCloseChoice(closeToTray: true);
+        _closeDialog.CloseRequested += () => _closeDialog.Hide();
         AddChild(_closeDialog);
         _resetDialog = new ConfirmationDialog
         {

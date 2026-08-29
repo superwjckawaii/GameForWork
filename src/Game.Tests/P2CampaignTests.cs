@@ -57,17 +57,12 @@ public sealed class P2CampaignTests
     }
 
     [Fact]
-    public void FormatFourSaveMigratesAsCompletedWithFreeRespec()
+    public void FormatFourTestSaveIsRejected()
     {
         P1GameSession session = Session();
         P1GameSessionSnapshot legacy = session.Capture() with { FormatVersion = 4, Campaign = null };
 
-        P1GameSession migrated = P1GameSession.Restore(legacy);
-
-        Assert.True(migrated.Campaign.Completed);
-        Assert.True(migrated.IsExpeditionUnlocked);
-        Assert.Equal(60, migrated.World.Hero.Progression.Level);
-        Assert.True(migrated.Management.FreeFullRespecAvailable);
+        Assert.Throws<InvalidDataException>(() => P1GameSession.Restore(legacy));
     }
 
     [Fact]
@@ -111,8 +106,14 @@ public sealed class P2CampaignTests
         return MigrateAsCompleted(Session());
     }
 
-    private static P1GameSession MigrateAsCompleted(P1GameSession session) =>
-        P1GameSession.Restore(session.Capture() with { FormatVersion = 4, Campaign = null });
+    private static P1GameSession MigrateAsCompleted(P1GameSession session)
+    {
+        P1GameSessionSnapshot snapshot = session.Capture();
+        string[] completed = P2CampaignCatalog.Nodes.Select(node => node.StableId).ToArray();
+        P2CampaignSnapshot campaign = new(P2CampaignCatalog.Nodes.Count, 0, false, true,
+            completed, completed, ["测试：五幕主线已完成。"], null);
+        return P1GameSession.Restore(snapshot with { Campaign = campaign });
+    }
 
     private static P1GameSession Session() => P1GameSession.CreateNew(new PlayerIdentity(
         "行路者",
