@@ -51,7 +51,7 @@ internal static class P1UiText
             string source = affix.Crafted ? "工匠" : affix.Definition.Source == "Natural" ? "自然" : affix.Definition.Source;
             text.AppendLine($"[TIER:{affix.Definition.Tier}]{PositionName(affix.Definition.Position)} T{affix.Definition.Tier} " +
                 $"{affix.Definition.DisplayName}{markers}：{Modifier(affix.Definition.ModifierKind, affix.Value)} " +
-                $"[{affix.Definition.MinimumValue}–{affix.Definition.MaximumValue}] · 需求 ilvl {affix.Definition.MinimumItemLevel} · {source}");
+                $"[{affix.Definition.MinimumValue}–{affix.Definition.MaximumValue}] · {source}");
         }
 
         if (P1FlaskRules.KindForBase(item.Base.StableId) is { } flaskKind)

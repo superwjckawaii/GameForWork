@@ -543,13 +543,32 @@ public sealed class PassiveTreeAllocation
             throw new InvalidDataException("Passive allocation exceeds the supported point cap.");
         }
 
+        var remaining = new HashSet<string>(StringComparer.Ordinal);
         foreach (string stableId in nodes)
         {
-            PassiveNodeDefinition node = P1PassiveTree.Get(stableId);
-            if (node.PrerequisiteId is not null && !P1PassiveTree.Neighbors(stableId).Any(result._allocated.Contains) ||
-                !result._allocated.Add(stableId))
+            _ = P1PassiveTree.Get(stableId);
+            if (!remaining.Add(stableId))
             {
                 throw new InvalidDataException("Passive allocation snapshot is not a valid path.");
+            }
+        }
+
+        while (remaining.Count > 0)
+        {
+            string[] connected = remaining.Where(stableId =>
+            {
+                PassiveNodeDefinition node = P1PassiveTree.Get(stableId);
+                return node.PrerequisiteId is null || P1PassiveTree.Neighbors(stableId).Any(result._allocated.Contains);
+            }).ToArray();
+            if (connected.Length == 0)
+            {
+                throw new InvalidDataException("Passive allocation snapshot is not a valid path.");
+            }
+
+            foreach (string stableId in connected)
+            {
+                result._allocated.Add(stableId);
+                remaining.Remove(stableId);
             }
         }
 

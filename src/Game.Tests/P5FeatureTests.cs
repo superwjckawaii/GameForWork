@@ -59,6 +59,27 @@ public sealed class P5FeatureTests
     }
 
     [Fact]
+    public void ManualRedispatchStartsANewConsecutiveFailureWindow()
+    {
+        P1GameSession session = CreateSession();
+        var failedMap = new P1MapItem("p5-failed", 1);
+        var failedRun = new P1MapRunResult(
+            failedMap, MapRoute.Safe, false, 3, 0, [], "test_failure");
+        for (int index = 0; index < 3; index++) session.World.Hero.RecordRun(failedRun);
+        session.World.Hero.Stop("consecutive_failures");
+        session.World.MapInventory.Add(new P1MapItem("p5-retry", 1));
+
+        session.AssignExpedition(
+            ExpeditionTeamKind.Hero,
+            P5ExpeditionTarget.SafeMaps,
+            P5DispatchMode.Once);
+
+        Assert.False(session.World.Hero.IsStopped);
+        Assert.Equal(0, session.World.Hero.ConsecutiveFailures);
+        Assert.Equal("p5-retry", Assert.Single(session.World.Hero.Queue.Maps).InstanceId);
+    }
+
+    [Fact]
     public void ExpeditionProgressAndAssignmentsSurviveSessionSnapshot()
     {
         P1GameSession session = CreateSession();

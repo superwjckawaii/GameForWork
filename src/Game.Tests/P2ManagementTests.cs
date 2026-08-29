@@ -115,6 +115,23 @@ public sealed class P2ManagementTests
     }
 
     [Fact]
+    public void UnequippingMainHandKeepsBuildAndPreviewRefreshValid()
+    {
+        P1GameSession session = Session();
+        var commands = new P2ItemCommandService(session);
+
+        P2ItemCommandResult result = commands.TryUnequip(EquipmentSlot.MainHand);
+        var exception = Record.Exception(() => session.GetCombatPreview());
+
+        Assert.True(result.Succeeded);
+        Assert.Null(exception);
+        Assert.False(session.HeroBuild.HasUsableWeapon);
+        Assert.False(session.World.Hero.Build.HasUsableWeapon);
+        Assert.Equal("core.weapon.unequipped", session.HeroBuild.EffectiveWeapon.StableId);
+        Assert.DoesNotContain(EquipmentSlot.MainHand, session.HeroEquipment.Items.Keys);
+    }
+
+    [Fact]
     public void LockedItemsCannotBeSoldAndManualSaleCanBeBoughtBack()
     {
         P1GameSession session = Session();

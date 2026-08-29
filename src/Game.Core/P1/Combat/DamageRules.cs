@@ -11,6 +11,7 @@ public sealed record WeaponProfile(
 
 public static class P1Weapons
 {
+    public static readonly WeaponProfile Unequipped = new("core.weapon.unequipped", 0, 0, 1_000, 0);
     public static readonly WeaponProfile RustedGreatsword = new("core.weapon.rusted_greatsword", 8, 12, 1_200, 500);
     public static readonly WeaponProfile HeavyBattleaxe = new("core.weapon.heavy_battleaxe", 12, 18, 900, 500);
     public static readonly WeaponProfile PoleWarhammer = new("core.weapon.pole_warhammer", 10, 15, 1_000, 600);

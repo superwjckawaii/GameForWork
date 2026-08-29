@@ -15,15 +15,18 @@ public sealed record AssembledCharacterBuild(
     int IncreasedBleedChanceBasisPoints,
     WarCryState WarCry,
     ChargedHeavyStrikeState? ChargedHeavyStrike,
-    IReadOnlyList<P1FlaskKind> Flasks)
+    IReadOnlyList<P1FlaskKind> Flasks,
+    WeaponProfile EffectiveWeapon)
 {
+    public bool HasUsableWeapon => Equipment.Weapon is not null;
+
     public HeavyStrikeRequest CreateHeavyStrikeRequest(
         ResourceState resources,
         int targetEvasion,
         int targetArmor) => new(
         resources,
         HeavyStrike,
-        Equipment.Weapon ?? throw new InvalidOperationException("A weapon must be equipped."),
+        EffectiveWeapon,
         Sheet.Accuracy(FlatAccuracy).Value,
         targetEvasion,
         targetArmor,
@@ -51,7 +54,7 @@ public static class CharacterBuildAssembler
         ArgumentNullException.ThrowIfNull(heavyStrikeConfiguration);
 
         EquipmentSummary equipment = loadout.CalculateSummary();
-        WeaponProfile weapon = equipment.Weapon ?? throw new InvalidOperationException("A weapon must be equipped.");
+        WeaponProfile weapon = equipment.Weapon ?? P1Weapons.Unequipped;
         EquipmentModifiers item = equipment.Modifiers;
         PassiveBuildModifiers passive = passiveTree.CalculateModifiers();
         var attributes = new CharacterAttributes(
@@ -102,6 +105,7 @@ public static class CharacterBuildAssembler
             passive.ChargedHeavyStrike ? new ChargedHeavyStrikeState() : null,
             loadout.Items.Where(pair => pair.Key is >= EquipmentSlot.Flask1 and <= EquipmentSlot.Flask5)
                 .Select(pair => P1FlaskRules.KindForBase(pair.Value.Base.StableId)).Where(kind => kind.HasValue)
-                .Select(kind => kind!.Value).Distinct().ToArray());
+                .Select(kind => kind!.Value).Distinct().ToArray(),
+            weapon);
     }
 }

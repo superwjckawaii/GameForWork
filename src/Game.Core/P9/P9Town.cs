@@ -305,7 +305,7 @@ public sealed class P9TownState
         };
         return new P1TeamBuild(
             partySheet,
-            assembled.Equipment.Weapon ?? throw new InvalidOperationException("Mercenary leader needs a weapon."),
+            assembled.EffectiveWeapon,
             skill,
             FlatAccuracy: 70 + assembled.FlatAccuracy,
             IncreasedDamageBasisPoints: checked(assembled.IncreasedAttackDamageBasisPoints + (active.Count - 1) * 6_000),
@@ -322,7 +322,8 @@ public sealed class P9TownState
             PartySize: active.Count,
             FrontlineCount: frontline,
             HasShield: assembled.Equipment.HasShield,
-            BlockChanceBasisPoints: assembled.Equipment.HasShield ? 2_000 : 0);
+            BlockChanceBasisPoints: assembled.Equipment.HasShield ? 2_000 : 0,
+            HasUsableWeapon: assembled.HasUsableWeapon);
     }
 
     public bool TryTransmute(TownEconomyState economy, MetalCurrencyKind output)

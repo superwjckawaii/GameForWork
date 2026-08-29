@@ -60,6 +60,23 @@ public sealed class P10FeatureTests
     }
 
     [Fact]
+    public void PassiveRestoreAcceptsAConnectedRingPathInSnapshotOrder()
+    {
+        string[] capturedOrder =
+        [
+            "core.passive.heavy.1",
+            "core.passive.constellation.00.00",
+            "core.passive.constellation.00.45",
+            "core.passive.constellation.00.46",
+            "core.passive.constellation.00.47",
+        ];
+
+        PassiveTreeAllocation restored = PassiveTreeAllocation.Restore(capturedOrder, 0);
+
+        Assert.Equal(capturedOrder.Order(), restored.Allocated.Order());
+    }
+
+    [Fact]
     public void P10SnapshotRoundTrips()
     {
         var state = new P10EndgameState();

@@ -714,7 +714,7 @@ public sealed class P1GameSession
         P1TeamExpeditionState team = Team(teamKind);
         ReturnQueuedMaps(team);
         World.Expedition.Assign(teamKind, target, mode);
-        team.Resume();
+        team.ResumeForNewDispatch();
         World.Expedition.PrepareNext(World, team);
         if (team.Queue.Maps.FirstOrDefault() is { } queued)
             team.Queue.TryReplaceAt(0, queued with
@@ -981,7 +981,7 @@ public sealed class P1GameSession
 
     public CombatPreview GetCombatPreview() => CombatPreviewRules.Calculate(
         _heroBuild.Sheet,
-        _heroBuild.Equipment.Weapon!,
+        _heroBuild.EffectiveWeapon,
         _heroBuild.HeavyStrike,
         _heroBuild.Sheet.Accuracy(_heroBuild.FlatAccuracy).Value,
         targetEvasion: 20,
@@ -1077,7 +1077,7 @@ public sealed class P1GameSession
 
     private static CombatPreview Preview(AssembledCharacterBuild build) => CombatPreviewRules.Calculate(
         build.Sheet,
-        build.Equipment.Weapon!,
+        build.EffectiveWeapon,
         build.HeavyStrike,
         build.Sheet.Accuracy(build.FlatAccuracy).Value,
         targetEvasion: 20,
@@ -1185,7 +1185,7 @@ public sealed class P1GameSession
         IReadOnlyList<SkillConfiguration>? activeSkills = null,
         P18CombatProfile? ascendancy = null) => new P1TeamBuild(
         build.Sheet,
-        build.Equipment.Weapon ?? throw new InvalidOperationException("Hero weapon is missing."),
+        build.EffectiveWeapon,
         new SkillConfiguration(P1SkillIds.HeavyStrike, supports),
         build.FlatAccuracy,
         build.IncreasedAttackDamageBasisPoints,
@@ -1217,7 +1217,8 @@ public sealed class P1GameSession
         HasShield: build.Equipment.HasShield,
         BlockChanceBasisPoints: checked(build.Equipment.BaseBlockChanceBasisPoints +
             build.Equipment.Modifiers.BlockChanceBasisPoints),
-        Ascendancy: ascendancy) with
+        Ascendancy: ascendancy,
+        HasUsableWeapon: build.HasUsableWeapon) with
         {
             AiSummary = $"{ai.Preset} · {(ai.MatchMode == AiRuleMatchMode.All ? "全部满足" : "任一满足")}：" +
                 $"敌人≥{ai.MinimumEnemyCount}、稀有度 {ai.EnemyRarity}、距离≤{ai.MaximumEnemyDistance}、" +

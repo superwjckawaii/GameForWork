@@ -335,7 +335,8 @@ public sealed record P1TeamBuild(
     IReadOnlyList<P1FlaskKind>? Flasks = null,
     bool HasShield = false,
     int BlockChanceBasisPoints = 0,
-    P18CombatProfile? Ascendancy = null);
+    P18CombatProfile? Ascendancy = null,
+    bool HasUsableWeapon = true);
 
 public sealed record MapNodeResult(
     int NodeIndex,

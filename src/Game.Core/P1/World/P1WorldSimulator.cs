@@ -141,6 +141,12 @@ public sealed class P1TeamExpeditionState
         StopReason = string.Empty;
     }
 
+    public void ResumeForNewDispatch()
+    {
+        Resume();
+        ConsecutiveFailures = 0;
+    }
+
     public void ApplyPolicy(ExpeditionPolicy policy)
     {
         policy = policy.Validate();

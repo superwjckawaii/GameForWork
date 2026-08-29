@@ -55,7 +55,7 @@ public sealed class P1MercenaryProfile
             heavyStrike);
         return new P1TeamBuild(
             build.Sheet,
-            build.Equipment.Weapon ?? throw new InvalidOperationException("The mercenary needs a weapon."),
+            build.EffectiveWeapon,
             heavyStrike,
             FlatAccuracy: checked(70 + build.FlatAccuracy),
             IncreasedDamageBasisPoints: build.IncreasedAttackDamageBasisPoints,
@@ -71,7 +71,8 @@ public sealed class P1MercenaryProfile
             WeaponLegendaryRule: build.Equipment.WeaponLegendaryRule,
             HasShield: build.Equipment.HasShield,
             BlockChanceBasisPoints: checked(build.Equipment.BaseBlockChanceBasisPoints +
-                build.Equipment.Modifiers.BlockChanceBasisPoints));
+                build.Equipment.Modifiers.BlockChanceBasisPoints),
+            HasUsableWeapon: build.HasUsableWeapon);
     }
 }
 

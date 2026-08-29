@@ -379,17 +379,19 @@ public sealed class WindowController : IDisposable
     {
         ImageTexture texture = CreateSolidIcon(new Color("4d9fd1"));
         _trayMenu = NativeMenu.CreateMenu();
-        NativeMenu.AddItem(_trayMenu, "显示窗口", Callable.From(Restore));
-        NativeMenu.AddItem(_trayMenu, "暂停/继续战斗", Callable.From(_togglePause));
-        NativeMenu.AddItem(_trayMenu, "打开日志目录", Callable.From(_openLogs));
+        NativeMenu.AddItem(_trayMenu, "显示窗口", TrayAction(Restore));
+        NativeMenu.AddItem(_trayMenu, "暂停/继续战斗", TrayAction(_togglePause));
+        NativeMenu.AddItem(_trayMenu, "打开日志目录", TrayAction(_openLogs));
         NativeMenu.AddSeparator(_trayMenu);
-        NativeMenu.AddItem(_trayMenu, "退出", Callable.From(_quit));
+        NativeMenu.AddItem(_trayMenu, "退出", TrayAction(_quit));
         _statusIndicatorId = DisplayServer.CreateStatusIndicator(
             texture,
             "GameForWork P1B",
             Callable.From<int, Vector2I>((_, _) => Restore()));
         DisplayServer.StatusIndicatorSetMenu(_statusIndicatorId, _trayMenu);
     }
+
+    private static Callable TrayAction(Action action) => Callable.From<Variant>(_ => action());
 
     private static ImageTexture CreateSolidIcon(Color color)
     {

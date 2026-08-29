@@ -315,15 +315,15 @@ public partial class P5ExpeditionPanel : VBoxContainer
                    $"路线 {team.ActiveRoute} · 最近 {(team.LastRun?.Succeeded == true ? "成功" : team.LastRun is null ? "暂无结算" : "失败")}";
         }
 
+        if (team.IsStopped)
+        {
+            return $"已停止：{StopReason(team.StopReason)}\n完成 {team.MapsCompleted} · 失败 {team.MapsFailed}";
+        }
+
         if (team.Queue.Count > 0)
         {
             P1MapItem map = team.Queue.Maps[0];
             return $"准备中：{TargetName(dispatch?.Target ?? P5ExpeditionTarget.SafeMaps)} · T{map.Tier} · Lv{map.MonsterLevel}";
-        }
-
-        if (team.IsStopped)
-        {
-            return $"已停止：{StopReason(team.StopReason)}\n完成 {team.MapsCompleted} · 失败 {team.MapsFailed}";
         }
 
         return dispatch is null ? "空闲：请选择目标。" :
