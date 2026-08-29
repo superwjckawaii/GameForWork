@@ -21,7 +21,16 @@ $expected = [ordered]@{
     'ui\p21-skill-gems.png' = @(320, 256)
     'ui\p21-metal-atlas.png' = @(160, 128)
     'ui\p21-jewel-atlas.png' = @(96, 32)
+    'ui\p21-ui-skin.png' = @(256, 64)
     'vfx\p21-combat-vfx.png' = @(512, 384)
+    'trees\p21-passive-backdrop.png' = @(512, 512)
+    'trees\p21-ascendancy-backdrops.png' = @(1152, 384)
+    'trees\p21-atlas-backdrop.png' = @(512, 512)
+    'brand\p21-app-icon.png' = @(256, 256)
+    'brand\p21-tray-normal.png' = @(32, 32)
+    'brand\p21-tray-waiting.png' = @(32, 32)
+    'brand\p21-tray-paused.png' = @(32, 32)
+    'brand\p21-tray-error.png' = @(32, 32)
 }
 
 foreach ($entry in $expected.GetEnumerator()) {
@@ -36,7 +45,8 @@ foreach ($entry in $expected.GetEnumerator()) {
 }
 
 foreach ($source in @('actor-master.png', 'boss-master.png', 'equipment-master.png', 'skill-gem-master.png',
-        'vfx-master.png', 'region-master.png', 'town-master.png', 'visual-direction-board.png')) {
+        'vfx-master.png', 'region-master.png', 'town-master.png', 'visual-direction-board.png', 'app-icon-master.png',
+        'ui-skin-master.png', 'passive-tree-master.png', 'ascendancy-master.png', 'atlas-tree-master.png')) {
     if (-not (Test-Path -LiteralPath (Join-Path $sourceRoot $source))) { throw "Missing P21 editable source: $source" }
 }
 
@@ -98,6 +108,25 @@ function Assert-UniqueCells {
     } finally { $bitmap.Dispose() }
 }
 
+function Assert-CellOccupancy {
+    param([string]$RelativePath, [int]$Columns, [int]$Count, [int]$CellSize, [int]$MinimumPixels)
+    $path = Join-Path $assetRoot $RelativePath
+    $bitmap = [System.Drawing.Bitmap]::FromFile($path)
+    try {
+        for ($index = 0; $index -lt $Count; $index++) {
+            $opaque = 0
+            $left = ($index % $Columns) * $CellSize
+            $top = [math]::Floor($index / $Columns) * $CellSize
+            for ($y = $top; $y -lt $top + $CellSize; $y++) {
+                for ($x = $left; $x -lt $left + $CellSize; $x++) {
+                    if ($bitmap.GetPixel($x, $y).A -gt 8) { $opaque++ }
+                }
+            }
+            if ($opaque -lt $MinimumPixels) { throw "Incomplete icon cell in $RelativePath at index $index ($opaque opaque pixels)" }
+        }
+    } finally { $bitmap.Dispose() }
+}
+
 Assert-TransparentGutters 'characters\p21-actor-animation.png' 31 20 48 64
 Assert-TransparentGutters 'enemies\p21-enemy-animation.png' 31 64 48 64
 Assert-TransparentGutters 'enemies\p21-boss-animation.png' 31 48 72 80
@@ -112,6 +141,14 @@ Assert-UniqueCells 'ui\p21-item-bases.png' 10 80 32
 Assert-UniqueCells 'ui\p21-unique-items.png' 5 25 32
 Assert-UniqueCells 'ui\p21-skill-gems.png' 10 78 32
 Assert-UniqueCells 'ui\p21-metal-atlas.png' 5 19 32
+Assert-CellOccupancy 'ui\p21-item-bases.png' 10 80 32 55
+Assert-CellOccupancy 'ui\p21-unique-items.png' 5 25 32 55
+Assert-CellOccupancy 'ui\p21-skill-gems.png' 10 78 32 90
+
+$iconPath = Join-Path $assetRoot 'brand\p21-app-icon.ico'
+if (-not (Test-Path -LiteralPath $iconPath) -or (Get-Item -LiteralPath $iconPath).Length -lt 1kb) {
+    throw 'Missing or invalid multi-size Windows application icon.'
+}
 
 $manifestPath = Join-Path $assetRoot 'p21-assets.json'
 $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json

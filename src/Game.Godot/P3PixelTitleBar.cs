@@ -35,9 +35,21 @@ public partial class P3PixelTitleBar : PanelContainer
         var row = new HBoxContainer();
         row.AddThemeConstantOverride("separation", 2);
         AddChild(row);
+        const string iconPath = "res://assets/p21/brand/p21-app-icon.png";
+        if (ResourceLoader.Exists(iconPath))
+        {
+            row.AddChild(new TextureRect
+            {
+                Texture = GD.Load<Texture2D>(iconPath),
+                CustomMinimumSize = new Vector2(24, 24),
+                ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,
+                StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered,
+                MouseFilter = MouseFilterEnum.Ignore,
+            });
+        }
         var drag = new Button
         {
-            Text = "◆ 暗门远征 · GameForWork P6",
+            Text = "暗门远征 · GameForWork",
             Flat = true,
             FocusMode = FocusModeEnum.None,
             SizeFlagsHorizontal = SizeFlags.ExpandFill,

@@ -195,16 +195,8 @@ public sealed class WindowController : IDisposable
             return;
         }
 
-        Color color = status switch
-        {
-            TrayStatus.Normal => new Color("4d9fd1"),
-            TrayStatus.Waiting => new Color("d8af48"),
-            TrayStatus.Stopped => new Color("d45c57"),
-            TrayStatus.Paused => new Color("777d88"),
-            _ => throw new ArgumentOutOfRangeException(nameof(status)),
-        };
-        DisplayServer.StatusIndicatorSetIcon(_statusIndicatorId, CreateSolidIcon(color));
-        DisplayServer.StatusIndicatorSetTooltip(_statusIndicatorId, $"GameForWork P1B - {status}");
+        DisplayServer.StatusIndicatorSetIcon(_statusIndicatorId, TrayIcon(status));
+        DisplayServer.StatusIndicatorSetTooltip(_statusIndicatorId, $"暗门远征 · {TrayStatusText(status)}");
     }
 
     public void TickSnapping(double delta)
@@ -377,7 +369,7 @@ public sealed class WindowController : IDisposable
 
     private void CreateTray()
     {
-        ImageTexture texture = CreateSolidIcon(new Color("4d9fd1"));
+        Texture2D texture = TrayIcon(TrayStatus.Normal);
         _trayMenu = NativeMenu.CreateMenu();
         NativeMenu.AddItem(_trayMenu, "显示窗口", TrayAction(Restore));
         NativeMenu.AddItem(_trayMenu, "暂停/继续战斗", TrayAction(_togglePause));
@@ -386,7 +378,7 @@ public sealed class WindowController : IDisposable
         NativeMenu.AddItem(_trayMenu, "退出", TrayAction(_quit));
         _statusIndicatorId = DisplayServer.CreateStatusIndicator(
             texture,
-            "GameForWork P1B",
+            "暗门远征 · GameForWork",
             Callable.From<int, Vector2I>((_, _) => Restore()));
         DisplayServer.StatusIndicatorSetMenu(_statusIndicatorId, _trayMenu);
     }
@@ -399,6 +391,29 @@ public sealed class WindowController : IDisposable
         image.Fill(color);
         return ImageTexture.CreateFromImage(image);
     }
+
+    private static Texture2D TrayIcon(TrayStatus status)
+    {
+        string name = status switch
+        {
+            TrayStatus.Normal => "normal",
+            TrayStatus.Waiting => "waiting",
+            TrayStatus.Stopped => "error",
+            TrayStatus.Paused => "paused",
+            _ => throw new ArgumentOutOfRangeException(nameof(status)),
+        };
+        string path = $"res://assets/p21/brand/p21-tray-{name}.png";
+        return ResourceLoader.Exists(path) ? GD.Load<Texture2D>(path) : CreateSolidIcon(new Color("4d9fd1"));
+    }
+
+    private static string TrayStatusText(TrayStatus status) => status switch
+    {
+        TrayStatus.Normal => "运行中",
+        TrayStatus.Waiting => "等待冒险资源",
+        TrayStatus.Stopped => "发生错误",
+        TrayStatus.Paused => "战斗已暂停",
+        _ => status.ToString(),
+    };
 
     private static int Snap(int value, int minimum, int maximum)
     {

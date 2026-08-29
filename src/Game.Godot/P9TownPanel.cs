@@ -65,6 +65,7 @@ public partial class P9TownPanel : VBoxContainer
     private Label? _summary;
     private Label? _tavernRefresh;
     private Texture2D? _mercenaryAtlas;
+    private Texture2D? _buildingAtlas;
     private bool _p21MercenaryAtlas;
     private string _selectedMember = string.Empty;
     private string _signature = string.Empty;
@@ -78,6 +79,8 @@ public partial class P9TownPanel : VBoxContainer
         _mercenaryAtlas = GD.Load<Texture2D>(_p21MercenaryAtlas
             ? p21Actors
             : "res://assets/p9/characters/p9-mercenary-atlas.png");
+        const string p21Buildings = "res://assets/p21/town/p21-building-atlas.png";
+        _buildingAtlas = ResourceLoader.Exists(p21Buildings) ? GD.Load<Texture2D>(p21Buildings) : null;
         var top = new HBoxContainer();
         AddChild(top);
         top.AddChild(new Label { Text = "固定城区 · 城镇方针" });
@@ -97,14 +100,7 @@ public partial class P9TownPanel : VBoxContainer
         leftScroll.AddChild(left);
         var townMap = new P11TownMap();
         left.AddChild(townMap);
-        AddTownHotspot(townMap, P9BuildingKind.Tavern, new Vector2(27, 46));
-        AddTownHotspot(townMap, P9BuildingKind.Workshop, new Vector2(157, 34));
-        AddTownHotspot(townMap, P9BuildingKind.Alchemy, new Vector2(276, 43));
-        AddTownHotspot(townMap, P9BuildingKind.Cartography, new Vector2(1, 122));
-        AddTownHotspot(townMap, P9BuildingKind.Storage, new Vector2(302, 127));
-        AddTownHotspot(townMap, P9BuildingKind.Reliquary, new Vector2(78, 181));
-        AddTownHotspot(townMap, P9BuildingKind.Teleporter, new Vector2(215, 181));
-        left.AddChild(new Label { Text = "城区建筑 · 点击升级，施工期间保留旧等级效果" });
+        left.AddChild(new Label { Text = "城区总览 · 建筑升级统一在下方卡片操作，施工期间保留旧等级效果" });
         _buildings = new GridContainer { Columns = 4 };
         left.AddChild(_buildings);
         var rightScroll = new ScrollContainer { Name = "酒馆名册", SizeFlagsHorizontal = SizeFlags.ExpandFill, SizeFlagsVertical = SizeFlags.ExpandFill };
@@ -164,7 +160,6 @@ public partial class P9TownPanel : VBoxContainer
             P9BuildingKind.Cartography, P9BuildingKind.Storage, P9BuildingKind.Reliquary, P9BuildingKind.Teleporter];
         for (int layoutIndex = 0; layoutIndex < layout.Length; layoutIndex++)
         {
-            if (layoutIndex == 4) _buildings!.AddChild(new Control { CustomMinimumSize = new Vector2(190, 1), MouseFilter = MouseFilterEnum.Ignore });
             P9BuildingKind kind = layout[layoutIndex];
             int level = session.Town.Level(kind);
             P9ConstructionSnapshot? job = session.Town.Construction.FirstOrDefault(item => item.Kind == kind);
@@ -172,20 +167,69 @@ public partial class P9TownPanel : VBoxContainer
             string state = job is not null
                 ? $"施工 {Math.Max(1, (job.RemainingMilliseconds + 59_999) / 60_000)} 分钟"
                 : cost is null ? "最高级"
-                : $"升级：{cost.Gold:N0} 金 + {cost.IronScraps} 铁屑 / {cost.DurationMilliseconds / 60_000} 分钟";
+                : $"需要 {cost.Gold:N0} 金 + {cost.IronScraps} 铁屑 · {cost.DurationMilliseconds / 60_000} 分钟";
+            string tooltip = $"{P9TownState.DisplayName(kind)} · Lv.{level}\n当前：{BuildingEffect(kind, level)}\n{BuildingTooltip(kind)}" +
+                             (cost is null ? "\n已达到最高等级。" : $"\n下一级：{BuildingEffect(kind, level + 1)}\n消耗：{cost.Gold:N0} 金币、{cost.IronScraps} 铁屑\n施工：{cost.DurationMilliseconds / 60_000} 分钟");
+            var card = new PanelContainer
+            {
+                CustomMinimumSize = new Vector2(184, 218),
+                SizeFlagsHorizontal = SizeFlags.ExpandFill,
+                TooltipText = tooltip,
+            };
+            var content = new VBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill, MouseFilter = MouseFilterEnum.Pass };
+            content.AddThemeConstantOverride("separation", 4);
+            card.AddChild(content);
+            if (_buildingAtlas is not null)
+            {
+                content.AddChild(new TextureRect
+                {
+                    Texture = P21ArtAtlas.Icon(_buildingAtlas, layoutIndex, 4),
+                    CustomMinimumSize = new Vector2(160, 104),
+                    ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,
+                    StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered,
+                    MouseFilter = MouseFilterEnum.Ignore,
+                });
+            }
+            content.AddChild(new Label
+            {
+                Text = $"{P9TownState.DisplayName(kind)} · Lv.{level}",
+                HorizontalAlignment = HorizontalAlignment.Center,
+                TooltipText = tooltip,
+            });
+            content.AddChild(new Label
+            {
+                Text = BuildingEffect(kind, level),
+                CustomMinimumSize = new Vector2(168, 32),
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center,
+                AutowrapMode = TextServer.AutowrapMode.WordSmart,
+                TooltipText = tooltip,
+            });
+            content.AddChild(new Label
+            {
+                Text = state,
+                CustomMinimumSize = new Vector2(168, 30),
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center,
+                AutowrapMode = TextServer.AutowrapMode.WordSmart,
+                TooltipText = tooltip,
+            });
             var button = new Button
             {
-                Text = $"{P9TownState.DisplayName(kind)}  Lv.{level}\n{BuildingEffect(kind, level)}\n{state}",
-                CustomMinimumSize = new Vector2(190, 90),
-                Disabled = level >= 4 || job is not null,
-                TooltipText = BuildingTooltip(kind),
+                Text = job is not null ? "施工中" : cost is null ? "已满级" : "升级",
+                CustomMinimumSize = new Vector2(96, 30),
+                SizeFlagsHorizontal = SizeFlags.ShrinkCenter,
+                Disabled = cost is null || job is not null,
+                TooltipText = tooltip,
+                ClipText = true,
             };
             button.Pressed += () =>
             {
-                bool ok = session.TryUpgradeTownBuilding(kind, out string message);
+                _ = session.TryUpgradeTownBuilding(kind, out string message);
                 _changed?.Invoke(message);
             };
-            _buildings.AddChild(button);
+            content.AddChild(button);
+            _buildings.AddChild(card);
         }
     }
 
@@ -277,24 +321,6 @@ public partial class P9TownPanel : VBoxContainer
         button.Pressed += action;
         parent.AddChild(button);
         return button;
-    }
-
-    private void AddTownHotspot(P11TownMap map, P9BuildingKind kind, Vector2 position)
-    {
-        var button = new Button
-        {
-            Text = P9TownState.DisplayName(kind),
-            Position = position,
-            Modulate = new Color(1, 1, 1, 0.88f),
-            TooltipText = BuildingTooltip(kind),
-        };
-        button.Pressed += () =>
-        {
-            if (_session is null) return;
-            _session().TryUpgradeTownBuilding(kind, out string message);
-            _changed?.Invoke(message);
-        };
-        map.AddHotspot(button, position);
     }
 
     private TextureRect MercenaryPortrait(P9MercenaryArchetype archetype)

@@ -118,7 +118,7 @@ public partial class P1WorldView : Control
     {
         if (_townBackground is not null)
         {
-            DrawTextureRect(_townBackground, bounds, false);
+            DrawTextureCover(_townBackground, bounds, new Rect2(Vector2.Zero, _townBackground.GetSize()));
         }
         else
         {
@@ -162,11 +162,11 @@ public partial class P1WorldView : Control
         if (_regionAtlas is not null && timeline.StableId.StartsWith("map:", StringComparison.Ordinal))
         {
             int region = RegionVisualIndex(timeline.StableId);
-            DrawTextureRectRegion(_regionAtlas, bounds, GridCell(_regionAtlas, region, 4, 3));
+            DrawTextureCover(_regionAtlas, bounds, GridCell(_regionAtlas, region, 4, 3));
         }
         else if (_combatBackground is not null)
         {
-            DrawTextureRect(_combatBackground, bounds, false);
+            DrawTextureCover(_combatBackground, bounds, new Rect2(Vector2.Zero, _combatBackground.GetSize()));
         }
         else
         {
@@ -246,11 +246,11 @@ public partial class P1WorldView : Control
         float enemyLife = state is null || state.EnemyMaximumLife <= 0
             ? 0
             : (float)state.EnemyLife / state.EnemyMaximumLife;
-        DrawBar(new Rect2(actor + new Vector2(-48, 25), new Vector2(96, 7)), heroLife, new Color("a73737"));
-        DrawBar(new Rect2(actor + new Vector2(-48, 35), new Vector2(96, 5)), heroMana, new Color("356db4"));
+        DrawBar(new Rect2(actor + new Vector2(-48, 11), new Vector2(96, 7)), heroLife, new Color("a73737"));
+        DrawBar(new Rect2(actor + new Vector2(-48, 20), new Vector2(96, 5)), heroMana, new Color("356db4"));
         if (state?.HeroMaximumShield > 0)
         {
-            DrawBar(new Rect2(actor + new Vector2(-48, 43), new Vector2(96, 4)),
+            DrawBar(new Rect2(actor + new Vector2(-48, 27), new Vector2(96, 4)),
                 (float)state.HeroShield / state.HeroMaximumShield, new Color("76c7d9"));
         }
 
@@ -372,13 +372,13 @@ public partial class P1WorldView : Control
             P21ArtContract.ActorCellWidth, P21ArtContract.ActorCellHeight,
             loop: heroAction != P21SpriteAction.Death);
         if (hero) DrawHeroEquipmentOverlay(actor, heroFacing);
-        DrawBar(new Rect2(actor + new Vector2(-30, 21), new Vector2(60, 5)),
+        DrawBar(new Rect2(actor + new Vector2(-30, 11), new Vector2(60, 5)),
             current.HeroMaximumLife <= 0 ? 0 : (float)current.HeroLife / current.HeroMaximumLife, new Color("a73737"));
-        DrawBar(new Rect2(actor + new Vector2(-30, 28), new Vector2(60, 4)),
+        DrawBar(new Rect2(actor + new Vector2(-30, 18), new Vector2(60, 4)),
             current.HeroMaximumMana <= 0 ? 0 : (float)current.HeroMana / current.HeroMaximumMana, new Color("356db4"));
         if (current.HeroMaximumShield > 0)
         {
-            DrawBar(new Rect2(actor + new Vector2(-30, 34), new Vector2(60, 3)),
+            DrawBar(new Rect2(actor + new Vector2(-30, 24), new Vector2(60, 3)),
                 (float)current.HeroShield / current.HeroMaximumShield, new Color("76c7d9"));
         }
 
@@ -1045,5 +1045,23 @@ public partial class P1WorldView : Control
         DrawRect(rect, new Color("242936"), true);
         DrawRect(new Rect2(rect.Position, new Vector2(rect.Size.X * Math.Clamp(progress, 0, 1), rect.Size.Y)), color, true);
         DrawRect(rect, new Color("8a7962"), false, 1);
+    }
+
+    private void DrawTextureCover(Texture2D texture, Rect2 destination, Rect2 source)
+    {
+        if (destination.Size.X <= 0 || destination.Size.Y <= 0 || source.Size.X <= 0 || source.Size.Y <= 0) return;
+        float destinationAspect = destination.Size.X / destination.Size.Y;
+        float sourceAspect = source.Size.X / source.Size.Y;
+        if (sourceAspect > destinationAspect)
+        {
+            float width = source.Size.Y * destinationAspect;
+            source = new Rect2(source.Position + new Vector2((source.Size.X - width) / 2, 0), new Vector2(width, source.Size.Y));
+        }
+        else if (sourceAspect < destinationAspect)
+        {
+            float height = source.Size.X / destinationAspect;
+            source = new Rect2(source.Position + new Vector2(0, (source.Size.Y - height) / 2), new Vector2(source.Size.X, height));
+        }
+        DrawTextureRectRegion(texture, destination, source);
     }
 }

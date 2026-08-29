@@ -58,11 +58,14 @@ public partial class P18AscendancyTreeView : Control
     private float _zoom = 1f;
     private bool _dragging;
     private Vector2 _press;
+    private Texture2D? _backdrops;
 
     public void Initialize(Func<P1GameSession> session, Action<string> changed)
     {
         _session = session; _changed = changed;
         CustomMinimumSize = new Vector2(720, 430); MouseFilter = MouseFilterEnum.Stop;
+        const string backdrops = "res://assets/p21/trees/p21-ascendancy-backdrops.png";
+        if (ResourceLoader.Exists(backdrops)) _backdrops = GD.Load<Texture2D>(backdrops);
     }
 
     public override void _Draw()
@@ -71,6 +74,14 @@ public partial class P18AscendancyTreeView : Control
         if (_session is null) return;
         P18Ascendancy selected = _session().Endgame.SelectedAscendancy;
         Vector2 origin = Size / 2 + _pan;
+        if (_backdrops is not null && selected != P18Ascendancy.None)
+        {
+            int index = (int)selected - 1;
+            float side = Math.Min(Size.X, Size.Y) * .92f;
+            DrawTextureRectRegion(_backdrops,
+                new Rect2(origin - new Vector2(side, side) / 2, new Vector2(side, side)),
+                new Rect2(index * 384, 0, 384, 384), new Color(1, 1, 1, .38f));
+        }
         DrawCircle(origin, 29 * _zoom, new Color("6b5434"));
         DrawString(ThemeDB.FallbackFont, origin + new Vector2(-42, 5),
             P18AscendancyCatalog.DisplayName(selected), HorizontalAlignment.Center, 84, 13, new Color("f0d394"));

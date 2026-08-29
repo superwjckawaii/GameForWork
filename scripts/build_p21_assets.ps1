@@ -482,6 +482,8 @@ $townSource.Dispose()
 
 Build-MetalAtlas -Destination (Join-Path $assetRoot 'ui\p21-metal-atlas.png')
 Build-JewelAtlas -Destination (Join-Path $assetRoot 'ui\p21-jewel-atlas.png')
+& (Join-Path $PSScriptRoot 'build_p21_1_assets.ps1') -RepositoryRoot $RepositoryRoot
+if ($LASTEXITCODE -ne 0) { throw "P21.1 asset build failed with exit code $LASTEXITCODE." }
 
 $manifest = [ordered]@{
     version = 1
@@ -509,7 +511,8 @@ $manifest = [ordered]@{
         buildings = 7
         vfx = 48
     }
-    sources = @('actor-master.png', 'boss-master.png', 'equipment-master.png', 'skill-gem-master.png', 'vfx-master.png', 'region-master.png', 'town-master.png')
+    sources = @('actor-master.png', 'boss-master.png', 'equipment-master.png', 'skill-gem-master.png', 'vfx-master.png', 'region-master.png', 'town-master.png',
+        'app-icon-master.png', 'ui-skin-master.png', 'passive-tree-master.png', 'ascendancy-master.png', 'atlas-tree-master.png')
 }
 $manifest | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $assetRoot 'p21-assets.json') -Encoding utf8
 Write-Host "P21 assets generated at $assetRoot"

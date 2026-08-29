@@ -29,6 +29,7 @@ public partial class P1PassiveTreeView : Control
     private Vector2 _pressPosition;
     private string? _hovered;
     private string _stateSignature = string.Empty;
+    private Texture2D? _backdrop;
 
     public event Action<string>? NodeSelected;
     public event Action<string>? NodeAllocateRequested;
@@ -40,6 +41,8 @@ public partial class P1PassiveTreeView : Control
     {
         CustomMinimumSize = new Vector2(820, 470);
         MouseFilter = MouseFilterEnum.Stop;
+        const string backdrop = "res://assets/p21/trees/p21-passive-backdrop.png";
+        if (ResourceLoader.Exists(backdrop)) _backdrop = GD.Load<Texture2D>(backdrop);
         _nodes = P1PassiveTree.Nodes.OrderBy(node => node.StableId, StringComparer.Ordinal).ToArray();
         BuildLayoutAndIndex();
         QueueRedraw();
@@ -48,6 +51,12 @@ public partial class P1PassiveTreeView : Control
     public override void _Draw()
     {
         DrawRect(new Rect2(Vector2.Zero, Size), new Color("11151d"), true);
+        if (_backdrop is not null)
+        {
+            float side = Math.Min(Size.X, Size.Y) * .98f;
+            DrawTextureRect(_backdrop, new Rect2((Size - new Vector2(side, side)) / 2, new Vector2(side, side)),
+                false, new Color(1, 1, 1, .26f));
+        }
         var drawnEdges = new HashSet<string>(StringComparer.Ordinal);
         foreach (PassiveNodeDefinition node in _nodes)
         {

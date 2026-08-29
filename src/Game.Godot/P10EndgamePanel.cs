@@ -14,14 +14,26 @@ public partial class P10AtlasTreeView : Control
     private Vector2 _pan;
     private bool _dragging;
     private Vector2 _press;
+    private Texture2D? _backdrop;
 
     public void Initialize(Func<P1GameSession> session, Action<string> changed)
-    { _session = session; _changed = changed; CustomMinimumSize = new Vector2(760, 390); MouseFilter = MouseFilterEnum.Stop; QueueRedraw(); }
+    {
+        _session = session; _changed = changed; CustomMinimumSize = new Vector2(760, 390); MouseFilter = MouseFilterEnum.Stop;
+        const string backdrop = "res://assets/p21/trees/p21-atlas-backdrop.png";
+        if (ResourceLoader.Exists(backdrop)) _backdrop = GD.Load<Texture2D>(backdrop);
+        QueueRedraw();
+    }
 
     public override void _Draw()
     {
         DrawRect(new Rect2(Vector2.Zero, Size), new Color("10151d"), true);
         Vector2 origin = Size / 2 + _pan;
+        if (_backdrop is not null)
+        {
+            float side = Math.Min(Size.X, Size.Y) * .98f;
+            DrawTextureRect(_backdrop, new Rect2(origin - new Vector2(side, side) / 2, new Vector2(side, side)),
+                false, new Color(1, 1, 1, .3f));
+        }
         foreach (P10AtlasNode node in P10AtlasTree.Nodes)
         {
             Vector2 point = NodePosition(node, origin);
