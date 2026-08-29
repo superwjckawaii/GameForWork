@@ -538,17 +538,18 @@ public sealed class P1WorldSimulator(IP1MapAttemptResolver attemptResolver)
         (int defeated, int total) = P1MapRewardGenerator.CombatProgress(run);
         P1MapRewards? partial = !run.Succeeded && !practice && defeated > 0
             ? P1MapRewardGenerator.GeneratePartial(expedition.Map, expedition.Route,
-                seed ^ 0x9e3779b97f4a7c15UL, defeated, total, state.MaximumUnlockedMapTier)
+                seed ^ 0x9e3779b97f4a7c15UL, run, state.MaximumUnlockedMapTier)
             : null;
         expedition.Team.RecordRun(run, countProgression: !practice, defeatedExperience: partial?.Experience ?? 0);
-        state.Expedition.RecordResolved(expedition.Map, run.Succeeded);
+        state.Expedition.RecordResolved(expedition.Map, run.Succeeded, seed, expedition.Route);
         if (!run.Succeeded)
         {
             if (partial is not null)
             {
-                expedition.Team.Backpack.Replace(partial.Equipment);
+                state.Economy.AddRewards(partial.Stackables);
                 LootProcessingResult defeatedLoot = LootProcessor.Process(partial.Equipment, state.Storage,
                     state.Filter, runPolicy.StorageFullBehavior);
+                expedition.Team.Backpack.Replace(defeatedLoot.NotableItems);
                 state.Economy.AddDispositionProceeds(defeatedLoot.GoldGained, defeatedLoot.IronScrapsGained);
                 if (defeatedLoot.ExpeditionMustStop) expedition.Team.Stop("storage_full");
             }
@@ -561,8 +562,7 @@ public sealed class P1WorldSimulator(IP1MapAttemptResolver attemptResolver)
         }
 
         P1MapRewards rewards = P1MapRewardGenerator.Generate(expedition.Map, expedition.Route,
-            seed ^ 0x9e3779b97f4a7c15UL, state.MaximumUnlockedMapTier);
-        expedition.Team.Backpack.Replace(rewards.Equipment);
+            seed ^ 0x9e3779b97f4a7c15UL, state.MaximumUnlockedMapTier, run);
         state.Economy.AddRewards(rewards.Stackables);
         state.MapInventory.AddRange(rewards.Maps);
         LootProcessingResult processed = LootProcessor.Process(
@@ -570,6 +570,7 @@ public sealed class P1WorldSimulator(IP1MapAttemptResolver attemptResolver)
             state.Storage,
             state.Filter,
             runPolicy.StorageFullBehavior);
+        expedition.Team.Backpack.Replace(processed.NotableItems);
         state.Economy.AddDispositionProceeds(processed.GoldGained, processed.IronScrapsGained);
         if (processed.ExpeditionMustStop)
         {

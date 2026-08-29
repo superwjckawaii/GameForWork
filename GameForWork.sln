@@ -8,6 +8,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Game.Godot", "src\Game.Godo
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Game.Tests", "src\Game.Tests\Game.Tests.csproj", "{B69002A5-CC60-4DC7-A3EB-85364266A357}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "P20Audit", "tools\P20Audit\P20Audit.csproj", "{2CBDF051-D042-4D86-B35A-854DE61A9073}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -26,5 +28,9 @@ Global
 		{B69002A5-CC60-4DC7-A3EB-85364266A357}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{B69002A5-CC60-4DC7-A3EB-85364266A357}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{B69002A5-CC60-4DC7-A3EB-85364266A357}.Release|Any CPU.Build.0 = Release|Any CPU
+		{2CBDF051-D042-4D86-B35A-854DE61A9073}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{2CBDF051-D042-4D86-B35A-854DE61A9073}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{2CBDF051-D042-4D86-B35A-854DE61A9073}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{2CBDF051-D042-4D86-B35A-854DE61A9073}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal

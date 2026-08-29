@@ -12,6 +12,7 @@ using GameForWork.Core.P9;
 using GameForWork.Core.P10;
 using GameForWork.Core.P16;
 using GameForWork.Core.P18;
+using GameForWork.Core.P20;
 using Godot;
 using System.Security.Cryptography;
 using System.Text.Json;
@@ -684,8 +685,12 @@ public partial class P2Dashboard : VBoxContainer
         page.AddChild(_townPanel);
         var workshop = new HFlowContainer();
         page.AddChild(workshop);
-        AddButton(workshop, "监守印记兑换传奇", () =>
-            Changed(RequireSession().TryExchangeLegendary() ? "传奇已存入仓库。" : "印记不足或仓库已满。"));
+        OptionButton legendary = AddOptions(workshop, "指定传奇", P20LegendaryDrops.ExchangePool.Select(item => item.DisplayName).ToArray());
+        AddButton(workshop, $"{P20LegendaryDrops.PityMarkCost} 印记兑换", () =>
+        {
+            string id = P20LegendaryDrops.ExchangePool[legendary.Selected].StableId;
+            Changed(RequireSession().TryExchangeLegendary(id) ? "指定传奇已存入仓库。" : "印记不足或仓库已满。");
+        });
         page.AddChild(new Label { Text = "掉落过滤器 · 有序规则（从上到下首次匹配）" });
         _filterPanel = new P2LootFilterPanel();
         _filterPanel.Initialize(

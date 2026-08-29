@@ -169,7 +169,7 @@ public sealed class P5ExpeditionDirector
         return true;
     }
 
-    public void RecordResolved(P1MapItem map, bool succeeded)
+    public void RecordResolved(P1MapItem map, bool succeeded, ulong seed = 0, MapRoute route = MapRoute.Safe)
     {
         ArgumentNullException.ThrowIfNull(map);
         if (!succeeded || IsPractice(map) || IsBoss(map))
@@ -177,14 +177,16 @@ public sealed class P5ExpeditionDirector
             return;
         }
 
-        MapsTowardNextFragment++;
-        if (MapsTowardNextFragment < MapsPerFragment)
+        int routeBasisPoints = route == MapRoute.Abyss ? 15_000 : 10_000;
+        int progress = P20.P20DropFormula.RollScaledCount(1,
+            map.ItemQuantityBasisPoints * routeBasisPoints / 10_000,
+            seed ^ 0x5f17c6a28d3b4091UL);
+        MapsTowardNextFragment += progress;
+        while (MapsTowardNextFragment >= MapsPerFragment)
         {
-            return;
+            MapsTowardNextFragment -= MapsPerFragment;
+            AbyssWardenFragments++;
         }
-
-        MapsTowardNextFragment -= MapsPerFragment;
-        AbyssWardenFragments++;
         while (AbyssWardenFragments >= FragmentsPerTicket)
         {
             AbyssWardenFragments -= FragmentsPerTicket;

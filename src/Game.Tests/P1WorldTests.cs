@@ -76,24 +76,25 @@ public sealed class P1WorldTests
     }
 
     [Fact]
-    public void MapRewardsStayWithinSealedRanges()
+    public void MapRewardsUseP20BudgetsAndTierDistribution()
     {
         for (ulong seed = 1; seed <= 100; seed++)
         {
             P1MapRewards safe = P1MapRewardGenerator.Generate(new P1MapItem($"safe-{seed}", 5), MapRoute.Safe, seed);
             Assert.Equal(190, safe.Experience);
-            Assert.InRange(safe.Equipment.Count, 5, 8);
-            Assert.InRange(safe.Stackables.Gold, 25, 35);
-            Assert.InRange(safe.Stackables.IronScraps, 2, 4);
+            Assert.InRange(safe.Equipment.Count, 1, 41);
+            Assert.True(safe.Stackables.Gold > 0);
+            Assert.Equal(0, safe.Stackables.IronScraps);
             Assert.Equal(1, safe.Stackables.MemoryAshes);
-            Assert.Equal(1, safe.Stackables.WardenMarks);
-            Assert.All(safe.Maps, map => Assert.InRange(map.Tier, 5, 6));
+            Assert.Equal(0, safe.Stackables.WardenMarks);
+            Assert.All(safe.Maps, map => Assert.InRange(map.Tier, 4, 7));
+            Assert.NotNull(safe.Trace);
+            Assert.Equal(safe.Equipment.Count, safe.Trace!.EquipmentCount);
 
             P1MapRewards abyss = P1MapRewardGenerator.Generate(new P1MapItem($"abyss-{seed}", 10), MapRoute.Abyss, seed);
-            Assert.InRange(abyss.Equipment.Count, 3, 6);
-            Assert.InRange(abyss.Stackables.Gold, 15, 25);
-            Assert.InRange(abyss.Stackables.SkillStones + abyss.Stackables.IronScraps - 2, 1, 4);
-            Assert.All(abyss.Maps, map => Assert.InRange(map.Tier, 10, 11));
+            Assert.InRange(abyss.Equipment.Count, 1, 41);
+            Assert.True(abyss.Stackables.Metals!.Sum(item => item.Amount) > 0);
+            Assert.All(abyss.Maps, map => Assert.InRange(map.Tier, 9, 12));
         }
     }
 
@@ -244,16 +245,16 @@ public sealed class P1WorldTests
         Assert.Equal(10, result.TotalMapsCompleted);
         Assert.All(result.Teams, team => Assert.Equal(0, team.RemainingQueue));
         Assert.True(state.MapInventory.Count > 0);
-        Assert.Equal(10, state.Economy.WardenMarks);
+        Assert.Equal(0, state.Economy.WardenMarks);
     }
 
     [Fact]
-    public void TenWardenMarksExchangeForLegendary()
+    public void TwelveWardenMarksExchangeForSelectedLegendary()
     {
-        var economy = new TownEconomyState(wardenMarks: 10);
+        var economy = new TownEconomyState(wardenMarks: 12);
 
-        Assert.True(economy.TryExchangeLegendary(out ItemInstance? item));
-        Assert.NotNull(item?.LegendaryRule);
+        Assert.True(economy.TryExchangeLegendary("core.unique.iron_moon", out ItemInstance? item));
+        Assert.Equal("core.unique.iron_moon", item?.LegendaryRule?.StableId);
         Assert.Equal(0, economy.WardenMarks);
         Assert.False(economy.TryExchangeLegendary(out _));
     }

@@ -1,4 +1,5 @@
 using GameForWork.Core.P1.Items;
+using GameForWork.Core.P20;
 
 namespace GameForWork.Core.P1.World;
 
@@ -7,6 +8,7 @@ public enum LootDisposition
     Keep,
     Sell,
     Dismantle,
+    Ignore,
 }
 
 public enum P16ItemSortMode
@@ -63,7 +65,9 @@ public sealed record LootFilterRule(
     int? MaximumLinkedSockets = null,
     string? BaseTag = null,
     int? MinimumAffixTier = null,
-    int? MaximumAffixTier = null)
+    int? MaximumAffixTier = null,
+    int? MinimumEstimatedValue = null,
+    int? MaximumEstimatedValue = null)
 {
     public bool Matches(ItemInstance item)
     {
@@ -76,6 +80,8 @@ public sealed record LootFilterRule(
             Slot is not null && item.Base.PrimarySlot != Slot ||
             MinimumItemLevel is not null && item.ItemLevel < MinimumItemLevel ||
             MaximumItemLevel is not null && item.ItemLevel > MaximumItemLevel ||
+            MinimumEstimatedValue is not null && P20ItemValue.Estimate(item) < MinimumEstimatedValue ||
+            MaximumEstimatedValue is not null && P20ItemValue.Estimate(item) > MaximumEstimatedValue ||
             item.LinkedSocketCount < MinimumLinkedSockets ||
             MaximumLinkedSockets is not null && item.LinkedSocketCount > MaximumLinkedSockets ||
             RequireFiveOrSixLink && item.LinkedSocketCount < 5 ||
@@ -272,11 +278,12 @@ public sealed record LootProcessingResult(
     int IronScrapsGained,
     bool StorageBecameFull,
     bool ExpeditionMustStop,
-    IReadOnlyList<string> ForcedFirstDiscoveries);
+    IReadOnlyList<string> ForcedFirstDiscoveries,
+    int Ignored,
+    IReadOnlyList<ItemInstance> NotableItems);
 
 public static class LootProcessor
 {
-    public const int MagicSaleGold = 3;
     public const int BasicDismantleIronScraps = 1;
 
     public static LootProcessingResult Process(
@@ -290,8 +297,10 @@ public static class LootProcessor
         int dismantled = 0;
         int gold = 0;
         int scraps = 0;
+        int ignored = 0;
         bool mustStop = false;
         var discoveries = new List<string>();
+        var notable = new List<ItemInstance>();
         foreach (ItemInstance item in items)
         {
             bool firstDiscovery = storage.IsFirstDiscovery(item);
@@ -307,6 +316,7 @@ public static class LootProcessor
                 }
 
                 stored++;
+                notable.Add(item);
                 if (firstDiscovery)
                 {
                     discoveries.Add(item.Base.StableId);
@@ -318,12 +328,16 @@ public static class LootProcessor
             if (disposition == LootDisposition.Sell)
             {
                 sold++;
-                gold = checked(gold + MagicSaleGold);
+                gold = checked(gold + P20ItemValue.SalePrice(item));
             }
-            else
+            else if (disposition == LootDisposition.Dismantle)
             {
                 dismantled++;
                 scraps = checked(scraps + BasicDismantleIronScraps);
+            }
+            else
+            {
+                ignored++;
             }
         }
 
@@ -335,7 +349,9 @@ public static class LootProcessor
             scraps,
             storage.IsFull,
             mustStop,
-            discoveries);
+            discoveries,
+            ignored,
+            notable.TakeLast(ExpeditionBackpack.Capacity).ToArray());
     }
 }
 

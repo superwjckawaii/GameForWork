@@ -2,6 +2,7 @@ using System.Text;
 using GameForWork.Core.P1.Items;
 using GameForWork.Core.P1.Progression;
 using GameForWork.Core.P14;
+using GameForWork.Core.P20;
 using Godot;
 
 namespace GameForWork.GodotClient;
@@ -13,6 +14,7 @@ internal static class P1UiText
         var text = new StringBuilder();
         text.AppendLine($"{RarityName(item.Rarity)} · {item.DisplayName}");
         text.AppendLine($"底材：{item.Base.DisplayName} · 物品等级 {item.ItemLevel} · {CategoryName(item.Base.Category)}");
+        text.AppendLine($"公开估值：{P20ItemValue.Estimate(item)} · 出售 {P20ItemValue.SalePrice(item)} 金币");
         text.AppendLine($"需求：等级 {item.Base.RequiredLevel} · 体魄 {item.Base.RequiredPhysique} · " +
             $"灵巧 {item.Base.RequiredDexterity} · 精神 {item.Base.RequiredSpirit} · 能量 {item.Base.RequiredEnergy}");
         if (item.Quality > 0) text.AppendLine($"品质 +{item.Quality}%");

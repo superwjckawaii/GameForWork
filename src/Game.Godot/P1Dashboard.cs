@@ -325,7 +325,7 @@ public partial class P1Dashboard : VBoxContainer
             WorkshopResult result = RequireSession().CraftEquippedWeapon();
             Changed(result.Succeeded ? "工坊制作成功。" : $"制作失败：{result.FailureReason}");
         });
-        AddButton(workshop, "10 监守印记兑换传奇", () =>
+        AddButton(workshop, "12 监守印记兑换传奇", () =>
             Changed(RequireSession().TryExchangeLegendary() ? "传奇已存入仓库。" : "印记不足或仓库已满。"));
 
         page.AddChild(new HSeparator());
@@ -339,7 +339,7 @@ public partial class P1Dashboard : VBoxContainer
         filterRow.AddChild(affixId);
         var minimum = new SpinBox { MinValue = 0, MaxValue = 50_000, Step = 1 };
         filterRow.AddChild(minimum);
-        OptionButton disposition = AddOptions(filterRow, "处理", ["保留", "出售", "分解"]);
+        OptionButton disposition = AddOptions(filterRow, "处理", ["保留", "出售", "分解", "忽略"]);
         AddButton(filterRow, "插入规则", () =>
         {
             ItemRarity? selectedRarity = rarity.Selected == 0 ? null : (ItemRarity)(rarity.Selected - 1);

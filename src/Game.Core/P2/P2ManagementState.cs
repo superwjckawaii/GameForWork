@@ -715,14 +715,7 @@ public sealed class P2ManagementState
         }
     }
 
-    public static int SalePrice(ItemInstance item) => item.Rarity switch
-    {
-        ItemRarity.Basic => 1,
-        ItemRarity.Magic => 3,
-        ItemRarity.Rare => 8,
-        ItemRarity.Legendary => 20,
-        _ => 0,
-    };
+    public static int SalePrice(ItemInstance item) => P20.P20ItemValue.SalePrice(item);
 
     private bool Contains(string instanceId) =>
         _sortingBag.Any(item => item.InstanceId == instanceId) ||
@@ -777,7 +770,7 @@ public sealed class P2ManagementState
         }
     }
 
-    public SkillStoneInstance AddDroppedSkillStone(ulong seed)
+    public SkillStoneInstance AddDroppedSkillStone(ulong seed, bool recordHistory = true)
     {
         SkillStoneDefinition[] pool = P2SkillStones.DropPool.OrderBy(item => item.StableId, StringComparer.Ordinal).ToArray();
         if (pool.Length == 0)
@@ -785,11 +778,24 @@ public sealed class P2ManagementState
             throw new InvalidOperationException("Skill stone drop pool is empty.");
         }
         var random = new Pcg32(seed);
-        SkillStoneDefinition definition = pool[(int)(random.NextUInt() % (uint)pool.Length)];
+        int Weight(SkillStoneDefinition candidate) => _skillStones.Any(stone => stone.DefinitionId == candidate.StableId) ? 1 : 3;
+        int totalWeight = pool.Sum(Weight);
+        int roll = (int)(random.NextUInt() % (uint)totalWeight);
+        SkillStoneDefinition definition = pool[^1];
+        foreach (SkillStoneDefinition candidate in pool)
+        {
+            int weight = Weight(candidate);
+            if (roll < weight)
+            {
+                definition = candidate;
+                break;
+            }
+            roll -= weight;
+        }
         string id = $"drop-skill-{seed:x16}-{_operationSequence++:x8}";
         var stone = new SkillStoneInstance(id, definition.StableId);
         _skillStones.Add(stone);
-        AddHistory($"获得技能石：{definition.DisplayName}。");
+        if (recordHistory) AddHistory($"获得技能石：{definition.DisplayName}。");
         return stone;
     }
 

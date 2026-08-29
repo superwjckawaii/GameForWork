@@ -1,6 +1,7 @@
 using GameForWork.Core.P1.World;
 using GameForWork.Core.P12;
 using GameForWork.Core.P18;
+using GameForWork.Core.P20;
 
 namespace GameForWork.Core.P10;
 
@@ -141,16 +142,18 @@ public sealed class P10EndgameState
         {
             _mechanics[mechanic]++;
             int bonus = 100 + AtlasBonus((P10AtlasTheme)((int)mechanic + 1));
+            int quantityBonus = Math.Max(0, map.ItemQuantityBasisPoints);
             switch (mechanic)
             {
-                case P10MapMechanic.LifeGarden: LifeForce = checked(LifeForce + map.Tier * bonus / 100); break;
-                case P10MapMechanic.RedAltar: RedFavor = checked(RedFavor + bonus); break;
-                case P10MapMechanic.BlueAltar: BlueFavor = checked(BlueFavor + bonus); break;
+                case P10MapMechanic.LifeGarden: LifeForce = checked(LifeForce + map.Tier * bonus / 100 * quantityBonus / 10_000); break;
+                case P10MapMechanic.RedAltar: RedFavor = checked(RedFavor + bonus * quantityBonus / 10_000); break;
+                case P10MapMechanic.BlueAltar: BlueFavor = checked(BlueFavor + bonus * quantityBonus / 10_000); break;
             }
         }
         if (map.Tier >= 11)
         {
-            CitadelFragments++;
+            CitadelFragments += P20DropFormula.RollScaledCount(1, map.ItemQuantityBasisPoints,
+                seed ^ 0xc17ade1f4a6b9023UL);
             while (CitadelFragments >= CitadelFragmentsPerTicket) { CitadelFragments -= CitadelFragmentsPerTicket; CitadelTickets++; }
         }
         return result;

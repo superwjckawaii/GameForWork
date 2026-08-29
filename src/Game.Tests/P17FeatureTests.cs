@@ -98,9 +98,10 @@ public sealed class P17FeatureTests
             new P1MapItem("p17-partial", 5), MapRoute.Safe, 99, defeatedEnemies: 3, totalEnemies: 12);
 
         Assert.Equal(47, rewards.Experience);
-        Assert.NotEmpty(rewards.Equipment);
+        Assert.True(rewards.Trace!.DefeatedEnemies > 0);
         Assert.Empty(rewards.Maps);
-        Assert.Equal(0, rewards.Stackables.Gold);
-        Assert.Equal(0, rewards.Stackables.SkillStones);
+        Assert.True(rewards.Stackables.Gold > 0);
+        Assert.Equal(0, rewards.Stackables.MemoryAshes);
+        Assert.Equal(0, rewards.Stackables.WardenMarks);
     }
 }

@@ -21,4 +21,6 @@
 - [P17 技能石底层与内容规格](v0.2/P17_SPECIFICATION.md)
 - [P18 铁誓者三升华与资源循环规格](v0.2/P18_SPECIFICATION.md)
 - [P19 装备底材与基础词缀库规格](v0.2/P19_SPECIFICATION.md)
-- 后续 P20～P22 的阶段规格在进入对应阶段时建立于 `v0.2/`。
+- [P20 掉落公式与经济规格](v0.2/P20_SPECIFICATION.md)
+- [P20 经济蒙特卡洛审计](v0.2/P20_ECONOMY_AUDIT.md)
+- 后续 P21～P22 的阶段规格在进入对应阶段时建立于 `v0.2/`。

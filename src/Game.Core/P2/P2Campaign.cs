@@ -7,6 +7,7 @@ using GameForWork.Core.P1.Progression;
 using GameForWork.Core.P1.World;
 using GameForWork.Core.P3;
 using GameForWork.Core.P6;
+using GameForWork.Core.P20;
 
 namespace GameForWork.Core.P2;
 
@@ -299,16 +300,6 @@ public sealed class P2CampaignSimulator
 {
     private sealed record TimelinePreparation(string NodeId, int BuildHash, Task<P3SceneTimeline> Task);
     private TimelinePreparation? _timelinePreparation;
-    private static readonly string[] DropBases =
-    [
-        "core.base.iron_gauntlets",
-        "core.base.march_boots",
-        "core.base.chain_belt",
-        "core.base.ember_amulet",
-        "core.base.spirit_amulet",
-        "core.base.shadow_treads",
-    ];
-
     public P2CampaignAdvanceResult Simulate(
         P2CampaignState campaign,
         P1WorldState world,
@@ -383,7 +374,7 @@ public sealed class P2CampaignSimulator
             {
                 world.Expedition.AddCombatReport(P6CombatReportBuilder.Build(
                     campaign.ActiveTimeline, $"主线 · {node.DisplayName}", offline));
-                GrantDefeatedEnemyRewards(world, management, node, campaign.ActiveTimeline, seed, "failed");
+                GrantDefeatedEnemyRewards(world, management, node, campaign.ActiveTimeline, seed);
                 campaign.RecordDefeat($"{node.DisplayName} 战斗失败：{campaign.ActiveTimeline.Outcome}");
                 break;
             }
@@ -425,17 +416,13 @@ public sealed class P2CampaignSimulator
         world.Expedition.AddCombatReport(P6CombatReportBuilder.Build(replay, $"主线重放 · {node.DisplayName}"));
         if (replay.Outcome != P1BattleOutcome.HeroVictory)
         {
-            GrantDefeatedEnemyRewards(world, management, node, replay, seed, "replay-failed");
+            GrantDefeatedEnemyRewards(world, management, node, replay, seed);
             return false;
         }
 
         world.Hero.Progression.AddExperience(Math.Max(10, 20 * node.Act));
         management.AddSkillExperience(10 * node.Act);
-        ItemInstance drop = GenerateDrop(node, seed ^ 0x8b8b8b8bUL, "replay");
-        if (!world.Storage.TryStore(drop))
-        {
-            management.AddToRecovery(drop, "重玩节点掉落时仓库已满");
-        }
+        GrantCombatLoot(world, management, node, replay, seed ^ 0x8b8b8b8bUL, completed: true);
 
         management.AddHistory($"已重玩 {node.DisplayName}，固定剧情奖励未重复发放。");
         return true;
@@ -446,8 +433,7 @@ public sealed class P2CampaignSimulator
         P2ManagementState management,
         CampaignNodeDefinition node,
         P3SceneTimeline timeline,
-        ulong seed,
-        string source)
+        ulong seed)
     {
         int defeated = timeline.Events.Count(item => item.Kind == P3SceneEventKind.EnemyDefeated);
         if (defeated <= 0) return;
@@ -458,13 +444,8 @@ public sealed class P2CampaignSimulator
             Sheet = world.Hero.Build.Sheet with { Level = world.Hero.Progression.Level },
         });
         management.AddSkillExperience(Math.Max(1, defeated * node.Act));
-        int dropCount = Math.Clamp((defeated + 2) / 3, 1, 3);
-        for (int index = 0; index < dropCount; index++)
-        {
-            ItemInstance drop = GenerateDrop(node, seed ^ (0x517cc1b727220a95UL + (ulong)index), $"{source}-{index}");
-            if (!world.Storage.TryStore(drop)) management.AddToRecovery(drop, "失败战斗掉落时仓库已满");
-        }
-        management.AddHistory($"战斗失败，但已结算 {defeated} 个击杀：{experience} 经验、{dropCount} 件物品。");
+        GrantCombatLoot(world, management, node, timeline, seed ^ 0x517cc1b727220a95UL, completed: false);
+        management.AddHistory($"战斗失败，但已结算 {defeated} 个击杀与 {experience} 经验；未发放节点完成奖励。");
     }
 
     private static void GrantRewards(
@@ -483,22 +464,15 @@ public sealed class P2CampaignSimulator
             Sheet = world.Hero.Build.Sheet with { Level = world.Hero.Progression.Level },
         });
         management.AddSkillExperience(60 + node.Act * 10);
-        int gold = 4 * node.Act + (node.Kind == CampaignNodeKind.ActBoss ? 12 : 0);
-        int scraps = node.Kind is CampaignNodeKind.EliteCombat or CampaignNodeKind.ActBoss ? node.Act : 0;
-        world.Economy.AddDispositionProceeds(gold, scraps);
+        if (node.Kind == CampaignNodeKind.StoryEvent)
+            world.Economy.AddDispositionProceeds(4 * node.Act, 0);
         if (node.Kind == CampaignNodeKind.ActBoss)
         {
             world.Hero.Progression.ClaimFirstBossPassivePoint();
         }
 
-        if (node.Kind != CampaignNodeKind.StoryEvent)
-        {
-            ItemInstance drop = GenerateDrop(node, seed, "first");
-            if (!world.Storage.TryStore(drop))
-            {
-                management.AddToRecovery(drop, "主线掉落时仓库已满");
-            }
-        }
+        if (node.Kind != CampaignNodeKind.StoryEvent && campaign.ActiveTimeline is not null)
+            GrantCombatLoot(world, management, node, campaign.ActiveTimeline, seed, completed: true);
 
         if (node.Act >= 4 && node.Kind != CampaignNodeKind.StoryEvent)
         {
@@ -511,22 +485,22 @@ public sealed class P2CampaignSimulator
         }
     }
 
-    private static ItemInstance GenerateDrop(CampaignNodeDefinition node, ulong seed, string suffix)
+    private static void GrantCombatLoot(P1WorldState world, P2ManagementState management,
+        CampaignNodeDefinition node, P3SceneTimeline timeline, ulong seed, bool completed)
     {
-        int absoluteIndex = (node.Act - 1) * 6 + node.IndexInAct;
-        string baseId = DropBases[absoluteIndex % DropBases.Length];
-        ItemRarity rarity = node.Kind switch
-        {
-            CampaignNodeKind.ActBoss => ItemRarity.Rare,
-            CampaignNodeKind.EliteCombat => ItemRarity.Magic,
-            _ => ItemRarity.Basic,
-        };
-        return ItemGenerator.Generate(
-            baseId,
-            P16CampaignLevels.MonsterLevel(node) + (node.Kind == CampaignNodeKind.ActBoss ? 2 : node.Kind == CampaignNodeKind.EliteCombat ? 1 : 0),
-            rarity,
-            seed ^ (ulong)absoluteIndex * 0x9e3779b97f4a7c15UL,
-            $"campaign-{node.Act}-{node.IndexInAct}-{suffix}");
+        int monsterLevel = P16CampaignLevels.MonsterLevel(node);
+        IReadOnlyList<P20DefeatedEnemy> defeated = P20DropFormula.ExtractDefeated(timeline, monsterLevel);
+        var context = new P20LootContext(node.StableId, monsterLevel, 10_000,
+            Math.Clamp(node.Act * 8 + (node.Kind == CampaignNodeKind.ActBoss ? 20 : 0), 0, 100),
+            MapRoute.Safe, AllowMaps: false, Completed: completed,
+            BossPool: node.Kind == CampaignNodeKind.ActBoss ? "campaign" : string.Empty);
+        P20RewardBatch rewards = P20DropFormula.Roll(context, defeated, seed);
+        world.Economy.AddRewards(new MapStackableRewards(rewards.Gold, 0, 0, 0, 0, rewards.Metals));
+        LootProcessingResult processed = LootProcessor.Process(rewards.Equipment, world.Storage, world.Filter,
+            StorageFullBehavior.AcceptStackablesOnly);
+        world.Economy.AddDispositionProceeds(processed.GoldGained, processed.IronScrapsGained);
+        for (int index = 0; index < rewards.SkillStones; index++)
+            management.AddDroppedSkillStone(seed ^ (0x20c0a11UL + (ulong)index), recordHistory: false);
     }
 
     private static string Hash(P2CampaignState campaign, P1WorldState world, long elapsed, ulong seed)

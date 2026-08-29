@@ -1,10 +1,9 @@
 using GameForWork.Core.P1.Items;
 using GameForWork.Core.P1.Combat;
-using GameForWork.Core.Simulation;
 using GameForWork.Core.P4;
 using GameForWork.Core.P5;
-using GameForWork.Core.P14;
 using GameForWork.Core.P3;
+using GameForWork.Core.P20;
 
 namespace GameForWork.Core.P1.World;
 
@@ -21,95 +20,25 @@ public sealed record P1MapRewards(
     IReadOnlyList<ItemInstance> Equipment,
     IReadOnlyList<P1MapItem> Maps,
     MapStackableRewards Stackables,
-    bool LegendaryDropped);
+    bool LegendaryDropped,
+    P20DropTrace? Trace = null);
 
 public static class P1MapRewardGenerator
 {
     public const int ExperiencePerMap = 190;
-    private static readonly string[] EquipmentBases = P1ItemBases.All.Select(item => item.StableId).ToArray();
-
     public static P1MapRewards Generate(P1MapItem completedMap, MapRoute route, ulong seed, int maximumUnlockedTier = P1MapItem.MaximumTier)
     {
-        ArgumentNullException.ThrowIfNull(completedMap);
-        completedMap.Validate();
-        var random = new Pcg32(seed);
-        completedMap = completedMap.EnsureFormal(seed);
-        int quantityBonus = Math.Max(0, completedMap.ItemQuantityBasisPoints - 10_000);
-        int itemCount = 3 + Next(random, 3) + (route == MapRoute.Safe ? 2 : 0) + quantityBonus / 4_000;
-        var equipment = new List<ItemInstance>(itemCount + 1);
-        for (int index = 0; index < itemCount; index++)
-        {
-            string baseId = EquipmentBases[Next(random, EquipmentBases.Length)];
-            ItemRarity rarity = P1ItemBases.Get(baseId).Category == ItemCategory.LifeFlask ? ItemRarity.Basic : RollRarity(random);
-            ulong itemSeed = NextSeed(random);
-            equipment.Add(ItemGenerator.Generate(
-                baseId,
-                P16MapTierLevels.DropItemLevel(completedMap.Tier, rarity == ItemRarity.Rare ? EnemyRarity.Rare : EnemyRarity.Normal),
-                rarity,
-                itemSeed,
-                $"drop-{completedMap.InstanceId}-{index}-{itemSeed:x8}"));
-        }
+        IReadOnlyList<P20DefeatedEnemy> defeated = P20DropFormula.SyntheticPack(completedMap.MonsterLevel);
+        return Generate(completedMap, route, seed, maximumUnlockedTier, defeated, completed: true);
+    }
 
-        bool legendary = random.NextBasisPoints() < 1_000;
-        if (legendary)
-        {
-            P14UniqueDefinition unique = P14UniqueItems.All.Where(item => !item.Mythic)
-                .ElementAt(Next(random, P14UniqueItems.All.Count(item => !item.Mythic)));
-            equipment.Add(P14UniqueItems.Create(unique.StableId, P16MapTierLevels.DropItemLevel(completedMap.Tier, EnemyRarity.Boss),
-                $"drop-{completedMap.InstanceId}-{unique.StableId.Split('.')[^1]}-{seed:x8}"));
-        }
-
-        var maps = new List<P1MapItem>(2);
-        if (random.NextBasisPoints() < 8_500)
-        {
-            maps.Add(CreateDroppedMap(completedMap, random, maps.Count, maximumUnlockedTier));
-        }
-
-        if (random.NextBasisPoints() < 1_000)
-        {
-            maps.Add(CreateDroppedMap(completedMap, random, maps.Count, maximumUnlockedTier));
-        }
-
-        int gold = 15 + Next(random, 11) + (route == MapRoute.Safe ? 10 : 0);
-        int scraps = 2 + Next(random, 3);
-        int skillStones = 0;
-        if (route == MapRoute.Abyss)
-        {
-            int abyssRewardCount = 1 + Next(random, 2);
-            for (int index = 0; index < abyssRewardCount; index++)
-            {
-                if (Next(random, 2) == 0)
-                {
-                    skillStones++;
-                }
-                else
-                {
-                    scraps++;
-                }
-            }
-        }
-        else if (route == MapRoute.LifeGarden)
-        {
-            gold += 4;
-            scraps += 2;
-        }
-
-        MetalCurrencyKind commonMetal = RollMetal(random, allowDangerous: false);
-        var metals = new List<MetalCurrencyStack> { new(commonMetal, 1 + Next(random, 2)) };
-        if (random.NextBasisPoints() < (route == MapRoute.Abyss ? 3_000 : 1_000))
-            metals.Add(new MetalCurrencyStack(RollMetal(random, allowDangerous: route == MapRoute.Abyss), 1));
-        if (route == MapRoute.Abyss || P5ExpeditionDirector.IsBoss(completedMap) || random.NextBasisPoints() < 3_000)
-        {
-            metals.Add(new MetalCurrencyStack(MetalCurrencyKind.ChainSteel,
-                P5ExpeditionDirector.IsBoss(completedMap) ? 3 : route == MapRoute.Abyss ? 2 : 1));
-        }
-
-        return new P1MapRewards(
-            ExperiencePerMap,
-            equipment,
-            maps,
-            new MapStackableRewards(gold, scraps, MemoryAshes: 1, WardenMarks: 1, skillStones, metals),
-            legendary);
+    public static P1MapRewards Generate(P1MapItem completedMap, MapRoute route, ulong seed,
+        int maximumUnlockedTier, P1MapRunResult run)
+    {
+        IReadOnlyList<P20DefeatedEnemy> defeated = P20DropFormula.ExtractDefeated(run, completedMap.MonsterLevel);
+        if (defeated.Count == 0 && run.Attempts.All(attempt => attempt.Timeline is null))
+            defeated = P20DropFormula.SyntheticPack(completedMap.MonsterLevel);
+        return Generate(completedMap, route, seed, maximumUnlockedTier, defeated, completed: true);
     }
 
     public static P1MapRewards GeneratePartial(
@@ -122,14 +51,42 @@ public static class P1MapRewardGenerator
     {
         if (defeatedEnemies <= 0 || totalEnemies <= 0) return new P1MapRewards(
             0, [], [], new MapStackableRewards(0, 0, 0, 0, 0, []), false);
-        P1MapRewards rolled = Generate(map, route, seed, maximumUnlockedTier);
-        int count = Math.Clamp((rolled.Equipment.Count * defeatedEnemies + totalEnemies - 1) / totalEnemies,
-            1, rolled.Equipment.Count);
-        int experience = Math.Max(1, ExperiencePerMap * defeatedEnemies / totalEnemies);
-        ItemInstance[] equipment = rolled.Equipment.Take(count).ToArray();
-        return new P1MapRewards(experience, equipment, [],
-            new MapStackableRewards(0, 0, 0, 0, 0, []),
-            equipment.Any(item => item.Rarity == ItemRarity.Legendary));
+        IReadOnlyList<P20DefeatedEnemy> synthetic = P20DropFormula.SyntheticPack(map.MonsterLevel);
+        int count = Math.Clamp((synthetic.Count * defeatedEnemies + totalEnemies - 1) / totalEnemies, 1, synthetic.Count);
+        P1MapRewards rewards = Generate(map, route, seed, maximumUnlockedTier,
+            synthetic.Take(count).ToArray(), completed: false);
+        return rewards with { Experience = Math.Max(1, ExperiencePerMap * defeatedEnemies / totalEnemies) };
+    }
+
+    public static P1MapRewards GeneratePartial(P1MapItem map, MapRoute route, ulong seed, P1MapRunResult run,
+        int maximumUnlockedTier = P1MapItem.MaximumTier)
+    {
+        IReadOnlyList<P20DefeatedEnemy> defeated = P20DropFormula.ExtractDefeated(run, map.MonsterLevel);
+        if (defeated.Count == 0) return new P1MapRewards(
+            0, [], [], new MapStackableRewards(0, 0, 0, 0, 0, []), false);
+        return Generate(map, route, seed, maximumUnlockedTier, defeated, completed: false);
+    }
+
+    private static P1MapRewards Generate(P1MapItem map, MapRoute route, ulong seed, int maximumUnlockedTier,
+        IReadOnlyList<P20DefeatedEnemy> defeated, bool completed)
+    {
+        ArgumentNullException.ThrowIfNull(map);
+        map.Validate();
+        map = map.EnsureFormal(seed);
+        string bossPool = P20LegendaryDrops.BossPool(map);
+        var context = new P20LootContext(map.InstanceId, map.MonsterLevel, map.ItemQuantityBasisPoints,
+            map.DangerFor(route), route, map.Tier, maximumUnlockedTier, AllowMaps: true,
+            Completed: completed, Practice: P5ExpeditionDirector.IsPractice(map), BossPool: bossPool);
+        P20RewardBatch rolled = P20DropFormula.Roll(context, defeated, seed);
+        int memoryAshes = completed ? P20DropFormula.RollScaledCount(1, map.ItemQuantityBasisPoints, seed ^ 0x20a5UL) : 0;
+        int wardenMarks = completed && bossPool.Length > 0
+            ? P20DropFormula.RollScaledCount(1, map.ItemQuantityBasisPoints, seed ^ 0x20b5UL)
+            : 0;
+        int experience = completed ? ExperiencePerMap : Math.Max(1,
+            ExperiencePerMap * defeated.Count / Math.Max(1, P20DropFormula.SyntheticPack(map.MonsterLevel).Count));
+        return new P1MapRewards(experience, rolled.Equipment, rolled.Maps,
+            new MapStackableRewards(rolled.Gold, 0, memoryAshes, wardenMarks, rolled.SkillStones, rolled.Metals),
+            rolled.LegendaryDropped, rolled.Trace);
     }
 
     public static (int Defeated, int Total) CombatProgress(P1MapRunResult run)
@@ -141,42 +98,4 @@ public static class P1MapRewardGenerator
         return (defeated, Math.Max(defeated, total));
     }
 
-    private static P1MapItem CreateDroppedMap(P1MapItem source, Pcg32 random, int ordinal, int maximumUnlockedTier)
-    {
-        int tier = random.NextBasisPoints() < 6_000
-            ? Math.Min(maximumUnlockedTier, source.Tier + 1)
-            : source.Tier;
-        string id = $"map-{source.InstanceId}-{ordinal}-{random.NextUInt():x8}";
-        return new P1MapItem(id, Math.Min(maximumUnlockedTier, tier)).EnsureFormal(random.NextUInt());
-    }
-
-    private static ItemRarity RollRarity(Pcg32 random)
-    {
-        int roll = random.NextBasisPoints();
-        return roll switch
-        {
-            < 5_000 => ItemRarity.Basic,
-            < 8_500 => ItemRarity.Magic,
-            _ => ItemRarity.Rare,
-        };
-    }
-
-    private static ulong NextSeed(Pcg32 random) => ((ulong)random.NextUInt() << 32) | random.NextUInt();
-
-    private static MetalCurrencyKind RollMetal(Pcg32 random, bool allowDangerous)
-    {
-        MetalCurrencyDefinition[] candidates = P4MetalCurrencies.All
-            .Where(item => allowDangerous || item.Tier != MetalCurrencyTier.Dangerous).ToArray();
-        int total = candidates.Sum(item => item.DropWeight);
-        int roll = Next(random, total);
-        foreach (MetalCurrencyDefinition candidate in candidates)
-        {
-            if (roll < candidate.DropWeight) return candidate.Kind;
-            roll -= candidate.DropWeight;
-        }
-        return candidates[^1].Kind;
-    }
-
-    private static int Next(Pcg32 random, int exclusiveMaximum) =>
-        (int)(random.NextUInt() % (uint)exclusiveMaximum);
 }

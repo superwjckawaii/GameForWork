@@ -836,14 +836,15 @@ public sealed class P1GameSession
         return result;
     }
 
-    public bool TryExchangeLegendary()
+    public bool TryExchangeLegendary(string? stableId = null)
     {
-        if (!World.Economy.TryExchangeLegendary(out ItemInstance? item) || item is null)
+        if (World.Storage.IsFull)
         {
             return false;
         }
-
-        return World.Storage.TryStore(item);
+        string selected = stableId ?? P20.P20LegendaryDrops.ExchangePool[0].StableId;
+        return World.Economy.TryExchangeLegendary(selected, out ItemInstance? item) && item is not null &&
+            World.Storage.TryStore(item);
     }
 
     public int EnqueueInventoryMaps()

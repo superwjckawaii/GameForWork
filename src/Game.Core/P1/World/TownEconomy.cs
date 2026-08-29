@@ -1,5 +1,7 @@
 using GameForWork.Core.P1.Items;
 using GameForWork.Core.P4;
+using GameForWork.Core.P14;
+using GameForWork.Core.P20;
 
 namespace GameForWork.Core.P1.World;
 
@@ -126,18 +128,24 @@ public sealed class TownEconomyState
         return true;
     }
 
-    public bool TryExchangeLegendary(out ItemInstance? legendary)
+    public bool TryExchangeLegendary(string stableId, out ItemInstance? legendary)
     {
-        if (WardenMarks < 10)
+        P14UniqueDefinition? selected = P20LegendaryDrops.ExchangePool
+            .FirstOrDefault(item => item.StableId == stableId);
+        if (selected is null || WardenMarks < P20LegendaryDrops.PityMarkCost)
         {
             legendary = null;
             return false;
         }
 
-        WardenMarks -= 10;
-        legendary = P1Legendary.Create(10) with { InstanceId = $"pity-echoing-oathbreaker-{WardenMarks}" };
+        WardenMarks -= P20LegendaryDrops.PityMarkCost;
+        legendary = P14UniqueItems.Create(selected.StableId, 100,
+            $"pity-{selected.StableId.Split('.')[^1]}-{WardenMarks}");
         return true;
     }
+
+    public bool TryExchangeLegendary(out ItemInstance? legendary) =>
+        TryExchangeLegendary(P20LegendaryDrops.ExchangePool[0].StableId, out legendary);
 
     public int TakeMemoryAshes()
     {

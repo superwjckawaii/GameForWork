@@ -19,6 +19,8 @@ public partial class P2LootFilterPanel : VBoxContainer
     private OptionButton? _base;
     private SpinBox? _minimumItemLevel;
     private SpinBox? _maximumItemLevel;
+    private SpinBox? _minimumEstimatedValue;
+    private SpinBox? _maximumEstimatedValue;
     private SpinBox? _minimumLinks;
     private SpinBox? _maximumLinks;
     private LineEdit? _affixFamily;
@@ -106,6 +108,10 @@ public partial class P2LootFilterPanel : VBoxContainer
         body.AddChild(itemLevelRow);
         _minimumItemLevel = AddSpin(itemLevelRow, "最低物品等级（0=任意）", 0, 120);
         _maximumItemLevel = AddSpin(itemLevelRow, "最高物品等级（0=任意）", 0, 120);
+        var valueRow = new HBoxContainer();
+        body.AddChild(valueRow);
+        _minimumEstimatedValue = AddSpin(valueRow, "最低公开估值（0=任意）", 0, 100_000);
+        _maximumEstimatedValue = AddSpin(valueRow, "最高公开估值（0=任意）", 0, 100_000);
         var linkRow = new HBoxContainer();
         body.AddChild(linkRow);
         _minimumLinks = AddSpin(linkRow, "最低连接数", 0, 6);
@@ -123,7 +129,7 @@ public partial class P2LootFilterPanel : VBoxContainer
         _worstAffixTier = AddSpin(tierRow, "最低T级（0=任意）", 0, 20);
         _schemeNeed = new CheckBox { Text = "满足当前技能方案的连接缺口" };
         body.AddChild(_schemeNeed);
-        _disposition = AddOptions(body, "处理", ["保留", "出售", "分解"]);
+        _disposition = AddOptions(body, "处理", ["保留", "出售", "分解", "忽略"]);
         _editor.Confirmed += SaveEditor;
         AddChild(_editor);
     }
@@ -183,6 +189,8 @@ public partial class P2LootFilterPanel : VBoxContainer
         if (baseId is null) _base!.Select(0);
         _minimumItemLevel!.Value = rule?.MinimumItemLevel ?? 0;
         _maximumItemLevel!.Value = rule?.MaximumItemLevel ?? 0;
+        _minimumEstimatedValue!.Value = rule?.MinimumEstimatedValue ?? 0;
+        _maximumEstimatedValue!.Value = rule?.MaximumEstimatedValue ?? 0;
         _minimumLinks!.Value = rule?.MinimumLinkedSockets ?? 0;
         _maximumLinks!.Value = rule?.MaximumLinkedSockets ?? 0;
         _affixFamily!.Text = rule?.AffixFamilyId ?? string.Empty;
@@ -223,7 +231,9 @@ public partial class P2LootFilterPanel : VBoxContainer
             MaximumLinkedSockets: _maximumLinks!.Value <= 0 ? null : (int)_maximumLinks.Value,
             BaseTag: string.IsNullOrWhiteSpace(_baseTag!.Text) ? null : _baseTag.Text.Trim(),
             MinimumAffixTier: _worstAffixTier!.Value <= 0 ? null : (int)_worstAffixTier.Value,
-            MaximumAffixTier: _bestAffixTier!.Value <= 0 ? null : (int)_bestAffixTier.Value);
+            MaximumAffixTier: _bestAffixTier!.Value <= 0 ? null : (int)_bestAffixTier.Value,
+            MinimumEstimatedValue: _minimumEstimatedValue!.Value <= 0 ? null : (int)_minimumEstimatedValue.Value,
+            MaximumEstimatedValue: _maximumEstimatedValue!.Value <= 0 ? null : (int)_maximumEstimatedValue.Value);
         if (_editingIndex >= 0 && _editingIndex < rules.Count) rules[_editingIndex] = rule;
         else rules.Add(rule);
         Replace(rules, previous is null ? "过滤规则已新增。" : "过滤规则已更新。");
@@ -272,6 +282,8 @@ public partial class P2LootFilterPanel : VBoxContainer
         if (rule.BaseStableId is not null) conditions.Add($"底材={rule.BaseStableId}");
         if (rule.MinimumItemLevel is not null) conditions.Add($"物等≥{rule.MinimumItemLevel}");
         if (rule.MaximumItemLevel is not null) conditions.Add($"物等≤{rule.MaximumItemLevel}");
+        if (rule.MinimumEstimatedValue is not null) conditions.Add($"估值≥{rule.MinimumEstimatedValue}");
+        if (rule.MaximumEstimatedValue is not null) conditions.Add($"估值≤{rule.MaximumEstimatedValue}");
         if (rule.MinimumLinkedSockets > 0) conditions.Add($"连接≥{rule.MinimumLinkedSockets}");
         if (rule.MaximumLinkedSockets is not null) conditions.Add($"连接≤{rule.MaximumLinkedSockets}");
         if (rule.AffixFamilyId is not null) conditions.Add($"{rule.AffixFamilyId}≥{rule.MinimumAffixValue ?? 0}");
@@ -284,7 +296,13 @@ public partial class P2LootFilterPanel : VBoxContainer
 
     private static string Signature(IEnumerable<LootFilterRule> rules) => string.Join('|', rules.Select(rule => rule.ToString()));
     private static string RarityName(ItemRarity rarity) => rarity switch { ItemRarity.Basic => "基础", ItemRarity.Magic => "魔法", ItemRarity.Rare => "稀有", _ => "传奇" };
-    private static string DispositionName(LootDisposition value) => value switch { LootDisposition.Keep => "保留", LootDisposition.Sell => "出售", _ => "分解" };
+    private static string DispositionName(LootDisposition value) => value switch
+    {
+        LootDisposition.Keep => "保留",
+        LootDisposition.Sell => "出售",
+        LootDisposition.Dismantle => "分解",
+        _ => "忽略",
+    };
 
     private static OptionButton AddOptions(Container parent, string label, IEnumerable<string> values)
     {
