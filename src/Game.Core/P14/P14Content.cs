@@ -9,7 +9,7 @@ namespace GameForWork.Core.P14;
 
 public sealed record P14FlaskDefinition(
     P1FlaskKind Kind, string StableId, string DisplayName, int MaximumCharges, int ChargesPerUse,
-    int DurationTicks, int MagnitudeBasisPoints, string AutoCondition);
+    int DurationTicks, int MagnitudeBasisPoints, string EffectDescription, string AutoCondition);
 
 public static class P14Flasks
 {
@@ -17,11 +17,16 @@ public static class P14Flasks
     public const int MaximumSlots = 5;
     public static IReadOnlyList<P14FlaskDefinition> All { get; } =
     [
-        new(P1FlaskKind.Life, "core.flask.life", "生命药剂", 30, 10, 60, 3_500, "生命低于 55%"),
-        new(P1FlaskKind.Mana, "core.flask.mana", "法力药剂", 30, 10, 80, 3_000, "法力低于 35%"),
-        new(P1FlaskKind.Armor, "core.flask.armor", "玄铁药剂", 40, 20, 100, 4_000, "预计物理重击"),
-        new(P1FlaskKind.Movement, "core.flask.movement", "疾行药剂", 40, 20, 100, 3_000, "接敌距离大于 6 格"),
-        new(P1FlaskKind.Resistance, "core.flask.resistance", "棱彩药剂", 40, 20, 100, 2_500, "预计元素重击"),
+        new(P1FlaskKind.Life, "core.flask.life", "生命药剂", 30, 10, 0, 40,
+            "立即恢复基础40点生命，受生命药剂效果修正", "生命低于角色AI设置的药剂阈值"),
+        new(P1FlaskKind.Mana, "core.flask.mana", "法力药剂", 30, 10, 80, 3_000,
+            "立即恢复30%最大法力；再次自动使用间隔4秒", "法力低于35%"),
+        new(P1FlaskKind.Armor, "core.flask.armor", "玄铁药剂", 40, 20, 100, 3_000,
+            "持续5秒，受到的物理击中伤害降低30%", "受到击中后自动使用"),
+        new(P1FlaskKind.Movement, "core.flask.movement", "疾行药剂", 40, 20, 100, 3_000,
+            "持续5秒，移动速度提高30%", "与目标距离大于6米"),
+        new(P1FlaskKind.Resistance, "core.flask.resistance", "棱彩药剂", 40, 20, 100, 2_500,
+            "持续5秒，受到的法术击中伤害降低25%", "受到击中后自动使用"),
     ];
 }
 
@@ -44,6 +49,18 @@ public static class P14UniqueItems
         new("core.unique.black_tide", "黑潮披挂", "core.base.gloom_raiment", "击败敌人后获得短暂疾行"),
         new("core.unique.starless_prayer", "无星祷衣", "core.base.starweave_robe", "法术压制成功时恢复护盾"),
         new("core.unique.last_banner", "末旗护符", "core.base.ember_amulet", "旗帜不再保留，但效果增强"),
+        new("core.unique.iron_moon", "铁月", "core.base.rusted_greatsword", "满生命时重击造成更多伤害"),
+        new("core.unique.hollow_guard", "空洞守卫", "core.base.ash_iron_shield", "格挡后获得短暂法术压制"),
+        new("core.unique.thorn_procession", "荆棘行列", "core.base.ritual_gloves", "流血敌人被击败时扩散创口"),
+        new("core.unique.pilgrims_debt", "朝圣者之债", "core.base.shadow_treads", "移动速度随未消耗药剂充能提高"),
+        new("core.unique.cinder_chain", "余烬锁链", "core.base.ration_belt", "药剂充能获取提高但效果缩短"),
+        new("core.unique.fourth_testament", "第四圣约", "core.base.spirit_amulet", "精神与能量互相提供护盾"),
+        new("core.unique.silent_anvil", "沉默铁砧", "core.base.rusted_warhammer", "低攻速攻击获得更高总伤害"),
+        new("core.unique.hunters_eclipse", "猎手蚀影", "core.base.hunter_hood", "闪避后下一次攻击必定暴击"),
+        new("core.unique.ashes_memory", "灰烬记忆", "core.base.ash_circlet", "护盾开始恢复时同时恢复法力"),
+        new("core.unique.grave_plate", "墓门重甲", "core.base.crude_chainmail", "护甲也降低法术击中伤害"),
+        new("core.unique.famine_ring", "饥馑指环", "core.base.iron_ring", "击杀充能翻倍但生命恢复降低"),
+        new("core.unique.last_watch", "终夜守望", "core.base.warlord_helm", "受到未格挡击中后累积壁垒"),
         new("core.mythic.heart_of_ash", "灰烬之心", "core.base.triune_carapace", "三阶段继承药剂与战吼，濒死时重燃一次", true),
     ];
 
@@ -54,7 +71,8 @@ public static class P14UniqueItems
             definition.StableId == "core.unique.echoing_oathbreaker" ? 7_000 : 10_000,
             definition.Mythic ? 15_000 : 10_000);
         return new ItemInstance(instanceId, P1ItemBases.Get(definition.BaseStableId), Math.Clamp(itemLevel, 1, 120),
-            ItemRarity.Legendary, [], rule, LinkedSocketCount: definition.Mythic ? 6 : 5);
+            ItemRarity.Legendary, [], rule, LinkedSocketCount: definition.Mythic ? 6 : 5,
+            RolledName: definition.DisplayName);
     }
 }
 

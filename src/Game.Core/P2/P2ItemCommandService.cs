@@ -1,4 +1,5 @@
 using GameForWork.Core.P1;
+using GameForWork.Core.P1.Combat;
 using GameForWork.Core.P1.Items;
 using System.Runtime.CompilerServices;
 using GameForWork.Core.P6;
@@ -42,6 +43,12 @@ public sealed class P2ItemCommandService(
         if (!EquipmentLoadout.CanEquip(slot, candidate.Base.Category))
         {
             return P2ItemCommandResult.Fail("slot_mismatch", "该物品不能放入目标装备槽。");
+        }
+        if (!MeetsRequirements(candidate))
+        {
+            return P2ItemCommandResult.Fail("requirements_not_met",
+                $"需求不足：等级 {candidate.Base.RequiredLevel}，体魄 {candidate.Base.RequiredPhysique}，" +
+                $"灵巧 {candidate.Base.RequiredDexterity}，精神 {candidate.Base.RequiredSpirit}，能量 {candidate.Base.RequiredEnergy}。");
         }
         if (slot is >= EquipmentSlot.Flask1 and <= EquipmentSlot.Flask5 &&
             (int)slot - (int)EquipmentSlot.Flask1 >= session.UnlockedFlaskSlots)
@@ -128,6 +135,19 @@ public sealed class P2ItemCommandService(
         if (character == P2CharacterKind.Hero) session.RecordJourneyEvent(P8JourneyEvent.EquippedItem);
         session.Management.AddHistory($"已将 {sourceItem.Base.DisplayName} 移至{target}。");
         return P2ItemCommandResult.Ok("装备槽交换完成。");
+    }
+
+    private bool MeetsRequirements(ItemInstance item)
+    {
+        if (character == P2CharacterKind.Hero)
+        {
+            return item.Base.MeetsRequirements(session.World.Hero.Progression.Level, session.HeroBuild.Sheet.Attributes);
+        }
+
+        P9MercenaryMember member = string.IsNullOrEmpty(mercenaryId)
+            ? session.Town.Roster.First()
+            : session.Town.Roster.First(candidate => candidate.Identity.StableId == mercenaryId);
+        return item.Base.MeetsRequirements(member.Level, member.Identity.FinalAttributes);
     }
 
     public P2WorkshopPreview Craft(ItemContainerKind source, int index, P2WorkshopRecipe recipe)

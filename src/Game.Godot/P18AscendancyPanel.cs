@@ -39,7 +39,6 @@ public partial class P18AscendancyPanel : VBoxContainer
         _tree.Initialize(session, changed);
         AddChild(_tree);
         AddChild(new Label { Text = "左键分配 · 右键退还（强化点2000金币，核心点10000金币）· 每条路线只能中心→强化→核心", HorizontalAlignment = HorizontalAlignment.Center });
-        Refresh();
     }
 
     public void Refresh()

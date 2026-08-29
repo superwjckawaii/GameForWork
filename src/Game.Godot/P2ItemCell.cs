@@ -14,7 +14,7 @@ public partial class P2ItemCell : Button
     {
         string[] lines = forText.Split('\n');
         string first = lines.Length == 0 ? string.Empty : EscapeBbCode(lines[0]);
-        string rest = string.Join('\n', lines.Skip(1).Select(EscapeBbCode));
+        string rest = string.Join('\n', lines.Skip(1).Select(FormatTooltipLine));
         var panel = new PanelContainer();
         panel.AddThemeStyleboxOverride("panel", new StyleBoxFlat
         {
@@ -137,4 +137,30 @@ public partial class P2ItemCell : Button
     }
 
     private static string EscapeBbCode(string text) => text.Replace("[", "[​", StringComparison.Ordinal);
+
+    private string FormatTooltipLine(string line)
+    {
+        const string marker = "[TIER:";
+        if (!line.StartsWith(marker, StringComparison.Ordinal))
+        {
+            return EscapeBbCode(line);
+        }
+
+        int end = line.IndexOf(']');
+        if (end < marker.Length || !int.TryParse(line.AsSpan(marker.Length, end - marker.Length), out int tier))
+        {
+            return EscapeBbCode(line);
+        }
+
+        float lightening = tier switch
+        {
+            1 => 0.18f,
+            2 or 3 => 0.10f,
+            4 or 5 => 0.04f,
+            6 or 7 => 0.0f,
+            _ => -0.08f,
+        };
+        Color color = lightening >= 0 ? TooltipRarityColor.Lightened(lightening) : TooltipRarityColor.Darkened(-lightening);
+        return $"[color=#{color.ToHtml(false)}]{EscapeBbCode(line[(end + 1)..])}[/color]";
+    }
 }

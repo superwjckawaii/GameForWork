@@ -17,8 +17,21 @@ public sealed record CharacterSheet(
     int IncreasedArmorBasisPoints = 0,
     int IncreasedEvasionBasisPoints = 0,
     int IncreasedShieldBasisPoints = 0,
-    int IncreasedManaRegenerationBasisPoints = 0)
+    int IncreasedManaRegenerationBasisPoints = 0,
+    int FireResistanceBasisPoints = 0,
+    int ColdResistanceBasisPoints = 0,
+    int LightningResistanceBasisPoints = 0,
+    int VoidResistanceBasisPoints = 0,
+    int BlockChanceBasisPoints = 0,
+    int SpellSuppressionBasisPoints = 0,
+    int FlatLifeRegeneration = 0,
+    int IncreasedMovementSpeedBasisPoints = 0)
 {
+    public int CappedResistance(int value) => Math.Clamp(value, -10_000, 7_500);
+
+    public int EffectiveBlockChanceBasisPoints => Math.Clamp(BlockChanceBasisPoints, 0, 7_500);
+
+    public int EffectiveSpellSuppressionBasisPoints => Math.Clamp(SpellSuppressionBasisPoints, 0, 10_000);
     public CalculatedValue MaximumLife()
     {
         var trace = new FormulaTraceBuilder();
@@ -103,6 +116,11 @@ public sealed record CharacterSheet(
             value);
     }
 
+    public CalculatedValue LifeRegenerationPerSecond() => CalculatedValue.Single(
+        "每秒生命恢复",
+        $"装备固定生命恢复 {FlatLifeRegeneration}",
+        Math.Max(0, FlatLifeRegeneration));
+
     public CalculatedValue ShieldRecoveryPerSecond()
     {
         int maximumShield = MaximumShield().Value;
@@ -122,6 +140,7 @@ public sealed record CharacterSheet(
 public sealed class ResourceState
 {
     private int _manaRecoveryRemainder;
+    private int _lifeRecoveryRemainder;
     private int _shieldRecoveryRemainder;
 
     public ResourceState(
@@ -208,6 +227,11 @@ public sealed class ResourceState
         _manaRecoveryRemainder += manaPerSecond;
         Mana = Math.Min(MaximumMana, Mana + (_manaRecoveryRemainder / ticksPerSecond));
         _manaRecoveryRemainder %= ticksPerSecond;
+
+        int lifePerSecond = Sheet.LifeRegenerationPerSecond().Value;
+        _lifeRecoveryRemainder += lifePerSecond;
+        Life = Math.Min(MaximumLife, Life + (_lifeRecoveryRemainder / ticksPerSecond));
+        _lifeRecoveryRemainder %= ticksPerSecond;
 
         if (tick - LastDamageTick < 2 * ticksPerSecond)
         {

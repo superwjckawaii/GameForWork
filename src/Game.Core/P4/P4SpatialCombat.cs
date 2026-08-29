@@ -957,6 +957,24 @@ public sealed class P4SpatialCombatRunner
             if (damage > 0 && hero.Life * 2L <= hero.MaximumLife && ascendancy.Has(P18NodeIds.BloodLowLifeCore))
                 damage = Math.Max(1, damage * 7_500 / 10_000);
             bool spell = enemy.Role == P4UnitRole.Caster;
+            if (damage > 0 && spell)
+            {
+                int resistance = enemy.Profile.Family switch
+                {
+                    EnemyFamily.FrostwildPack => request.Build.Sheet.ColdResistanceBasisPoints,
+                    EnemyFamily.BloodforgeConstruct or EnemyFamily.AshenLegion => request.Build.Sheet.FireResistanceBasisPoints,
+                    EnemyFamily.VoidCult or EnemyFamily.RiftBeast => request.Build.Sheet.VoidResistanceBasisPoints,
+                    _ => request.Build.Sheet.LightningResistanceBasisPoints,
+                };
+                damage = Math.Max(1, damage * (10_000 - request.Build.Sheet.CappedResistance(resistance)) / 10_000);
+                int suppression = request.Build.Sheet.EffectiveSpellSuppressionBasisPoints;
+                if (suppression > 0 && random.NextUInt() % 10_000 < suppression)
+                {
+                    damage = Math.Max(1, damage * 3_000 / 10_000);
+                    events.Add(Event(tick, P4SpatialEventKind.Guard, "hero", enemy.EntityId, 0,
+                        heroPosition, enemy.Position, "spell_suppression"));
+                }
+            }
             int blockChance = request.Build.BlockChanceBasisPoints;
             if (request.Build.HasShield && ascendancy.Has(P18NodeIds.BastionAttackBlockSmall)) blockChance += 800;
             if (request.Build.HasShield && ascendancy.Has(P18NodeIds.BastionAttackBlockCore)) blockChance += 1_200;

@@ -1,3 +1,5 @@
+using GameForWork.Core.P19;
+
 namespace GameForWork.Core.P1.Items;
 
 public static class P1Affixes
@@ -7,7 +9,12 @@ public static class P1Affixes
     public static IReadOnlyList<AffixDefinition> All => Catalog;
 
     public static IReadOnlyList<AffixDefinition> For(ItemCategory category, int itemLevel) =>
-        Catalog.Where(affix => affix.Category == category && affix.MinimumItemLevel <= itemLevel).ToArray();
+        Catalog.Where(affix =>
+            (affix.ApplicableCategories?.Contains(category) ?? affix.Category == category) &&
+            affix.MinimumItemLevel <= itemLevel).ToArray();
+
+    public static IReadOnlyList<AffixDefinition> For(ItemBaseDefinition itemBase, int itemLevel) =>
+        Catalog.Where(affix => affix.MinimumItemLevel <= itemLevel && affix.Supports(itemBase)).ToArray();
 
     private static IReadOnlyList<AffixDefinition> Build()
     {
@@ -98,7 +105,12 @@ public static class P1Affixes
             ItemModifierKind.IncreasedManaRegenerationBasisPoints, 500, 1_000, 1_100, 2_000, 700);
         AddTwoTiers(result, ItemCategory.Ring, "ring.critical", "暴击率增加", AffixPosition.Suffix,
             ItemModifierKind.IncreasedCriticalChanceBasisPoints, 500, 1_000, 1_100, 1_800, 700);
-        return result;
+        result.AddRange(P19Catalog.Affixes);
+        return result
+            .OrderBy(affix => affix.StableFamilyId, StringComparer.Ordinal)
+            .ThenBy(affix => affix.Tier)
+            .ThenBy(affix => affix.SourceId, StringComparer.Ordinal)
+            .ToArray();
     }
 
     private static void AddTwoTiers(

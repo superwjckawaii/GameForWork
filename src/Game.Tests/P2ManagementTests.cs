@@ -8,7 +8,7 @@ namespace GameForWork.Tests;
 public sealed class P2ManagementTests
 {
     [Fact]
-    public void NewEquipmentSlotsHaveTwoBasesAndAffixFamilies()
+    public void EquipmentSlotsHaveP19BaseRoutesAndAffixFamilies()
     {
         foreach (ItemCategory category in new[]
                  {
@@ -18,12 +18,18 @@ public sealed class P2ManagementTests
                      ItemCategory.Amulet,
                  })
         {
-            Assert.Equal(2, P1ItemBases.All.Count(item => item.Category == category));
+            int expected = category switch
+            {
+                ItemCategory.Gloves or ItemCategory.Boots => 6,
+                ItemCategory.Belt => 5,
+                _ => 6,
+            };
+            Assert.Equal(expected, P1ItemBases.All.Count(item => item.Category == category));
             int families = P1Affixes.For(category, 60)
                 .Select(affix => affix.StableFamilyId)
                 .Distinct(StringComparer.Ordinal)
                 .Count();
-            Assert.InRange(families, 4, 6);
+            Assert.True(families >= 8);
         }
     }
 
@@ -95,7 +101,7 @@ public sealed class P2ManagementTests
     {
         P1GameSession session = Session();
         ItemInstance replacement = ItemGenerator.Generate(
-            "core.base.heavy_battleaxe", 4, ItemRarity.Magic, 10, "replacement");
+            "core.base.rusted_greatsword", 4, ItemRarity.Magic, 10, "replacement");
         Assert.True(session.World.Storage.TryStore(replacement));
         int initialEquippedAndStored = session.HeroEquipment.Items.Count + session.World.Storage.Count;
 

@@ -70,7 +70,8 @@ public sealed class P1MercenaryProfile
             HeavyStrikeProfile: build.HeavyStrike,
             WeaponLegendaryRule: build.Equipment.WeaponLegendaryRule,
             HasShield: build.Equipment.HasShield,
-            BlockChanceBasisPoints: build.Equipment.HasShield ? 2_000 : 0);
+            BlockChanceBasisPoints: checked(build.Equipment.BaseBlockChanceBasisPoints +
+                build.Equipment.Modifiers.BlockChanceBasisPoints));
     }
 }
 

@@ -23,6 +23,9 @@ public partial class P2LootFilterPanel : VBoxContainer
     private SpinBox? _maximumLinks;
     private LineEdit? _affixFamily;
     private SpinBox? _minimumAffixValue;
+    private LineEdit? _baseTag;
+    private SpinBox? _bestAffixTier;
+    private SpinBox? _worstAffixTier;
     private CheckBox? _schemeNeed;
     private OptionButton? _disposition;
     private int _editingIndex = -1;
@@ -111,6 +114,13 @@ public partial class P2LootFilterPanel : VBoxContainer
         _affixFamily = new LineEdit { PlaceholderText = "例如 core.affix.ring.life" };
         body.AddChild(_affixFamily);
         _minimumAffixValue = AddSpin(body, "词缀最低数值（0=任意）", 0, 100_000);
+        body.AddChild(new Label { Text = "底材标签（留空为任意）" });
+        _baseTag = new LineEdit { PlaceholderText = "例如 ring / str_armour / shield" };
+        body.AddChild(_baseTag);
+        var tierRow = new HBoxContainer();
+        body.AddChild(tierRow);
+        _bestAffixTier = AddSpin(tierRow, "最高T级（0=任意）", 0, 20);
+        _worstAffixTier = AddSpin(tierRow, "最低T级（0=任意）", 0, 20);
         _schemeNeed = new CheckBox { Text = "满足当前技能方案的连接缺口" };
         body.AddChild(_schemeNeed);
         _disposition = AddOptions(body, "处理", ["保留", "出售", "分解"]);
@@ -177,6 +187,9 @@ public partial class P2LootFilterPanel : VBoxContainer
         _maximumLinks!.Value = rule?.MaximumLinkedSockets ?? 0;
         _affixFamily!.Text = rule?.AffixFamilyId ?? string.Empty;
         _minimumAffixValue!.Value = rule?.MinimumAffixValue ?? 0;
+        _baseTag!.Text = rule?.BaseTag ?? string.Empty;
+        _bestAffixTier!.Value = rule?.MaximumAffixTier ?? 0;
+        _worstAffixTier!.Value = rule?.MinimumAffixTier ?? 0;
         _schemeNeed!.ButtonPressed = rule?.RequireCurrentSchemeNeed ?? false;
         _disposition!.Select((int)(rule?.Disposition ?? LootDisposition.Keep));
     }
@@ -207,7 +220,10 @@ public partial class P2LootFilterPanel : VBoxContainer
             Category: EnumValue<ItemCategory>(_category!),
             MinimumItemLevel: _minimumItemLevel!.Value <= 0 ? null : (int)_minimumItemLevel.Value,
             MaximumItemLevel: _maximumItemLevel!.Value <= 0 ? null : (int)_maximumItemLevel.Value,
-            MaximumLinkedSockets: _maximumLinks!.Value <= 0 ? null : (int)_maximumLinks.Value);
+            MaximumLinkedSockets: _maximumLinks!.Value <= 0 ? null : (int)_maximumLinks.Value,
+            BaseTag: string.IsNullOrWhiteSpace(_baseTag!.Text) ? null : _baseTag.Text.Trim(),
+            MinimumAffixTier: _worstAffixTier!.Value <= 0 ? null : (int)_worstAffixTier.Value,
+            MaximumAffixTier: _bestAffixTier!.Value <= 0 ? null : (int)_bestAffixTier.Value);
         if (_editingIndex >= 0 && _editingIndex < rules.Count) rules[_editingIndex] = rule;
         else rules.Add(rule);
         Replace(rules, previous is null ? "过滤规则已新增。" : "过滤规则已更新。");
@@ -259,6 +275,9 @@ public partial class P2LootFilterPanel : VBoxContainer
         if (rule.MinimumLinkedSockets > 0) conditions.Add($"连接≥{rule.MinimumLinkedSockets}");
         if (rule.MaximumLinkedSockets is not null) conditions.Add($"连接≤{rule.MaximumLinkedSockets}");
         if (rule.AffixFamilyId is not null) conditions.Add($"{rule.AffixFamilyId}≥{rule.MinimumAffixValue ?? 0}");
+        if (rule.BaseTag is not null) conditions.Add($"底材标签={rule.BaseTag}");
+        if (rule.MaximumAffixTier is not null) conditions.Add($"最高T≤{rule.MaximumAffixTier}");
+        if (rule.MinimumAffixTier is not null) conditions.Add($"最低T≥{rule.MinimumAffixTier}");
         if (rule.RequireCurrentSchemeNeed) conditions.Add("当前方案缺口");
         return $"{(conditions.Count == 0 ? "任意物品" : string.Join(" 且 ", conditions))} → {DispositionName(rule.Disposition)}";
     }

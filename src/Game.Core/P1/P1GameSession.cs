@@ -1002,6 +1002,9 @@ public sealed class P1GameSession
             throw new ArgumentException("Candidate cannot be equipped in the requested slot.", nameof(slot));
         }
 
+        bool requirementsMet = candidate.Base.MeetsRequirements(
+            World.Hero.Progression.Level,
+            _heroBuild.Sheet.Attributes);
         EquipmentLoadout hypothetical = EquipmentLoadout.Restore(HeroEquipment.Items
             .Where(pair => pair.Key != slot)
             .Select(pair => new KeyValuePair<EquipmentSlot, ItemInstance>(pair.Key, pair.Value)));
@@ -1038,7 +1041,7 @@ public sealed class P1GameSession
             next.SupportLinkCapacity - current.SupportLinkCapacity,
             proposedPreview.AverageHitDamage.Value - currentPreview.AverageHitDamage.Value,
             proposedPreview.EffectiveLife.Value - currentPreview.EffectiveLife.Value,
-            RequirementsMet: true,
+            RequirementsMet: requirementsMet,
             DisabledSkillLinks: capacity.IsValid ? 0 : Math.Max(0, capacity.RequiredSupportLinks - capacity.AvailableSupportLinks),
             slot,
             candidate.LinkedSocketCount - (currentItem?.LinkedSocketCount ?? 0),
@@ -1202,7 +1205,8 @@ public sealed class P1GameSession
         AddedPhysicalDamage: build.AddedPhysicalDamage,
         HeavyStrikeProfile: build.HeavyStrike,
         WeaponLegendaryRule: build.Equipment.WeaponLegendaryRule,
-        MovementSpeedBasisPoints: checked(10_000 + build.Passives.IncreasedMovementSpeedBasisPoints),
+        MovementSpeedBasisPoints: checked(10_000 + build.Passives.IncreasedMovementSpeedBasisPoints +
+            build.Equipment.Modifiers.IncreasedMovementSpeedBasisPoints),
         ActiveSkills: activeSkills ??
         [
             new SkillConfiguration(P1SkillIds.HeavyStrike, supports),
@@ -1211,7 +1215,8 @@ public sealed class P1GameSession
         ],
         Flasks: build.Flasks,
         HasShield: build.Equipment.HasShield,
-        BlockChanceBasisPoints: build.Equipment.HasShield ? 2_000 : 0,
+        BlockChanceBasisPoints: checked(build.Equipment.BaseBlockChanceBasisPoints +
+            build.Equipment.Modifiers.BlockChanceBasisPoints),
         Ascendancy: ascendancy) with
         {
             AiSummary = $"{ai.Preset} · {(ai.MatchMode == AiRuleMatchMode.All ? "全部满足" : "任一满足")}：" +

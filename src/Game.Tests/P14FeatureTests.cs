@@ -17,10 +17,16 @@ public sealed class P14FeatureTests
         Assert.Equal(30, P1Skills.All.Count);
         Assert.Equal(48, Enum.GetValues<SkillSupport>().Count(value => value != SkillSupport.None));
         Assert.Equal(48, P2SkillStones.All.Count(item => item.Kind == SkillStoneKind.Support));
-        Assert.Equal(42, P1ItemBases.All.Count);
-        Assert.Equal(12, P14UniqueItems.All.Count(item => !item.Mythic));
+        Assert.Equal(80, P1ItemBases.All.Count);
+        Assert.Equal(24, P14UniqueItems.All.Count(item => !item.Mythic));
         Assert.Single(P14UniqueItems.All, item => item.Mythic);
         Assert.Equal(5, P14Flasks.All.Count);
+        Assert.All(P14Flasks.All, flask =>
+        {
+            Assert.False(string.IsNullOrWhiteSpace(flask.EffectDescription));
+            Assert.False(string.IsNullOrWhiteSpace(flask.AutoCondition));
+            Assert.True(flask.MaximumCharges >= flask.ChargesPerUse);
+        });
         Assert.Equal(48, P1Enemies.NormalEnemies.Count);
         Assert.Equal(18, Enum.GetValues<EliteAffix>().Length);
         Assert.Equal(8, P14Bosses.MapBosses.Count);

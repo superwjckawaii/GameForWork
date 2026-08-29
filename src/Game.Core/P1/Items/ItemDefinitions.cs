@@ -1,4 +1,5 @@
 using GameForWork.Core.P1.Combat;
+using GameForWork.Core.P19;
 
 namespace GameForWork.Core.P1.Items;
 
@@ -60,8 +61,34 @@ public sealed record ItemBaseDefinition(
     int SupportLinkCapacity = 0,
     ItemModifierKind ImplicitModifier = ItemModifierKind.None,
     int ImplicitMinimumValue = 0,
-    int ImplicitMaximumValue = 0)
+    int ImplicitMaximumValue = 0,
+    int RequiredLevel = 1,
+    int RequiredPhysique = 0,
+    int RequiredDexterity = 0,
+    int RequiredSpirit = 0,
+    int RequiredEnergy = 0,
+    string SourceId = "",
+    IReadOnlyList<string>? Tags = null,
+    int ArmorMinimum = 0,
+    int ArmorMaximum = 0,
+    int EvasionMinimum = 0,
+    int EvasionMaximum = 0,
+    int ShieldMinimum = 0,
+    int ShieldMaximum = 0,
+    int BlockChanceBasisPoints = 0,
+    int MovementPenaltyBasisPoints = 0,
+    int SocketLimit = 0,
+    string ImplicitText = "")
 {
+    public IReadOnlyList<string> ItemTags => Tags ?? Array.Empty<string>();
+
+    public bool MeetsRequirements(int level, CharacterAttributes attributes) =>
+        level >= RequiredLevel &&
+        attributes.Physique >= RequiredPhysique &&
+        attributes.Dexterity >= RequiredDexterity &&
+        attributes.Spirit >= RequiredSpirit &&
+        attributes.Energy >= RequiredEnergy;
+
     public WeaponProfile ToWeaponProfile() => Category is ItemCategory.TwoHandWeapon or ItemCategory.OneHandWeapon
         ? new WeaponProfile(
             StableId,
@@ -84,94 +111,7 @@ public static class P1ItemBases
             ? definition
             : throw new KeyNotFoundException($"Unknown item base: {stableId}");
 
-    private static IReadOnlyList<ItemBaseDefinition> Build() =>
-    [
-        Weapon("core.base.rusted_greatsword", "生锈巨剑", P1Weapons.RustedGreatsword),
-        Weapon("core.base.heavy_battleaxe", "沉重战斧", P1Weapons.HeavyBattleaxe),
-        Weapon("core.base.pole_warhammer", "长柄战锤", P1Weapons.PoleWarhammer),
-        Weapon("core.base.ash_glaive", "烬锋长刃", new WeaponProfile("core.weapon.ash_glaive", 8, 15, 1_150, 600)),
-        Weapon("core.base.warden_maul", "监守重槌", new WeaponProfile("core.weapon.warden_maul", 12, 21, 820, 500)),
-        Weapon("core.base.blood_halberd", "血痕战戟", new WeaponProfile("core.weapon.blood_halberd", 9, 18, 980, 550)),
-        Weapon("core.base.glass_greatblade", "琉璃巨刃", new WeaponProfile("core.weapon.glass_greatblade", 11, 24, 900, 750)),
-        Weapon("core.base.oathbreaker_axe", "破誓巨斧", new WeaponProfile("core.weapon.oathbreaker_axe", 16, 27, 780, 500)),
-        OneHandWeapon("core.base.rusted_warhammer", "锈蚀战锤",
-            new WeaponProfile("core.weapon.rusted_warhammer", 7, 12, 1_150, 500)),
-        new("core.base.ash_iron_shield", "灰铁塔盾", ItemCategory.Shield, EquipmentSlot.OffHand,
-            Armor: 24, CoreSkillCapacity: 1, SupportLinkCapacity: 2),
-        new("core.base.crude_chainmail", "粗制链甲", ItemCategory.BodyArmor, EquipmentSlot.Chest,
-            Armor: 30, CoreSkillCapacity: 1, SupportLinkCapacity: 2),
-        new("core.base.hide_coat", "兽皮外衣", ItemCategory.BodyArmor, EquipmentSlot.Chest,
-            Evasion: 25, CoreSkillCapacity: 1, SupportLinkCapacity: 2),
-        new("core.base.runed_robe", "符文长袍", ItemCategory.BodyArmor, EquipmentSlot.Chest,
-            Shield: 20, CoreSkillCapacity: 1, SupportLinkCapacity: 2),
-        new("core.base.bastion_plate", "堡垒板甲", ItemCategory.BodyArmor, EquipmentSlot.Chest,
-            Armor: 58, CoreSkillCapacity: 1, SupportLinkCapacity: 3),
-        new("core.base.gloom_raiment", "幽影战衣", ItemCategory.BodyArmor, EquipmentSlot.Chest,
-            Evasion: 51, CoreSkillCapacity: 1, SupportLinkCapacity: 3),
-        new("core.base.starweave_robe", "星织法袍", ItemCategory.BodyArmor, EquipmentSlot.Chest,
-            Shield: 46, CoreSkillCapacity: 1, SupportLinkCapacity: 3),
-        new("core.base.triune_carapace", "三相甲壳", ItemCategory.BodyArmor, EquipmentSlot.Chest,
-            Armor: 24, Evasion: 24, Shield: 24, CoreSkillCapacity: 1, SupportLinkCapacity: 4),
-        new("core.base.iron_helmet", "铁制盔", ItemCategory.Helmet, EquipmentSlot.Helmet,
-            Armor: 15, SupportLinkCapacity: 1),
-        new("core.base.hunter_hood", "猎手兜帽", ItemCategory.Helmet, EquipmentSlot.Helmet,
-            Evasion: 12, SupportLinkCapacity: 1),
-        new("core.base.ash_circlet", "灰纹头冠", ItemCategory.Helmet, EquipmentSlot.Helmet,
-            Shield: 10, SupportLinkCapacity: 1),
-        new("core.base.warlord_helm", "军阀重盔", ItemCategory.Helmet, EquipmentSlot.Helmet,
-            Armor: 28, SupportLinkCapacity: 2),
-        new("core.base.raven_mask", "鸦影面具", ItemCategory.Helmet, EquipmentSlot.Helmet,
-            Evasion: 24, SupportLinkCapacity: 2),
-        new("core.base.oracle_crown", "先知冠冕", ItemCategory.Helmet, EquipmentSlot.Helmet,
-            Shield: 22, SupportLinkCapacity: 2),
-        new("core.base.iron_gauntlets", "铁鳞护手", ItemCategory.Gloves, EquipmentSlot.Gloves, Armor: 10),
-        new("core.base.ritual_gloves", "仪式手套", ItemCategory.Gloves, EquipmentSlot.Gloves, Shield: 8),
-        new("core.base.march_boots", "行军铁靴", ItemCategory.Boots, EquipmentSlot.Boots, Armor: 12),
-        new("core.base.shadow_treads", "影行短靴", ItemCategory.Boots, EquipmentSlot.Boots, Evasion: 12),
-        new("core.base.chain_belt", "锁链腰带", ItemCategory.Belt, EquipmentSlot.Belt,
-            ImplicitModifier: ItemModifierKind.FlatMaximumLife, ImplicitMinimumValue: 6, ImplicitMaximumValue: 10),
-        new("core.base.ration_belt", "补给腰带", ItemCategory.Belt, EquipmentSlot.Belt,
-            ImplicitModifier: ItemModifierKind.IncreasedLifeFlaskEffectBasisPoints,
-            ImplicitMinimumValue: 500, ImplicitMaximumValue: 800),
-        new("core.base.ember_amulet", "余烬护符", ItemCategory.Amulet, EquipmentSlot.Amulet,
-            ImplicitModifier: ItemModifierKind.Physique, ImplicitMinimumValue: 1, ImplicitMaximumValue: 2),
-        new("core.base.spirit_amulet", "祷灵护符", ItemCategory.Amulet, EquipmentSlot.Amulet,
-            ImplicitModifier: ItemModifierKind.Spirit, ImplicitMinimumValue: 1, ImplicitMaximumValue: 2),
-        new("core.base.iron_ring", "铁环", ItemCategory.Ring, EquipmentSlot.RingLeft,
-            ImplicitModifier: ItemModifierKind.AddedPhysicalDamage, ImplicitMinimumValue: 1, ImplicitMaximumValue: 2),
-        new("core.base.life_ring", "生命戒", ItemCategory.Ring, EquipmentSlot.RingLeft,
-            ImplicitModifier: ItemModifierKind.FlatMaximumLife, ImplicitMinimumValue: 8, ImplicitMaximumValue: 8),
-        new("core.base.focus_ring", "专注戒", ItemCategory.Ring, EquipmentSlot.RingLeft,
-            ImplicitModifier: ItemModifierKind.FlatMaximumMana, ImplicitMinimumValue: 8, ImplicitMaximumValue: 8),
-        new("core.base.ember_ring", "余火戒", ItemCategory.Ring, EquipmentSlot.RingLeft,
-            ImplicitModifier: ItemModifierKind.IncreasedPhysicalDamageBasisPoints, ImplicitMinimumValue: 300, ImplicitMaximumValue: 600),
-        new("core.base.guard_ring", "壁垒戒", ItemCategory.Ring, EquipmentSlot.RingLeft,
-            ImplicitModifier: ItemModifierKind.IncreasedArmorBasisPoints, ImplicitMinimumValue: 400, ImplicitMaximumValue: 700),
-        new("core.base.quicksilver_ring", "迅银戒", ItemCategory.Ring, EquipmentSlot.RingLeft,
-            ImplicitModifier: ItemModifierKind.IncreasedAttackSpeedBasisPoints, ImplicitMinimumValue: 250, ImplicitMaximumValue: 450),
-        new("core.base.life_flask", "生命药剂", ItemCategory.LifeFlask, EquipmentSlot.Flask1),
-        new("core.base.mana_flask", "法力药剂", ItemCategory.LifeFlask, EquipmentSlot.Flask1),
-        new("core.base.armor_flask", "玄铁药剂", ItemCategory.LifeFlask, EquipmentSlot.Flask1),
-        new("core.base.movement_flask", "疾行药剂", ItemCategory.LifeFlask, EquipmentSlot.Flask1),
-        new("core.base.resistance_flask", "棱彩药剂", ItemCategory.LifeFlask, EquipmentSlot.Flask1),
-    ];
-
-    private static ItemBaseDefinition Weapon(string id, string name, WeaponProfile weapon) => new(
-        id,
-        name,
-        ItemCategory.TwoHandWeapon,
-        EquipmentSlot.MainHand,
-        weapon.MinimumPhysicalDamage,
-        weapon.MaximumPhysicalDamage,
-        weapon.AttacksPerSecondMilli,
-        weapon.CriticalChanceBasisPoints,
-        CoreSkillCapacity: 1,
-        SupportLinkCapacity: 2);
-
-    private static ItemBaseDefinition OneHandWeapon(string id, string name, WeaponProfile weapon) => new(
-        id, name, ItemCategory.OneHandWeapon, EquipmentSlot.MainHand,
-        weapon.MinimumPhysicalDamage, weapon.MaximumPhysicalDamage, weapon.AttacksPerSecondMilli,
-        weapon.CriticalChanceBasisPoints, CoreSkillCapacity: 1, SupportLinkCapacity: 2);
+    private static IReadOnlyList<ItemBaseDefinition> Build() => P19Catalog.Bases;
 }
 
 public enum ItemModifierKind
@@ -193,6 +133,16 @@ public enum ItemModifierKind
     IncreasedLifeFlaskEffectBasisPoints,
     ExtraSupportLinkCapacity,
     IncreasedManaRegenerationBasisPoints,
+    Dexterity,
+    Energy,
+    FireResistanceBasisPoints,
+    ColdResistanceBasisPoints,
+    LightningResistanceBasisPoints,
+    VoidResistanceBasisPoints,
+    IncreasedMovementSpeedBasisPoints,
+    BlockChanceBasisPoints,
+    SpellSuppressionBasisPoints,
+    FlatLifeRegeneration,
 }
 
 public enum AffixPosition
@@ -211,7 +161,32 @@ public sealed record AffixDefinition(
     int MinimumValue,
     int MaximumValue,
     int Weight,
-    ItemModifierKind ModifierKind);
+    ItemModifierKind ModifierKind,
+    string GroupId = "",
+    IReadOnlyList<ItemCategory>? ApplicableCategories = null,
+    IReadOnlyDictionary<string, int>? TagWeights = null,
+    string SourceId = "",
+    string RawText = "",
+    IReadOnlyList<string>? ModTags = null,
+    bool Local = false,
+    string Source = "Natural")
+{
+    public string MutualExclusionGroup => string.IsNullOrWhiteSpace(GroupId) ? StableFamilyId : GroupId;
+
+    public bool Supports(ItemBaseDefinition itemBase) =>
+        (ApplicableCategories?.Contains(itemBase.Category) ?? Category == itemBase.Category) && WeightFor(itemBase) > 0;
+
+    public int WeightFor(ItemBaseDefinition itemBase)
+    {
+        if (TagWeights is null || TagWeights.Count == 0) return Weight;
+        int resolved = itemBase.ItemTags
+            .Where(TagWeights.ContainsKey)
+            .Select(tag => TagWeights[tag])
+            .DefaultIfEmpty(0)
+            .Max();
+        return resolved;
+    }
+}
 
 public sealed record AffixRoll(AffixDefinition Definition, int Value, bool Crafted = false);
 
@@ -245,8 +220,10 @@ public sealed record ItemInstance(
     ItemEnchantment? Enchantment = null,
     bool IsCorrupted = false,
     string CorruptionOutcome = "",
-    bool IsKeyItem = false)
+    bool IsKeyItem = false,
+    string RolledName = "")
 {
+    public string DisplayName => string.IsNullOrWhiteSpace(RolledName) ? Base.DisplayName : RolledName;
     public int PrefixCount => Affixes.Count(affix => affix.Definition.Position == AffixPosition.Prefix);
     public int SuffixCount => Affixes.Count(affix => affix.Definition.Position == AffixPosition.Suffix);
     public int ExtraSupportLinkCapacity => Affixes
@@ -279,5 +256,6 @@ public static class P1Legendary
         ItemRarity.Legendary,
         Array.Empty<AffixRoll>(),
         EchoingOathbreakerRule,
-        LinkedSocketCount: 5);
+        LinkedSocketCount: 5,
+        RolledName: "回响破誓者");
 }

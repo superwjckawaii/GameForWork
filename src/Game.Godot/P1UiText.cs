@@ -1,6 +1,7 @@
 using System.Text;
 using GameForWork.Core.P1.Items;
 using GameForWork.Core.P1.Progression;
+using GameForWork.Core.P14;
 using Godot;
 
 namespace GameForWork.GodotClient;
@@ -10,18 +11,28 @@ internal static class P1UiText
     public static string ItemTooltip(ItemInstance item)
     {
         var text = new StringBuilder();
-        text.AppendLine($"{RarityName(item.Rarity)} · {item.Base.DisplayName}");
-        text.AppendLine($"物品等级 {item.ItemLevel} · {CategoryName(item.Base.Category)}");
+        text.AppendLine($"{RarityName(item.Rarity)} · {item.DisplayName}");
+        text.AppendLine($"底材：{item.Base.DisplayName} · 物品等级 {item.ItemLevel} · {CategoryName(item.Base.Category)}");
+        text.AppendLine($"需求：等级 {item.Base.RequiredLevel} · 体魄 {item.Base.RequiredPhysique} · " +
+            $"灵巧 {item.Base.RequiredDexterity} · 精神 {item.Base.RequiredSpirit} · 能量 {item.Base.RequiredEnergy}");
         if (item.Quality > 0) text.AppendLine($"品质 +{item.Quality}%");
-        if (item.Base.Category == ItemCategory.TwoHandWeapon)
+        if (item.Base.Category is ItemCategory.TwoHandWeapon or ItemCategory.OneHandWeapon)
         {
-            text.AppendLine($"物理伤害 {item.Base.MinimumPhysicalDamage}–{item.Base.MaximumPhysicalDamage}");
+            int finalMinimum = QualityScale(item.Base.MinimumPhysicalDamage, item.Quality);
+            int finalMaximum = QualityScale(item.Base.MaximumPhysicalDamage, item.Quality);
+            text.AppendLine($"物理伤害 {finalMinimum}–{finalMaximum}（底材 {item.Base.MinimumPhysicalDamage}–{item.Base.MaximumPhysicalDamage}）");
             text.AppendLine($"攻击频率 {item.Base.AttacksPerSecondMilli / 1000.0:0.00}/秒 · 暴击 {item.Base.CriticalChanceBasisPoints / 100.0:0.0}%");
         }
 
         if (item.Base.Armor + item.Base.Evasion + item.Base.Shield > 0)
         {
-            text.AppendLine($"护甲 {item.Base.Armor} · 闪避 {item.Base.Evasion} · 护盾 {item.Base.Shield}");
+            text.AppendLine($"护甲 {QualityScale(item.Base.Armor, item.Quality)}（底材 {item.Base.ArmorMinimum}–{item.Base.ArmorMaximum}） · " +
+                $"闪避 {QualityScale(item.Base.Evasion, item.Quality)}（底材 {item.Base.EvasionMinimum}–{item.Base.EvasionMaximum}） · " +
+                $"护盾 {QualityScale(item.Base.Shield, item.Quality)}（底材 {item.Base.ShieldMinimum}–{item.Base.ShieldMaximum}）");
+        }
+        if (item.Base.BlockChanceBasisPoints > 0)
+        {
+            text.AppendLine($"基础格挡 {item.Base.BlockChanceBasisPoints / 100.0:0.#}%");
         }
 
         if (item.LinkedSocketCount > 0)
@@ -37,8 +48,19 @@ internal static class P1UiText
         foreach (AffixRoll affix in item.Affixes)
         {
             string markers = (affix.Crafted ? "（工匠）" : string.Empty) + (item.IsFractured(affix) ? "（破溃）" : string.Empty);
-            text.AppendLine($"{PositionName(affix.Definition.Position)} T{affix.Definition.Tier} {affix.Definition.DisplayName}{markers}：" +
-                Modifier(affix.Definition.ModifierKind, affix.Value));
+            string source = affix.Crafted ? "工匠" : affix.Definition.Source == "Natural" ? "自然" : affix.Definition.Source;
+            text.AppendLine($"[TIER:{affix.Definition.Tier}]{PositionName(affix.Definition.Position)} T{affix.Definition.Tier} " +
+                $"{affix.Definition.DisplayName}{markers}：{Modifier(affix.Definition.ModifierKind, affix.Value)} " +
+                $"[{affix.Definition.MinimumValue}–{affix.Definition.MaximumValue}] · 需求 ilvl {affix.Definition.MinimumItemLevel} · {source}");
+        }
+
+        if (P1FlaskRules.KindForBase(item.Base.StableId) is { } flaskKind)
+        {
+            P14FlaskDefinition flask = P14Flasks.All.Single(definition => definition.Kind == flaskKind);
+            text.AppendLine($"效果：{flask.EffectDescription}");
+            text.AppendLine($"充能：最大{flask.MaximumCharges} · 每次使用消耗{flask.ChargesPerUse}");
+            text.AppendLine("击杀充能：普通+1 · 魔法+2 · 稀有+4 · Boss+6");
+            text.AppendLine($"自动使用：{flask.AutoCondition}");
         }
 
         if (item.Enchantment is not null)
@@ -148,8 +170,20 @@ internal static class P1UiText
         ItemModifierKind.IncreasedLifeFlaskEffectBasisPoints => "生命药剂效果增加",
         ItemModifierKind.ExtraSupportLinkCapacity => "额外连接容量",
         ItemModifierKind.IncreasedManaRegenerationBasisPoints => "法力恢复增加",
+        ItemModifierKind.Dexterity => "灵巧",
+        ItemModifierKind.Energy => "能量",
+        ItemModifierKind.FireResistanceBasisPoints => "火焰抗性",
+        ItemModifierKind.ColdResistanceBasisPoints => "冰霜抗性",
+        ItemModifierKind.LightningResistanceBasisPoints => "闪电抗性",
+        ItemModifierKind.VoidResistanceBasisPoints => "虚空抗性",
+        ItemModifierKind.IncreasedMovementSpeedBasisPoints => "移动速度增加",
+        ItemModifierKind.BlockChanceBasisPoints => "格挡概率",
+        ItemModifierKind.SpellSuppressionBasisPoints => "法术压制概率",
+        ItemModifierKind.FlatLifeRegeneration => "每秒生命恢复",
         _ => kind.ToString(),
     };
+
+    private static int QualityScale(int value, int quality) => value * (100 + Math.Clamp(quality, 0, 20)) / 100;
 
     private static string PassiveEffectName(PassiveEffectKind kind) => kind switch
     {
@@ -189,7 +223,7 @@ internal static class P1UiText
         ItemCategory.Belt => "腰带",
         ItemCategory.Amulet => "项链",
         ItemCategory.Ring => "戒指",
-        ItemCategory.LifeFlask => "生命药剂",
+        ItemCategory.LifeFlask => "药剂",
         _ => category.ToString(),
     };
 

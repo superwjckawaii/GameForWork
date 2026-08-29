@@ -55,8 +55,6 @@ public partial class P2Dashboard : VBoxContainer
     private Label? _characterStatus;
     private Label? _storageStatus;
     private Label? _selectedPassive;
-    private Label? _skillSummary;
-    private Label? _activeSkillSummary;
     private Label? _craftingStatus;
     private string _storageSearch = string.Empty;
     private RichTextLabel? _history;
@@ -79,6 +77,7 @@ public partial class P2Dashboard : VBoxContainer
     private P9TownPanel? _townPanel;
     private P10EndgamePanel? _endgamePanel;
     private P18AscendancyPanel? _ascendancyPanel;
+    private P19AffixPanel? _affixPanel;
     private OptionButton? _characterSelector;
     private PopupMenu? _itemMenu;
     private ConfirmationDialog? _confirmDialog;
@@ -403,6 +402,13 @@ public partial class P2Dashboard : VBoxContainer
         _characterModes.AddChild(_passiveMode);
         _aiMode = BuildAiMode();
         _characterModes.AddChild(_aiMode);
+        _affixPanel = new P19AffixPanel
+        {
+            Name = "词缀图鉴",
+            SizeFlagsHorizontal = SizeFlags.ExpandFill,
+            SizeFlagsVertical = SizeFlags.ExpandFill,
+        };
+        _characterModes.AddChild(_affixPanel);
         _characterModes.TabChanged += index =>
         {
             if (_skillMode is not null && _characterModes.GetTabControl((int)index) == _skillMode)
@@ -493,6 +499,9 @@ public partial class P2Dashboard : VBoxContainer
         AddButton(batch, "批量分解", () => ConfirmBatch(P16BatchAction.Dismantle));
         AddButton(batch, "按连接数整理", () => SortItems(P16ItemSortMode.LinkedSockets));
         AddButton(batch, "按稀有度整理", () => SortItems(P16ItemSortMode.Rarity));
+        AddButton(batch, "按物等整理", () => SortItems(P16ItemSortMode.ItemLevel));
+        AddButton(batch, "按底材整理", () => SortItems(P16ItemSortMode.Base));
+        AddButton(batch, "按最高T级整理", () => SortItems(P16ItemSortMode.HighestAffixTier));
 
         body.AddChild(new Label { Text = "装备制作与附魔已集中到“金属仓与附魔”页；选择物品后切换该页操作。" });
         _craftingStatus = new Label { AutowrapMode = TextServer.AutowrapMode.WordSmart };
@@ -523,11 +532,6 @@ public partial class P2Dashboard : VBoxContainer
     private Control BuildSkillMode()
     {
         VBoxContainer page = Page("技能");
-        page.AddChild(new Label { Text = "技能石拥有独立实例、等级和经验；主角可配置，佣兵由自主成长决定。" });
-        _skillSummary = new Label { AutowrapMode = TextServer.AutowrapMode.WordSmart };
-        page.AddChild(_skillSummary);
-        _activeSkillSummary = new Label { AutowrapMode = TextServer.AutowrapMode.WordSmart };
-        page.AddChild(_activeSkillSummary);
         _skillStonePanel = new P2SkillStonePanel();
         _skillStonePanel.SizeFlagsVertical = SizeFlags.ExpandFill;
         _skillStonePanel.Initialize(RequireSession, Changed);
@@ -1114,7 +1118,15 @@ public partial class P2Dashboard : VBoxContainer
         P16BatchScope scope = (P16BatchScope)(_batchScope?.Selected ?? (int)P16BatchScope.Storage);
         if (scope is P16BatchScope.Storage or P16BatchScope.Both) session.World.Storage.Sort(mode);
         if (scope is P16BatchScope.SortingBag or P16BatchScope.Both) session.Management.SortSortingBag(mode);
-        Changed($"{(scope == P16BatchScope.Both ? "整理背包与仓库" : scope == P16BatchScope.Storage ? "仓库" : "整理背包")}已按{(mode == P16ItemSortMode.LinkedSockets ? "连接数" : "稀有度")}整理。");
+        string modeName = mode switch
+        {
+            P16ItemSortMode.LinkedSockets => "连接数",
+            P16ItemSortMode.Rarity => "稀有度",
+            P16ItemSortMode.ItemLevel => "物品等级",
+            P16ItemSortMode.Base => "底材",
+            _ => "最高词缀T级",
+        };
+        Changed($"{(scope == P16BatchScope.Both ? "整理背包与仓库" : scope == P16BatchScope.Storage ? "仓库" : "整理背包")}已按{modeName}整理。");
     }
 
     private static string RarityLabel(ItemRarity rarity) => rarity switch
@@ -1440,30 +1452,13 @@ public partial class P2Dashboard : VBoxContainer
             _equipmentGrid!.SetSlots(slots);
             _passiveTree!.SetState(_session.Passives.Allocated, _session.World.Hero.Progression.EarnedPassivePoints);
             _ascendancyPanel?.Refresh();
+            _affixPanel?.Refresh();
             bool heroSelected = _selectedCharacter == P2CharacterKind.Hero;
             foreach (BaseButton control in _heroOnlyControls)
             {
                 control.Disabled = !heroSelected;
             }
 
-            _skillSummary!.Text = heroSelected
-                ? $"技能石 {_session.Management.SkillStones.Count} · 已安装 {_session.Management.InstalledSkillStoneIds.Count} · " +
-                  $"仓库 {_session.Management.UninstalledSkillStones.Count} · 当前方案 {_session.Management.ActiveSkillScheme}"
-                : $"佣兵技能、辅助、天赋与 AI 由自主成长生成，玩家不可修改。\n{_session.World.Mercenaries.Build.AiSummary}";
-            _activeSkillSummary!.Text = heroSelected
-                ? "孔组：" + string.Join(" · ", _session.Management.SkillLinks
-                    .OrderBy(link => link.Priority)
-                    .Select(link =>
-                    {
-                        if (string.IsNullOrEmpty(link.ActiveStoneInstanceId))
-                        {
-                            return $"{_session.GetSkillChains().FirstOrDefault(item => item.StableId == link.ChainId)?.DisplayName ?? "孔组"} 等待主动";
-                        }
-                        SkillStoneInstance active = _session.Management.SkillStones.Single(stone => stone.InstanceId == link.ActiveStoneInstanceId);
-                        P5SkillChainDefinition? chain = _session.GetSkillChains().FirstOrDefault(item => item.StableId == link.ChainId);
-                        return $"{chain?.DisplayName ?? "未装配"} {active.Definition.DisplayName}+{link.SupportStoneInstanceIds.Count}";
-                    }))
-                : "佣兵的主动技能优先级由其 AI 自主配置。";
             ItemInstance? craftItem = ItemAt(_craftContainer, _craftIndex);
             _craftingStatus!.Text =
                 $"金属库存：淬刃铁 {economy.MetalAmount(MetalCurrencyKind.TemperingIron)} · " +

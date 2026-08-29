@@ -56,9 +56,9 @@ public static class CharacterBuildAssembler
         PassiveBuildModifiers passive = passiveTree.CalculateModifiers();
         var attributes = new CharacterAttributes(
             checked(baseAttributes.Physique + item.Physique),
-            baseAttributes.Dexterity,
+            checked(baseAttributes.Dexterity + item.Dexterity),
             checked(baseAttributes.Spirit + item.Spirit),
-            baseAttributes.Energy);
+            checked(baseAttributes.Energy + item.Energy));
         var sheet = new CharacterSheet(
             level,
             attributes,
@@ -69,7 +69,15 @@ public static class CharacterBuildAssembler
             checked(item.IncreasedArmorBasisPoints + passive.IncreasedArmorBasisPoints),
             item.IncreasedEvasionBasisPoints,
             item.IncreasedShieldBasisPoints,
-            checked(item.IncreasedManaRegenerationBasisPoints + passive.IncreasedManaRegenerationBasisPoints));
+            checked(item.IncreasedManaRegenerationBasisPoints + passive.IncreasedManaRegenerationBasisPoints),
+            item.FireResistanceBasisPoints,
+            item.ColdResistanceBasisPoints,
+            item.LightningResistanceBasisPoints,
+            item.VoidResistanceBasisPoints,
+            item.BlockChanceBasisPoints,
+            item.SpellSuppressionBasisPoints,
+            item.FlatLifeRegeneration,
+            item.IncreasedMovementSpeedBasisPoints);
         SkillUseProfile heavyStrike = SkillRules.BuildHeavyStrike(
             heavyStrikeConfiguration,
             weapon,

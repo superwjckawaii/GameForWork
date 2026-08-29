@@ -213,7 +213,7 @@ public static class P9CraftingRules
         int roll = random.NextBasisPoints();
         if (roll < 4_000)
         {
-            int quality = Math.Min(30, item.Quality + 5);
+            int quality = Math.Min(20, item.Quality + 5);
             return Ok(item with { IsCorrupted = true, CorruptionOutcome = "empowered", Quality = quality },
                 MetalCurrencyKind.CorruptionIron, $"强力腐化：品质提升至 {quality}%");
         }

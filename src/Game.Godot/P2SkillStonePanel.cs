@@ -28,7 +28,6 @@ public partial class P2SkillStonePanel : VBoxContainer
     {
         _session = session;
         _changed = changed;
-        AddChild(new Label { Text = "技能石背包与装备孔组 · 拖曳装入/换孔 · 右键卸下 · 悬浮查看完整说明", AutowrapMode = TextServer.AutowrapMode.WordSmart });
         SizeFlagsVertical = SizeFlags.ExpandFill;
         _wideColumns = new HBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill, SizeFlagsVertical = SizeFlags.ExpandFill };
         _wideColumns.AddThemeConstantOverride("separation", 12);

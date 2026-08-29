@@ -13,15 +13,24 @@ public enum P16ItemSortMode
 {
     LinkedSockets,
     Rarity,
+    ItemLevel,
+    Base,
+    HighestAffixTier,
 }
 
 public static class P16ItemSorting
 {
     public static int Compare(ItemInstance left, ItemInstance right, P16ItemSortMode mode)
     {
-        int primary = mode == P16ItemSortMode.LinkedSockets
-            ? right.LinkedSocketCount.CompareTo(left.LinkedSocketCount)
-            : right.Rarity.CompareTo(left.Rarity);
+        int primary = mode switch
+        {
+            P16ItemSortMode.LinkedSockets => right.LinkedSocketCount.CompareTo(left.LinkedSocketCount),
+            P16ItemSortMode.Rarity => right.Rarity.CompareTo(left.Rarity),
+            P16ItemSortMode.ItemLevel => right.ItemLevel.CompareTo(left.ItemLevel),
+            P16ItemSortMode.Base => string.Compare(left.Base.DisplayName, right.Base.DisplayName, StringComparison.Ordinal),
+            P16ItemSortMode.HighestAffixTier => BestTier(left).CompareTo(BestTier(right)),
+            _ => 0,
+        };
         if (primary != 0) return primary;
         int secondary = mode == P16ItemSortMode.LinkedSockets
             ? right.Rarity.CompareTo(left.Rarity)
@@ -30,6 +39,8 @@ public static class P16ItemSorting
         int level = right.ItemLevel.CompareTo(left.ItemLevel);
         return level != 0 ? level : string.Compare(left.Base.DisplayName, right.Base.DisplayName, StringComparison.Ordinal);
     }
+
+    private static int BestTier(ItemInstance item) => item.Affixes.Select(affix => affix.Definition.Tier).DefaultIfEmpty(int.MaxValue).Min();
 }
 
 public sealed record LootFilterRule(
@@ -49,7 +60,10 @@ public sealed record LootFilterRule(
     ItemCategory? Category = null,
     int? MinimumItemLevel = null,
     int? MaximumItemLevel = null,
-    int? MaximumLinkedSockets = null)
+    int? MaximumLinkedSockets = null,
+    string? BaseTag = null,
+    int? MinimumAffixTier = null,
+    int? MaximumAffixTier = null)
 {
     public bool Matches(ItemInstance item)
     {
@@ -58,6 +72,7 @@ public sealed record LootFilterRule(
             MaximumRarity is not null && item.Rarity > MaximumRarity ||
             Category is not null && item.Base.Category != Category ||
             BaseStableId is not null && item.Base.StableId != BaseStableId ||
+            BaseTag is not null && !item.Base.ItemTags.Contains(BaseTag, StringComparer.Ordinal) ||
             Slot is not null && item.Base.PrimarySlot != Slot ||
             MinimumItemLevel is not null && item.ItemLevel < MinimumItemLevel ||
             MaximumItemLevel is not null && item.ItemLevel > MaximumItemLevel ||
@@ -69,14 +84,16 @@ public sealed record LootFilterRule(
             return false;
         }
 
-        if (AffixFamilyId is null)
+        if (AffixFamilyId is null && MinimumAffixTier is null && MaximumAffixTier is null)
         {
             return true;
         }
 
         return item.Affixes.Any(affix =>
-            affix.Definition.StableFamilyId == AffixFamilyId &&
-            (MinimumAffixValue is null || affix.Value >= MinimumAffixValue));
+            (AffixFamilyId is null || affix.Definition.StableFamilyId == AffixFamilyId) &&
+            (MinimumAffixValue is null || affix.Value >= MinimumAffixValue) &&
+            (MinimumAffixTier is null || affix.Definition.Tier >= MinimumAffixTier) &&
+            (MaximumAffixTier is null || affix.Definition.Tier <= MaximumAffixTier));
     }
 }
 

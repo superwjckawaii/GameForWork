@@ -19,7 +19,17 @@ public sealed record EquipmentModifiers(
     int IncreasedEvasionBasisPoints,
     int IncreasedShieldBasisPoints,
     int IncreasedLifeFlaskEffectBasisPoints,
-    int IncreasedManaRegenerationBasisPoints);
+    int IncreasedManaRegenerationBasisPoints,
+    int Dexterity = 0,
+    int Energy = 0,
+    int FireResistanceBasisPoints = 0,
+    int ColdResistanceBasisPoints = 0,
+    int LightningResistanceBasisPoints = 0,
+    int VoidResistanceBasisPoints = 0,
+    int IncreasedMovementSpeedBasisPoints = 0,
+    int BlockChanceBasisPoints = 0,
+    int SpellSuppressionBasisPoints = 0,
+    int FlatLifeRegeneration = 0);
 
 public sealed record EquipmentSummary(
     DefensiveEquipment Defense,
@@ -28,7 +38,8 @@ public sealed record EquipmentSummary(
     int SupportLinkCapacity,
     WeaponProfile? Weapon,
     LegendaryRule? WeaponLegendaryRule,
-    bool HasShield = false);
+    bool HasShield = false,
+    int BaseBlockChanceBasisPoints = 0);
 
 public sealed class EquipmentLoadout
 {
@@ -121,7 +132,17 @@ public sealed class EquipmentLoadout
             sums[(int)ItemModifierKind.IncreasedEvasionBasisPoints],
             sums[(int)ItemModifierKind.IncreasedShieldBasisPoints],
             sums[(int)ItemModifierKind.IncreasedLifeFlaskEffectBasisPoints],
-            sums[(int)ItemModifierKind.IncreasedManaRegenerationBasisPoints]);
+            sums[(int)ItemModifierKind.IncreasedManaRegenerationBasisPoints],
+            sums[(int)ItemModifierKind.Dexterity],
+            sums[(int)ItemModifierKind.Energy],
+            sums[(int)ItemModifierKind.FireResistanceBasisPoints],
+            sums[(int)ItemModifierKind.ColdResistanceBasisPoints],
+            sums[(int)ItemModifierKind.LightningResistanceBasisPoints],
+            sums[(int)ItemModifierKind.VoidResistanceBasisPoints],
+            sums[(int)ItemModifierKind.IncreasedMovementSpeedBasisPoints],
+            sums[(int)ItemModifierKind.BlockChanceBasisPoints],
+            sums[(int)ItemModifierKind.SpellSuppressionBasisPoints],
+            sums[(int)ItemModifierKind.FlatLifeRegeneration]);
         ItemInstance? weaponItem = _items.GetValueOrDefault(EquipmentSlot.MainHand);
         return new EquipmentSummary(
             new DefensiveEquipment(armor, evasion, shield),
@@ -130,10 +151,11 @@ public sealed class EquipmentLoadout
             equipped.Sum(item => item.Base.SupportLinkCapacity + item.ExtraSupportLinkCapacity),
             weaponItem?.Base.Category is ItemCategory.TwoHandWeapon or ItemCategory.OneHandWeapon ? QualityWeapon(weaponItem) : null,
             weaponItem?.LegendaryRule,
-            _items.GetValueOrDefault(EquipmentSlot.OffHand)?.Base.Category == ItemCategory.Shield);
+            _items.GetValueOrDefault(EquipmentSlot.OffHand)?.Base.Category == ItemCategory.Shield,
+            equipped.Sum(item => item.Base.BlockChanceBasisPoints));
     }
 
-    private static int QualityScale(int value, int quality) => checked(value * (100 + Math.Clamp(quality, 0, 30)) / 100);
+    private static int QualityScale(int value, int quality) => checked(value * (100 + Math.Clamp(quality, 0, 20)) / 100);
 
     private static WeaponProfile QualityWeapon(ItemInstance item)
     {

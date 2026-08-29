@@ -106,7 +106,7 @@ public sealed class P1BuildAndItemTests
     [Theory]
     [InlineData(ItemRarity.Basic, 0, 0)]
     [InlineData(ItemRarity.Magic, 1, 2)]
-    [InlineData(ItemRarity.Rare, 2, 4)]
+    [InlineData(ItemRarity.Rare, 4, 6)]
     public void GeneratedAffixCountsRespectNaturalDropRules(ItemRarity rarity, int minimum, int maximum)
     {
         for (ulong seed = 1; seed <= 20; seed++)
@@ -126,23 +126,20 @@ public sealed class P1BuildAndItemTests
         for (ulong seed = 1; seed <= 100; seed++)
         {
             ItemInstance lowLevel = ItemGenerator.Generate("core.base.crude_chainmail", 1, ItemRarity.Rare, seed);
-            Assert.All(lowLevel.Affixes, affix => Assert.Equal(2, affix.Definition.Tier));
-            Assert.DoesNotContain(
-                lowLevel.Affixes,
-                affix => affix.Definition.ModifierKind is ItemModifierKind.IncreasedEvasionBasisPoints or
-                    ItemModifierKind.IncreasedShieldBasisPoints);
+            Assert.All(lowLevel.Affixes, affix => Assert.True(affix.Definition.MinimumItemLevel <= 1));
+            Assert.All(lowLevel.Affixes, affix => Assert.True(affix.Definition.Supports(lowLevel.Base)));
         }
 
-        Assert.Contains(P1Affixes.For(ItemCategory.BodyArmor, 6), affix => affix.Tier == 1);
+        Assert.Contains(P1Affixes.For(ItemCategory.BodyArmor, 120), affix => affix.Tier == 1);
     }
 
     [Fact]
-    public void IronRingImplicitRollIsOneOrTwo()
+    public void IronRingUsesImportedPhysicalImplicitRange()
     {
         for (ulong seed = 1; seed <= 20; seed++)
         {
             ItemInstance ring = ItemGenerator.Generate("core.base.iron_ring", 1, ItemRarity.Basic, seed);
-            Assert.InRange(ring.ImplicitValue, 1, 2);
+            Assert.InRange(ring.ImplicitValue, 1, 4);
         }
     }
 
@@ -202,7 +199,7 @@ public sealed class P1BuildAndItemTests
             passives,
             new SkillConfiguration(P1SkillIds.HeavyStrike, SkillSupport.None));
 
-        Assert.Equal(116, build.Sheet.MaximumLife().Value);
+        Assert.InRange(build.Sheet.MaximumLife().Value, 128, 138);
         Assert.Equal(500, build.IncreasedAttackDamageBasisPoints);
         Assert.NotNull(build.Equipment.Weapon);
     }
