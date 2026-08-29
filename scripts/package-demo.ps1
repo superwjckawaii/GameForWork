@@ -10,11 +10,14 @@ $projectPath = Join-Path $repositoryRoot 'src\Game.Godot'
 $artifactsRoot = Join-Path $repositoryRoot 'artifacts'
 $outputDirectory = Join-Path $artifactsRoot "GameForWork-v$Version"
 $archivePath = Join-Path $artifactsRoot "GameForWork-v$Version-win-x64.zip"
+. (Join-Path $PSScriptRoot 'native-tools.ps1')
+$dotnetBinary = Resolve-DotnetBinary
+Set-DotnetEnvironment -DotnetBinary $dotnetBinary
+$GodotPath = Resolve-GodotBinary -RequestedPath $GodotPath
 
-if (-not $GodotPath) {
-    $GodotPath = 'D:\OtherTools\Godot_v4.7.2-stable_mono_win64\Godot_v4.7.2-stable_mono_win64\Godot_v4.7.2-stable_mono_win64_console.exe'
-}
-if (-not (Test-Path -LiteralPath $GodotPath)) { throw "Godot executable not found: $GodotPath" }
+& (Join-Path $repositoryRoot 'scripts\verify_p21_assets.ps1') -RepositoryRoot $repositoryRoot
+Invoke-NativeChecked -FilePath $GodotPath -Arguments @('--headless', '--path', $projectPath, '--editor', '--quit') `
+    -Label 'Godot asset import before release export' -RejectGodotErrors
 
 New-Item -ItemType Directory -Path $artifactsRoot -Force | Out-Null
 if (Test-Path -LiteralPath $outputDirectory) {
@@ -27,13 +30,9 @@ if (Test-Path -LiteralPath $outputDirectory) {
 if (Test-Path -LiteralPath $archivePath) { Remove-Item -LiteralPath $archivePath -Force }
 New-Item -ItemType Directory -Path $outputDirectory -Force | Out-Null
 
-$exportOutput = & $GodotPath --headless --path $projectPath --export-release 'Windows Portable x64' (Join-Path $outputDirectory 'GameForWork.exe') 2>&1
-$exportExitCode = $LASTEXITCODE
-$exportOutput | ForEach-Object { Write-Host $_ }
-$exportText = $exportOutput | Out-String
-if ($exportExitCode -ne 0 -or $exportText -match '(?m)^ERROR:') {
-    throw "Godot release export failed or emitted an error (exit code $exportExitCode)."
-}
+Invoke-NativeChecked -FilePath $GodotPath -Arguments @('--headless', '--path', $projectPath, '--export-release',
+    'Windows Portable x64', (Join-Path $outputDirectory 'GameForWork.exe')) `
+    -Label 'Godot Windows release export' -RejectGodotErrors
 $executable = Join-Path $outputDirectory 'GameForWork.exe'
 if (-not (Test-Path -LiteralPath $executable) -or (Get-Item -LiteralPath $executable).Length -lt 1MB) {
     throw 'Godot release export did not create a valid executable.'
@@ -46,4 +45,8 @@ if (Test-Path -LiteralPath $releaseNotes) {
     Copy-Item -LiteralPath $releaseNotes -Destination (Join-Path $outputDirectory 'VERSION.md')
 }
 Compress-Archive -Path (Join-Path $outputDirectory '*') -DestinationPath $archivePath -CompressionLevel Optimal
+$archive = Get-Item -LiteralPath $archivePath
+if ($archive.Length -lt 50MB) { throw "Portable ZIP is unexpectedly small: $($archive.Length) bytes." }
+$archiveHash = (Get-FileHash -LiteralPath $archivePath -Algorithm SHA256).Hash
 Write-Host "[package] $archivePath"
+Write-Host "[package] bytes=$($archive.Length) sha256=$archiveHash"

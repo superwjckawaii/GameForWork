@@ -16,7 +16,7 @@
 .\scripts\package-demo.ps1
 ```
 
-验证脚本依次执行依赖恢复、编译、单元测试、Godot 无界面导入和主场景启动检查。若 .NET SDK 或 Godot 不在已约定的本机位置，可分别通过 `DOTNET_BIN` 或 `GODOT_BIN` 指定可执行程序完整路径。
+验证脚本依次执行素材审计、依赖恢复、编译、单元测试、Godot 无界面导入和主场景启动检查。Godot 即使返回退出码 0，只要输出 `ERROR:`、脚本错误或结构化 Error 日志，门禁仍会失败。若 .NET SDK 或 Godot 不在已约定的本机位置，可分别通过 `DOTNET_BIN` 或 `GODOT_BIN` 指定可执行程序完整路径。
 
 `stability.ps1` 还支持 `Visible` 与 `Tray` 两种长稳模式，默认运行两小时；`package-demo.ps1` 使用 Godot 的 Windows .NET 导出模板生成自包含 PCK 的便携 ZIP，输出到忽略版本控制的 `artifacts/`。
 

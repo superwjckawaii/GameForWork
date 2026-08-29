@@ -19,19 +19,6 @@ jobs:
         with:
           dotnet-version: 8.0.x
 
-      - name: Restore
-        run: dotnet restore GameForWork.sln
-
-      - name: Audit P21 pixel assets
-        shell: pwsh
-        run: ./scripts/verify_p21_assets.ps1
-
-      - name: Build Release
-        run: dotnet build GameForWork.sln --no-restore --configuration Release
-
-      - name: Test Release
-        run: dotnet test src/Game.Tests/Game.Tests.csproj --no-build --configuration Release
-
       - name: Download Godot 4.7.2 Mono
         shell: pwsh
         run: |
@@ -43,14 +30,6 @@ jobs:
           if (-not $console) { throw 'Godot console executable was not found in the archive.' }
           "GODOT_BIN=$($console.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append
 
-      - name: Godot import
+      - name: Run unified Release gate
         shell: pwsh
-        run: |
-          & $env:GODOT_BIN --headless --path src/Game.Godot --editor --quit
-          if ($LASTEXITCODE -ne 0) { throw "Godot import failed: $LASTEXITCODE" }
-
-      - name: Godot startup
-        shell: pwsh
-        run: |
-          & $env:GODOT_BIN --headless --path src/Game.Godot --quit-after 10
-          if ($LASTEXITCODE -ne 0) { throw "Godot startup failed: $LASTEXITCODE" }
+        run: .\scripts\verify.ps1 -Configuration Release
