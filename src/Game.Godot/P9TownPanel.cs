@@ -17,7 +17,9 @@ public partial class P11TownMap : Control
         ClipContents = true;
         var background = new TextureRect
         {
-            Texture = GD.Load<Texture2D>("res://assets/p9/town/p9-town-district.png"),
+            Texture = GD.Load<Texture2D>(ResourceLoader.Exists("res://assets/p21/town/p21-town-district.png")
+                ? "res://assets/p21/town/p21-town-district.png"
+                : "res://assets/p9/town/p9-town-district.png"),
             ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,
             StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered,
             MouseFilter = MouseFilterEnum.Ignore,
@@ -63,6 +65,7 @@ public partial class P9TownPanel : VBoxContainer
     private Label? _summary;
     private Label? _tavernRefresh;
     private Texture2D? _mercenaryAtlas;
+    private bool _p21MercenaryAtlas;
     private string _selectedMember = string.Empty;
     private string _signature = string.Empty;
 
@@ -70,7 +73,11 @@ public partial class P9TownPanel : VBoxContainer
     {
         _session = session;
         _changed = changed;
-        _mercenaryAtlas = GD.Load<Texture2D>("res://assets/p9/characters/p9-mercenary-atlas.png");
+        const string p21Actors = "res://assets/p21/characters/p21-actor-animation.png";
+        _p21MercenaryAtlas = ResourceLoader.Exists(p21Actors);
+        _mercenaryAtlas = GD.Load<Texture2D>(_p21MercenaryAtlas
+            ? p21Actors
+            : "res://assets/p9/characters/p9-mercenary-atlas.png");
         var top = new HBoxContainer();
         AddChild(top);
         top.AddChild(new Label { Text = "固定城区 · 城镇方针" });
@@ -295,11 +302,21 @@ public partial class P9TownPanel : VBoxContainer
         AtlasTexture? texture = null;
         if (_mercenaryAtlas is not null)
         {
-            float width = _mercenaryAtlas.GetWidth() / 4f;
+            Rect2 region;
+            if (_p21MercenaryAtlas)
+            {
+                int rig = (int)archetype + 1;
+                region = P21ArtAtlas.AnimationCell(0, rig * 4, 48, 64);
+            }
+            else
+            {
+                float width = _mercenaryAtlas.GetWidth() / 4f;
+                region = new Rect2((int)archetype * width, 0, width, _mercenaryAtlas.GetHeight());
+            }
             texture = new AtlasTexture
             {
                 Atlas = _mercenaryAtlas,
-                Region = new Rect2((int)archetype * width, 0, width, _mercenaryAtlas.GetHeight()),
+                Region = region,
                 FilterClip = true,
             };
         }

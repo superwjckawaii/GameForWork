@@ -1,0 +1,57 @@
+{
+  "version": 1,
+  "style": "original-low-density-dark-fantasy-pixel-art",
+  "animation": {
+    "actions": {
+      "idle": 4,
+      "move": 6,
+      "attack": 6,
+      "cast": 6,
+      "hit": 3,
+      "death": 6
+    },
+    "columns": 31,
+    "directions": [
+      "down",
+      "left",
+      "right",
+      "up"
+    ],
+    "actorCell": [
+      48,
+      64
+    ],
+    "enemyCell": [
+      48,
+      64
+    ],
+    "bossCell": [
+      72,
+      80
+    ],
+    "anchor": "bottom-center"
+  },
+  "counts": {
+    "actorRigs": 5,
+    "enemyBodyRigs": 16,
+    "enemyTypes": 48,
+    "bosses": 12,
+    "itemBases": 80,
+    "uniqueItems": 25,
+    "skillGems": 78,
+    "metalCurrencies": 19,
+    "jewels": 3,
+    "regions": 12,
+    "buildings": 7,
+    "vfx": 48
+  },
+  "sources": [
+    "actor-master.png",
+    "boss-master.png",
+    "equipment-master.png",
+    "skill-gem-master.png",
+    "vfx-master.png",
+    "region-master.png",
+    "town-master.png"
+  ]
+}

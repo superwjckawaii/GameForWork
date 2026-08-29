@@ -106,7 +106,8 @@ public sealed record P4EnemyFrame(
     int Life,
     int MaximumLife,
     P4Point Position,
-    string TargetId);
+    string TargetId,
+    IReadOnlyList<EliteAffix>? EliteAffixes = null);
 
 public sealed record P4AllyFrame(string EntityId, P4Point Position, bool Frontline);
 
@@ -1389,7 +1390,8 @@ public sealed class P4SpatialCombatRunner
                 enemy.Life,
                 enemy.MaximumLife,
                 enemy.Position,
-                "hero")).ToArray(),
+                "hero",
+                enemy.Scaled.EliteAffixes)).ToArray(),
             BuildAllies(heroPosition, partySize, frontlineCount)));
     }
 

@@ -24,4 +24,5 @@
 - [P20 掉落公式与经济规格](v0.2/P20_SPECIFICATION.md)
 - [P20 经济蒙特卡洛审计](v0.2/P20_ECONOMY_AUDIT.md)
 - [P20.5 主天赋树 V2 规格](v0.2/P20_5_PASSIVE_TREE_SPECIFICATION.md)
-- 后续 P21～P22 的阶段规格在进入对应阶段时建立于 `v0.2/`。
+- [P21 像素美术、逐帧动画与稳定图集规格](v0.2/P21_SPECIFICATION.md)
+- 后续 P22 的阶段规格在进入对应阶段时建立于 `v0.2/`。

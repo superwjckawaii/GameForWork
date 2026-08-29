@@ -23,11 +23,13 @@ public partial class P2SkillStonePanel : VBoxContainer
     private bool _readOnly;
     private LineEdit? _search;
     private OptionButton? _kindFilter;
+    private P21ArtAtlas? _art;
 
     public void Initialize(Func<P1GameSession> session, Action<string> changed)
     {
         _session = session;
         _changed = changed;
+        _art = new P21ArtAtlas();
         SizeFlagsVertical = SizeFlags.ExpandFill;
         _wideColumns = new HBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill, SizeFlagsVertical = SizeFlags.ExpandFill };
         _wideColumns.AddThemeConstantOverride("separation", 12);
@@ -108,11 +110,17 @@ public partial class P2SkillStonePanel : VBoxContainer
         foreach (SkillStoneInstance stone in stones)
         {
             Color stoneColor = P7SkillStoneVisual.ColorFor(stone.Definition.StableId);
+            Texture2D? stoneIcon = _art?.SkillIcon(stone.Definition.StableId);
             var cell = new P7SkillStoneCell
             {
                 StoneInstanceId = stone.InstanceId,
                 StoneColor = stoneColor,
-                Text = stone.Definition.Kind == SkillStoneKind.Active ? "◆" : "◇",
+                Icon = stoneIcon,
+                Text = stoneIcon is null
+                    ? stone.Definition.Kind == SkillStoneKind.Active ? "◆" : "◇"
+                    : string.Empty,
+                ExpandIcon = true,
+                IconAlignment = HorizontalAlignment.Center,
                 TooltipText = P7SkillTooltip.Build(stone, "技能石背包"),
                 CustomMinimumSize = new Vector2(44, 44),
             };
@@ -141,11 +149,17 @@ public partial class P2SkillStonePanel : VBoxContainer
                 SkillStoneInstance? stone = string.IsNullOrEmpty(sockets[index]) ? null : management.SkillStones.FirstOrDefault(item => item.InstanceId == sockets[index]);
                 hasActive |= stone?.Definition.Kind == SkillStoneKind.Active;
                 Color stoneColor = stone is null ? new Color("81786b") : P7SkillStoneVisual.ColorFor(stone.Definition.StableId);
+                Texture2D? stoneIcon = stone is null ? null : _art?.SkillIcon(stone.Definition.StableId);
                 var socket = new P6SkillSocketZone
                 {
                     Panel = this, ChainId = chain.StableId, SocketIndex = index, StoneInstanceId = stone?.InstanceId ?? string.Empty,
                     StoneColor = stoneColor,
-                    Text = stone is null ? "○" : stone.Definition.Kind == SkillStoneKind.Active ? "◆" : "◇",
+                    Icon = stoneIcon,
+                    Text = stone is null ? "○" : stoneIcon is null
+                        ? stone.Definition.Kind == SkillStoneKind.Active ? "◆" : "◇"
+                        : string.Empty,
+                    ExpandIcon = true,
+                    IconAlignment = HorizontalAlignment.Center,
                     TooltipText = stone is null ? $"空连接孔 {index + 1}\n从左侧技能石背包拖入" : P7SkillTooltip.Build(stone, $"{chain.DisplayName} · 孔 {index + 1}") + "\n右键卸下",
                     CustomMinimumSize = new Vector2(48, 44),
                 };
@@ -320,7 +334,7 @@ public partial class P7SkillStoneCell : Button
     public Color StoneColor { get; set; } = Colors.White;
     public override Variant _GetDragData(Vector2 atPosition)
     {
-        SetDragPreview(P7SkillStoneVisual.DragPreview(Text, StoneColor));
+        SetDragPreview(P7SkillStoneVisual.DragPreview(Icon, Text, StoneColor));
         return Variant.From($"p2-skill|{StoneInstanceId}");
     }
 }
@@ -335,7 +349,7 @@ public partial class P6SkillSocketZone : Button
     public override Variant _GetDragData(Vector2 atPosition)
     {
         if (string.IsNullOrEmpty(StoneInstanceId)) return default;
-        SetDragPreview(P7SkillStoneVisual.DragPreview(Text, StoneColor));
+        SetDragPreview(P7SkillStoneVisual.DragPreview(Icon, Text, StoneColor));
         return Variant.From($"p2-skill|{StoneInstanceId}");
     }
     public override bool _CanDropData(Vector2 atPosition, Variant data) => data.VariantType == Variant.Type.String && data.AsString().StartsWith("p2-skill|", StringComparison.Ordinal);
@@ -363,7 +377,7 @@ internal static class P7SkillStoneVisual
         return Color.FromHsv(hash % 360 / 360f, .58f, .95f);
     }
 
-    public static Control DragPreview(string glyph, Color color)
+    public static Control DragPreview(Texture2D? icon, string glyph, Color color)
     {
         var panel = new PanelContainer
         {
@@ -376,14 +390,22 @@ internal static class P7SkillStoneVisual
             BorderWidthLeft = 2, BorderWidthTop = 2, BorderWidthRight = 2, BorderWidthBottom = 2,
             CornerRadiusTopLeft = 10, CornerRadiusTopRight = 10, CornerRadiusBottomLeft = 10, CornerRadiusBottomRight = 10,
         });
-        var label = new Label
+        Control content = icon is null ? new Label
         {
             Text = glyph, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center,
             MouseFilter = Control.MouseFilterEnum.Ignore,
+        } : new TextureRect
+        {
+            Texture = icon, ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,
+            StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered,
+            MouseFilter = Control.MouseFilterEnum.Ignore,
         };
-        label.AddThemeColorOverride("font_color", color.Lightened(.18f));
-        label.AddThemeFontSizeOverride("font_size", 24);
-        panel.AddChild(label);
+        if (content is Label label)
+        {
+            label.AddThemeColorOverride("font_color", color.Lightened(.18f));
+            label.AddThemeFontSizeOverride("font_size", 24);
+        }
+        panel.AddChild(content);
         return panel;
     }
 }

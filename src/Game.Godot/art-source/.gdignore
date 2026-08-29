@@ -1,0 +1,2 @@
+# ImageGen masters are source material for the offline P21 build pipeline.
+# Godot only imports the production atlases under assets/p21.

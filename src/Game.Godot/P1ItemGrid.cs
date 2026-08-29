@@ -11,7 +11,8 @@ public partial class P1ItemGrid : GridContainer
     private IReadOnlyList<int> _externalIndices = [];
     private bool _filtered;
     private int _selectedIndex = -1;
-    private Texture2D? _iconAtlas;
+    private P21ArtAtlas? _art;
+    private readonly Dictionary<string, Texture2D?> _iconCache = new(StringComparer.Ordinal);
     private string _contentSignature = string.Empty;
 
     public event Action<int>? ItemSelected;
@@ -32,12 +33,8 @@ public partial class P1ItemGrid : GridContainer
 
     public override void _Ready()
     {
-        const string path = "res://assets/p2/ui/p2-item-grid.png";
-        if (ResourceLoader.Exists(path))
-        {
-            _iconAtlas = GD.Load<Texture2D>(path);
-            ApplyCells();
-        }
+        _art = new P21ArtAtlas();
+        ApplyCells();
     }
 
     public void Configure(int columns, int capacity, float cellSize = 38)
@@ -147,7 +144,7 @@ public partial class P1ItemGrid : GridContainer
             bool occupied = index < _items.Count && _items[index] is not null;
             ItemInstance? item = occupied ? _items[index] : null;
             cell.HasItem = occupied;
-            cell.Icon = occupied ? IconFor(item!.Base.Category) : null;
+            cell.Icon = occupied ? IconFor(item!) : null;
             cell.ExpandIcon = occupied && cell.Icon is not null;
             cell.Text = occupied && cell.Icon is null ? P1UiText.ItemGlyph(item!.Base.Category) :
                 occupied ? string.Empty : EmptyLabel;
@@ -182,36 +179,13 @@ public partial class P1ItemGrid : GridContainer
         CornerRadiusBottomRight = 2,
     };
 
-    private Texture2D? IconFor(ItemCategory category)
+    private Texture2D? IconFor(ItemInstance item)
     {
-        if (_iconAtlas is null)
-        {
-            return null;
-        }
-
-        (int column, int row) = category switch
-        {
-            ItemCategory.TwoHandWeapon => (0, 0),
-            ItemCategory.BodyArmor => (1, 0),
-            ItemCategory.Helmet => (2, 0),
-            ItemCategory.Ring => (3, 0),
-            ItemCategory.LifeFlask => (4, 0),
-            ItemCategory.Gloves => (5, 0),
-            ItemCategory.Boots => (6, 0),
-            ItemCategory.Belt => (7, 0),
-            ItemCategory.Amulet => (0, 1),
-            _ => (0, 0),
-        };
-        float height = _iconAtlas.GetHeight() / 2f;
-        float[] starts = [32, 280, 580, 850, 1_120, 1_360, 1_630, 1_880];
-        float[] widths = [236, 280, 240, 220, 220, 265, 240, 270];
-        float scaleX = _iconAtlas.GetWidth() / 2_172f;
-        return new AtlasTexture
-        {
-            Atlas = _iconAtlas,
-            Region = new Rect2(starts[column] * scaleX, height * row, widths[column] * scaleX, height),
-            FilterClip = true,
-        };
+        string key = item.LegendaryRule?.StableId ?? item.Base.StableId;
+        if (_iconCache.TryGetValue(key, out Texture2D? cached)) return cached;
+        Texture2D? resolved = _art?.ItemIcon(item);
+        _iconCache[key] = resolved;
+        return resolved;
     }
 
     private void Select(int index)

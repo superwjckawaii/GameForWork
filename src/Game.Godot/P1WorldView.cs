@@ -1,9 +1,12 @@
 using GameForWork.Core.P1;
+using GameForWork.Core.P1.Combat;
+using GameForWork.Core.P1.Items;
 using GameForWork.Core.P1.World;
 using GameForWork.Core.P2;
 using GameForWork.Core.P3;
 using GameForWork.Core.P4;
 using GameForWork.Core.P12;
+using GameForWork.Core.P21;
 using Godot;
 
 namespace GameForWork.GodotClient;
@@ -31,6 +34,9 @@ public partial class P1WorldView : Control
     private Texture2D? _bossAtlas;
     private Texture2D? _regionAtlas;
     private Texture2D? _vfxAtlas;
+    private Texture2D? _actorAnimationAtlas;
+    private Texture2D? _enemyAnimationAtlas;
+    private Texture2D? _bossAnimationAtlas;
     private readonly Dictionary<string, P4EnemyFrame> _nextEnemies = new(StringComparer.Ordinal);
     private readonly Dictionary<string, Vector2> _positions = new(StringComparer.Ordinal);
     private readonly List<P3SceneEvent> _recentEvents = [];
@@ -64,15 +70,22 @@ public partial class P1WorldView : Control
     public override void _Ready()
     {
         MouseFilter = MouseFilterEnum.Ignore;
-        _townBackground = LoadOptional("res://assets/p2/town/military-town.png");
-        _combatBackground = LoadOptional("res://assets/p2/combat/gate-ruins.png");
+        _townBackground = LoadOptional("res://assets/p21/town/p21-town-district.png") ??
+                          LoadOptional("res://assets/p2/town/military-town.png");
+        _combatBackground = LoadOptional("res://assets/p21/regions/act-1.png") ??
+                            LoadOptional("res://assets/p2/combat/gate-ruins.png");
         _characterAtlas = LoadOptional("res://assets/p15/characters/p15-character-directions.png") ??
                           LoadOptional("res://assets/p2/characters/p2-character-grid.png");
         _mercenaryTexture = null;
         _enemyAtlas = LoadOptional("res://assets/p15/enemies/p15-enemy-elite-atlas.png");
         _bossAtlas = LoadOptional("res://assets/p15/enemies/p15-boss-atlas.png");
-        _regionAtlas = LoadOptional("res://assets/p15/regions/p15-region-atlas.png");
-        _vfxAtlas = LoadOptional("res://assets/p15/vfx/p15-skill-mechanic-atlas.png");
+        _regionAtlas = LoadOptional("res://assets/p21/regions/p21-region-atlas.png") ??
+                       LoadOptional("res://assets/p15/regions/p15-region-atlas.png");
+        _vfxAtlas = LoadOptional("res://assets/p21/vfx/p21-combat-vfx.png") ??
+                    LoadOptional("res://assets/p15/vfx/p15-skill-mechanic-atlas.png");
+        _actorAnimationAtlas = LoadOptional("res://assets/p21/characters/p21-actor-animation.png");
+        _enemyAnimationAtlas = LoadOptional("res://assets/p21/enemies/p21-enemy-animation.png");
+        _bossAnimationAtlas = LoadOptional("res://assets/p21/enemies/p21-boss-animation.png");
     }
 
     public override void _Process(double delta)
@@ -139,7 +152,14 @@ public partial class P1WorldView : Control
     {
         ObservedScene? observed = Observe();
         P3SceneTimeline? timeline = observed?.Timeline;
-        if (_regionAtlas is not null && timeline is not null && timeline.StableId.StartsWith("map:", StringComparison.Ordinal))
+        if (timeline is null)
+        {
+            DrawRect(bounds, new Color("0b0f16"), true);
+            DrawCaption(bounds, "暂无进行中的战斗", new Color("8f98a4"));
+            return;
+        }
+
+        if (_regionAtlas is not null && timeline.StableId.StartsWith("map:", StringComparison.Ordinal))
         {
             int region = RegionVisualIndex(timeline.StableId);
             DrawTextureRectRegion(_regionAtlas, bounds, GridCell(_regionAtlas, region, 4, 3));
@@ -174,15 +194,13 @@ public partial class P1WorldView : Control
             }
         }
 
-        long elapsed = timeline is null
-            ? 0
-            : Math.Clamp((long)_visualElapsedMilliseconds, 0, timeline.DurationMilliseconds);
-        P3SceneEvent? state = timeline?.StateAt(elapsed);
-        float sceneProgress = timeline is null || timeline.DurationMilliseconds <= 0
+        long elapsed = Math.Clamp((long)_visualElapsedMilliseconds, 0, timeline.DurationMilliseconds);
+        P3SceneEvent? state = timeline.StateAt(elapsed);
+        float sceneProgress = timeline.DurationMilliseconds <= 0
             ? 0
             : Math.Clamp((float)elapsed / timeline.DurationMilliseconds, 0, 1);
         bool hero = observed?.Hero ?? true;
-        if (timeline?.SpatialFrames is { Count: > 0 })
+        if (timeline.SpatialFrames is { Count: > 0 })
         {
             DrawSpatialBattle(bounds, observed!, timeline, elapsed, sceneProgress, hero);
             return;
@@ -312,26 +330,48 @@ public partial class P1WorldView : Control
         CollectRecentEvents(timeline.Events, elapsed, _recentEvents);
         DrawSpatialSkills(field, actor, _positions, _recentEvents, elapsed);
 
-        foreach (P4EnemyFrame enemy in current.Enemies.Where(enemy => enemy.Life > 0))
+        foreach (P4EnemyFrame enemy in current.Enemies.Where(enemy => enemy.Life > 0 ||
+                     HasRecentEvent(_recentEvents, P3SceneEventKind.EnemyDefeated, targetId: enemy.EntityId)))
         {
             Vector2 position = _positions[enemy.EntityId];
             float radius = enemy.Boss ? 12 : enemy.Elite ? 9 : 7;
             DrawShadow(position + new Vector2(0, 5), radius + 2);
-            DrawSpatialEnemy(position, enemy, radius, enemy.EntityId == current.HeroTargetId);
-            DrawBar(new Rect2(position + new Vector2(-16, 10), new Vector2(32, 4)),
-                enemy.MaximumLife <= 0 ? 0 : (float)enemy.Life / enemy.MaximumLife,
-                enemy.Boss ? new Color("cf4055") : new Color("8d2739"));
+            P4EnemyFrame future = _nextEnemies.GetValueOrDefault(enemy.EntityId) ?? enemy;
+            P21Facing facing = FacingBetween(enemy.Position, future.Position, current.HeroPosition);
+            P21SpriteAction action = ResolveEnemyAction(enemy, future, _recentEvents);
+            long actionAge = EventAge(_recentEvents, elapsed, action == P21SpriteAction.Death
+                ? P3SceneEventKind.EnemyDefeated
+                : action == P21SpriteAction.Hit ? null : P3SceneEventKind.EnemyAttack, enemy.EntityId);
+            DrawSpatialEnemy(position, enemy, radius, enemy.EntityId == current.HeroTargetId, facing, action, actionAge);
+            if (enemy.Life > 0)
+            {
+                DrawBar(new Rect2(position + new Vector2(-16, 10), new Vector2(32, 4)),
+                    enemy.MaximumLife <= 0 ? 0 : (float)enemy.Life / enemy.MaximumLife,
+                    enemy.Boss ? new Color("cf4055") : new Color("8d2739"));
+            }
         }
 
         DrawShadow(actor + new Vector2(0, 6), 10);
+        P4EnemyFrame? heroTarget = current.Enemies.FirstOrDefault(enemy => enemy.EntityId == current.HeroTargetId);
+        P21Facing heroFacing = FacingBetween(current.HeroPosition, next.HeroPosition,
+            heroTarget?.Position ?? new P4Point(current.HeroPosition.XRaw, current.HeroPosition.YRaw - 1));
+        P21SpriteAction heroAction = ResolveHeroAction(current, next, _recentEvents);
         foreach (P4AllyFrame ally in current.Allies ?? [])
         {
             Vector2 allyPosition = MapPoint(field, ally.Position);
             _positions[ally.EntityId] = allyPosition;
             DrawShadow(allyPosition + new Vector2(0, 5), 7);
-            DrawCharacterSprite(allyPosition, 1 + StableVisualIndex(ally.EntityId, 4), 0, new Vector2(34, 42));
+            int rig = 1 + StableVisualIndex(ally.EntityId, 4);
+            DrawP21Sprite(_actorAnimationAtlas, rig, heroFacing,
+                heroAction == P21SpriteAction.Idle ? P21SpriteAction.Idle : heroAction,
+                elapsed, allyPosition, new Vector2(36, 46), P21ArtContract.ActorRigCount,
+                P21ArtContract.ActorCellWidth, P21ArtContract.ActorCellHeight);
         }
-        DrawCharacterSprite(actor, hero ? 0 : 1, 0, new Vector2(38, 48));
+        DrawP21Sprite(_actorAnimationAtlas, hero ? 0 : 1, heroFacing, heroAction, elapsed,
+            actor, new Vector2(44, 56), P21ArtContract.ActorRigCount,
+            P21ArtContract.ActorCellWidth, P21ArtContract.ActorCellHeight,
+            loop: heroAction != P21SpriteAction.Death);
+        if (hero) DrawHeroEquipmentOverlay(actor, heroFacing);
         DrawBar(new Rect2(actor + new Vector2(-30, 21), new Vector2(60, 5)),
             current.HeroMaximumLife <= 0 ? 0 : (float)current.HeroLife / current.HeroMaximumLife, new Color("a73737"));
         DrawBar(new Rect2(actor + new Vector2(-30, 28), new Vector2(60, 4)),
@@ -354,8 +394,26 @@ public partial class P1WorldView : Control
             HorizontalAlignment.Left, -1, 13, new Color("c6bca9"));
     }
 
-    private void DrawSpatialEnemy(Vector2 position, P4EnemyFrame enemy, float radius, bool targeted)
+    private void DrawSpatialEnemy(Vector2 position, P4EnemyFrame enemy, float radius, bool targeted,
+        P21Facing facing, P21SpriteAction action, long actionAge)
     {
+        Texture2D? animation = enemy.Boss ? _bossAnimationAtlas : _enemyAnimationAtlas;
+        if (animation is not null)
+        {
+            int rig = enemy.Boss ? P21ArtContract.BossRig(enemy.EnemyStableId) : P21ArtContract.EnemyRig(enemy.EnemyStableId);
+            int cellWidth = enemy.Boss ? P21ArtContract.BossCellWidth : P21ArtContract.ActorCellWidth;
+            int cellHeight = enemy.Boss ? P21ArtContract.BossCellHeight : P21ArtContract.ActorCellHeight;
+            int rigCount = enemy.Boss ? P21ArtContract.BossRigCount : P21ArtContract.EnemyBodyRigCount;
+            Vector2 size = enemy.Boss ? new Vector2(62, 70) : enemy.Elite ? new Vector2(40, 50) : new Vector2(34, 43);
+            DrawP21Sprite(animation, rig, facing, action, actionAge, position, size, rigCount,
+                cellWidth, cellHeight, loop: action != P21SpriteAction.Death);
+            DrawEnemyRoleMarker(position, enemy);
+            DrawEliteMarkers(position, enemy);
+            if (enemy.Elite || enemy.Boss)
+                DrawArc(position, radius + 7, 0, MathF.Tau, 16, new Color("e2b85d"), enemy.Boss ? 3 : 2);
+            if (targeted) DrawArc(position, radius + 10, 0, MathF.Tau, 20, new Color(1, .85f, .35f, .9f), 2);
+            return;
+        }
         Texture2D? atlas = enemy.Boss ? _bossAtlas : _enemyAtlas;
         if (atlas is not null)
         {
@@ -399,7 +457,7 @@ public partial class P1WorldView : Control
         IEnumerable<P3SceneEvent> recent,
         long elapsed)
     {
-        foreach (P3SceneEvent item in recent)
+        foreach (P3SceneEvent item in recent.OrderByDescending(item => item.AtMilliseconds).Take(12))
         {
             float age = Math.Clamp((elapsed - item.AtMilliseconds) / 900f, 0, 1);
             string[] ids = item.Detail.Split('|');
@@ -407,6 +465,8 @@ public partial class P1WorldView : Control
                 ? live
                 : MapPoint(field, new P4Point(item.Position.X * 1_000, item.Position.Y * 1_000));
             Vector2 source = ids.Length > 0 && positions.TryGetValue(ids[0], out Vector2 origin) ? origin : actor;
+            int vfxIndex = VfxIndex(item.Kind);
+            if (vfxIndex >= 0 && age < .58f) DrawVfx(vfxIndex, target, item.Kind == P3SceneEventKind.BossPhase ? 54 : 38);
             if (item.Kind == P3SceneEventKind.WarCry)
             {
                 DrawArc(actor, 14 + age * 38, 0, MathF.Tau, 24, new Color(0.95f, 0.62f, 0.2f, 1 - age), 3);
@@ -512,6 +572,188 @@ public partial class P1WorldView : Control
     private static P4Point Lerp(P4Point from, P4Point to, float weight) => new(
         (int)MathF.Round(Mathf.Lerp(from.XRaw, to.XRaw, weight)),
         (int)MathF.Round(Mathf.Lerp(from.YRaw, to.YRaw, weight)));
+
+    private void DrawP21Sprite(Texture2D? atlas, int rig, P21Facing facing, P21SpriteAction action,
+        long elapsed, Vector2 feetPosition, Vector2 maximumSize, int rigCount, int cellWidth, int cellHeight,
+        bool loop = true)
+    {
+        if (atlas is null)
+        {
+            DrawCharacterSprite(feetPosition, Math.Clamp(rig, 0, 4), (int)facing, maximumSize);
+            return;
+        }
+        int column = P21ArtContract.AnimationColumn(action, Math.Max(0, elapsed), loop);
+        int row = P21ArtContract.AnimationRow(rig, facing, rigCount);
+        Rect2 source = P21ArtAtlas.AnimationCell(column, row, cellWidth, cellHeight);
+        float scale = Math.Min(maximumSize.X / cellWidth, maximumSize.Y / cellHeight);
+        Vector2 size = new(cellWidth * scale, cellHeight * scale);
+        Rect2 destination = new(feetPosition + new Vector2(-size.X / 2, -size.Y), size);
+        DrawTextureRectRegion(atlas, destination, source);
+    }
+
+    private static P21Facing FacingBetween(P4Point from, P4Point to, P4Point fallback)
+    {
+        int x = to.XRaw - from.XRaw;
+        int y = to.YRaw - from.YRaw;
+        if (x == 0 && y == 0)
+        {
+            x = fallback.XRaw - from.XRaw;
+            y = fallback.YRaw - from.YRaw;
+        }
+        if (Math.Abs(x) >= Math.Abs(y)) return x < 0 ? P21Facing.Left : P21Facing.Right;
+        return y < 0 ? P21Facing.Up : P21Facing.Down;
+    }
+
+    private static P21SpriteAction ResolveHeroAction(P4SpatialFrame current, P4SpatialFrame next,
+        IReadOnlyList<P3SceneEvent> recent)
+    {
+        if (current.HeroLife <= 0) return P21SpriteAction.Death;
+        if (recent.Any(item => EventTargets(item, "hero") && item.Kind is P3SceneEventKind.EnemyAttack or P3SceneEventKind.Bleed))
+            return P21SpriteAction.Hit;
+        P3SceneEvent? action = recent.LastOrDefault(item => EventSource(item, "hero") && IsHeroAction(item.Kind));
+        if (action is not null)
+            return action.Kind is P3SceneEventKind.WarCry or P3SceneEventKind.Banner or P3SceneEventKind.Guard or
+                P3SceneEventKind.Flask or P3SceneEventKind.EmberNova or P3SceneEventKind.StormBrand
+                ? P21SpriteAction.Cast
+                : P21SpriteAction.Attack;
+        return current.HeroPosition != next.HeroPosition ? P21SpriteAction.Move : P21SpriteAction.Idle;
+    }
+
+    private static P21SpriteAction ResolveEnemyAction(P4EnemyFrame current, P4EnemyFrame next,
+        IReadOnlyList<P3SceneEvent> recent)
+    {
+        if (current.Life <= 0) return P21SpriteAction.Death;
+        if (recent.Any(item => EventTargets(item, current.EntityId) && IsDamageEvent(item.Kind))) return P21SpriteAction.Hit;
+        if (recent.Any(item => item.Kind == P3SceneEventKind.EnemyAttack && EventSource(item, current.EntityId)))
+            return current.Role is P4UnitRole.Caster or P4UnitRole.Summoner ? P21SpriteAction.Cast : P21SpriteAction.Attack;
+        return current.Position != next.Position ? P21SpriteAction.Move : P21SpriteAction.Idle;
+    }
+
+    private static bool IsHeroAction(P3SceneEventKind kind) => kind is
+        P3SceneEventKind.WarCry or P3SceneEventKind.HeavyStrike or P3SceneEventKind.EarthCleave or
+        P3SceneEventKind.SpiritBlade or P3SceneEventKind.SeismicCharge or P3SceneEventKind.BloodTideSpin or
+        P3SceneEventKind.Banner or P3SceneEventKind.AshJavelin or P3SceneEventKind.EmberNova or
+        P3SceneEventKind.StormBrand or P3SceneEventKind.SkillEffect or P3SceneEventKind.Guard or P3SceneEventKind.Flask;
+
+    private static bool IsDamageEvent(P3SceneEventKind kind) => kind is
+        P3SceneEventKind.HeavyStrike or P3SceneEventKind.EarthCleave or P3SceneEventKind.SpiritBlade or
+        P3SceneEventKind.Chain or P3SceneEventKind.SeismicCharge or P3SceneEventKind.BloodTideSpin or
+        P3SceneEventKind.AshJavelin or P3SceneEventKind.EmberNova or P3SceneEventKind.StormBrand or
+        P3SceneEventKind.EnemyAttack or P3SceneEventKind.Bleed or P3SceneEventKind.SkillEffect;
+
+    private static bool HasRecentEvent(IEnumerable<P3SceneEvent> events, P3SceneEventKind kind,
+        string? sourceId = null, string? targetId = null) => events.Any(item => item.Kind == kind &&
+        (sourceId is null || EventSource(item, sourceId)) && (targetId is null || EventTargets(item, targetId)));
+
+    private static long EventAge(IEnumerable<P3SceneEvent> events, long elapsed, P3SceneEventKind? kind, string entityId)
+    {
+        P3SceneEvent? item = events.LastOrDefault(candidate =>
+            (kind is null || candidate.Kind == kind) && (EventSource(candidate, entityId) || EventTargets(candidate, entityId)));
+        return item is null ? elapsed : Math.Max(0, elapsed - item.AtMilliseconds);
+    }
+
+    private static bool EventSource(P3SceneEvent item, string entityId)
+    {
+        int separator = item.Detail.IndexOf('|');
+        return separator > 0 && item.Detail.AsSpan(0, separator).SequenceEqual(entityId);
+    }
+
+    private static bool EventTargets(P3SceneEvent item, string entityId)
+    {
+        int first = item.Detail.IndexOf('|');
+        if (first < 0) return false;
+        int second = item.Detail.IndexOf('|', first + 1);
+        ReadOnlySpan<char> target = second < 0 ? item.Detail.AsSpan(first + 1) : item.Detail.AsSpan(first + 1, second - first - 1);
+        return target.SequenceEqual(entityId);
+    }
+
+    private void DrawEnemyRoleMarker(Vector2 position, P4EnemyFrame enemy)
+    {
+        int variant = P21ArtContract.EnemyVariant(enemy.EnemyStableId);
+        Color color = variant switch { 0 => new Color("c44f4f"), 1 => new Color("59a4c7"), _ => new Color("a374c6") };
+        Vector2 marker = position + new Vector2(-5 + variant * 5, enemy.Boss ? -65 : -44);
+        if (enemy.Role is P4UnitRole.Ranged or P4UnitRole.Charger)
+            DrawColoredPolygon([marker + new Vector2(0, -3), marker + new Vector2(3, 3), marker + new Vector2(-3, 3)], color);
+        else if (enemy.Role is P4UnitRole.Caster or P4UnitRole.Summoner)
+            DrawArc(marker, 3, 0, MathF.Tau, 8, color, 2);
+        else DrawRect(new Rect2(marker - new Vector2(2, 2), new Vector2(4, 4)), color, true);
+    }
+
+    private void DrawEliteMarkers(Vector2 position, P4EnemyFrame enemy)
+    {
+        if (enemy.EliteAffixes is not { Count: > 0 }) return;
+        int index = 0;
+        foreach (EliteAffix affix in enemy.EliteAffixes.Take(4))
+        {
+            Color color = EliteAffixColor(affix);
+            Vector2 point = position + new Vector2(-9 + index * 6, enemy.Boss ? -58 : -38);
+            DrawCircle(point, 2.2f, color);
+            index++;
+        }
+    }
+
+    private static Color EliteAffixColor(EliteAffix affix) => affix switch
+    {
+        EliteAffix.FlameTouched or EliteAffix.CorpseExplosion => new Color("ef6337"),
+        EliteAffix.FrostTouched => new Color("65cfe2"),
+        EliteAffix.StormTouched or EliteAffix.Swift or EliteAffix.HastedAura => new Color("e6cb4d"),
+        EliteAffix.VoidTouched or EliteAffix.ArcaneWard or EliteAffix.Suppressor => new Color("a66bd7"),
+        EliteAffix.Vampiric or EliteAffix.Lacerating => new Color("c73c55"),
+        EliteAffix.Regenerating => new Color("62b86e"),
+        EliteAffix.IronSkin or EliteAffix.FortifiedAura or EliteAffix.Massive => new Color("aeb6bd"),
+        _ => new Color("d6a85a"),
+    };
+
+    private void DrawHeroEquipmentOverlay(Vector2 actor, P21Facing facing)
+    {
+        if (_session is null) return;
+        if (_session.HeroEquipment.Items.TryGetValue(EquipmentSlot.MainHand, out ItemInstance? weapon))
+        {
+            Color color = P1UiText.RarityColor(weapon.Rarity);
+            float side = facing == P21Facing.Left ? -1 : 1;
+            DrawLine(actor + new Vector2(side * 7, -28), actor + new Vector2(side * 18, -44), color, 2);
+        }
+        if (_session.HeroEquipment.Items.ContainsKey(EquipmentSlot.OffHand))
+        {
+            float side = facing == P21Facing.Right ? -1 : 1;
+            DrawArc(actor + new Vector2(side * 10, -23), 6, -.8f, 2.2f, 8, new Color("a7b0b7"), 2);
+        }
+        if (_session.HeroEquipment.Items.ContainsKey(EquipmentSlot.Helmet))
+            DrawLine(actor + new Vector2(-5, -47), actor + new Vector2(5, -47), new Color("c0aa78"), 2);
+        if (_session.HeroEquipment.Items.ContainsKey(EquipmentSlot.Chest))
+            DrawRect(new Rect2(actor + new Vector2(-3, -32), new Vector2(6, 3)), new Color("8d6f52"), true);
+    }
+
+    private void DrawVfx(int index, Vector2 center, float size)
+    {
+        if (_vfxAtlas is null) return;
+        Rect2 source = new((index % 8) * 64, (index / 8) * 64, 64, 64);
+        DrawTextureRectRegion(_vfxAtlas, new Rect2(center - new Vector2(size / 2, size / 2), new Vector2(size, size)), source);
+    }
+
+    private static int VfxIndex(P3SceneEventKind kind) => kind switch
+    {
+        P3SceneEventKind.HeavyStrike => 0,
+        P3SceneEventKind.EarthCleave => 2,
+        P3SceneEventKind.Aftershock => 4,
+        P3SceneEventKind.BloodTideSpin => 5,
+        P3SceneEventKind.SpiritBlade => 7,
+        P3SceneEventKind.Chain => 8,
+        P3SceneEventKind.AshJavelin => 9,
+        P3SceneEventKind.EmberNova => 10,
+        P3SceneEventKind.StormBrand => 11,
+        P3SceneEventKind.SeismicCharge => 14,
+        P3SceneEventKind.WarCry => 16,
+        P3SceneEventKind.Banner => 17,
+        P3SceneEventKind.Guard => 18,
+        P3SceneEventKind.Block => 19,
+        P3SceneEventKind.Bleed => 22,
+        P3SceneEventKind.Ailment => 24,
+        P3SceneEventKind.Flask => 32,
+        P3SceneEventKind.EnemyDefeated => 42,
+        P3SceneEventKind.BossPhase => 40,
+        _ => -1,
+    };
 
     private static int FindFrameIndex(IReadOnlyList<P4SpatialFrame> frames, long elapsed)
     {

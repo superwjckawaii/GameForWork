@@ -22,6 +22,10 @@ jobs:
       - name: Restore
         run: dotnet restore GameForWork.sln
 
+      - name: Audit P21 pixel assets
+        shell: pwsh
+        run: ./scripts/verify_p21_assets.ps1
+
       - name: Build Release
         run: dotnet build GameForWork.sln --no-restore --configuration Release
 

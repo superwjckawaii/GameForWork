@@ -81,6 +81,9 @@ Write-Host "[verify] configuration=$Configuration"
 Write-Host "[verify] dotnet=$dotnetBinary"
 Write-Host "[verify] godot=$godotBinary"
 
+& (Join-Path $repositoryRoot 'scripts\verify_p21_assets.ps1') -RepositoryRoot $repositoryRoot
+if ($LASTEXITCODE -ne 0) { throw "P21 asset audit failed with exit code $LASTEXITCODE." }
+
 Invoke-Checked -FilePath $dotnetBinary -Arguments @('restore', $solutionPath) -Label 'Restore solution'
 Invoke-Checked -FilePath $dotnetBinary -Arguments @('build', $solutionPath, '--no-restore', '--configuration', $Configuration) -Label 'Build solution'
 Invoke-Checked -FilePath $dotnetBinary -Arguments @('test', (Join-Path $repositoryRoot 'src\Game.Tests\Game.Tests.csproj'), '--no-build', '--configuration', $Configuration) -Label 'Run unit tests'

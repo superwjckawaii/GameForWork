@@ -9,10 +9,12 @@ public partial class P205JewelStashPanel : VBoxContainer
     private Func<P1GameSession>? _session;
     private GridContainer? _grid;
     private string _signature = string.Empty;
+    private P21ArtAtlas? _art;
 
     public void Initialize(Func<P1GameSession> session)
     {
         _session = session;
+        _art = new P21ArtAtlas();
         SizeFlagsHorizontal = SizeFlags.ExpandFill;
         SizeFlagsVertical = SizeFlags.ExpandFill;
         AddChild(new Label
@@ -45,11 +47,15 @@ public partial class P205JewelStashPanel : VBoxContainer
             bool isInstalled = socketed.Any(pair => pair.Value == jewel);
             KeyValuePair<string, PassiveJewelKind> installed = socketed.FirstOrDefault(pair => pair.Value == jewel);
             Color color = P205JewelVisual.ColorFor(jewel);
+            Texture2D? jewelIcon = isInstalled ? null : _art?.JewelIcon((int)jewel);
             var cell = new P205JewelStashCell
             {
                 Jewel = jewel,
                 JewelColor = color,
-                Text = isInstalled ? "已镶嵌" : P205JewelVisual.Glyph(jewel),
+                Icon = jewelIcon,
+                Text = isInstalled ? "已镶嵌" : jewelIcon is null ? P205JewelVisual.Glyph(jewel) : string.Empty,
+                ExpandIcon = true,
+                IconAlignment = HorizontalAlignment.Center,
                 Disabled = isInstalled,
                 CustomMinimumSize = new Vector2(78, 62),
                 TooltipText = $"{P205JewelVisual.Name(jewel)}\n{P205JewelVisual.Description(jewel)}\n" +
@@ -70,7 +76,7 @@ public partial class P205JewelStashCell : Button
     public override Variant _GetDragData(Vector2 atPosition)
     {
         if (Disabled) return default;
-        SetDragPreview(P205JewelVisual.DragPreview(Jewel, JewelColor));
+        SetDragPreview(P205JewelVisual.DragPreview(Icon, Jewel, JewelColor));
         return Variant.From($"p205-jewel|{(int)Jewel}");
     }
 }
@@ -105,7 +111,7 @@ internal static class P205JewelVisual
         _ => new Color("5c9ed8"),
     };
 
-    public static Control DragPreview(PassiveJewelKind jewel, Color color)
+    public static Control DragPreview(Texture2D? icon, PassiveJewelKind jewel, Color color)
     {
         var panel = new PanelContainer
         {
@@ -118,14 +124,22 @@ internal static class P205JewelVisual
             BorderWidthLeft = 2, BorderWidthTop = 2, BorderWidthRight = 2, BorderWidthBottom = 2,
             CornerRadiusTopLeft = 12, CornerRadiusTopRight = 12, CornerRadiusBottomLeft = 12, CornerRadiusBottomRight = 12,
         });
-        var label = new Label
+        Control content = icon is null ? new Label
         {
             Text = Glyph(jewel)[..1], HorizontalAlignment = HorizontalAlignment.Center,
             VerticalAlignment = VerticalAlignment.Center, MouseFilter = Control.MouseFilterEnum.Ignore,
+        } : new TextureRect
+        {
+            Texture = icon, ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,
+            StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered,
+            MouseFilter = Control.MouseFilterEnum.Ignore,
         };
-        label.AddThemeColorOverride("font_color", color.Lightened(.2f));
-        label.AddThemeFontSizeOverride("font_size", 25);
-        panel.AddChild(label);
+        if (content is Label label)
+        {
+            label.AddThemeColorOverride("font_color", color.Lightened(.2f));
+            label.AddThemeFontSizeOverride("font_size", 25);
+        }
+        panel.AddChild(content);
         return panel;
     }
 }
