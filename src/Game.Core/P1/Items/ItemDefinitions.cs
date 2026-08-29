@@ -1,5 +1,6 @@
 using GameForWork.Core.P1.Combat;
 using GameForWork.Core.P19;
+using GameForWork.Core.P24;
 
 namespace GameForWork.Core.P1.Items;
 
@@ -111,7 +112,7 @@ public static class P1ItemBases
             ? definition
             : throw new KeyNotFoundException($"Unknown item base: {stableId}");
 
-    private static IReadOnlyList<ItemBaseDefinition> Build() => P19Catalog.Bases;
+    private static IReadOnlyList<ItemBaseDefinition> Build() => P19Catalog.Bases.Concat(P24ItemCatalog.Bases).ToArray();
 }
 
 public enum ItemModifierKind

@@ -2,6 +2,7 @@ using GameForWork.Core.P1.Combat;
 using GameForWork.Core.P3;
 using GameForWork.Core.P14;
 using GameForWork.Core.P17;
+using GameForWork.Core.P24;
 
 namespace GameForWork.Core.P6;
 
@@ -176,7 +177,9 @@ public static class P6CombatReportBuilder
         if (marker.Length > "skill:".Length)
         {
             string stableId = marker["skill:".Length..];
-            return P17SkillCatalog.Active.FirstOrDefault(active => active.SkillId == stableId)?.DisplayName ?? stableId;
+            return P24SkillCatalog.TryActiveForSkill(stableId, out P24ActiveSkillDefinition? p24)
+                ? p24!.Combat.DisplayName
+                : P17SkillCatalog.Active.FirstOrDefault(active => active.SkillId == stableId)?.DisplayName ?? stableId;
         }
         string dot = item.Detail.Split('|').FirstOrDefault(part => part.StartsWith("dot:", StringComparison.Ordinal)) ?? string.Empty;
         return dot.Length > 4 ? $"持续伤害·{dot[4..]}" : "异常伤害";

@@ -1,6 +1,7 @@
 using GameForWork.Core.P1.Combat;
 using GameForWork.Core.P1.Progression;
 using GameForWork.Core.P17;
+using GameForWork.Core.P24;
 
 namespace GameForWork.Core.P6;
 
@@ -36,7 +37,9 @@ public static class P6CombatSkillRules
     public static P6ResolvedSkill Resolve(SkillConfiguration configuration, int maximumLife, P205PassiveModifiers? passive = null)
     {
         SkillDefinition definition = P1Skills.Get(configuration.SkillId);
-        P17ActiveSkillDefinition active = P17SkillCatalog.ActiveForSkill(configuration.SkillId);
+        P17ActiveSkillDefinition active = P24SkillCatalog.TryActiveForSkill(configuration.SkillId, out P24ActiveSkillDefinition? p24Active)
+            ? p24Active!.Combat
+            : P17SkillCatalog.ActiveForSkill(configuration.SkillId);
         int mana = P18.P18AscendancyRules.AttackManaCost(definition.BaseManaCost, definition.Tags);
         int life = 0;
         int range = definition.RangeRaw;
@@ -142,6 +145,14 @@ public static class P6CombatSkillRules
         if (configuration.Supports.HasFlag(SkillSupport.Pierce)) pierce += 2;
         if (configuration.Supports.HasFlag(SkillSupport.Fork)) fork += 2;
         if (configuration.Supports.HasFlag(SkillSupport.Return)) returns = true;
+        P24SupportProfile p24 = P24SupportRules.Resolve(configuration.ExtendedSupports);
+        damage = checked(damage * p24.DamageMultiplierBasisPoints / 10_000);
+        range = checked(range * p24.RangeMultiplierBasisPoints / 10_000);
+        castTime = Math.Max(1, checked(castTime * 10_000 / Math.Max(1, p24.CastSpeedBasisPoints)));
+        cooldown = Math.Max(1, checked(cooldown * 10_000 / Math.Max(1, p24.CooldownRecoveryBasisPoints)));
+        projectiles += p24.ProjectileCount;
+        pierce += p24.PierceCount;
+        chains += p24.ChainCount;
         passive ??= P205PassiveModifiers.Empty;
         mana = Math.Max(0, checked(mana * Math.Max(0, 10_000 - passive.ReducedSkillCostBasisPoints) / 10_000));
         life = Math.Max(0, checked(life * Math.Max(0, 10_000 - passive.ReducedSkillCostBasisPoints) / 10_000));

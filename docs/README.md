@@ -36,3 +36,5 @@
 
 - [v0.3 六职业、十八升华与主天赋树 V3 总规格](v0.3/V0_3_SPECIFICATION.md)
 - [P23 六职业底层与主天赋树 V3 实现规格](v0.3/P23_SPECIFICATION.md)
+- [P23.1 十八升华完整实现规格](v0.3/P23_1_SPECIFICATION.md)
+- [P24 五职业配套构筑内容实施规格](v0.3/P24_SPECIFICATION.md)

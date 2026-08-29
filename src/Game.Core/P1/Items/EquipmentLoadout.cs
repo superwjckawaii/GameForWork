@@ -56,14 +56,19 @@ public sealed class EquipmentLoadout
         }
 
         if (slot == EquipmentSlot.OffHand &&
-            _items.GetValueOrDefault(EquipmentSlot.MainHand)?.Base.Category == ItemCategory.TwoHandWeapon)
+            _items.GetValueOrDefault(EquipmentSlot.MainHand) is { } mainHand &&
+            mainHand.Base.Category == ItemCategory.TwoHandWeapon &&
+            !(mainHand.Base.ItemTags.Contains("bow", StringComparer.Ordinal) && item.Base.ItemTags.Contains("quiver", StringComparer.Ordinal)))
         {
             return false;
         }
 
         if (item.Base.Category == ItemCategory.TwoHandWeapon)
         {
-            _items.Remove(EquipmentSlot.OffHand);
+            ItemInstance? offHand = _items.GetValueOrDefault(EquipmentSlot.OffHand);
+            if (!item.Base.ItemTags.Contains("bow", StringComparer.Ordinal) ||
+                offHand?.Base.ItemTags.Contains("quiver", StringComparer.Ordinal) != true)
+                _items.Remove(EquipmentSlot.OffHand);
         }
 
         _items[slot] = item;
@@ -151,7 +156,7 @@ public sealed class EquipmentLoadout
             equipped.Sum(item => item.Base.SupportLinkCapacity + item.ExtraSupportLinkCapacity),
             weaponItem?.Base.Category is ItemCategory.TwoHandWeapon or ItemCategory.OneHandWeapon ? QualityWeapon(weaponItem) : null,
             weaponItem?.LegendaryRule,
-            _items.GetValueOrDefault(EquipmentSlot.OffHand)?.Base.Category == ItemCategory.Shield,
+            _items.GetValueOrDefault(EquipmentSlot.OffHand)?.Base.ItemTags.Contains("shield", StringComparer.Ordinal) == true,
             equipped.Sum(item => item.Base.BlockChanceBasisPoints));
     }
 
@@ -199,7 +204,7 @@ public static class SkillCapacityRules
         EquipmentSummary equipment)
     {
         int requiredCore = skills.Count;
-        int requiredLinks = skills.Sum(skill => BitOperations.PopCount((ulong)skill.Supports));
+        int requiredLinks = skills.Sum(skill => BitOperations.PopCount((ulong)skill.Supports) + skill.ExtendedSupports.Count);
         bool enoughCore = requiredCore <= equipment.CoreSkillCapacity;
         bool enoughLinks = requiredLinks <= equipment.SupportLinkCapacity;
         string reason = !enoughCore ? "core_capacity" : !enoughLinks ? "support_capacity" : string.Empty;

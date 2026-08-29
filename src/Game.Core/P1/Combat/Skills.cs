@@ -1,4 +1,5 @@
 using GameForWork.Core.P17;
+using GameForWork.Core.P24;
 
 namespace GameForWork.Core.P1.Combat;
 
@@ -152,7 +153,11 @@ public sealed record SkillConfiguration(
     int Priority = 50,
     SkillAiRule? AiRule = null,
     int Level = 1,
-    string StoneInstanceId = "");
+    string StoneInstanceId = "",
+    IReadOnlyList<P24SupportMechanic>? P24Supports = null)
+{
+    public IReadOnlyList<P24SupportMechanic> ExtendedSupports => P24Supports ?? Array.Empty<P24SupportMechanic>();
+}
 
 public sealed record SkillDefinition(
     string StableId,
@@ -165,6 +170,7 @@ public sealed record SkillDefinition(
 public static class P1Skills
 {
     private static readonly IReadOnlyDictionary<string, SkillDefinition> Catalog = P17SkillCatalog.Active
+        .Concat(P24SkillCatalog.Active.Select(item => item.Combat))
         .Select(item => new SkillDefinition(item.SkillId, item.Tags, item.ManaCost, item.RangeRaw,
             item.CastTimeTicks, item.CooldownTicks))
         .ToDictionary(item => item.StableId, StringComparer.Ordinal);

@@ -6,6 +6,7 @@ using GameForWork.Core.Simulation;
 using GameForWork.Core.P1.World;
 using GameForWork.Core.P17;
 using GameForWork.Core.P23;
+using GameForWork.Core.P24;
 
 namespace GameForWork.Core.P2;
 
@@ -45,6 +46,7 @@ public sealed record SkillStoneDefinition(
     P17SkillCapability RequiredAnyCapabilities = P17SkillCapability.None,
     P17SkillCapability ExcludedCapabilities = P17SkillCapability.None,
     SkillSupport CombatSupport = SkillSupport.None,
+    P24SupportMechanic P24Support = P24SupportMechanic.None,
     P17SupportConflict ProvidesConflict = P17SupportConflict.None,
     P17SupportConflict ConflictsWith = P17SupportConflict.None);
 
@@ -53,6 +55,8 @@ public static class P2SkillStones
     private static readonly IReadOnlyDictionary<string, SkillStoneDefinition> Catalog =
         P17SkillCatalog.Active.Select(Active)
             .Concat(P17SkillCatalog.Supports.Select(Support))
+            .Concat(P24SkillCatalog.Active.Select(item => Active(item.Combat)))
+            .Concat(P24SkillCatalog.Supports.Select(Support))
             .ToDictionary(item => item.StableId, StringComparer.Ordinal);
 
     public static IReadOnlyCollection<SkillStoneDefinition> All => Catalog.Values.ToArray();
@@ -75,6 +79,12 @@ public static class P2SkillStones
             RequiredAnyCapabilities: definition.RequiredAny, ExcludedCapabilities: definition.Excluded,
             CombatSupport: definition.Support, ProvidesConflict: definition.ProvidesConflict,
             ConflictsWith: definition.ConflictsWith);
+
+    private static SkillStoneDefinition Support(P24SupportSkillDefinition definition) =>
+        new(definition.StoneId, definition.DisplayName, SkillStoneKind.Support, 1,
+            Description: definition.Description, StarterGranted: false,
+            RequiredAllCapabilities: definition.RequiredAll, RequiredAnyCapabilities: definition.RequiredAny,
+            ExcludedCapabilities: definition.Excluded, P24Support: definition.Mechanic);
 }
 
 public sealed record SkillStoneInstance(

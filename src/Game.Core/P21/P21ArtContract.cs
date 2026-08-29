@@ -2,6 +2,7 @@ using GameForWork.Core.P1.Combat;
 using GameForWork.Core.P1.Items;
 using GameForWork.Core.P14;
 using GameForWork.Core.P17;
+using GameForWork.Core.P19;
 
 namespace GameForWork.Core.P21;
 
@@ -40,7 +41,7 @@ public static class P21ArtContract
     public static IReadOnlyList<string> EnemyIds { get; } = P1Enemies.NormalEnemies
         .Select(enemy => enemy.StableId).ToArray();
 
-    public static IReadOnlyList<string> ItemBaseIds { get; } = P1ItemBases.All
+    public static IReadOnlyList<string> ItemBaseIds { get; } = P19Catalog.Bases
         .OrderBy(item => item.StableId, StringComparer.Ordinal).Select(item => item.StableId).ToArray();
 
     public static IReadOnlyList<string> UniqueItemIds { get; } = P14UniqueItems.All

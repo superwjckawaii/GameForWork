@@ -13,6 +13,7 @@ using GameForWork.Core.P14;
 using GameForWork.Core.P17;
 using GameForWork.Core.P18;
 using GameForWork.Core.P23;
+using GameForWork.Core.P24;
 
 namespace GameForWork.Core.P1;
 
@@ -1257,15 +1258,15 @@ public sealed class P1GameSession
         .Where(link => !string.IsNullOrEmpty(link.ChainId) && !string.IsNullOrEmpty(link.ActiveStoneInstanceId))
         .OrderBy(link => link.Priority)
         .Select(link => (Link: link, Stone: Management.SkillStones.Single(stone => stone.InstanceId == link.ActiveStoneInstanceId)))
-        .Where(entry => P17SkillCatalog.Active.First(active => active.StoneId == entry.Stone.DefinitionId).Role !=
-                        P17SkillRole.Reservation || entry.Link.ReservationEnabled)
+        .Where(entry => ActiveRole(entry.Stone.DefinitionId) != P17SkillRole.Reservation || entry.Link.ReservationEnabled)
         .Select(entry => new SkillConfiguration(
             ToCombatSkillId(entry.Stone.DefinitionId),
             SupportsFor(entry.Stone.DefinitionId),
             entry.Link.Priority,
             entry.Link.AiRule ?? GlobalSkillRule(),
             entry.Stone.Level,
-            entry.Stone.InstanceId))
+            entry.Stone.InstanceId,
+            P24SupportsFor(entry.Stone.DefinitionId)))
         .Where(configuration => !string.IsNullOrEmpty(configuration.SkillId))
         .ToArray();
 
@@ -1292,9 +1293,30 @@ public sealed class P1GameSession
         return supports;
     }
 
+    private IReadOnlyList<P24SupportMechanic> P24SupportsFor(string activeDefinitionId)
+    {
+        SkillStoneInstance? active = Management.SkillStones.FirstOrDefault(item => item.DefinitionId == activeDefinitionId);
+        SkillLinkConfiguration? link = active is null
+            ? null
+            : Management.SkillLinks.FirstOrDefault(item => item.ActiveStoneInstanceId == active.InstanceId);
+        return (link?.SupportStoneInstanceIds ?? [])
+            .Select(id => Management.SkillStones.Single(item => item.InstanceId == id).Definition.P24Support)
+            .Where(value => value != P24SupportMechanic.None)
+            .Distinct()
+            .ToArray();
+    }
+
+    private static P17SkillRole ActiveRole(string stoneId)
+    {
+        if (P24SkillCatalog.TryActiveForStone(stoneId, out P24ActiveSkillDefinition? p24)) return p24!.Combat.Role;
+        return P17SkillCatalog.ActiveForStone(stoneId).Role;
+    }
+
     private static string ToCombatSkillId(string definitionId) => definitionId.StartsWith("core.skill_stone.", StringComparison.Ordinal)
         ? definitionId.Replace("core.skill_stone.", "core.skill.", StringComparison.Ordinal)
-        : string.Empty;
+        : definitionId.StartsWith("p24.skill_stone.", StringComparison.Ordinal)
+            ? definitionId.Replace("p24.skill_stone.", "p24.skill.", StringComparison.Ordinal)
+            : string.Empty;
 
     private static IEnumerable<string> SupportDefinitionIds(SkillSupport supports)
     {

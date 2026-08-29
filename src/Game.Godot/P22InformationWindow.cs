@@ -1,4 +1,5 @@
 using GameForWork.Core.P1;
+using GameForWork.Core.P24;
 using Godot;
 
 namespace GameForWork.GodotClient;
@@ -44,6 +45,7 @@ public partial class P22InformationWindow : Window
         _journey = GuidePage("旅程路线", "切换到本页时读取当前存档的完整旅程状态。");
         tabs.AddChild(_journey);
         tabs.AddChild(GuidePage("系统与操作", SystemGuide));
+        tabs.AddChild(GuidePage("P24 构筑", P24Guide()));
         tabs.AddChild(new P19AffixPanel
         {
             Name = "词缀库",
@@ -94,6 +96,9 @@ public partial class P22InformationWindow : Window
         SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
         SizeFlagsVertical = Control.SizeFlags.ExpandFill,
     };
+
+    private static string P24Guide() => string.Join("\n\n", P24GuideCatalog.Entries.Select(entry =>
+        $"{entry.Title}\n{entry.Summary}\n{string.Join('\n', entry.Rules.Select(rule => $"· {rule}"))}"));
 
     private const string QuickGuide =
         "核心流程\n" +

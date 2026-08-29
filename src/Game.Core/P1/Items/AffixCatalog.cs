@@ -1,4 +1,5 @@
 using GameForWork.Core.P19;
+using GameForWork.Core.P24;
 
 namespace GameForWork.Core.P1.Items;
 
@@ -117,6 +118,7 @@ public static class P1Affixes
         AddTwoTiers(result, ItemCategory.Ring, "ring.critical", "暴击率增加", AffixPosition.Suffix,
             ItemModifierKind.IncreasedCriticalChanceBasisPoints, 500, 1_000, 1_100, 1_800, 700);
         result.AddRange(P19Catalog.Affixes);
+        result.AddRange(P24ItemCatalog.Affixes);
         return result
             .OrderBy(affix => affix.StableFamilyId, StringComparer.Ordinal)
             .ThenBy(affix => affix.Tier)

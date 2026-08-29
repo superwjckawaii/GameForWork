@@ -20,9 +20,10 @@ public sealed class P2ManagementTests
         {
             int expected = category switch
             {
-                ItemCategory.Gloves or ItemCategory.Boots => 6,
+                ItemCategory.Gloves => 11,
+                ItemCategory.Boots => 6,
                 ItemCategory.Belt => 5,
-                _ => 6,
+                _ => 10,
             };
             Assert.Equal(expected, P1ItemBases.All.Count(item => item.Category == category));
             int families = P1Affixes.For(category, 60)
