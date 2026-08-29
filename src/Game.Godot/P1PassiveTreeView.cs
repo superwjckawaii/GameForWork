@@ -39,7 +39,6 @@ public partial class P1PassiveTreeView : Control
 
     public override void _Ready()
     {
-        CustomMinimumSize = new Vector2(820, 470);
         MouseFilter = MouseFilterEnum.Stop;
         const string backdrop = "res://assets/p21/trees/p21-passive-backdrop.png";
         if (ResourceLoader.Exists(backdrop)) _backdrop = GD.Load<Texture2D>(backdrop);
@@ -281,7 +280,7 @@ public partial class P1PassiveTreeView : Control
 
     private void DrawMiniMap()
     {
-        Rect2 area = new(Size.X - 132, Size.Y - 98, 120, 86);
+        Rect2 area = new(Size.X - 132, Math.Max(86, Size.Y - 198), 120, 86);
         DrawRect(area, new Color("0b0e14cc"), true);
         DrawRect(area, new Color("596473"), false, 1);
         foreach (PassiveNodeDefinition node in _nodes.Where(node => node.Kind != PassiveNodeKind.Small || node.Start != PassiveStartKind.None))

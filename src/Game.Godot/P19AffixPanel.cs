@@ -13,7 +13,7 @@ public partial class P19AffixPanel : VBoxContainer
 
     public override void _Ready()
     {
-        Name = "词缀图鉴";
+        Name = "词缀库";
         var controls = new HFlowContainer();
         AddChild(controls);
         _category = Options(controls, "装备类别", ["全部", .. Enum.GetNames<ItemCategory>()]);

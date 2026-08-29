@@ -19,7 +19,7 @@ public partial class P10AtlasTreeView : Control
 
     public void Initialize(Func<P1GameSession> session, Action<string> changed)
     {
-        _session = session; _changed = changed; CustomMinimumSize = new Vector2(760, 390); MouseFilter = MouseFilterEnum.Stop;
+        _session = session; _changed = changed; MouseFilter = MouseFilterEnum.Stop;
         const string backdrop = "res://assets/p21/trees/p21-atlas-backdrop.png";
         if (ResourceLoader.Exists(backdrop)) _backdrop = GD.Load<Texture2D>(backdrop);
         QueueRedraw();
@@ -51,7 +51,6 @@ public partial class P10AtlasTreeView : Control
             DrawCircle(point, radius, color);
             DrawCircle(point, radius + 1.5f, color.Lightened(.3f), false, 1.2f);
         }
-        DrawString(ThemeDB.FallbackFont, new Vector2(10, 20), "异界星图 · 360 个功能节点 · 首次完成每个地图阶级获得 1 点", HorizontalAlignment.Left, -1, 12, new Color("d4c6a5"));
     }
 
     public override void _GuiInput(InputEvent inputEvent)
@@ -96,7 +95,7 @@ public partial class P10AtlasTreeView : Control
     { P10AtlasTheme.MapSupply => "地图续航", P10AtlasTheme.Abyss => "裂渊", P10AtlasTheme.LifeGarden => "命能花园", P10AtlasTheme.RedAltar => "赤誓祭坛", P10AtlasTheme.BlueAltar => "苍誓祭坛", _ => "攻坚" };
 }
 
-public partial class P10EndgamePanel : VBoxContainer
+public partial class P10EndgamePanel : Control
 {
     private Func<P1GameSession>? _session;
     private Action<string>? _changed;
@@ -111,9 +110,19 @@ public partial class P10EndgamePanel : VBoxContainer
     public void Initialize(Func<P1GameSession> session, Action<string> changed)
     {
         _session = session; _changed = changed;
+        ClipContents = true;
+        _atlas = new P10AtlasTreeView { MouseFilter = MouseFilterEnum.Stop };
+        _atlas.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
+        _atlas.Initialize(session, changed);
+        AddChild(_atlas);
+
+        var overlay = new VBoxContainer { MouseFilter = MouseFilterEnum.Ignore, ZIndex = 10 };
+        overlay.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
+        AddChild(overlay);
+        var top = new VBoxContainer();
         _summary = new Label { AutowrapMode = TextServer.AutowrapMode.WordSmart };
-        AddChild(_summary);
-        var schemeBar = new HFlowContainer(); AddChild(schemeBar);
+        top.AddChild(_summary);
+        var schemeBar = new HFlowContainer(); top.AddChild(schemeBar);
         schemeBar.AddChild(new Label { Text = "异界方案" });
         _schemes = new OptionButton(); schemeBar.AddChild(_schemes);
         for (int index = 0; index < 3; index++) _schemes.AddItem($"方案 {index + 1}", index);
@@ -127,9 +136,11 @@ public partial class P10EndgamePanel : VBoxContainer
         schemeBar.AddChild(_schemeName);
         var rename = new Button { Text = "重命名" }; schemeBar.AddChild(rename);
         rename.Pressed += () => { changed(session().TryRenameAtlasScheme(session().Endgame.ActiveAtlasSchemeIndex, _schemeName.Text) ? "异界方案已重命名。" : "请输入 1–12 个字符。"); Refresh(true); };
-        _atlas = new P10AtlasTreeView { SizeFlagsVertical = SizeFlags.ExpandFill };
-        _atlas.Initialize(session, changed); AddChild(_atlas);
-        var bossActions = new HFlowContainer(); AddChild(bossActions);
+        overlay.AddChild(Hud(top));
+        overlay.AddChild(new Control { SizeFlagsVertical = SizeFlags.ExpandFill, MouseFilter = MouseFilterEnum.Ignore });
+
+        var bottom = new VBoxContainer();
+        var bossActions = new HFlowContainer(); bottom.AddChild(bossActions);
         var boss = new Button { Text = "正式挑战：灰烬天垒", TooltipText = "消耗 1 枚天垒门票；正式模式只有一次战斗机会。" };
         boss.Pressed += () => { changed(session().TryChallengeCitadel() ? "灰烬天垒三阶段已排入主角远征。" : "主角队必须空闲，并持有由 8 枚 T11+ 碎片合成的门票。"); Refresh(true); };
         bossActions.AddChild(boss);
@@ -140,7 +151,23 @@ public partial class P10EndgamePanel : VBoxContainer
         _breakthrough.Pressed += () => { changed(session().TryChallengeFinalBreakthrough() ? "百级门扉试炼已排入主角远征。" : "需要 100 级、未完成突破且主角队空闲。"); Refresh(true); };
         bossActions.AddChild(_breakthrough);
         _preflight = new Label { AutowrapMode = TextServer.AutowrapMode.WordSmart };
-        AddChild(_preflight);
+        bottom.AddChild(_preflight);
+        overlay.AddChild(Hud(bottom));
+    }
+
+    private static PanelContainer Hud(Control content)
+    {
+        var panel = new PanelContainer { MouseFilter = MouseFilterEnum.Stop };
+        panel.AddThemeStyleboxOverride("panel", new StyleBoxFlat
+        {
+            BgColor = new Color("10151de8"),
+            ContentMarginLeft = 8,
+            ContentMarginTop = 6,
+            ContentMarginRight = 8,
+            ContentMarginBottom = 6,
+        });
+        panel.AddChild(content);
+        return panel;
     }
 
     public void Refresh(bool force = false)

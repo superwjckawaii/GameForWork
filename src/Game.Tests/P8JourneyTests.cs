@@ -94,6 +94,20 @@ public sealed class P8JourneyTests
         Assert.True(P1GameSession.Restore(session.Capture()).Journey.CompletionShown);
     }
 
+    [Fact]
+    public void TierSixteenGuidanceExplainsLevelHundredAndAscendancyProgression()
+    {
+        P1GameSession session = CreateSession(tutorial: false);
+        P8JourneyStepDefinition tier16 = session.Journey.AllSteps.Single(step => step.Step == P8JourneyStep.CompleteTier16);
+        P8JourneyStepDefinition level100 = session.Journey.AllSteps.Single(step => step.Step == P8JourneyStep.ReachLevel100);
+        P8JourneyStepDefinition breakthrough = session.Journey.AllSteps.Single(step => step.Step == P8JourneyStep.CompleteBreakthrough);
+
+        Assert.Contains("100 级", tier16.HelpText, StringComparison.Ordinal);
+        Assert.Contains("升华 4/4", tier16.HelpText, StringComparison.Ordinal);
+        Assert.Contains("远征 → 异界与突破", level100.HelpText, StringComparison.Ordinal);
+        Assert.Contains("2 个升华点", breakthrough.HelpText, StringComparison.Ordinal);
+    }
+
     private static P1GameSession CreateSession(bool tutorial) => P1GameSession.CreateNew(new PlayerIdentity(
         "引路者", CharacterGender.Androgynous, CharacterSkinTone.Umber,
         CharacterHairStyle.Braided, P1Ascendancy.IronOath), 0x8080, tutorial);

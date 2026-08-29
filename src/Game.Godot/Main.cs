@@ -23,6 +23,7 @@ public partial class Main : Node
     private P2Dashboard? _dashboard;
     private HFlowContainer? _standardToolbar;
     private P3PixelTitleBar? _pixelTitleBar;
+    private P22InformationWindow? _informationWindow;
     private P3ToastOverlay? _toast;
     private VBoxContainer? _interfaceRoot;
     private HBoxContainer? _miniToolbar;
@@ -81,7 +82,12 @@ public partial class Main : Node
         TaskScheduler.UnobservedTaskException += OnUnobservedTaskException;
         _settingsStore = new SettingsStore(Path.Combine(userDirectory, "settings.json"));
         _logger.Write(GameLogLevel.Information, "p1a.start", "application", "P1A application started.");
-        _savesRoot = Path.Combine(userDirectory, "saves");
+        string[] userArguments = OS.GetCmdlineUserArgs();
+        bool stabilityRun = userArguments.Any(argument =>
+            argument is "--p22-stability-visible" or "--p22-stability-tray");
+        _savesRoot = stabilityRun
+            ? Path.Combine(Path.GetTempPath(), "GameForWork", "stability", System.Environment.ProcessId.ToString())
+            : Path.Combine(userDirectory, "saves");
         TryInitializeSave(_activeSlot);
         BuildInterface();
 
@@ -102,7 +108,6 @@ public partial class Main : Node
         _singleInstance.StartListening(() => Interlocked.Exchange(ref _restoreRequested, 1));
         UpdateWindowModeInterface();
         UpdateTrayState();
-        string[] userArguments = OS.GetCmdlineUserArgs();
         string? stabilitySeconds = userArguments.FirstOrDefault(argument =>
             argument.StartsWith("--p22-stability-seconds=", StringComparison.Ordinal));
         if (stabilitySeconds is not null &&
@@ -290,6 +295,7 @@ public partial class Main : Node
         _pixelTitleBar.Initialize(
             ToggleLargeWindow,
             ToggleAlwaysOnTop,
+            ShowInformation,
             () => GetWindow().Mode = Window.ModeEnum.Minimized,
             () => _windowController?.HideToTray(),
             OnCloseRequested);
@@ -423,6 +429,10 @@ public partial class Main : Node
         root.AddChild(_dashboard);
         root.AddChild(_testHarness);
 
+        _informationWindow = new P22InformationWindow { Theme = root.Theme };
+        AddChild(_informationWindow);
+        _informationWindow.Initialize(() => _session);
+
         _closeDialog = new ConfirmationDialog
         {
             Title = "关闭 GameForWork",
@@ -466,6 +476,12 @@ public partial class Main : Node
         AddChild(_resetDialog);
     }
 
+    private void ShowInformation()
+    {
+        EnsureStandardWindow();
+        _informationWindow?.Open();
+    }
+
     private void SetFontScale(int percent)
     {
         int clamped = Math.Clamp(percent, 80, 150);
@@ -477,6 +493,10 @@ public partial class Main : Node
         if (_closeDialog is not null)
         {
             _closeDialog.Theme = P2ThemeFactory.Create(clamped);
+        }
+        if (_informationWindow is not null)
+        {
+            _informationWindow.Theme = P2ThemeFactory.Create(clamped);
         }
         if (_resetDialog is not null) _resetDialog.Theme = P2ThemeFactory.Create(clamped);
 

@@ -6,14 +6,16 @@ public partial class P3PixelTitleBar : PanelContainer
 {
     private Action? _toggleSize;
     private Action? _togglePin;
+    private Action? _showInformation;
     private Action? _minimize;
     private Action? _hide;
     private Action? _close;
 
-    public void Initialize(Action toggleSize, Action togglePin, Action minimize, Action hide, Action close)
+    public void Initialize(Action toggleSize, Action togglePin, Action showInformation, Action minimize, Action hide, Action close)
     {
         _toggleSize = toggleSize;
         _togglePin = togglePin;
+        _showInformation = showInformation;
         _minimize = minimize;
         _hide = hide;
         _close = close;
@@ -73,6 +75,7 @@ public partial class P3PixelTitleBar : PanelContainer
             }
         };
         row.AddChild(drag);
+        AddTitleButton(row, "?", "游戏信息与指引", () => _showInformation?.Invoke());
         AddTitleButton(row, "◆", "置顶 / 取消置顶", () => _togglePin?.Invoke());
         AddTitleButton(row, "—", "最小化", () => _minimize?.Invoke());
         AddTitleButton(row, "▾", "隐藏到托盘", () => _hide?.Invoke());

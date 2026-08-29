@@ -80,7 +80,6 @@ public partial class P2Dashboard : VBoxContainer
     private P9TownPanel? _townPanel;
     private P10EndgamePanel? _endgamePanel;
     private P18AscendancyPanel? _ascendancyPanel;
-    private P19AffixPanel? _affixPanel;
     private OptionButton? _characterSelector;
     private PopupMenu? _itemMenu;
     private ConfirmationDialog? _confirmDialog;
@@ -352,10 +351,9 @@ public partial class P2Dashboard : VBoxContainer
         };
         dispatch.AddChild(_expeditionPanel);
         var endgameTab = new VBoxContainer { Name = "异界与突破", SizeFlagsVertical = SizeFlags.ExpandFill };
-        var endgameScroll = new ScrollContainer { SizeFlagsVertical = SizeFlags.ExpandFill, SizeFlagsHorizontal = SizeFlags.ExpandFill };
         _endgamePanel = new P10EndgamePanel { SizeFlagsVertical = SizeFlags.ExpandFill, SizeFlagsHorizontal = SizeFlags.ExpandFill };
         _endgamePanel.Initialize(RequireSession, Changed);
-        endgameScroll.AddChild(_endgamePanel); endgameTab.AddChild(endgameScroll); tabs.AddChild(endgameTab);
+        endgameTab.AddChild(_endgamePanel); tabs.AddChild(endgameTab);
         return Wrap(page);
     }
 
@@ -405,13 +403,6 @@ public partial class P2Dashboard : VBoxContainer
         _characterModes.AddChild(_passiveMode);
         _aiMode = BuildAiMode();
         _characterModes.AddChild(_aiMode);
-        _affixPanel = new P19AffixPanel
-        {
-            Name = "词缀图鉴",
-            SizeFlagsHorizontal = SizeFlags.ExpandFill,
-            SizeFlagsVertical = SizeFlags.ExpandFill,
-        };
-        _characterModes.AddChild(_affixPanel);
         _characterModes.TabChanged += index =>
         {
             if (_skillMode is not null && _characterModes.GetTabControl((int)index) == _skillMode)
@@ -553,14 +544,17 @@ public partial class P2Dashboard : VBoxContainer
         VBoxContainer page = Page("天赋");
         var tabs = new TabContainer { SizeFlagsVertical = SizeFlags.ExpandFill };
         page.AddChild(tabs);
-        VBoxContainer main = Page("主天赋");
+        var main = new Control
+        {
+            Name = "主天赋",
+            SizeFlagsHorizontal = SizeFlags.ExpandFill,
+            SizeFlagsVertical = SizeFlags.ExpandFill,
+            ClipContents = true,
+        };
         tabs.AddChild(main);
-        var search = new LineEdit { PlaceholderText = "搜索天赋名称或效果；规划不会消耗点数" };
-        search.TextChanged += query => _passiveTree?.SetSearch(query);
-        main.AddChild(search);
-        main.AddChild(new Label { Text = "铁誓星盘 · 1,200 节点 · 左键拖曳 / 滚轮缩放 · 双击分配 · 右键双击洗点" });
         OptionButton? mastery = null;
-        _passiveTree = new P1PassiveTreeView();
+        _passiveTree = new P1PassiveTreeView { MouseFilter = MouseFilterEnum.Stop };
+        _passiveTree.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
         _passiveTree.NodeSelected += stableId =>
         {
             PassiveNodeDefinition node = P1PassiveTree.Get(stableId);
@@ -599,8 +593,25 @@ public partial class P2Dashboard : VBoxContainer
                 ? "记忆珠宝已从珠宝仓拖入棱孔。"
                 : "该孔未分配，或同名珠宝已经镶嵌。");
         main.AddChild(_passiveTree);
+
+        var overlay = new VBoxContainer { MouseFilter = MouseFilterEnum.Ignore, ZIndex = 10 };
+        overlay.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
+        main.AddChild(overlay);
+        var header = new VBoxContainer();
+        var search = new LineEdit
+        {
+            PlaceholderText = "搜索天赋名称或效果；规划不会消耗点数",
+            SizeFlagsHorizontal = SizeFlags.ExpandFill,
+        };
+        search.TextChanged += query => _passiveTree?.SetSearch(query);
+        header.AddChild(search);
+        header.AddChild(new Label { Text = "铁誓星盘 · 1,200 节点 · 左键拖曳 / 滚轮缩放 · 双击分配 · 右键双击洗点" });
+        overlay.AddChild(TreeHud(header));
+        overlay.AddChild(new Control { SizeFlagsVertical = SizeFlags.ExpandFill, MouseFilter = MouseFilterEnum.Ignore });
+
+        var footer = new VBoxContainer();
         var row = new HFlowContainer();
-        main.AddChild(row);
+        footer.AddChild(row);
         _selectedPassive = new Label
         {
             Text = "单击查看 · 左键双击加点 · 右键双击洗点（不会切断已分配路径）",
@@ -633,7 +644,7 @@ public partial class P2Dashboard : VBoxContainer
         Button reset = AddButton(row, "完整重置", ResetPassives);
         _heroOnlyControls.AddRange([allocate, allocatePath, refund, reset]);
         var specialization = new HFlowContainer();
-        main.AddChild(specialization);
+        footer.AddChild(specialization);
         mastery = new OptionButton { TooltipText = "分配专精节点后，从该类别六个效果中选择一个；同类专精效果全局唯一。", Disabled = true };
         specialization.AddChild(mastery);
         Button chooseMastery = AddButton(specialization, "选择专精效果", () =>
@@ -659,10 +670,11 @@ public partial class P2Dashboard : VBoxContainer
             Changed(id is not null && RequireSession().TryUnsocketJewel(id) ? "记忆珠宝已取下。" : "该棱孔没有珠宝。");
         });
         _heroOnlyControls.AddRange([chooseMastery, socketJewel, unsocketJewel]);
+        overlay.AddChild(TreeHud(footer));
         _ascendancyPanel = new P18AscendancyPanel { Name = "升华", SizeFlagsVertical = SizeFlags.ExpandFill };
         _ascendancyPanel.Initialize(RequireSession, Changed);
         tabs.AddChild(_ascendancyPanel);
-        return Wrap(page);
+        return page;
     }
 
     private Control BuildAiMode()
@@ -1496,7 +1508,6 @@ public partial class P2Dashboard : VBoxContainer
                 _session.Passives.StartKind, _session.Passives.SocketedJewels);
             _jewelStashPanel?.RefreshState();
             _ascendancyPanel?.Refresh();
-            _affixPanel?.Refresh();
             bool heroSelected = _selectedCharacter == P2CharacterKind.Hero;
             foreach (BaseButton control in _heroOnlyControls)
             {
@@ -1686,6 +1697,21 @@ public partial class P2Dashboard : VBoxContainer
         SizeFlagsHorizontal = SizeFlags.ExpandFill,
         SizeFlagsVertical = SizeFlags.ExpandFill,
     };
+
+    private static PanelContainer TreeHud(Control content)
+    {
+        var panel = new PanelContainer { MouseFilter = MouseFilterEnum.Stop };
+        panel.AddThemeStyleboxOverride("panel", new StyleBoxFlat
+        {
+            BgColor = new Color("10151de8"),
+            ContentMarginLeft = 8,
+            ContentMarginTop = 6,
+            ContentMarginRight = 8,
+            ContentMarginBottom = 6,
+        });
+        panel.AddChild(content);
+        return panel;
+    }
 
     private static ScrollContainer Wrap(Control child)
     {

@@ -4,7 +4,7 @@ using Godot;
 
 namespace GameForWork.GodotClient;
 
-public partial class P18AscendancyPanel : VBoxContainer
+public partial class P18AscendancyPanel : Control
 {
     private Func<P1GameSession>? _session;
     private Action<string>? _changed;
@@ -16,9 +16,20 @@ public partial class P18AscendancyPanel : VBoxContainer
     {
         _session = session;
         _changed = changed;
-        var bar = new HFlowContainer(); AddChild(bar);
+        ClipContents = true;
+        _tree = new P18AscendancyTreeView { MouseFilter = MouseFilterEnum.Stop };
+        _tree.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
+        _tree.Initialize(session, changed);
+        AddChild(_tree);
+
+        var overlay = new VBoxContainer { MouseFilter = MouseFilterEnum.Ignore, ZIndex = 10 };
+        overlay.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
+        AddChild(overlay);
+        var top = new VBoxContainer();
         _summary = new Label { SizeFlagsHorizontal = SizeFlags.ExpandFill, AutowrapMode = TextServer.AutowrapMode.WordSmart };
-        bar.AddChild(_summary);
+        top.AddChild(_summary);
+        var bar = new HFlowContainer();
+        top.AddChild(bar);
         _path = new OptionButton();
         foreach (P18Ascendancy value in Enum.GetValues<P18Ascendancy>().Where(value => value != P18Ascendancy.None))
             _path.AddItem(P18AscendancyCatalog.DisplayName(value), (int)value);
@@ -34,11 +45,13 @@ public partial class P18AscendancyPanel : VBoxContainer
         reset.Pressed += () => { changed(session().TryResetAscendancy(false) ? "升华节点已全部重置。" : "没有可重置节点，或金币不足。"); Refresh(); };
         var change = new Button { Text = "更换路线（100000金币）" }; bar.AddChild(change);
         change.Pressed += () => { changed(session().TryResetAscendancy(true) ? "升华路线已清除，可以重新选择。" : "尚未选择路线，或金币不足。"); Refresh(); };
-
-        _tree = new P18AscendancyTreeView { SizeFlagsVertical = SizeFlags.ExpandFill };
-        _tree.Initialize(session, changed);
-        AddChild(_tree);
-        AddChild(new Label { Text = "左键分配 · 右键退还（强化点2000金币，核心点10000金币）· 每条路线只能中心→强化→核心", HorizontalAlignment = HorizontalAlignment.Center });
+        overlay.AddChild(Hud(top));
+        overlay.AddChild(new Control { SizeFlagsVertical = SizeFlags.ExpandFill, MouseFilter = MouseFilterEnum.Ignore });
+        overlay.AddChild(Hud(new Label
+        {
+            Text = "左键分配 · 右键退还（强化点2000金币，核心点10000金币）· 每条路线只能中心→强化→核心",
+            HorizontalAlignment = HorizontalAlignment.Center,
+        }));
     }
 
     public void Refresh()
@@ -47,6 +60,21 @@ public partial class P18AscendancyPanel : VBoxContainer
         var state = _session().Endgame;
         _summary!.Text = $"{P18AscendancyCatalog.DisplayName(state.SelectedAscendancy)} · 已用 {state.AscendancyPassives.Count}/{state.BreakthroughPoints}（上限8） · 金币 {_session().World.Economy.Gold}";
         _tree?.QueueRedraw();
+    }
+
+    private static PanelContainer Hud(Control content)
+    {
+        var panel = new PanelContainer { MouseFilter = MouseFilterEnum.Stop };
+        panel.AddThemeStyleboxOverride("panel", new StyleBoxFlat
+        {
+            BgColor = new Color("0d1118e8"),
+            ContentMarginLeft = 8,
+            ContentMarginTop = 6,
+            ContentMarginRight = 8,
+            ContentMarginBottom = 6,
+        });
+        panel.AddChild(content);
+        return panel;
     }
 }
 
@@ -63,7 +91,7 @@ public partial class P18AscendancyTreeView : Control
     public void Initialize(Func<P1GameSession> session, Action<string> changed)
     {
         _session = session; _changed = changed;
-        CustomMinimumSize = new Vector2(720, 430); MouseFilter = MouseFilterEnum.Stop;
+        MouseFilter = MouseFilterEnum.Stop;
         const string backdrops = "res://assets/p21/trees/p21-ascendancy-backdrops.png";
         if (ResourceLoader.Exists(backdrops)) _backdrops = GD.Load<Texture2D>(backdrops);
     }
