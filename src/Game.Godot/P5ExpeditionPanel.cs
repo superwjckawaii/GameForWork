@@ -308,6 +308,9 @@ public partial class P5ExpeditionPanel : VBoxContainer
     {
         var content = new VBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
         content.AddChild(new Label { Text = title });
+        var gameplay = new P28GameplayPanel();
+        gameplay.Initialize(_session!, kind, message => _changed?.Invoke(message));
+        content.AddChild(gameplay);
         var selectors = new HFlowContainer();
         content.AddChild(selectors);
         var target = new OptionButton();
@@ -372,9 +375,10 @@ public partial class P5ExpeditionPanel : VBoxContainer
             if (blockGarden.ButtonPressed && preferred != MapRoute.LifeGarden) blocked.Add(MapRoute.LifeGarden);
             int rarityId = rarityFilter.GetItemId(rarityFilter.Selected);
             int corruption = corruptionFilter.GetItemId(corruptionFilter.Selected);
-            _session!().SetExpeditionPolicy(kind, team.Policy with
+            _session!().SetExpeditionPolicy(kind, (team.PendingPolicy ?? team.Policy) with
             {
                 PreferredRoute = preferred,
+                RouteDecisionTimeoutSeconds = 0,
                 RoutePriority = new[] { preferred, MapRoute.Safe, MapRoute.LifeGarden, MapRoute.Abyss, MapRoute.Warfront }.Distinct().ToArray(),
                 BlockedRoutes = blocked,
                 MaximumMapTier = (int)maximumTier.Value,

@@ -203,8 +203,8 @@ public partial class P9MetalPanel : VBoxContainer
             var button = new Button
             {
                 Text = $"{GardenName(craft)}\n{cost} 命能",
-                TooltipText = "只保留或偏向公开类别；相同存档种子产生相同结果。",
-                Disabled = target is null || target.Item.Rarity != ItemRarity.Rare || !target.Item.CanModify || session.Endgame.LifeForce < cost,
+                TooltipText = craft is P14GardenCraft.KeepPrefixes or P14GardenCraft.KeepSuffixes ? "保留侧词缀逐条不变，仅重铸另一侧，最多三前缀三后缀。" : "重铸并保证至少一条合法目标标签词缀；无合法候选不扣费。每次成功加工使用独立且可复现的结果。",
+                Disabled = target is null || !P14GardenCrafting.CanApply(target.Item, craft) || session.Endgame.LifeForce < cost,
             };
             button.Pressed += () =>
             {
@@ -227,6 +227,7 @@ public partial class P9MetalPanel : VBoxContainer
         P14GardenCraft.KeepSuffixes => "保留后缀重铸",
         P14GardenCraft.BiasLife => "生命偏向重铸",
         P14GardenCraft.BiasDefense => "防御偏向重铸",
+        P14GardenCraft.BiasSpell => "法术偏向重铸",
         _ => "攻击偏向重铸",
     };
 

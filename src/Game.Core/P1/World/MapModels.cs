@@ -5,6 +5,7 @@ using GameForWork.Core.P3;
 using GameForWork.Core.P12;
 using GameForWork.Core.P18;
 using GameForWork.Core.P26;
+using GameForWork.Core.P28;
 using GameForWork.Core.Simulation;
 using System.Text.Json.Serialization;
 
@@ -66,7 +67,8 @@ public sealed record ExpeditionPolicy(
     int MaximumMapTier = P1MapItem.MaximumAreaLevel,
     P26MapFilter? MapFilter = null,
     P26MapOrder MapOrder = P26MapOrder.Recommended,
-    P26NoMatchBehavior NoMatchBehavior = P26NoMatchBehavior.Wait)
+    P26NoMatchBehavior NoMatchBehavior = P26NoMatchBehavior.Wait,
+    P28GameplayPolicy? Gameplay = null)
 {
     public static ExpeditionPolicy Recommended => new(
         RouteSelectionMode.Automatic,
@@ -123,6 +125,7 @@ public sealed record ExpeditionPolicy(
         }
 
         MapFilter?.Validate();
+        Gameplay?.Validate();
         return this;
     }
 
@@ -152,7 +155,10 @@ public sealed record P1MapItem(
     bool IsManualPriority = false,
     bool IsRunning = false,
     bool IsQuestMap = false,
-    long AcquiredSequence = 0)
+    long AcquiredSequence = 0,
+    P28GameplayPolicy? Gameplay = null,
+    ulong GameplaySeed = 0,
+    int ResumeNode = 1)
 {
     public const int MinimumTier = 1;
     public const int MaximumTier = 20;
@@ -176,8 +182,9 @@ public sealed record P1MapItem(
 
     public P1MapItem Validate()
     {
+        Gameplay?.Validate();
         if (string.IsNullOrWhiteSpace(InstanceId) || InstanceId.Length > 128 ||
-            Tier is < MinimumTier or > MaximumTier ||
+            Tier is < MinimumTier or > MaximumTier || ResumeNode is < 1 or > 32 ||
             Quality is < 0 or > 20 || !Enum.IsDefined(Rarity) || !Enum.IsDefined(Altar) ||
             EffectiveAffixes.Count > 4 || EffectiveRouteCandidates.Count > 3 ||
             EffectiveAffixes.Count(affix => affix.Family == P26MapAffixFamily.DangerousPrefix) > 2 ||
@@ -431,9 +438,12 @@ public sealed class P1MapRunner(IP1MapAttemptResolver resolver)
     {
         ArgumentNullException.ThrowIfNull(resolver);
         var attempts = new List<MapAttemptResult>();
+        map = map with { GameplaySeed = seed };
+        int resumeNode = 1;
         for (int attempt = 1; attempt <= P1MapItem.TotalAttempts; attempt++)
         {
-            MapAttemptResult result = resolver.Resolve(map, route, team, attempt, unchecked(seed + (ulong)attempt - 1));
+            MapAttemptResult result = resolver.Resolve(map with { ResumeNode = resumeNode }, route, team, attempt,
+                resolver is P1MapAttemptResolver ? seed : unchecked(seed + (ulong)attempt - 1));
             attempts.Add(result);
             if (result.Succeeded)
             {
@@ -447,13 +457,16 @@ public sealed class P1MapRunner(IP1MapAttemptResolver resolver)
                     string.Empty,
                     attempts.Sum(item => item.Timeline?.DurationMilliseconds ?? 0));
             }
+            resumeNode = result.Nodes.LastOrDefault()?.NodeIndex ?? 1;
+            if (result.Timeline?.PlannedNodes?.FirstOrDefault(node => node.Index == resumeNode)?.Gameplay?.NoRescue == true)
+                break;
         }
 
         return new P1MapRunResult(
             map,
             route,
             false,
-            P1MapItem.TotalAttempts,
+            attempts.Count,
             0,
             attempts,
             attempts[^1].FailureReason,

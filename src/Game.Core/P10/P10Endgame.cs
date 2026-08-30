@@ -3,6 +3,7 @@ using GameForWork.Core.P12;
 using GameForWork.Core.P18;
 using GameForWork.Core.P20;
 using GameForWork.Core.P26;
+using GameForWork.Core.P28;
 
 namespace GameForWork.Core.P10;
 
@@ -91,7 +92,9 @@ public sealed record P10EndgameSnapshot(
     bool WarfrontDiscovered = false,
     int WarfrontMerit = 0,
     int WarfrontReputation = 0,
-    bool WarfrontGuaranteeIssued = false);
+    bool WarfrontGuaranteeIssued = false,
+    IReadOnlyDictionary<P28RewardPreference, int>? BlueMisses = null,
+    long GameplayOperationSequence = 0);
 
 public sealed record P12AtlasSchemeSnapshot(string Name, IReadOnlyList<string> AllocatedPassives);
 
@@ -131,6 +134,43 @@ public sealed class P10EndgameState
     public int WarfrontMerit { get; private set; }
     public int WarfrontReputation { get; private set; }
     public bool WarfrontGuaranteeIssued { get; private set; }
+    private readonly Dictionary<P28RewardPreference, int> _blueMisses = [];
+    public IReadOnlyDictionary<P28RewardPreference, int> BlueMisses => _blueMisses;
+    public long GameplayOperationSequence { get; private set; }
+    public void CompleteGameplayOperation() => GameplayOperationSequence = checked(GameplayOperationSequence + 1);
+    public void DiscoverWarfront() => WarfrontDiscovered = true;
+    public int SupplyTier => WarfrontReputation >= 60 ? 3 : WarfrontReputation >= 15 ? 2 : 1;
+    public bool TrySpendWarfrontMerit(int amount)
+    {
+        if (amount <= 0 || WarfrontMerit < amount) return false;
+        WarfrontMerit -= amount; return true;
+    }
+    public bool RecordGameplay(P28RewardLedger earned, bool bluePityUnlocked)
+    {
+        LifeForce = checked(LifeForce + earned.LifeForce); RedFavor = checked(RedFavor + earned.RedFavor);
+        BlueFavor = checked(BlueFavor + earned.BlueFavor); WarfrontMerit = checked(WarfrontMerit + earned.Merit);
+        WarfrontReputation = checked(WarfrontReputation + earned.Reputation);
+        AddFragments(earned.Fragments);
+        foreach (P28Mechanic mechanic in earned.Encounters.Where(e => e.Kills > 0).Select(e => e.Node.Gameplay!.Mechanic).Distinct())
+        {
+            P10MapMechanic? kind = mechanic switch { P28Mechanic.Abyss => P10MapMechanic.Abyss,
+                P28Mechanic.Garden => P10MapMechanic.LifeGarden, P28Mechanic.Red => P10MapMechanic.RedAltar,
+                P28Mechanic.Blue => P10MapMechanic.BlueAltar, P28Mechanic.Warfront => P10MapMechanic.Warfront, _ => null };
+            if (kind is not null) _mechanics[kind.Value]++;
+        }
+        if (!bluePityUnlocked || earned.BlueTarget is null) return false;
+        P28RewardPreference target = earned.BlueTarget.Value;
+        if (earned.BlueTargetHit) { _blueMisses[target] = 0; return false; }
+        int misses = _blueMisses.GetValueOrDefault(target) + 1;
+        _blueMisses[target] = misses >= 10 ? 0 : misses;
+        return misses >= 10;
+    }
+    private void AddFragments(int count)
+    {
+        CitadelFragments = checked(CitadelFragments + count);
+        CitadelTickets = checked(CitadelTickets + CitadelFragments / CitadelFragmentsPerTicket);
+        CitadelFragments %= CitadelFragmentsPerTicket;
+    }
     public const int MaximumAscendancyPoints = 8;
 
     public IReadOnlyList<P10MapMechanic> RecordMapCompletion(P1MapItem map, MapRoute route, ulong seed)
@@ -143,39 +183,9 @@ public sealed class P10EndgameState
         if (route == MapRoute.Warfront) selected.Add(P10MapMechanic.Warfront);
         if (map.Altar == P12MapAltar.RedOath) selected.Add(P10MapMechanic.RedAltar);
         if (map.Altar == P12MapAltar.BlueOath) selected.Add(P10MapMechanic.BlueAltar);
-        if (selected.Count == 0)
-        {
-            P10MapMechanic[] choices = [P10MapMechanic.Abyss, P10MapMechanic.LifeGarden,
-                P10MapMechanic.RedAltar, P10MapMechanic.BlueAltar];
-            selected.Add(choices[(int)((seed + (ulong)map.Tier) % (ulong)choices.Length)]);
-        }
         P10MapMechanic[] result = selected.Distinct().Take(3).ToArray();
-        foreach (P10MapMechanic mechanic in result)
-        {
-            _mechanics[mechanic]++;
-            P10AtlasTheme theme = mechanic switch
-            {
-                P10MapMechanic.Abyss => P10AtlasTheme.Abyss,
-                P10MapMechanic.LifeGarden => P10AtlasTheme.LifeGarden,
-                P10MapMechanic.RedAltar => P10AtlasTheme.RedAltar,
-                P10MapMechanic.BlueAltar => P10AtlasTheme.BlueAltar,
-                _ => P10AtlasTheme.Warfront,
-            };
-            int bonus = 100 + AtlasBonus(theme);
-            int quantityBonus = Math.Max(0, map.ItemQuantityBasisPoints);
-            switch (mechanic)
-            {
-                case P10MapMechanic.LifeGarden: LifeForce = checked(LifeForce + map.Tier * bonus / 100 * quantityBonus / 10_000); break;
-                case P10MapMechanic.RedAltar: RedFavor = checked(RedFavor + bonus * quantityBonus / 10_000); break;
-                case P10MapMechanic.BlueAltar: BlueFavor = checked(BlueFavor + bonus * quantityBonus / 10_000); break;
-                case P10MapMechanic.Warfront: RecordWarfrontAttempt(map.Tier, true); break;
-            }
-        }
-        if (map.Tier >= 11)
-        {
-            CitadelFragments += 1;
-            while (CitadelFragments >= CitadelFragmentsPerTicket) { CitadelFragments -= CitadelFragmentsPerTicket; CitadelTickets++; }
-        }
+        // Progression only. Mechanic rewards require a combat ledger, never a random phantom encounter.
+        if (map.Tier >= 11) AddFragments(1);
         return result;
     }
 
@@ -183,7 +193,7 @@ public sealed class P10EndgameState
     {
         if (tier is < 1 or > 20) throw new ArgumentOutOfRangeException(nameof(tier));
         WarfrontDiscovered = true;
-        WarfrontMerit = checked(WarfrontMerit + tier * (succeeded ? 10 : 3));
+        WarfrontMerit = checked(WarfrontMerit + tier * (succeeded ? 10 : 0));
         if (succeeded) WarfrontReputation = checked(WarfrontReputation + 1 + tier / 5);
     }
 
@@ -293,8 +303,6 @@ public sealed class P10EndgameState
     public static bool IsCitadelPractice(P1MapItem map) => map.InstanceId.StartsWith(CitadelPracticeMapPrefix, StringComparison.Ordinal);
     public static bool IsBreakthroughTrial(P1MapItem map) => map.InstanceId.StartsWith(BreakthroughMapPrefix, StringComparison.Ordinal);
 
-    public int AtlasBonus(P10AtlasTheme theme) => AtlasPassives.Select(P10AtlasTree.Get).Count(node => node.Theme == theme) * 10;
-
     public P10EndgameSnapshot Capture() => new(_completedTiers.Order().ToArray(), AtlasPassives.Order().ToArray(),
         new Dictionary<P10MapMechanic, int>(_mechanics), LifeForce, RedFavor, BlueFavor, CitadelFragments,
         CitadelTickets, CitadelDefeated, _ascendancy.Order().ToArray(), BreakthroughPoints,
@@ -303,7 +311,7 @@ public sealed class P10EndgameState
         0, CitadelVictories, MythicReforgeMaterials, MythicGranted,
         BreakthroughAttempts, BreakthroughVictories, BonusAtlasPoints, SelectedAscendancy,
         Act3AscendancyAwarded, Act5AscendancyAwarded, WarfrontDiscovered,
-        WarfrontMerit, WarfrontReputation, WarfrontGuaranteeIssued);
+        WarfrontMerit, WarfrontReputation, WarfrontGuaranteeIssued, new Dictionary<P28RewardPreference, int>(_blueMisses), GameplayOperationSequence);
 
     public static P10EndgameState Restore(P10EndgameSnapshot? snapshot)
     {
@@ -314,7 +322,8 @@ public sealed class P10EndgameState
             snapshot.BreakthroughPoints is < 0 or > MaximumAscendancyPoints || snapshot.AscendancyPassives.Count > snapshot.BreakthroughPoints ||
             snapshot.CitadelVictories < 0 || snapshot.MythicReforgeMaterials < 0 || snapshot.BreakthroughAttempts < 0 ||
             snapshot.BreakthroughVictories < 0 || snapshot.BonusAtlasPoints is < 0 or > 5 || !Enum.IsDefined(snapshot.SelectedAscendancy) ||
-            snapshot.WarfrontMerit < 0 || snapshot.WarfrontReputation < 0)
+            snapshot.WarfrontMerit < 0 || snapshot.WarfrontReputation < 0 || snapshot.GameplayOperationSequence < 0 ||
+            (snapshot.BlueMisses?.Any(p => !Enum.IsDefined(p.Key) || p.Value is < 0 or > 9) ?? false))
             throw new InvalidDataException("P10 endgame snapshot is invalid.");
         foreach (int tier in snapshot.CompletedTiers) state._completedTiers.Add(tier);
         IEnumerable<string> migratedAtlas = snapshot.AtlasPassives
@@ -339,6 +348,8 @@ public sealed class P10EndgameState
         state.WarfrontMerit = snapshot.WarfrontMerit;
         state.WarfrontReputation = snapshot.WarfrontReputation;
         state.WarfrontGuaranteeIssued = snapshot.WarfrontGuaranteeIssued;
+        state.GameplayOperationSequence = snapshot.GameplayOperationSequence;
+        foreach (var pair in snapshot.BlueMisses ?? new Dictionary<P28RewardPreference, int>()) state._blueMisses[pair.Key] = pair.Value;
         foreach (string id in snapshot.AscendancyPassives)
         {
             if (id.StartsWith("core.ascendancy.iron_oath.", StringComparison.Ordinal)) continue;

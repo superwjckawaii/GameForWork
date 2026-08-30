@@ -59,7 +59,7 @@ public static class P6CombatSkillRules
         int pierce = 0;
         int fork = 0;
         bool returns = active.Tags.HasFlag(SkillTag.Returning);
-        damage = checked(damage * (10_000 + (Math.Clamp(configuration.Level, 1, 20) - 1) * 250) / 10_000);
+        damage = checked(damage * (10_000 + (Math.Clamp(configuration.Level, 1, 21) - 1) * 250) / 10_000);
 
         if (configuration.Supports.HasFlag(SkillSupport.IncreasedArea))
         {

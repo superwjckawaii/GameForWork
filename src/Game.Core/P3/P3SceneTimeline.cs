@@ -8,6 +8,7 @@ using GameForWork.Core.P4;
 using GameForWork.Core.P12;
 using GameForWork.Core.P14;
 using GameForWork.Core.P27;
+using GameForWork.Core.P28;
 
 namespace GameForWork.Core.P3;
 
@@ -63,7 +64,7 @@ public sealed record P3SceneEvent(
     int HeroMaximumShield,
     int EnemyLife,
     int EnemyMaximumLife,
-    P3GridPosition Position);
+    P3GridPosition Position, P4Point? EffectPosition = null);
 
 public sealed record P3EncounterSegment(
     int NodeIndex,
@@ -92,7 +93,8 @@ public sealed record P3SceneTimeline(
     IReadOnlyList<P3EncounterSegment> Encounters,
     IReadOnlyList<P3SceneEvent> Events,
     string FinalHash,
-    IReadOnlyList<P4SpatialFrame>? SpatialFrames = null)
+    IReadOnlyList<P4SpatialFrame>? SpatialFrames = null,
+    IReadOnlyList<P14MapNode>? PlannedNodes = null)
 {
     public const int LogicalWidth = 12;
     public const int LogicalHeight = 24;
@@ -150,7 +152,7 @@ public static class P3SceneTimelineBuilder
         ArgumentNullException.ThrowIfNull(build);
         ArgumentNullException.ThrowIfNull(map);
         P12MapCombatModifiers modifiers = P12MapCombatModifiers.From(map);
-        P14MapPlan plan = P14MapPlanner.Build(map, route, [], seed ^ (ulong)attempt);
+        P14MapPlan plan = P14MapPlanner.Build(map, route, [], map.GameplaySeed == 0 ? seed : map.GameplaySeed);
         return Build(
             $"map:{map.AreaId}:{map.InstanceId}:attempt:{attempt}",
             build,
@@ -162,7 +164,7 @@ public static class P3SceneTimelineBuilder
             seed,
             modifiers,
             plan,
-            map.AreaId);
+            map.AreaId, map: map) with { PlannedNodes = plan.Nodes };
     }
 
     public static long TravelMilliseconds(int tileDistance, int movementSpeedBasisPoints)
@@ -190,7 +192,8 @@ public static class P3SceneTimelineBuilder
         P12MapCombatModifiers? mapModifiers = null,
         P14MapPlan? mapPlan = null,
         string areaId = "",
-        string finalBossStableId = "")
+        string finalBossStableId = "",
+        P1MapItem? map = null)
     {
         var random = new Pcg32(seed);
         var events = new List<P3SceneEvent>();
@@ -208,7 +211,14 @@ public static class P3SceneTimelineBuilder
 
         for (int nodeIndex = 1; nodeIndex <= nodeCount; nodeIndex++)
         {
+            // Node-local randomness is stable across rescues. Cleared nodes are never replayed.
+            if (map is not null) random = new Pcg32(seed ^ ((ulong)nodeIndex * 0x9e3779b97f4a7c15UL));
+            if (nodeIndex < (map?.ResumeNode ?? 1)) continue;
             P14MapNode? plannedNode = mapPlan?.Nodes[nodeIndex - 1];
+            P28EncounterModifiers gameplay = P28EncounterModifiers.For(mapPlan, nodeIndex, map);
+            P1TeamBuild encounterBuild = gameplay.Apply(build);
+            maximumLife = encounterBuild.Sheet.MaximumLife().Value;
+            heroLife = Math.Min(heroLife, maximumLife);
             int distance = 14 + (int)(random.NextUInt() % 9);
             long travel = TravelMilliseconds(distance, build.MovementSpeedBasisPoints);
             events.Add(Event(now, P3SceneEventKind.TravelStarted, nodeIndex, 0, distance, "move", heroLife,
@@ -216,6 +226,11 @@ public static class P3SceneTimelineBuilder
             now += travel;
             events.Add(Event(now, P3SceneEventKind.NodeEntered, nodeIndex, 0, 0, "12x24", heroLife,
                 maximumLife, heroMana, maximumMana, heroShield, maximumShield, 0, 0, new(6, 20)));
+            if (plannedNode?.Gameplay?.Candidates is { } candidates)
+                events.Add(Event(now, P3SceneEventKind.MechanicChoice, nodeIndex, 0, 0,
+                    $"选择：{plannedNode.DisplayName}；代价数值：{plannedNode.Gameplay.Choice?.Magnitude}；刷新{plannedNode.Gameplay.Refreshes}次；" +
+                    string.Join(" / ", candidates.Select(c => $"{c.Name}·{c.Enemy}·{c.Rule}·{c.Tag}")),
+                    heroLife, maximumLife, heroMana, maximumMana, heroShield, maximumShield, 0, 0, new(6, 12)));
 
             if (plannedNode is not null && plannedNode.EnemyCount == 0)
             {
@@ -226,7 +241,7 @@ public static class P3SceneTimelineBuilder
             }
 
             bool campaign = stableId.StartsWith("campaign:", StringComparison.Ordinal);
-            bool bossNode = plannedNode?.Kind is P14MapNodeKind.Boss or P14MapNodeKind.WarfrontOfficer or P14MapNodeKind.WarfrontCommander ||
+            bool bossNode = !string.IsNullOrEmpty(plannedNode?.BossStableId) || plannedNode?.Kind is P14MapNodeKind.Boss or P14MapNodeKind.WarfrontOfficer or P14MapNodeKind.WarfrontCommander ||
                             finalBoss && nodeIndex == nodeCount;
             bool eliteNode = plannedNode?.Kind == P14MapNodeKind.Elite ||
                              !bossNode && (forceElite && nodeIndex % 2 == 0 || !campaign && nodeIndex == nodeCount - 1);
@@ -246,7 +261,7 @@ public static class P3SceneTimelineBuilder
                 plannedNode?.DisplayName ?? (bossNode ? "boss_group" : eliteNode ? "elite_group" : "group"), heroLife, maximumLife,
                 heroMana, maximumMana, heroShield, maximumShield, enemyCount, enemyCount, new(6, 4)));
             P4NodeCombatResult result = new P4SpatialCombatRunner().Run(new P4NodeCombatRequest(
-                build,
+                encounterBuild,
                 nodeIndex,
                 areaLevel,
                 enemyCount,
@@ -257,9 +272,9 @@ public static class P3SceneTimelineBuilder
                 InitialHeroLife: heroLife,
                 InitialHeroMana: heroMana,
                 InitialHeroShield: heroShield,
-                EnemyLifeBasisPoints: mapModifiers?.EnemyLifeBasisPoints ?? 10_000,
-                EnemyDamageBasisPoints: mapModifiers?.EnemyDamageBasisPoints ?? 10_000,
-                EnemySpeedBasisPoints: mapModifiers?.EnemySpeedBasisPoints ?? 10_000,
+                EnemyLifeBasisPoints: P28Gameplay.Scale(mapModifiers?.EnemyLifeBasisPoints ?? 10_000, gameplay.Life),
+                EnemyDamageBasisPoints: P28Gameplay.Scale(mapModifiers?.EnemyDamageBasisPoints ?? 10_000, gameplay.Damage),
+                EnemySpeedBasisPoints: P28Gameplay.Scale(mapModifiers?.EnemySpeedBasisPoints ?? 10_000, gameplay.Speed),
                 PlayerRecoveryBasisPoints: mapModifiers?.PlayerRecoveryBasisPoints ?? 10_000,
                 BossStableId: bossNode ? plannedNode?.BossStableId ?? mapPlan?.FinalBossStableId ?? finalBossStableId ?? string.Empty : string.Empty,
                 BossLifeBasisPoints: mapModifiers?.BossLifeBasisPoints ?? 10_000,
@@ -275,7 +290,12 @@ public static class P3SceneTimelineBuilder
                 BossCount: bossNode ? mapModifiers?.BossCount ?? 1 : 1,
                 AdditionalRareEnemies: mapModifiers?.AdditionalRareEnemies ?? 0,
                 EncounterFamily: mapPlan is null ? null : P27MonsterCatalog.FamilyForEncounter(
-                    areaId, plannedNode?.Kind, mapPlan.Altar, nodeIndex, encounterSeed)), encounterSeed);
+                    areaId, plannedNode?.Kind, mapPlan.Altar, nodeIndex, encounterSeed),
+                FlaskRecoveryBasisPoints: gameplay.FlaskRecovery,
+                IncomingHitBasisPoints: gameplay.IncomingHits,
+                ExtraBossPhase: gameplay.ExtraPhase,
+                GardenTags: plannedNode?.Gameplay?.Selections?.Select(c => c.Tag).ToArray() ??
+                    (plannedNode?.Gameplay?.Mechanic == P28Mechanic.Garden ? [plannedNode.Gameplay.Choice!.Tag] : null)), encounterSeed);
             spatialFrames.AddRange(result.Frames.Select(frame => frame with { AtMilliseconds = start + frame.AtMilliseconds }));
             AppendSpatialEvents(events, result, start, nodeIndex, maximumLife, maximumMana, maximumShield);
             long duration = checked((long)result.Ticks * TickMilliseconds);
@@ -359,7 +379,7 @@ public static class P3SceneTimelineBuilder
                 maximumShield,
                 enemy?.Life ?? 0,
                 enemy?.MaximumLife ?? 0,
-                new P3GridPosition(item.TargetPosition.XRaw / 1_000, item.TargetPosition.YRaw / 1_000)));
+                new P3GridPosition(item.TargetPosition.XRaw / 1_000, item.TargetPosition.YRaw / 1_000)) with { EffectPosition = item.TargetPosition });
         }
     }
 

@@ -232,5 +232,7 @@ public static class P27MonsterCatalog
 
     private static EnemySkillProfile S(EnemySkillKind kind, string name, EnemyDamageType damage, int multiplier,
         int cooldown = 10_000, int range = 0, bool area = false, string telegraph = "", bool avoidable = true) =>
-        new(kind, name, damage, multiplier, cooldown, range, area, telegraph, avoidable);
+        new(kind, name, damage, multiplier, cooldown, range, area, telegraph, avoidable,
+            kind is EnemySkillKind.ArcaneBolt or EnemySkillKind.GroundHazard or EnemySkillKind.CorpseBurst or
+                EnemySkillKind.RootSnare or EnemySkillKind.DelayedNova or EnemySkillKind.ChainLightning);
 }

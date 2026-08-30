@@ -257,12 +257,14 @@ public sealed class P2ItemCommandService(
         if (!item.CanModify || item.Rarity != ItemRarity.Rare)
             return new(false, "命能加工要求未锁定、未腐化的稀有装备。", null, cost);
         if (session.Endgame.LifeForce < cost) return new(false, $"命能不足，需要 {cost}。", null, cost);
+        if (!P14GardenCrafting.CanApply(item, craft)) return new(false, "当前底材没有合法的目标词缀，未消耗命能。", null, cost);
         ItemInstance result = P14GardenCrafting.Apply(item, craft,
-            session.Seed ^ (ulong)session.SimulationSequence ^ (ulong)index * 0x9e3779b97f4a7c15UL);
+            session.Seed ^ (ulong)session.Endgame.GameplayOperationSequence * 0x9e3779b97f4a7c15UL ^ (ulong)index);
         if (!Replace(source, index, result)) return new(false, "物品位置变化，命能未消耗。", null, cost);
         if (!session.Endgame.TrySpendLifeForce(cost)) throw new InvalidOperationException("Life force changed during crafting.");
+        session.Endgame.CompleteGameplayOperation();
         if (source == ItemContainerKind.Equipped) session.NotifyEquipmentChanged(character);
-        session.Management.AddHistory($"命能加工：{craft}，消耗 {cost} 命能。" );
+        session.Management.AddHistory($"命能加工：{craft}，消耗 {cost} 命能。");
         session.RecordJourneyEvent(P8JourneyEvent.CraftedItem);
         return new(true, $"{craft} 完成，消耗 {cost} 命能。", result, cost);
     }

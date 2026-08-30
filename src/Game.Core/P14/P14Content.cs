@@ -86,7 +86,7 @@ public enum P14MapNodeKind
     WarfrontEncounter, WarfrontOfficer, WarfrontCommander,
 }
 public sealed record P14MapNode(int Index, P14MapNodeKind Kind, string DisplayName, int EnemyCount, bool Optional = false,
-    string BossStableId = "");
+    string BossStableId = "", GameForWork.Core.P28.P28EncounterRule? Gameplay = null);
 public sealed record P14MapPlan(
     string MapInstanceId, MapRoute Route, IReadOnlyList<P14MapNode> Nodes, P12MapAltar Altar,
     IReadOnlyList<string> AtlasSnapshot, int RouteChoiceIndex, string FinalBossStableId);
@@ -110,59 +110,9 @@ public static class P14MapPlanner
                     new(3, P14MapNodeKind.Boss, P14Bosses.CitadelStages[1].DisplayName, 7, BossStableId: P14Bosses.CitadelStages[1].StableId),
                     new(4, P14MapNodeKind.Boss, P14Bosses.CitadelStages[2].DisplayName, 5, BossStableId: P14Bosses.CitadelStages[2].StableId)],
                 P12MapAltar.None, atlas, 1, P14Bosses.CitadelStages[2].StableId);
-        if (route == MapRoute.Warfront)
-        {
-            P14BossDefinition officer = P14Bosses.WarfrontOfficers[(int)(seed % (ulong)P14Bosses.WarfrontOfficers.Count)];
-            return new(map.InstanceId, route,
-                [new(1, P14MapNodeKind.WarfrontEncounter, "侦察接敌", 9),
-                    new(2, P14MapNodeKind.WarfrontEncounter, "突破前线", 14),
-                    new(3, P14MapNodeKind.RouteChoice, "战地补给抉择", 0),
-                    new(4, P14MapNodeKind.WarfrontOfficer, officer.DisplayName, 7, BossStableId: officer.StableId),
-                    new(5, P14MapNodeKind.WarfrontCommander, P14Bosses.WarfrontCommander.DisplayName, 9,
-                        BossStableId: P14Bosses.WarfrontCommander.StableId)],
-                map.Altar, atlas, 3, P14Bosses.WarfrontCommander.StableId);
-        }
-        var random = new Pcg32(seed ^ (ulong)map.Tier << 32);
-        int count = 5 + (int)(random.NextUInt() % 4);
-        int choice = 2 + (int)(random.NextUInt() % 2);
-        int mechanicBudget = Math.Clamp(count - 3, 2, 4);
-        var nodes = new List<P14MapNode>(count) { new(1, P14MapNodeKind.Entrance, "地图入口", 0) };
-        for (int index = 2; index < count; index++)
-        {
-            if (index == choice)
-            {
-                nodes.Add(new(index, P14MapNodeKind.RouteChoice, "收益路线抉择", 0));
-                continue;
-            }
-            P14MapNodeKind kind = route switch
-            {
-                MapRoute.Abyss when mechanicBudget-- > 0 => P14MapNodeKind.AbyssFissure,
-                MapRoute.LifeGarden when mechanicBudget-- > 0 => P14MapNodeKind.GardenPlot,
-                _ when map.Altar != P12MapAltar.None && nodes.All(node => node.Kind != P14MapNodeKind.Altar) => P14MapNodeKind.Altar,
-                _ => index == count - 1 ? P14MapNodeKind.Elite : P14MapNodeKind.Encounter,
-            };
-            int enemies = kind == P14MapNodeKind.RouteChoice ? 0 :
-                8 + map.Tier / 2 + (int)(random.NextUInt() % 7);
-            nodes.Add(new(index, kind, NodeName(kind, map.Altar), enemies, kind == P14MapNodeKind.Altar));
-        }
-        P12MapArea area = P12MapCatalog.TryGet(map.AreaId, out P12MapArea found) ? found : P12MapCatalog.Areas[0];
-        string bossId = P14Bosses.ForArea(area.StableId).StableId;
-        nodes.Add(new(count, P14MapNodeKind.Boss, area.BossName, 5, BossStableId: bossId));
-        return new(map.InstanceId, route, nodes, map.Altar, atlas,
-            choice, bossId);
+        return GameForWork.Core.P28.P28Gameplay.Build(map, route, atlas, seed);
     }
 
-    private static string NodeName(P14MapNodeKind kind, P12MapAltar altar) => kind switch
-    {
-        P14MapNodeKind.AbyssFissure => "移动裂隙追猎",
-        P14MapNodeKind.GardenPlot => "命能苗圃",
-        P14MapNodeKind.Altar => altar == P12MapAltar.RedOath ? "赤誓祭坛" : "苍誓祭坛",
-        P14MapNodeKind.Elite => "精英据点",
-        P14MapNodeKind.WarfrontEncounter => "亡旗军阵",
-        P14MapNodeKind.WarfrontOfficer => "军官阵地",
-        P14MapNodeKind.WarfrontCommander => "统帅本阵",
-        _ => "地图遭遇",
-    };
 }
 
 public sealed record P14BossSkill(string DisplayName, string DamageType, string Telegraph, bool Avoidable);
@@ -239,7 +189,11 @@ public static class P14Bosses
                 _ => EnemyDamageType.Physical,
             },
             13_500 + index * 1_500, 11_000 + index * 1_500, index == 1 ? 5_500 : 2_400,
-            index != 1, skill.Telegraph, skill.Avoidable)).ToArray();
+            index != 1, skill.Telegraph, skill.Avoidable, IsSpell: index == 2 || skill.DamageType == "法术")).ToArray();
+        if (boss == WarfrontCommander)
+            skills = skills.Concat(WarfrontOfficers.SelectMany(officer => CombatProfile(officer.StableId).EffectiveSkills)).ToArray();
+        if (boss == WarfrontOfficers[0]) skills[0] = skills[0] with { Kind = EnemySkillKind.ShieldLink };
+        if (boss == WarfrontOfficers[1]) skills[0] = skills[0] with { Kind = EnemySkillKind.Artillery };
         return new EnemyProfile(boss.StableId, boss.DisplayName, endgame ? 520 : 310,
             endgame ? 13 : 9, endgame ? 21 : 15, endgame ? 38 : 24, 8, 78, 2_100, 1_000, 0,
             EnemyFamily.Boss, EnemyRole.Melee, skills[0].Kind, skills[0].RangeRaw, skills);
@@ -275,7 +229,7 @@ public static class P14AtlasRules
     }
 }
 
-public enum P14GardenCraft { KeepPrefixes, KeepSuffixes, BiasLife, BiasDefense, BiasAttack }
+public enum P14GardenCraft { KeepPrefixes, KeepSuffixes, BiasLife, BiasDefense, BiasAttack, BiasSpell }
 public static class P14GardenCrafting
 {
     public static int Cost(P14GardenCraft craft) => craft is P14GardenCraft.KeepPrefixes or P14GardenCraft.KeepSuffixes ? 80 : 40;
@@ -290,16 +244,45 @@ public static class P14GardenCrafting
 
     public static ItemInstance Apply(ItemInstance item, P14GardenCraft craft, ulong seed)
     {
-        if (!item.CanModify || item.Rarity != ItemRarity.Rare)
-            throw new InvalidOperationException("命能加工要求未锁定、未腐化的稀有装备。");
-        IReadOnlyList<AffixRoll> retained = SelectRetained(item, craft);
-        ItemInstance rolled = ItemGenerator.Generate(item.Base.StableId, item.ItemLevel, ItemRarity.Rare, seed,
-            item.InstanceId);
-        AffixRoll[] affixes = retained.Concat(rolled.Affixes)
-            .GroupBy(affix => affix.Definition.StableFamilyId, StringComparer.Ordinal)
-            .Select(group => group.First()).Take(6).ToArray();
+        if (!CanApply(item, craft)) throw new InvalidOperationException("命能加工要求可修改的稀有装备及至少一条合法目标词缀。");
+        var random = new Pcg32(seed);
+        bool keep = craft is P14GardenCraft.KeepPrefixes or P14GardenCraft.KeepSuffixes;
+        var affixes = keep ? SelectRetained(item, craft).ToList() : new List<AffixRoll>();
+        int target = keep ? affixes.Count + 3 : 4 + (int)(random.NextUInt() % 3);
+        while (affixes.Count < target)
+        {
+            AffixDefinition[] pool = Legal(item).Where(d =>
+                (!keep || d.Position != (craft == P14GardenCraft.KeepPrefixes ? AffixPosition.Prefix : AffixPosition.Suffix)) &&
+                affixes.Count(a => a.Definition.Position == d.Position) < 3 &&
+                affixes.All(a => a.Definition.StableFamilyId != d.StableFamilyId && a.Definition.MutualExclusionGroup != d.MutualExclusionGroup) &&
+                (keep || affixes.Count > 0 || Tagged(d, craft))).ToArray();
+            if (pool.Length == 0) break;
+            int total = pool.Sum(d => d.WeightFor(item.Base));
+            int roll = (int)(random.NextUInt() % (uint)total);
+            AffixDefinition selected = pool[^1];
+            foreach (AffixDefinition candidate in pool) { roll -= candidate.WeightFor(item.Base); if (roll < 0) { selected = candidate; break; } }
+            affixes.Add(new(selected, selected.MinimumValue + (int)(random.NextUInt() % (uint)(selected.MaximumValue - selected.MinimumValue + 1))));
+        }
         return item with { Affixes = affixes };
     }
+
+    public static bool CanApply(ItemInstance item, P14GardenCraft craft) => Enum.IsDefined(craft) && item.CanModify && item.Rarity == ItemRarity.Rare &&
+        (craft is P14GardenCraft.KeepPrefixes or P14GardenCraft.KeepSuffixes || Legal(item).Any(d => Tagged(d, craft)));
+    private static IEnumerable<AffixDefinition> Legal(ItemInstance item) => P1Affixes.For(item.Base, item.ItemLevel)
+        .Where(d => d.WeightFor(item.Base) > 0 && d.ModifierKind switch
+        {
+            ItemModifierKind.IncreasedArmorBasisPoints => item.Base.Armor > 0,
+            ItemModifierKind.IncreasedEvasionBasisPoints => item.Base.Evasion > 0,
+            ItemModifierKind.IncreasedShieldBasisPoints => item.Base.Shield > 0,
+            _ => true
+        });
+    public static bool Tagged(AffixDefinition d, P14GardenCraft craft) => craft switch
+    {
+        P14GardenCraft.BiasLife => d.ModTags?.Contains("life") == true || d.ModifierKind is ItemModifierKind.FlatMaximumLife or ItemModifierKind.FlatLifeRegeneration,
+        P14GardenCraft.BiasDefense => d.ModTags?.Contains("defences") == true || d.ModifierKind is ItemModifierKind.IncreasedArmorBasisPoints or ItemModifierKind.IncreasedEvasionBasisPoints or ItemModifierKind.IncreasedShieldBasisPoints,
+        P14GardenCraft.BiasSpell => d.ModTags?.Contains("caster") == true || d.ModTags?.Contains("spell") == true,
+        _ => d.ModTags?.Contains("attack") == true || d.ModifierKind is ItemModifierKind.AddedPhysicalDamage or ItemModifierKind.IncreasedPhysicalDamageBasisPoints or ItemModifierKind.IncreasedAttackSpeedBasisPoints,
+    };
 }
 
 public sealed record P14GardenCraftResult(bool Succeeded, string Summary, ItemInstance? Result, int Cost);
@@ -333,10 +316,10 @@ public static class P14MechanicRules
 {
     public static P14MechanicResult ResolveAbyss(int wavesCleared, int requiredWaves, int remainingSeconds)
     {
-        bool completed = wavesCleared >= requiredWaves && remainingSeconds >= 0;
-        return new(completed, true, completed ? 14_000 + remainingSeconds * 50 : 10_000,
+        bool completed = wavesCleared >= requiredWaves;
+        return new(completed, true, completed ? 14_000 : 10_000,
             0, completed ? 1 + requiredWaves / 2 : 0,
-            completed ? "裂隙已追至宝箱，获得通货与天垒碎片机会。" : "裂隙闭合；额外奖励丢失，地图继续。" );
+            completed ? "裂隙已追至宝箱，获得通货与天垒碎片机会。" : "裂隙闭合；额外奖励丢失，地图继续。");
     }
 
     public static P14MechanicResult ResolveGarden(IReadOnlyList<int> selectedPlotRisks, int tier)
@@ -345,7 +328,7 @@ public static class P14MechanicRules
             throw new ArgumentOutOfRangeException(nameof(selectedPlotRisks));
         int risk = selectedPlotRisks.Sum();
         return new(true, true, 10_000 + risk * 900, Math.Max(3, tier * (3 + risk)), 0,
-            $"三块苗圃已收割，获得 {Math.Max(3, tier * (3 + risk))} 命能。" );
+            $"三块苗圃已收割，获得 {Math.Max(3, tier * (3 + risk))} 命能。");
     }
 
     public static P14AltarChoice SelectAltar(P12MapAltar altar, int tier, int choiceIndex)

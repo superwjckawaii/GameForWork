@@ -322,7 +322,7 @@ public static class P7SkillTooltip
         {
             compatibility = $"\n辅助条件：全部[{definition.RequiredAllCapabilities}] · 任一[{definition.RequiredAnyCapabilities}] · 排除[{definition.ExcludedCapabilities}]";
         }
-        return $"{definition.DisplayName}\n{(definition.Kind == SkillStoneKind.Active ? "主动" : "辅助")}技能石 · Lv.{stone.Level}/20 · XP {stone.Experience}\n" +
+        return $"{definition.DisplayName}\n{(definition.Kind == SkillStoneKind.Active ? "主动" : "辅助")}技能石 · Lv.{stone.Level}/20 · XP {stone.Experience}\n品质 {stone.Quality}（连接技能伤害提高 {stone.Quality}%）{(stone.Mutated ? " · 异变：有效技能等级+1" : "")}\n" +
                $"标签：{tags}{mechanics}{compatibility}\n{definition.Description}\n位置：{location}\n来源：" +
                (stone.InstanceId.StartsWith("starter-", StringComparison.Ordinal) ? "初始技能" : "战斗掉落");
     }

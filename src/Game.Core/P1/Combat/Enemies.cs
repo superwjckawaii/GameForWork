@@ -53,7 +53,8 @@ public sealed record EnemySkillProfile(
     int RangeRaw = 0,
     bool Area = false,
     string Telegraph = "",
-    bool Avoidable = true);
+    bool Avoidable = true,
+    bool IsSpell = false);
 
 public sealed record EnemyProfile(
     string StableId, string DisplayName, int Life, int MinimumPhysicalDamage, int MaximumPhysicalDamage,

@@ -12,7 +12,8 @@ using GameForWork.Core.Simulation;
 
 namespace GameForWork.Core.P20;
 
-public sealed record P20DefeatedEnemy(string StableId, EnemyRarity Rarity, int MonsterLevel, int ThreatPoints);
+public sealed record P20DefeatedEnemy(string StableId, EnemyRarity Rarity, int MonsterLevel, int ThreatPoints,
+    string EntityKey = "");
 
 public sealed record P20LootContext(
     string SourceId,
@@ -130,7 +131,10 @@ public static class P20DropFormula
         int stoneRoute = (context.Route == MapRoute.Abyss ? 30_000 : 10_000) +
             P26AtlasEffects.SkillStoneIncrease(context.Map?.AtlasSnapshot, bossDefeated);
         int skillStones = Math.Min(5, RollRatio(random, Scale(effectiveBudget, stoneRoute), SkillStoneCost));
-        IReadOnlyList<P1MapItem> maps = context.AllowMaps && context.Completed && !context.Practice
+        // Defeated enemies can drop maps even when the last encounter fails; completion only adds its own bonuses.
+        bool mapDropEligible = context.Completed || defeated.Count > 0 && random.NextBasisPoints() <
+            Math.Min(10_000, defeated.Count * 10_000 / Math.Max(1, SyntheticPack(context.MonsterLevel).Count));
+        IReadOnlyList<P1MapItem> maps = context.AllowMaps && mapDropEligible && !context.Practice
             ? RollMaps(context, random)
             : [];
         var trace = new P20DropTrace(defeated.Count, baseBudget, effectiveBudget, equipment.Count, gold,
@@ -152,9 +156,11 @@ public static class P20DropFormula
                 .SelectMany(candidate => candidate.Enemies)
                 .FirstOrDefault(enemy => enemy.EntityId == entityId);
             EnemyRarity rarity = frame?.Rarity ?? EnemyRarity.Normal;
+            if (frame?.Summoned == true) continue;
             stableId = frame?.EnemyStableId ?? stableId;
             int threat = EnemyProfiles.GetValueOrDefault(stableId)?.ThreatPoints ?? (rarity == EnemyRarity.Boss ? 4 : 2);
-            result.Add(new P20DefeatedEnemy(stableId, rarity, monsterLevel, Math.Clamp(threat, 1, 4)));
+            result.Add(new P20DefeatedEnemy(stableId, rarity, monsterLevel, Math.Clamp(threat, 1, 4),
+                $"{defeated.NodeIndex}:{entityId}"));
         }
         return result;
     }
@@ -163,6 +169,7 @@ public static class P20DropFormula
         run.Attempts.SelectMany(attempt => attempt.Timeline is null
                 ? Array.Empty<P20DefeatedEnemy>()
                 : ExtractDefeated(attempt.Timeline, monsterLevel))
+            .DistinctBy(enemy => enemy.EntityKey)
             .ToArray();
 
     public static IReadOnlyList<P20DefeatedEnemy> SyntheticPack(int monsterLevel, bool boss = true)

@@ -59,6 +59,7 @@ public sealed class P1TeamExpeditionState
 
     public void AdvanceRouteDecision(long elapsedMilliseconds, bool offline)
     {
+        if (Queue.Count == 0 || ActiveMap is not null) { RouteDecisionRemainingMilliseconds = 0; return; }
         if (offline) RouteDecisionRemainingMilliseconds = -1;
         else if (RouteDecisionRemainingMilliseconds > 0)
         {
@@ -366,8 +367,12 @@ public sealed record P1OfflineResult(
 
 public sealed class P1WorldSimulator(IP1MapAttemptResolver attemptResolver)
 {
-    private sealed record RunPreparation(string MapId, MapRoute Route, ulong Seed, int BuildHash, Task<P1MapRunResult> Task);
+    private sealed record RunPreparation(string MapId, MapRoute Route, ulong Seed, int BuildHash, Task<P1MapRunResult> Task,
+        GameForWork.Core.P28.P28GameplayPolicy? Gameplay, string AtlasKey);
     private readonly Dictionary<ExpeditionTeamKind, RunPreparation> _runPreparations = [];
+    public Action<P1TeamExpeditionState, P1MapItem, MapRoute>? MapStarted { get; set; }
+    public Func<P1MapItem, P1MapItem>? PrepareMap { get; set; }
+    public Action<P1TeamExpeditionState, P1MapRunResult, ulong, int, ExpeditionPolicy>? MapResolved { get; set; }
 
     public P1OfflineResult Simulate(P1WorldState state, long elapsedMilliseconds, ulong seed, bool offline = false,
         bool asyncPreparation = false)
@@ -497,6 +502,8 @@ public sealed class P1WorldSimulator(IP1MapAttemptResolver attemptResolver)
             P1MapItem queuedSource = team.Queue.Maps[0];
             bool enteredAsFormalMap = !string.IsNullOrWhiteSpace(queuedSource.AreaId) && queuedSource.EffectiveRouteCandidates.Count > 0;
             P1MapItem queuedMap = queuedSource.EnsureFormal(worldSeed);
+            queuedMap = PrepareMap?.Invoke(queuedMap) ?? queuedMap;
+            queuedMap = queuedMap with { Gameplay = team.Policy.Gameplay ?? new() };
             if (queuedMap.Tier > state.MaximumUnlockedMapTier && !P5ExpeditionDirector.IsBoss(queuedMap) &&
                 !P5ExpeditionDirector.IsPractice(queuedMap) && !GameForWork.Core.P10.P10EndgameState.IsCitadel(queuedMap))
             {
@@ -519,11 +526,13 @@ public sealed class P1WorldSimulator(IP1MapAttemptResolver attemptResolver)
             {
                 if (!_runPreparations.TryGetValue(team.Kind, out RunPreparation? preparation) ||
                     preparation.MapId != queuedMap.InstanceId || preparation.Route != route ||
-                    preparation.Seed != runSeed || preparation.BuildHash != buildHash)
+                    preparation.Seed != runSeed || preparation.BuildHash != buildHash ||
+                    preparation.Gameplay != queuedMap.Gameplay || preparation.AtlasKey != string.Join('|', queuedMap.AtlasSnapshot ?? []))
                 {
                     P1TeamBuild preparedBuild = team.Build;
                     preparation = new RunPreparation(queuedMap.InstanceId, route, runSeed, buildHash,
-                        Task.Run(() => new P1MapRunner(attemptResolver).Run(queuedMap, route, preparedBuild, runSeed)));
+                        Task.Run(() => new P1MapRunner(attemptResolver).Run(queuedMap, route, preparedBuild, runSeed)), queuedMap.Gameplay,
+                        string.Join('|', queuedMap.AtlasSnapshot ?? []));
                     _runPreparations[team.Kind] = preparation;
                 }
                 if (!preparation.Task.IsCompleted) continue;
@@ -546,6 +555,7 @@ public sealed class P1WorldSimulator(IP1MapAttemptResolver attemptResolver)
                 ? plannedRun.DurationMilliseconds
                 : route == MapRoute.Abyss ? 120_000 : 90_000;
             team.StartMap(map, route, duration, plannedRun);
+            MapStarted?.Invoke(team, map, route);
             active[team.Kind] = new ActiveExpedition(team, map, route, checked(now + duration));
         }
     }
@@ -566,7 +576,7 @@ public sealed class P1WorldSimulator(IP1MapAttemptResolver attemptResolver)
                     $"{expedition.Team.Kind} · {encounter} · 尝试 {index + 1}", offline));
             }
         }
-        bool practice = P5ExpeditionDirector.IsPractice(expedition.Map);
+        bool practice = P5ExpeditionDirector.IsPractice(expedition.Map) || GameForWork.Core.P10.P10EndgameState.IsCitadelPractice(expedition.Map);
         (int defeated, int total) = P1MapRewardGenerator.CombatProgress(run);
         P1MapRewards? partial = !run.Succeeded && !practice && defeated > 0
             ? P1MapRewardGenerator.GeneratePartial(expedition.Map, expedition.Route,
@@ -579,12 +589,14 @@ public sealed class P1WorldSimulator(IP1MapAttemptResolver attemptResolver)
             if (partial is not null)
             {
                 state.Economy.AddRewards(partial.Stackables);
+                state.AddMaps(partial.Maps);
                 LootProcessingResult defeatedLoot = LootProcessor.Process(partial.Equipment, state.Storage,
                     state.Filter, runPolicy.StorageFullBehavior);
                 expedition.Team.Backpack.Replace(defeatedLoot.NotableItems);
                 state.Economy.AddDispositionProceeds(defeatedLoot.GoldGained, defeatedLoot.IronScrapsGained);
                 if (defeatedLoot.ExpeditionMustStop) expedition.Team.Stop("storage_full");
             }
+            if (!practice) MapResolved?.Invoke(expedition.Team, run, seed, partial?.Stackables.SkillStones ?? 0, runPolicy);
             return;
         }
 
@@ -608,6 +620,7 @@ public sealed class P1WorldSimulator(IP1MapAttemptResolver attemptResolver)
         {
             expedition.Team.Stop("storage_full");
         }
+        MapResolved?.Invoke(expedition.Team, run, seed, rewards.Stackables.SkillStones, runPolicy);
     }
 
     private static string Hash(P1WorldState state, long elapsed, ulong seed)

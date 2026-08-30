@@ -61,12 +61,13 @@ public sealed class P1WorldTests
                 FlatMaximumLife: 1_000),
             new WeaponProfile("test.overwhelming", 1_000, 1_000, 2_000, 10_000),
             new SkillConfiguration(P1SkillIds.HeavyStrike, SkillSupport.AttackSpeed),
-            FlatAccuracy: 1_000);
+            FlatAccuracy: 1_000, ActiveSkills: [new(P1SkillIds.HeavyStrike, SkillSupport.AttackSpeed), new(P1SkillIds.EarthCleave, SkillSupport.IncreasedArea)]);
 
         MapAttemptResult result = new P1MapAttemptResolver().Resolve(
             new P1MapItem("formal", 1), MapRoute.Safe, powerful, 1, 42);
 
-        Assert.True(result.Succeeded);
+        Assert.True(result.Succeeded, $"{result.FailureReason}; {result.Timeline?.FinalHeroLife} HP; " +
+            string.Join(';', result.Nodes.Select(n => $"{n.NodeIndex}:{n.Outcome}:{n.Ticks}")));
         Assert.InRange(result.Timeline!.NodeCount, 5, 8);
         Assert.Equal(result.Timeline.TotalWaves, result.Nodes.Select(node => node.NodeIndex).Distinct().Count());
         Assert.Equal(12, result.Timeline.GridWidth);
@@ -332,7 +333,7 @@ public sealed class P1WorldTests
                 FlatMaximumLife: 1_000),
             new WeaponProfile("test.offline", 1_000, 1_000, 2_000, 10_000),
             new SkillConfiguration(P1SkillIds.HeavyStrike, SkillSupport.AttackSpeed),
-            FlatAccuracy: 1_000);
+            FlatAccuracy: 1_000, ActiveSkills: [new(P1SkillIds.HeavyStrike, SkillSupport.AttackSpeed), new(P1SkillIds.EarthCleave, SkillSupport.IncreasedArea)]);
         var state = new P1WorldState(strong, strong);
         state.AddInitialMaps();
         var stopwatch = Stopwatch.StartNew();

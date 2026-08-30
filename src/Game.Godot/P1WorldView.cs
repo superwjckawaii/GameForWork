@@ -502,7 +502,8 @@ public partial class P1WorldView : Control
         IEnumerable<P3SceneEvent> recent,
         long elapsed)
     {
-        foreach (P3SceneEvent item in recent.OrderByDescending(item => item.AtMilliseconds).Take(12))
+        foreach (P3SceneEvent item in recent.OrderByDescending(item => item.Kind == P3SceneEventKind.BossPhase || item.Detail.Contains("持续危险地面", StringComparison.Ordinal))
+                     .ThenByDescending(item => item.AtMilliseconds).Take(24))
         {
             float age = Math.Clamp((elapsed - item.AtMilliseconds) / 900f, 0, 1);
             string[] ids = item.Detail.Split('|');
@@ -510,6 +511,16 @@ public partial class P1WorldView : Control
                 ? live
                 : MapPoint(field, new P4Point(item.Position.X * 1_000, item.Position.Y * 1_000));
             Vector2 source = ids.Length > 0 && positions.TryGetValue(ids[0], out Vector2 origin) ? origin : actor;
+            bool ground = item.Detail.Contains("持续危险地面", StringComparison.Ordinal);
+            bool warning = item.Kind == P3SceneEventKind.BossPhase && item.Detail.Contains("until:", StringComparison.Ordinal);
+            if ((ground || warning) && item.EffectPosition is { } effect)
+            {
+                target = MapPoint(field, effect);
+                float radius = field.Size.X * (ground ? .15f : 1f / 6f);
+                DrawCircle(target, radius, new Color(ground ? "ab4c2230" : "f0804020"));
+                DrawArc(target, radius, 0, MathF.Tau, 32, new Color(ground ? "dc772aaa" : "ffb050dd"), 2);
+                continue;
+            }
             int vfxIndex = VfxIndex(item.Kind);
             if (vfxIndex >= 0 && age < .58f) DrawVfx(vfxIndex, target, item.Kind == P3SceneEventKind.BossPhase ? 54 : 38);
             if (item.Kind == P3SceneEventKind.WarCry)

@@ -42,8 +42,8 @@ public sealed class P14FeatureTests
             Altar: P12MapAltar.RedOath, AtlasSnapshot: ["core.atlas.01.00"]);
         P14MapPlan plan = P14MapPlanner.Build(map, MapRoute.Abyss, ["core.atlas.02.00"], 55);
 
-        Assert.InRange(plan.Nodes.Count, 5, 8);
-        Assert.InRange(plan.RouteChoiceIndex, 2, 3);
+        Assert.Equal(9, plan.Nodes.Count);
+        Assert.Contains(plan.Nodes, node => node.Kind == P14MapNodeKind.Altar && node.Gameplay?.Choice is not null);
         Assert.InRange(plan.Nodes.Count(node => node.Kind == P14MapNodeKind.AbyssFissure), 2, 4);
         Assert.Equal(P14MapNodeKind.Boss, plan.Nodes[^1].Kind);
         Assert.Equal(["core.atlas.01.00"], plan.AtlasSnapshot);

@@ -15,6 +15,7 @@ using GameForWork.Core.P18;
 using GameForWork.Core.P23;
 using GameForWork.Core.P24;
 using GameForWork.Core.P26;
+using GameForWork.Core.P28;
 
 namespace GameForWork.Core.P1;
 
@@ -380,6 +381,7 @@ public sealed class P1GameSession
         AdvanceTownSystems(simulatedMilliseconds);
         if (!Campaign.Completed)
         {
+            _campaignSimulator.NodeResolved = () => { SynchronizeCampaignAscendancyPoints(); RefreshHeroBuild(); Journey.Synchronize(this); };
             P2CampaignAdvanceResult campaignResult = _campaignSimulator.Simulate(
                 Campaign,
                 World,
@@ -406,41 +408,15 @@ public sealed class P1GameSession
                 campaignResult.FinalHash);
         }
 
-        int skillStoneRewardsBefore = World.Economy.SkillStones;
-        Dictionary<ExpeditionTeamKind, int> completedBefore = World.Teams.ToDictionary(team => team.Kind, team => team.MapsCompleted);
-        Dictionary<ExpeditionTeamKind, int> failedBefore = World.Teams.ToDictionary(team => team.Kind, team => team.MapsFailed);
+        _simulator.MapStarted = (_, map, route) => { if (route == MapRoute.Warfront && !P5ExpeditionDirector.IsPractice(map)) Endgame.DiscoverWarfront(); };
+        _simulator.PrepareMap = map => map with { AtlasSnapshot = Endgame.AtlasPassives.Order(StringComparer.Ordinal).ToArray() };
+        _simulator.MapResolved = ResolveGameplay;
         P1OfflineResult result = _simulator.Simulate(
             World,
             simulatedMilliseconds,
             Seed,
             offline,
             asyncPreparation);
-        SimulationSequence = checked(
-            SimulationSequence + result.TotalMapsCompleted + result.TotalMapsFailed);
-        foreach (P1TeamExpeditionState team in World.Teams)
-        {
-            int completed = team.MapsCompleted - completedBefore[team.Kind];
-            int failed = team.MapsFailed - failedBefore[team.Kind];
-            if (failed > 0 && team.LastRun is { Succeeded: false, Route: MapRoute.Warfront } failedRun)
-                Endgame.RecordWarfrontAttempt(failedRun.Map.Tier, false);
-            if (completed <= 0 || team.LastRun is not { Succeeded: true } run) continue;
-            bool special = P10EndgameState.IsCitadel(run.Map) || P10EndgameState.IsCitadelPractice(run.Map) ||
-                           P10EndgameState.IsBreakthroughTrial(run.Map);
-            if (!special)
-                for (int index = 0; index < completed; index++)
-                    Endgame.RecordMapCompletion(run.Map, run.Route, Seed ^ (ulong)SimulationSequence ^ ((ulong)(int)team.Kind << 48) ^ (uint)index);
-            if (P10EndgameState.IsBreakthroughTrial(run.Map)) RecordFinalBreakthroughTrialVictory();
-            if (P10EndgameState.IsCitadel(run.Map))
-            {
-                Endgame.RecordCitadelVictory();
-                if (Endgame.TryClaimCitadelMythic())
-                {
-                    ItemInstance mythic = P14UniqueItems.Create("core.mythic.heart_of_ash", 120,
-                        $"mythic-heart-of-ash-{SimulationSequence:000000}");
-                    if (!World.Storage.TryStore(mythic)) Management.AddToRecovery(mythic, "灰烬天垒首杀奖励；仓库已满");
-                }
-            }
-        }
         EnsureWarfrontDiscoveryMap();
         SynchronizeWarfrontRouteCandidates();
         int ashes = World.Economy.TakeMemoryAshes();
@@ -449,23 +425,87 @@ public sealed class P1GameSession
             Passives.AddMemoryAshes(ashes);
         }
 
-        int newSkillStones = Math.Max(0, World.Economy.SkillStones - skillStoneRewardsBefore);
-        for (int index = 0; index < newSkillStones; index++)
-        {
-            Management.AddDroppedSkillStone(Seed ^ ((ulong)SimulationSequence << 32) ^ (uint)index);
-        }
-        if (result.TotalMapsCompleted > 0)
-        {
-            Management.AddSkillExperience(checked(result.TotalMapsCompleted * 120));
-            Town.AddActiveExperience(checked(result.TotalMapsCompleted * 120));
-        }
 
         if (World.Expedition.Reports.Any(report => report.Context.Contains("深渊监守者", StringComparison.Ordinal)))
             Town.RecordMilestone("p9.milestone.abyss_warden", World.Economy);
-        if (result.TotalMapsCompleted > 0 || ashes > 0 || newSkillStones > 0)
+        if (result.TotalMapsCompleted > 0 || ashes > 0)
             RefreshHeroTeamBuild();
         if (result.TotalMapsCompleted > 0) RefreshMercenaryPartyBuild();
         return result;
+    }
+
+    private void ResolveGameplay(P1TeamExpeditionState team, P1MapRunResult run, ulong seed, int baseStones, ExpeditionPolicy policy)
+    {
+        SimulationSequence = checked(SimulationSequence + 1);
+        for (int i = 0; i < baseStones; i++) Management.AddDroppedSkillStone(seed ^ (uint)i ^ 0x703238baUL);
+        bool special = P10EndgameState.IsCitadel(run.Map) || P10EndgameState.IsCitadelPractice(run.Map) ||
+            P10EndgameState.IsBreakthroughTrial(run.Map) || P5ExpeditionDirector.IsPractice(run.Map);
+        if (!special)
+        {
+            P28RewardLedger rewards = P28Rewards.Roll(run, seed);
+            bool pity = Endgame.RecordGameplay(rewards, P28Gameplay.Has(run.Map.AtlasSnapshot, "blue", 11));
+            World.Economy.AddRewards(rewards.Stackables);
+            World.AddMaps(rewards.Maps);
+            LootProcessingResult processed = LootProcessor.Process(rewards.Equipment, World.Storage, World.Filter,
+                policy.StorageFullBehavior);
+            World.Economy.AddDispositionProceeds(processed.GoldGained, processed.IronScrapsGained);
+            team.Backpack.Replace(team.Backpack.Items.Concat(processed.NotableItems));
+            if (processed.ExpeditionMustStop) team.Stop("storage_full");
+            for (int i = 0; i < rewards.Stackables.SkillStones - rewards.QualityStones - rewards.MutatedStones; i++) Management.AddDroppedSkillStone(seed ^ (uint)i ^ 0x703238ccUL);
+            for (int i = 0; i < rewards.QualityStones + rewards.MutatedStones; i++)
+                Management.AddDroppedSkillStone(seed ^ (uint)i ^ 0x703238abUL, quality: 20,
+                    mutated: i < rewards.MutatedStones);
+            if (pity && rewards.BlueTarget is { } target)
+            {
+                if (target == P28RewardPreference.SkillStones) Management.AddDroppedSkillStone(seed ^ 0xb1eeUL);
+                else
+                {
+                    ItemInstance item = target == P28RewardPreference.Legendary
+                        ? P14UniqueItems.Create("core.unique.blue_vow", run.Map.MonsterLevel, $"p28-pity-{run.Map.InstanceId}")
+                        : P28Rewards.Equipment(target, Math.Min(120, run.Map.MonsterLevel + 2), true, seed, $"p28-pity-{run.Map.InstanceId}");
+                    if (!World.Storage.TryStore(item)) Management.AddToRecovery(item, "苍誓保底奖励");
+                }
+            }
+            if (rewards.Encounters.Any(e => e.Kills > 0)) Management.AddHistory(
+                $"P28 T{run.Map.Tier} {run.Route}：命能+{rewards.LifeForce} 战功+{rewards.Merit} 声望+{rewards.Reputation}；" +
+                (run.Succeeded ? "已完成" : "保留已击败怪物与已兑现奖励；未完成/苍誓承诺不发放"));
+            if (run.Succeeded) Endgame.RecordMapCompletion(run.Map, run.Route, seed);
+        }
+        if (!run.Succeeded) { Journey.Synchronize(this); return; }
+        Management.AddSkillExperience(120); Town.AddActiveExperience(120);
+        if (P10EndgameState.IsBreakthroughTrial(run.Map)) RecordFinalBreakthroughTrialVictory();
+        if (P10EndgameState.IsCitadel(run.Map))
+        {
+            Endgame.RecordCitadelVictory();
+            if (Endgame.TryClaimCitadelMythic())
+            {
+                ItemInstance mythic = P14UniqueItems.Create("core.mythic.heart_of_ash", 120, $"mythic-{run.Map.InstanceId}");
+                if (!World.Storage.TryStore(mythic)) Management.AddToRecovery(mythic, "灰烬天垒首杀奖励");
+            }
+        }
+        EnsureWarfrontDiscoveryMap(); SynchronizeWarfrontRouteCandidates();
+        RefreshHeroTeamBuild(); RefreshMercenaryPartyBuild(); Journey.Synchronize(this);
+    }
+
+    public bool TryExchangeWarfrontSupply(P28RewardPreference preference)
+    {
+        if (!Endgame.WarfrontDiscovered || preference is not (P28RewardPreference.Weapons or P28RewardPreference.Armor or
+            P28RewardPreference.Jewelry or P28RewardPreference.Materials)) return false;
+        int tier = Endgame.SupplyTier;
+        int cost = tier * 50;
+        if (!Endgame.TrySpendWarfrontMerit(cost)) return false;
+        ulong seed = Seed ^ (ulong)Endgame.GameplayOperationSequence * 0x9e3779b97f4a7c15UL;
+        Endgame.CompleteGameplayOperation();
+        if (preference == P28RewardPreference.Materials)
+            World.Economy.AddRewards(new(0, 0, 0, 0, 0, [new(tier == 3 ? MetalCurrencyKind.ExaltedGold : MetalCurrencyKind.AlchemicalGold, tier * 3)]));
+        else
+        {
+            int level = Math.Min(120, P16MapTierLevels.MonsterLevel(Endgame.CompletedTiers.DefaultIfEmpty(6).Max()) + tier - 1);
+            ItemInstance item = P28Rewards.Equipment(preference, level, true, seed, $"p28-supply-{Endgame.GameplayOperationSequence}");
+            if (!World.Storage.TryStore(item)) Management.AddToRecovery(item, "军需兑换：仓库已满");
+        }
+        Management.AddHistory($"兑换 {tier} 阶军需，消耗 {cost} 战功。");
+        return true;
     }
 
     private void EnsureWarfrontDiscoveryMap()
@@ -1020,7 +1060,7 @@ public sealed class P1GameSession
             }
         }
         return new(processed, completed, skipped, spent, stopped,
-            $"处理 {processed} 张，完成 {completed} 张，腐化摧毁 {destroyed} 张，跳过 {skipped} 张，消耗金属 {spent}。" );
+            $"处理 {processed} 张，完成 {completed} 张，腐化摧毁 {destroyed} 张，跳过 {skipped} 张，消耗金属 {spent}。");
     }
 
     public (int Sold, int Gold) SellMaps(P26MapFilter requestedFilter)
@@ -1334,9 +1374,10 @@ public sealed class P1GameSession
             SupportsFor(entry.Stone.DefinitionId),
             entry.Link.Priority,
             entry.Link.AiRule ?? GlobalSkillRule(),
-            entry.Stone.Level,
+            entry.Stone.Level + (entry.Stone.Mutated ? 1 : 0),
             entry.Stone.InstanceId,
-            P24SupportsFor(entry.Stone.DefinitionId)))
+            P24SupportsFor(entry.Stone.DefinitionId),
+            entry.Stone.Quality + entry.Link.SupportStoneInstanceIds.Sum(id => Management.SkillStones.FirstOrDefault(s => s.InstanceId == id)?.Quality ?? 0)))
         .Where(configuration => !string.IsNullOrEmpty(configuration.SkillId))
         .ToArray();
 

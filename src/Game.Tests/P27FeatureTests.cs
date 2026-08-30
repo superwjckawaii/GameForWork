@@ -68,17 +68,17 @@ public sealed class P27FeatureTests
             RouteCandidates: [MapRoute.Safe, MapRoute.Warfront], SelectedRoute: MapRoute.Warfront,
             Altar: P12MapAltar.RedOath);
         P14MapPlan plan = P14MapPlanner.Build(map, MapRoute.Warfront, [], 27);
-        Assert.Equal(5, plan.Nodes.Count);
+        Assert.Equal(6, plan.Nodes.Count); // Five warfront nodes plus the independent map altar.
         Assert.Equal(P14MapNodeKind.WarfrontEncounter, plan.Nodes[0].Kind);
         Assert.Equal(P14MapNodeKind.RouteChoice, plan.Nodes[2].Kind);
         Assert.Equal(P14MapNodeKind.WarfrontOfficer, plan.Nodes[3].Kind);
-        Assert.Equal(P14MapNodeKind.WarfrontCommander, plan.Nodes[4].Kind);
+        Assert.Equal(P14MapNodeKind.WarfrontCommander, plan.Nodes[^1].Kind);
         Assert.Equal(P12MapAltar.RedOath, plan.Altar);
 
         var state = new P10EndgameState();
         state.RecordWarfrontAttempt(8, false);
         Assert.True(state.WarfrontDiscovered);
-        Assert.Equal(24, state.WarfrontMerit);
+        Assert.Equal(0, state.WarfrontMerit); // No flat consolation currency without defeated enemies.
         Assert.Equal(0, state.WarfrontReputation);
         P10EndgameState restored = P10EndgameState.Restore(state.Capture());
         Assert.True(restored.WarfrontDiscovered);

@@ -91,7 +91,7 @@ public sealed record SkillStoneInstance(
     string InstanceId,
     string DefinitionId,
     int Level = 1,
-    int Experience = 0)
+    int Experience = 0, int Quality = 0, bool Mutated = false)
 {
     public SkillStoneDefinition Definition => P2SkillStones.Get(DefinitionId);
 }
@@ -216,6 +216,8 @@ public sealed class P2ManagementState
         P2ManagementState state = snapshot is null ? CreateNew() : new P2ManagementState();
         if (snapshot is not null)
         {
+            if (snapshot.SkillStones.Any(s => s.Quality is < 0 or > 20 || s.Level is < 1 or > 20))
+                throw new InvalidDataException("技能石品质或等级无效。");
             state._sortingBag.AddRange(snapshot.SortingBag.Take(SortingBagCapacity).Select(P6SocketRules.Ensure));
             state._recovery.AddRange(snapshot.Recovery.Select(P6SocketRules.Ensure));
             state._recovery.AddRange(snapshot.SortingBag.Skip(SortingBagCapacity).Select(P6SocketRules.Ensure));
@@ -805,9 +807,10 @@ public sealed class P2ManagementState
         }
     }
 
-    public SkillStoneInstance AddDroppedSkillStone(ulong seed, bool recordHistory = true)
+    public SkillStoneInstance AddDroppedSkillStone(ulong seed, bool recordHistory = true, int quality = 0, bool mutated = false)
     {
-        SkillStoneDefinition[] pool = P2SkillStones.DropPool.OrderBy(item => item.StableId, StringComparer.Ordinal).ToArray();
+        SkillStoneDefinition[] pool = P2SkillStones.DropPool.Where(item => !mutated || item.Kind == SkillStoneKind.Active)
+            .OrderBy(item => item.StableId, StringComparer.Ordinal).ToArray();
         if (pool.Length == 0)
         {
             throw new InvalidOperationException("Skill stone drop pool is empty.");
@@ -828,7 +831,7 @@ public sealed class P2ManagementState
             roll -= weight;
         }
         string id = $"drop-skill-{seed:x16}-{_operationSequence++:x8}";
-        var stone = new SkillStoneInstance(id, definition.StableId);
+        var stone = new SkillStoneInstance(id, definition.StableId, Quality: Math.Clamp(quality, 0, 20), Mutated: mutated);
         _skillStones.Add(stone);
         if (recordHistory) AddHistory($"获得技能石：{definition.DisplayName}。");
         return stone;

@@ -93,8 +93,7 @@ public static class P1MapRewardGenerator
 
     public static (int Defeated, int Total) CombatProgress(P1MapRunResult run)
     {
-        int defeated = run.Attempts.Sum(attempt => attempt.Timeline?.Events.Count(item =>
-            item.Kind == P3SceneEventKind.EnemyDefeated) ?? 0);
+        int defeated = P20DropFormula.ExtractDefeated(run, run.Map.MonsterLevel).Count;
         int total = run.Attempts.Sum(attempt => attempt.Timeline?.Events.Where(item =>
             item.Kind == P3SceneEventKind.WaveStarted).Sum(item => Math.Max(0, item.Value)) ?? 0);
         return (defeated, Math.Max(defeated, total));

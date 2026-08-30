@@ -60,8 +60,10 @@ public sealed class P4SpatialCombatTests
             build, 1, 100, 1, HasElite: true, HasBoss: true, AbyssRoute: false, Formation: 0), 771);
 
         Assert.NotEqual(P1BattleOutcome.Timeout, result.Outcome);
-        Assert.InRange(result.Ticks, 1, 2_400);
-        Assert.True(result.Frames.Count < 700);
+        Assert.True(result.Ticks > 2_400); // Slow, real progress is not converted into a fabricated victory.
+        Assert.True(result.Frames.Count <= 4_096);
+        Assert.Equal(P1BattleOutcome.HeroVictory, result.Outcome);
+        Assert.All(result.Frames[^1].Enemies, enemy => Assert.Equal(0, enemy.Life));
     }
 
     [Fact]

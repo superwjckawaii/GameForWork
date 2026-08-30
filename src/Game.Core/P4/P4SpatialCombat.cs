@@ -109,7 +109,7 @@ public sealed record P4EnemyFrame(
     int MaximumLife,
     P4Point Position,
     string TargetId,
-    IReadOnlyList<EliteAffix>? EliteAffixes = null);
+    IReadOnlyList<EliteAffix>? EliteAffixes = null, bool Summoned = false);
 
 public sealed record P4AllyFrame(string EntityId, P4Point Position, bool Frontline);
 
@@ -168,7 +168,12 @@ public sealed record P4NodeCombatRequest(
     int EnemyAreaDamageBasisPoints = 10_000,
     int BossCount = 1,
     int AdditionalRareEnemies = 0,
-    EnemyFamily? EncounterFamily = null);
+    EnemyFamily? EncounterFamily = null,
+    int FlaskRecoveryBasisPoints = 10_000,
+    int IncomingHitBasisPoints = 10_000,
+    bool ExtraBossPhase = false,
+    IReadOnlyList<string>? GardenTags = null,
+    IReadOnlyList<EnemyProfile>? EnemyPool = null);
 
 public sealed record P4NodeCombatResult(
     P1BattleOutcome Outcome,
@@ -184,7 +189,6 @@ public sealed class P4SpatialCombatRunner
 {
     public const int TickMilliseconds = 50;
     private const int StalemateProgressWindowTicks = 1_200;
-    private const int DetailedSimulationTicks = 2_400;
     private const int HeroEntityRawSpeed = 4_000;
     private const int HeavyStrikeRange = 1_500;
     private const int CleaveRange = 2_800;
@@ -205,6 +209,9 @@ public sealed class P4SpatialCombatRunner
         var frames = new List<P4SpatialFrame>();
         var projectiles = new List<PendingBlade>();
         var aftershocks = new List<PendingAftershock>();
+        var hazards = new List<EnemyHazard>();
+        int rootedUntilTick = 0;
+        int dodgeUntilTick = 0, dodgeReadyTick = 0;
         P18CombatProfile ascendancy = request.Build.Ascendancy ?? P18CombatProfile.Empty;
         var ascendancyRuntime = new P18CombatRuntime(ascendancy);
         request = request with { AscendancyRuntime = ascendancyRuntime };
@@ -315,6 +322,31 @@ public sealed class P4SpatialCombatRunner
         for (tick = 0; (request.MaximumTicks == 0 || tick < request.MaximumTicks) &&
              hero.IsAlive && enemies.Any(enemy => enemy.Life > 0); tick++)
         {
+            P4Point beforeMovement = heroPosition;
+            foreach (P4EnemyUnit unit in enemies)
+                unit.LinkedBy = enemies.FirstOrDefault(source => source != unit && source.Life > 0 &&
+                    source.ShieldUntilTick > tick && InRange(source.Position, unit.Position, 4_000));
+            if (tick >= rootedUntilTick)
+            {
+                P4EnemyUnit? warning = enemies.FirstOrDefault(e => e.Life > 0 && e.TelegraphTarget is not null &&
+                    InRange(heroPosition, e.TelegraphTarget.Value, 2_000));
+                P4Point? danger = warning?.TelegraphTarget ?? hazards.FirstOrDefault(h =>
+                    h.Expires > tick && InRange(heroPosition, h.Position, h.Radius))?.Position;
+                if (danger is not null && tick >= dodgeReadyTick)
+                {
+                    dodgeUntilTick = tick + 10;
+                    dodgeReadyTick = tick + 40;
+                }
+                if (danger is not null && tick < dodgeUntilTick)
+                {
+                    int direction = heroPosition.XRaw >= danger.Value.XRaw ? 1 : -1;
+                    if (heroPosition.XRaw >= 11_300) direction = -1;
+                    if (heroPosition.XRaw <= 700) direction = 1;
+                    heroPosition = P4Point.MoveToward(heroPosition,
+                        heroPosition with { XRaw = Math.Clamp(heroPosition.XRaw + direction * 3_000, 350, 11_650) },
+                        Math.Max(1, request.Build.MovementSpeedBasisPoints * 300 / 10_000));
+                }
+            }
             hero.AdvanceRegenerationTick(tick);
             if (tick > 0 && tick % 20 == 0)
             {
@@ -330,7 +362,7 @@ public sealed class P4SpatialCombatRunner
             if (utilityFlasks.GetValueOrDefault(P1FlaskKind.Mana) is { } manaFlask &&
                 hero.Mana * 10_000L < hero.MaximumMana * 3_500L && manaFlask.TryUse())
             {
-                int restored = hero.RestoreMana(Math.Max(1, hero.MaximumMana * 3_000 / 10_000));
+                int restored = hero.RestoreMana(Math.Max(0, (int)((long)hero.MaximumMana * 3_000 / 10_000 * request.FlaskRecoveryBasisPoints / 10_000)));
                 events.Add(Event(tick, P4SpatialEventKind.Flask, "hero", "hero", restored,
                     heroPosition, heroPosition, "mana"));
             }
@@ -346,7 +378,7 @@ public sealed class P4SpatialCombatRunner
 
             P4EnemyUnit? target = SelectTarget(enemies, heroPosition);
             heroTargetId = target?.EntityId ?? string.Empty;
-            if (target is not null && tick >= heroNextActionTick)
+            if (target is not null && tick >= heroNextActionTick && heroPosition == beforeMovement)
             {
                 var skillTargets = skills.ToDictionary(
                     pair => pair.Key,
@@ -585,9 +617,18 @@ public sealed class P4SpatialCombatRunner
 
             if (RechargeFlasksForKills(enemies, flask, utilityFlasks, tick, heroPosition, events, ascendancyRuntime, hero))
                 chargeReadyTick = 0;
+            if (tick < rootedUntilTick) heroPosition = beforeMovement;
             ResolveEnemies(request, enemies, hero, heroPosition, random, tick, events, utilityFlasks,
                 guardUntilTick, guardReductionBasisPoints, shieldCounter, shieldCounterConfiguration,
-                ref shieldCounterReadyTick, ascendancyRuntime);
+                ref shieldCounterReadyTick, ascendancyRuntime, hazards, ref rootedUntilTick);
+            foreach (EnemyHazard hazard in hazards.Where(h => h.Expires > tick && tick >= h.Start && (tick - h.Start) % 10 == 0))
+            {
+                int damage = InRange(heroPosition, hazard.Position, hazard.Radius) ? hazard.Damage : 0;
+                if (damage > 0) hero.ApplyDamage(damage, tick);
+                events.Add(Event(tick, P4SpatialEventKind.EnemyAttack, hazard.Source, "hero", damage,
+                    hazard.Position, hazard.Position, $"持续危险地面|radius:{hazard.Radius}|until:{hazard.Expires * TickMilliseconds}"));
+            }
+            hazards.RemoveAll(h => h.Expires <= tick);
             int totalEnemyLife = enemies.Sum(enemy => Math.Max(0, enemy.Life));
             if (hero.Life < minimumHeroLife || totalEnemyLife < minimumEnemyLife)
             {
@@ -600,34 +641,6 @@ public sealed class P4SpatialCombatRunner
                 tick - lastProgressTick >= StalemateProgressWindowTicks)
             {
                 projectedOutcome = P1BattleOutcome.Draw;
-                break;
-            }
-
-            if (request.MaximumTicks == 0 && hero.IsAlive && totalEnemyLife > 0 && tick >= DetailedSimulationTicks)
-            {
-                long heroDamageProgress = (long)(initialHeroLife - minimumHeroLife) * 1_000_000 /
-                    Math.Max(1, initialHeroLife);
-                long enemyDamageProgress = (long)(initialEnemyLife - minimumEnemyLife) * 1_000_000 /
-                    Math.Max(1, initialEnemyLife);
-                if (enemyDamageProgress > heroDamageProgress)
-                {
-                    projectedOutcome = P1BattleOutcome.HeroVictory;
-                    foreach (P4EnemyUnit enemy in enemies.Where(enemy => enemy.Life > 0))
-                    {
-                        enemy.Life = 0;
-                        events.Add(Event(tick, P4SpatialEventKind.EnemyDefeated, "hero", enemy.EntityId, 0,
-                            heroPosition, enemy.Position, enemy.Profile.StableId));
-                    }
-                }
-                else if (heroDamageProgress > enemyDamageProgress)
-                {
-                    projectedOutcome = P1BattleOutcome.EnemyVictory;
-                    hero.ApplyDamage(checked(hero.Life + hero.Shield), tick);
-                }
-                else
-                {
-                    projectedOutcome = P1BattleOutcome.Draw;
-                }
                 break;
             }
 
@@ -651,10 +664,10 @@ public sealed class P4SpatialCombatRunner
     private static List<P4EnemyUnit> CreateEnemies(P4NodeCombatRequest request, Pcg32 random)
     {
         var result = new List<P4EnemyUnit>(request.EnemyCount);
-        IReadOnlyList<EnemyProfile> pool = P1Enemies.ForEncounter(request.AreaLevel, request.EncounterFamily);
+        IReadOnlyList<EnemyProfile> pool = request.EnemyPool ?? P1Enemies.ForEncounter(request.AreaLevel, request.EncounterFamily);
         // P27 intentionally permits extreme packs: one repeated monster, or an entire pack
         // drawn from a single combat role. It does not synthesize a front/back/support template.
-        IReadOnlyList<EnemyProfile> packPool = P27MonsterCatalog.SelectPackPool(pool, random);
+        IReadOnlyList<EnemyProfile> packPool = request.EnemyPool ?? P27MonsterCatalog.SelectPackPool(pool, random);
         int magicCount = request.AreaLevel >= 8 && request.EnemyCount >= 6 ? Math.Clamp(request.EnemyCount / 4, 2, 6) : 0;
         for (int index = 0; index < request.EnemyCount; index++)
         {
@@ -668,8 +681,26 @@ public sealed class P4SpatialCombatRunner
                         : EnemyRarity.Normal;
             bool elite = rarity is EnemyRarity.Magic or EnemyRarity.Rare;
             EnemyProfile profile = boss
-                ? string.IsNullOrEmpty(request.BossStableId) ? P1Enemies.AbyssWarden : P14Bosses.CombatProfile(request.BossStableId)
+                ? string.IsNullOrEmpty(request.BossStableId) || request.BossStableId == P1Enemies.AbyssWarden.StableId ? P1Enemies.AbyssWarden :
+                    P1Enemies.NormalEnemies.FirstOrDefault(e => e.StableId == request.BossStableId) ?? P14Bosses.CombatProfile(request.BossStableId)
                 : packPool[(int)(random.NextUInt() % (uint)packPool.Count)];
+            if (!boss && request.GardenTags is { Count: > 0 })
+            {
+                EnemySkillKind kind = request.GardenTags[index % request.GardenTags.Count] switch
+                {
+                    "life" => EnemySkillKind.RootSnare,
+                    "defense" => EnemySkillKind.ShieldLink,
+                    "attack" => EnemySkillKind.Burrow,
+                    _ => EnemySkillKind.GroundHazard,
+                };
+                profile = profile with
+                {
+                    Skills = profile.EffectiveSkills.Append(new EnemySkillProfile(kind,
+                    "苗圃特性", kind == EnemySkillKind.GroundHazard ? EnemyDamageType.Fire : EnemyDamageType.Physical,
+                    10_000, RangeRaw: 5_000, Area: kind != EnemySkillKind.ShieldLink,
+                    IsSpell: kind is EnemySkillKind.RootSnare or EnemySkillKind.GroundHazard)).ToArray()
+                };
+            }
             IReadOnlyList<EliteAffix> affixes = EnemyRules.RollAffixes(random, rarity);
             ScaledEnemy scaled = EnemyRules.Scale(profile, request.AreaLevel, affixes, request.AbyssRoute, rarity);
             int lifeScale = boss ? 10_000 : rarity == EnemyRarity.Rare ? 7_000 : rarity == EnemyRarity.Magic ? 5_000 : 4_500;
@@ -867,7 +898,7 @@ public sealed class P4SpatialCombatRunner
             ? Math.Max(1, request.AreaLevel * 5 + weaponRoll / 2)
             : Math.Max(1, weaponRoll + request.Build.AddedPhysicalDamage);
         P205PassiveModifiers profile = request.Build.PassiveProfile ?? P205PassiveModifiers.Empty;
-        raw = checked(raw * (10_000 + request.Build.IncreasedDamageBasisPoints + profile.DamageFor(tags)) / 10_000);
+        raw = checked(raw * (10_000 + request.Build.IncreasedDamageBasisPoints + profile.DamageFor(tags) + configuration.Quality * 100) / 10_000);
         raw = checked(raw * (10_000 + profile.MoreDamageBasisPoints) / 10_000);
         raw = checked(raw * skill.BaseDamageBasisPoints / 10_000);
         raw = checked(raw * P6CombatSkillRules.DamageMultiplier(skill, enemy.Life, enemy.MaximumLife) / 10_000);
@@ -886,7 +917,9 @@ public sealed class P4SpatialCombatRunner
             enemy.Scaled.LightningResistanceBasisPoints + request.EnemyElementalResistanceBasisPoints,
             enemy.Scaled.VoidResistanceBasisPoints + request.EnemyVoidResistanceBasisPoints);
         int value = damage.Total - damage.Physical * Math.Clamp(request.EnemyPhysicalReductionBasisPoints, 0, 9_000) / 10_000;
+        int beforeShieldLink = enemy.Life;
         enemy.Life = Math.Max(0, enemy.Life - value);
+        value = beforeShieldLink - enemy.Life;
         int leech = skill.LifeLeechBasisPoints +
             (runtime.Has(P18NodeIds.BloodTideSmall) && tags.HasFlag(SkillTag.Attack) &&
              skill.DamageType == P17DamageType.Physical ? 100 : 0);
@@ -945,7 +978,7 @@ public sealed class P4SpatialCombatRunner
 
     private static void ResolveEnemies(
         P4NodeCombatRequest request,
-        IEnumerable<P4EnemyUnit> enemies,
+        List<P4EnemyUnit> enemies,
         ResourceState hero,
         P4Point heroPosition,
         Pcg32 random,
@@ -957,10 +990,11 @@ public sealed class P4SpatialCombatRunner
         P6ResolvedSkill? shieldCounter,
         SkillConfiguration? shieldCounterConfiguration,
         ref int shieldCounterReadyTick,
-        P18CombatRuntime ascendancy)
+        P18CombatRuntime ascendancy, List<EnemyHazard> hazards, ref int rootedUntilTick)
     {
-        foreach (P4EnemyUnit enemy in enemies.Where(enemy => enemy.Life > 0))
+        foreach (P4EnemyUnit enemy in enemies.Where(enemy => enemy.Life > 0).ToArray())
         {
+            if (enemy.Life <= 0) continue; // An earlier counterattack may have killed this snapshot member.
             EnemySkillProfile activeSkill = enemy.Profile.EffectiveSkills[enemy.ActionSequence % enemy.Profile.EffectiveSkills.Count];
             P14BossDefinition? bossDefinition = enemy.Boss ? P14Bosses.TryGet(enemy.Profile.StableId) : null;
             if (bossDefinition is not null)
@@ -973,15 +1007,8 @@ public sealed class P4SpatialCombatRunner
                     events.Add(Event(tick, P4SpatialEventKind.BossPhaseChanged, enemy.EntityId, "hero", phase,
                         enemy.Position, heroPosition, phase == 2 ? "enraged" : "phase_two"));
                 }
-                if (tick + 4 >= enemy.NextActionTick && enemy.LastTelegraphTick != enemy.NextActionTick)
-                {
-                    enemy.LastTelegraphTick = enemy.NextActionTick;
-                    P14BossSkill skill = bossDefinition.Skills[Math.Abs(enemy.NextActionTick / 8) % bossDefinition.Skills.Count];
-                    events.Add(Event(tick, P4SpatialEventKind.BossTelegraph, enemy.EntityId, "hero", 0,
-                        enemy.Position, heroPosition, $"{skill.DisplayName}|{skill.Telegraph}|{skill.DamageType}|{skill.Avoidable}"));
-                }
             }
-            int range = enemy.Boss ? EnemyRange(enemy.Role) : Math.Max(enemy.Profile.AttackRangeRaw, activeSkill.RangeRaw);
+            int range = Math.Max(enemy.Profile.AttackRangeRaw, activeSkill.RangeRaw);
             if (activeSkill.Area)
                 range = checked((int)((long)range * request.EnemyAreaBasisPoints / 10_000));
             long distance = P4Point.DistanceSquared(enemy.Position, heroPosition);
@@ -1010,12 +1037,54 @@ public sealed class P4SpatialCombatRunner
                 distance = P4Point.DistanceSquared(enemy.Position, heroPosition);
             }
 
-            if (tick < enemy.NextActionTick || distance > (long)range * range || !hero.IsAlive)
+            if (tick < enemy.NextActionTick || enemy.TelegraphTarget is null && distance > (long)range * range || !hero.IsAlive)
             {
                 continue;
             }
 
             int attacksPerSecond = checked((int)((long)enemy.Scaled.AttacksPerSecondMilli * request.EnemySpeedBasisPoints / 10_000));
+            int normalInterval = Math.Max(8, checked((20_000 + attacksPerSecond - 1) / attacksPerSecond));
+            bool areaAttack = activeSkill.Area || activeSkill.Kind is EnemySkillKind.Burrow or EnemySkillKind.Artillery;
+            if (activeSkill.Avoidable && areaAttack && enemy.TelegraphTarget is null &&
+                activeSkill.Kind is not (EnemySkillKind.HealingBloom or EnemySkillKind.RepairPulse or EnemySkillKind.ShieldLink))
+            {
+                enemy.TelegraphTarget = heroPosition;
+                enemy.NextActionTick = tick + 12;
+                events.Add(Event(tick, P4SpatialEventKind.BossTelegraph, enemy.EntityId, "hero", 2_000,
+                    enemy.Position, heroPosition, $"{activeSkill.DisplayName}|{activeSkill.Telegraph}|{activeSkill.DamageType}|True|until:{(tick + 12) * TickMilliseconds}"));
+                continue;
+            }
+            P4Point impactPoint = enemy.TelegraphTarget ?? heroPosition;
+            enemy.TelegraphTarget = null;
+            if (activeSkill.Kind == EnemySkillKind.Burrow)
+            {
+                enemy.Position = impactPoint;
+                events.Add(Event(tick, P4SpatialEventKind.EnemyMoved, enemy.EntityId, "hero", 0,
+                    enemy.Position, impactPoint, "钻地包抄"));
+            }
+            if (activeSkill.Kind is EnemySkillKind.ShieldLink or EnemySkillKind.SummonSwarm ||
+                enemy.Boss && enemy.BossPhase > 0 && enemy.ActionSequence % 4 == 0 &&
+                enemy.Profile.StableId.Contains("warfront", StringComparison.Ordinal))
+            {
+                if (activeSkill.Kind == EnemySkillKind.ShieldLink)
+                {
+                    enemy.ShieldUntilTick = tick + 80;
+                    events.Add(Event(tick, P4SpatialEventKind.Guard, enemy.EntityId, "allies", 3_000,
+                        enemy.Position, enemy.Position, "护盾链接：4米内其他友军30%减伤，不叠加，来源死亡或离开即断开"));
+                }
+                else if (enemies.Count(e => e.Summoned && e.Life > 0) < 8 && enemies.Count(e => e.Summoned) < 24)
+                {
+                    EnemyProfile child = P1Enemies.CorruptedWorker;
+                    ScaledEnemy scaled = EnemyRules.Scale(child, request.AreaLevel, [], request.AbyssRoute, EnemyRarity.Normal);
+                    int ordinal = enemies.Count;
+                    enemies.Add(new P4EnemyUnit($"enemy-{request.NodeIndex}-{ordinal}", child, scaled, P4UnitRole.Melee,
+                        EnemyRarity.Normal, false, false, Math.Max(2, scaled.Life / 2), enemy.Position, tick + 10)
+                    { Summoned = true });
+                    events.Add(Event(tick, P4SpatialEventKind.SkillEffect, enemy.EntityId, $"enemy-{request.NodeIndex}-{ordinal}", 1,
+                        enemy.Position, enemy.Position, "召唤增援；无经验、物品和药剂充能"));
+                }
+                enemy.NextActionTick = tick + normalInterval * 2; enemy.ActionSequence++; continue;
+            }
             if (activeSkill.Kind is EnemySkillKind.HealingBloom or EnemySkillKind.RepairPulse)
             {
                 int restored = 0;
@@ -1045,12 +1114,13 @@ public sealed class P4SpatialCombatRunner
                 500);
             DamageResult hit = DamageRules.Resolve(new DamageRequest(
                 weapon,
-                TargetArmor: request.Build.Sheet.Armor().Value,
-                TargetEvasion: request.Build.Sheet.Evasion().Value,
+                TargetArmor: activeSkill.DamageType == EnemyDamageType.Physical ? request.Build.Sheet.Armor().Value : 0,
+                TargetEvasion: activeSkill.IsSpell ? 0 : request.Build.Sheet.Evasion().Value,
                 Accuracy: enemy.Profile.Accuracy,
-                IsSpell: enemy.Role == P4UnitRole.Caster), random);
+                IsSpell: activeSkill.IsSpell), random);
             int divisor = Math.Max(6, 8 + request.EnemyCount / 3);
             int damage = hit.Hit ? hit.FinalPhysicalDamage / divisor : 0;
+            damage = checked((int)((long)damage * request.IncomingHitBasisPoints / 10_000));
             int skillMultiplier = activeSkill.DamageMultiplierBasisPoints;
             if (enemies.Any(unit => unit.Life > 0 && unit.Profile.EffectiveSkills.Any(skill => skill.Kind == EnemySkillKind.WarAura)))
                 skillMultiplier = checked(skillMultiplier * 11_000 / 10_000);
@@ -1061,17 +1131,17 @@ public sealed class P4SpatialCombatRunner
                 damage = checked(damage * (1 + request.ExtraEnemyProjectiles) * request.EnemyProjectileDamageBasisPoints / 10_000);
             if (enemy.BossPhase == 1) damage = checked(damage * 11_500 / 10_000);
             if (enemy.BossPhase == 2) damage = checked(damage * 17_500 / 10_000);
-            if (damage > 0 && utilityFlasks.GetValueOrDefault(P1FlaskKind.Armor)?.Active == true)
+            if (damage > 0 && activeSkill.DamageType == EnemyDamageType.Physical && utilityFlasks.GetValueOrDefault(P1FlaskKind.Armor)?.Active == true)
                 damage = Math.Max(1, damage * 7_000 / 10_000);
-            if (damage > 0 && enemy.Role == P4UnitRole.Caster &&
+            if (damage > 0 && activeSkill.IsSpell &&
                 utilityFlasks.GetValueOrDefault(P1FlaskKind.Resistance)?.Active == true)
                 damage = Math.Max(1, damage * 7_500 / 10_000);
             if (damage > 0 && tick < guardUntilTick)
                 damage = Math.Max(1, damage * (10_000 - guardReductionBasisPoints) / 10_000);
             if (damage > 0 && hero.Life * 2L <= hero.MaximumLife && ascendancy.Has(P18NodeIds.BloodLowLifeCore))
                 damage = Math.Max(1, damage * 7_500 / 10_000);
-            bool spell = enemy.Role == P4UnitRole.Caster || activeSkill.DamageType != EnemyDamageType.Physical;
-            if (damage > 0 && spell)
+            bool spell = activeSkill.IsSpell;
+            if (damage > 0)
             {
                 int resistance = activeSkill.DamageType switch
                 {
@@ -1081,10 +1151,11 @@ public sealed class P4SpatialCombatRunner
                     EnemyDamageType.Lightning => request.Build.Sheet.LightningResistanceBasisPoints,
                     _ => 0,
                 };
-                int effectiveResistance = Math.Max(0, request.Build.Sheet.CappedResistance(resistance) - request.EnemyPenetrationBasisPoints);
+                int effectiveResistance = activeSkill.DamageType == EnemyDamageType.Physical ? 0 :
+                    Math.Max(-10_000, request.Build.Sheet.CappedResistance(resistance) - request.EnemyPenetrationBasisPoints);
                 damage = Math.Max(1, damage * (10_000 - effectiveResistance) / 10_000);
                 int suppression = request.Build.Sheet.EffectiveSpellSuppressionBasisPoints;
-                if (suppression > 0 && random.NextUInt() % 10_000 < suppression)
+                if (spell && suppression > 0 && random.NextUInt() % 10_000 < suppression)
                 {
                     damage = Math.Max(1, damage * 3_000 / 10_000);
                     events.Add(Event(tick, P4SpatialEventKind.Guard, "hero", enemy.EntityId, 0,
@@ -1126,20 +1197,25 @@ public sealed class P4SpatialCombatRunner
                 damage = Math.Max(1, damage * ascendancy.IncomingHitMultiplier(spell, false, tick) / 10_000);
                 if (!spell) ascendancy.OnUnblockedAttack(tick);
             }
-            if (enemy.Boss && hit.Hit)
+            if (activeSkill.Kind is EnemySkillKind.GroundHazard or EnemySkillKind.Artillery)
+                hazards.Add(new(enemy.EntityId, impactPoint, 1_800, Math.Max(1, damage / 2), tick + 10, tick + 90));
+            if (request.ExtraBossPhase && enemy.Boss && enemy.BossPhase > 0)
+                hazards.Add(new(enemy.EntityId, impactPoint, 2_000, Math.Max(1, damage / 2), tick + 20, tick + 31));
+            if (areaAttack && !InRange(heroPosition, impactPoint, 2_000)) damage = 0;
+            if (activeSkill.Kind == EnemySkillKind.RootSnare && damage > 0)
             {
-                damage = Math.Max(1, damage);
+                rootedUntilTick = Math.Max(rootedUntilTick, tick + 20);
+                events.Add(Event(tick, P4SpatialEventKind.Ailment, enemy.EntityId, "hero", 20,
+                    enemy.Position, heroPosition, "缠根：1秒禁止移动"));
             }
             if (damage > 0)
             {
                 hero.ApplyDamage(damage, tick);
             }
 
-            string attackDetail = bossDefinition is null ?
-                $"{activeSkill.DisplayName}|{activeSkill.Telegraph}|{activeSkill.DamageType}|{activeSkill.Avoidable}" :
-                bossDefinition.Skills[Math.Abs(enemy.NextActionTick / 8) % bossDefinition.Skills.Count].DisplayName;
+            string attackDetail = $"{activeSkill.DisplayName}|{activeSkill.Telegraph}|{activeSkill.DamageType}|{activeSkill.Avoidable}|{(spell ? "spell" : "attack")}";
             events.Add(Event(tick, P4SpatialEventKind.EnemyAttack, enemy.EntityId, "hero", damage,
-                enemy.Position, heroPosition, attackDetail));
+                enemy.Position, impactPoint, attackDetail));
             int interval = Math.Max(8, checked((20_000 + attacksPerSecond - 1) / attacksPerSecond));
             interval = Math.Max(8, checked(interval * activeSkill.CooldownMultiplierBasisPoints / 10_000));
             enemy.NextActionTick = tick + interval;
@@ -1183,7 +1259,8 @@ public sealed class P4SpatialCombatRunner
             request.Build.Weapon,
             request.Build.AddedPhysicalDamage,
             request.Build.AddedPhysicalDamage,
-            checked(request.Build.IncreasedDamageBasisPoints + (request.Build.PassiveProfile ?? P205PassiveModifiers.Empty).DamageFor(tags)),
+            checked(request.Build.IncreasedDamageBasisPoints + (request.Build.PassiveProfile ?? P205PassiveModifiers.Empty).DamageFor(tags) +
+                ((request.Build.ActiveSkills ?? []).FirstOrDefault(s => s.SkillId == skillId)?.Quality ?? 0) * 100),
             [skillMultiplier, ascendancyMultiplier, 10_000 + (request.Build.PassiveProfile?.MoreDamageBasisPoints ?? 0)],
             request.Build.CannotCrit ? 0 : checked(request.Build.Weapon.CriticalChanceBasisPoints + request.Build.IncreasedCriticalChanceBasisPoints),
             request.Build.CriticalMultiplierBasisPoints,
@@ -1254,7 +1331,7 @@ public sealed class P4SpatialCombatRunner
         ResourceState hero)
     {
         bool resetMovement = false;
-        foreach (P4EnemyUnit enemy in enemies.Where(item => item.Life <= 0 && !item.KillCharged))
+        foreach (P4EnemyUnit enemy in enemies.Where(item => item.Life <= 0 && !item.KillCharged && !item.Summoned))
         {
             enemy.KillCharged = true;
             int charges = enemy.Rarity switch
@@ -1446,6 +1523,7 @@ public sealed class P4SpatialCombatRunner
             flaskEffect = checked(flaskEffect + 2_500);
         int recovered = flask.TryUse(hero.MaximumLife - hero.Life, flaskEffect);
         recovered = checked((int)((long)recovered * request.PlayerRecoveryBasisPoints / 10_000));
+        recovered = checked((int)((long)recovered * request.FlaskRecoveryBasisPoints / 10_000));
         if (recovered > 0)
         {
             hero.HealLife(recovered);
@@ -1493,8 +1571,14 @@ public sealed class P4SpatialCombatRunner
                 enemy.MaximumLife,
                 enemy.Position,
                 "hero",
-                enemy.Scaled.EliteAffixes)).ToArray(),
+                enemy.Scaled.EliteAffixes, enemy.Summoned)).ToArray(),
             BuildAllies(heroPosition, partySize, frontlineCount)));
+        // Keep simulation exact, but bound playback snapshots in extremely long battles.
+        if (frames is List<P4SpatialFrame> list && list.Count > 4_096)
+        {
+            P4SpatialFrame[] retained = list.Where((_, index) => index == 0 || index % 2 == 1 || index == list.Count - 1).ToArray();
+            list.Clear(); list.AddRange(retained);
+        }
     }
 
     private static IReadOnlyList<P4AllyFrame> BuildAllies(P4Point leader, int partySize, int frontlineCount)
@@ -1628,9 +1712,9 @@ public sealed class P4SpatialCombatRunner
     {
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(request.Build);
-        if (request.NodeIndex <= 0 || request.AreaLevel is < 1 or > 120 || request.EnemyCount is < 1 or > 48 ||
-            request.MaximumTicks < 0 || request.EnemyLifeBasisPoints is < 1_000 or > 100_000 ||
-            request.EnemyDamageBasisPoints is < 1_000 or > 100_000 || request.EnemySpeedBasisPoints is < 1_000 or > 50_000 ||
+        if (request.NodeIndex <= 0 || request.AreaLevel is < 1 or > 120 || request.EnemyCount is < 1 or > 128 ||
+            request.MaximumTicks < 0 || request.EnemyLifeBasisPoints is < 1_000 or > 500_000 ||
+            request.EnemyDamageBasisPoints is < 1_000 or > 500_000 || request.EnemySpeedBasisPoints is < 1_000 or > 100_000 ||
             request.PlayerRecoveryBasisPoints is < 0 or > 10_000 ||
             request.BossLifeBasisPoints is < 1_000 or > 100_000 || request.BossDamageBasisPoints is < 1_000 or > 100_000 ||
             request.EnemyPhysicalReductionBasisPoints is < 0 or > 9_000 || request.EnemyElementalResistanceBasisPoints is < 0 or > 9_000 ||
@@ -1664,7 +1748,18 @@ public sealed class P4SpatialCombatRunner
         public bool Boss { get; } = boss;
         public int MaximumLife { get; } = life;
         public int Ordinal { get; } = int.Parse(entityId[(entityId.LastIndexOf('-') + 1)..]);
-        public int Life { get; set; } = life;
+        private int _life = life;
+        public P4EnemyUnit? LinkedBy { get; set; }
+        public int Life
+        {
+            get => _life;
+            set => _life = value < _life && LinkedBy is { Life: > 0 } source &&
+                InRange(Position, source.Position, 4_000)
+                ? Math.Max(0, _life - Math.Max(1, (_life - value) * 7 / 10)) : value;
+        }
+        public bool Summoned { get; init; }
+        public int ShieldUntilTick { get; set; }
+        public P4Point? TelegraphTarget { get; set; }
         public P4Point Position { get; set; } = position;
         public int NextActionTick { get; set; } = nextActionTick;
         public int BleedRemaining { get; set; }
@@ -1695,4 +1790,5 @@ public sealed class P4SpatialCombatRunner
         int LifeLeechBasisPoints);
 
     private sealed record PendingAftershock(int ImpactTick, string TargetId, int ActualHitDamage, P4Point Origin);
+    private sealed record EnemyHazard(string Source, P4Point Position, int Radius, int Damage, int Start, int Expires);
 }

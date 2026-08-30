@@ -298,6 +298,7 @@ public sealed class P2CampaignState
 
 public sealed class P2CampaignSimulator
 {
+    public Action? NodeResolved { get; set; }
     private sealed record TimelinePreparation(string NodeId, int BuildHash, Task<P3SceneTimeline> Task);
     private TimelinePreparation? _timelinePreparation;
     public P2CampaignAdvanceResult Simulate(
@@ -376,6 +377,7 @@ public sealed class P2CampaignSimulator
                     campaign.ActiveTimeline, $"主线 · {node.DisplayName}", offline));
                 GrantDefeatedEnemyRewards(world, management, node, campaign.ActiveTimeline, seed);
                 campaign.RecordDefeat($"{node.DisplayName} 战斗失败：{campaign.ActiveTimeline.Outcome}");
+                NodeResolved?.Invoke();
                 break;
             }
 
@@ -388,6 +390,7 @@ public sealed class P2CampaignSimulator
             GrantRewards(campaign, world, management, node, seed);
             campaign.CompleteCurrentNode(rewardClaimed: true);
             nodesCompleted++;
+            NodeResolved?.Invoke();
         }
 
         return new P2CampaignAdvanceResult(
@@ -435,7 +438,7 @@ public sealed class P2CampaignSimulator
         P3SceneTimeline timeline,
         ulong seed)
     {
-        int defeated = timeline.Events.Count(item => item.Kind == P3SceneEventKind.EnemyDefeated);
+        int defeated = P20DropFormula.ExtractDefeated(timeline, P16CampaignLevels.MonsterLevel(node)).Count;
         if (defeated <= 0) return;
         int experience = defeated * (4 + node.Act * 2);
         world.Hero.Progression.AddExperience(experience);

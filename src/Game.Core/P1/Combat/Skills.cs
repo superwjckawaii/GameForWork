@@ -154,7 +154,7 @@ public sealed record SkillConfiguration(
     SkillAiRule? AiRule = null,
     int Level = 1,
     string StoneInstanceId = "",
-    IReadOnlyList<P24SupportMechanic>? P24Supports = null)
+    IReadOnlyList<P24SupportMechanic>? P24Supports = null, int Quality = 0)
 {
     public IReadOnlyList<P24SupportMechanic> ExtendedSupports => P24Supports ?? Array.Empty<P24SupportMechanic>();
 }
@@ -271,7 +271,7 @@ public static class SkillRules
         var moreMultipliers = new List<int> { 14_000 };
         if (configuration.Level > 1)
         {
-            moreMultipliers.Add(checked(10_000 + (Math.Clamp(configuration.Level, 1, 20) - 1) * 250));
+            moreMultipliers.Add(checked(10_000 + (Math.Clamp(configuration.Level, 1, 21) - 1) * 250));
         }
 
         if (configuration.Supports.HasFlag(SkillSupport.IncreasedArea))
