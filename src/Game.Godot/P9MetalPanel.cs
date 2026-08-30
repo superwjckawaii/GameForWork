@@ -35,13 +35,13 @@ public partial class P9MetalPanel : VBoxContainer
         _changed = changed;
         const string p21 = "res://assets/p21/ui/p21-metal-atlas.png";
         _metalAtlas = GD.Load<Texture2D>(ResourceLoader.Exists(p21) ? p21 : "res://assets/p9/ui/p9-metal-atlas.png");
-        Name = "金属";
+        Name = "打造";
         SizeFlagsVertical = SizeFlags.ExpandFill;
         var outerScroll = new ScrollContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill, SizeFlagsVertical = SizeFlags.ExpandFill };
         AddChild(outerScroll);
         _body = new VBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
         outerScroll.AddChild(_body);
-        _body.AddChild(new Label { Text = "金属仓 · 不占普通仓库", AutowrapMode = TextServer.AutowrapMode.WordSmart });
+        _body.AddChild(new Label { Text = "打造材料 · 不占普通仓库 · 悬浮任意材料或配方查看完整效果", AutowrapMode = TextServer.AutowrapMode.WordSmart });
         _status = new Label { AutowrapMode = TextServer.AutowrapMode.WordSmart };
         _body.AddChild(_status);
         _grid = new GridContainer { Columns = 3, SizeFlagsHorizontal = SizeFlags.ExpandFill };
@@ -55,7 +55,7 @@ public partial class P9MetalPanel : VBoxContainer
         _body.AddChild(new Label { Text = "命能花园 · 确定性定向加工" });
         _garden = new HFlowContainer();
         _body.AddChild(_garden);
-        _confirm = new ConfirmationDialog { Title = "确认金属加工", OkButtonText = "确认使用", CancelButtonText = "取消", Exclusive = true };
+        _confirm = new ConfirmationDialog { Title = "确认打造", OkButtonText = "确认使用", CancelButtonText = "取消", Exclusive = true };
         _confirm.Confirmed += () => { Action? action = _pending; _pending = null; action?.Invoke(); };
         _confirm.Canceled += () => _pending = null;
         AddChild(_confirm);
@@ -152,7 +152,8 @@ public partial class P9MetalPanel : VBoxContainer
             var button = new Button
             {
                 Text = $"Lv.{enchantment.WorkshopLevel} {enchantment.DisplayName}\n{enchantment.GoldCost:N0} 金币",
-                TooltipText = $"{enchantment.DisplayName}：{enchantment.ModifierKind} +{enchantment.Value}",
+                TooltipText = $"{enchantment.DisplayName}\n完整效果：{ModifierText(enchantment.ModifierKind, enchantment.Value)}\n" +
+                              $"覆盖现有附魔 · 需要工坊 Lv.{enchantment.WorkshopLevel} · 消耗 {enchantment.GoldCost:N0} 金币",
                 Disabled = target is null || session.Town.Level(P9BuildingKind.Workshop) < enchantment.WorkshopLevel || session.World.Economy.Gold < enchantment.GoldCost,
             };
             button.Pressed += () =>
@@ -181,7 +182,8 @@ public partial class P9MetalPanel : VBoxContainer
             var button = new Button
             {
                 Text = $"Lv.{recipe.AlchemyLevel}  {recipe.InputCount}×{input} + {recipe.GoldCost:N0} 金\n→ 1×{output}",
-                TooltipText = "固定配方，不受随机数影响。",
+                TooltipText = $"完整炼金效果\n消耗：{recipe.InputCount}×{input} + {recipe.GoldCost:N0} 金币\n" +
+                              $"获得：1×{output}\n需要炼金所 Lv.{recipe.AlchemyLevel} · 固定配方，不受随机数影响",
                 Disabled = session.Town.Level(P9BuildingKind.Alchemy) < recipe.AlchemyLevel ||
                     session.World.Economy.MetalAmount(recipe.Input) < recipe.InputCount ||
                     session.World.Economy.Gold < recipe.GoldCost,
@@ -257,6 +259,23 @@ public partial class P9MetalPanel : VBoxContainer
 
     private static string TierText(MetalCurrencyTier tier) => tier switch
     { MetalCurrencyTier.Basic => "基础", MetalCurrencyTier.Advanced => "进阶", MetalCurrencyTier.High => "高阶", _ => "危险" };
+
+    private static string ModifierText(ItemModifierKind kind, int value)
+    {
+        string name = kind switch
+        {
+            ItemModifierKind.FlatAccuracy => "命中值",
+            ItemModifierKind.FlatMaximumLife => "最大生命",
+            ItemModifierKind.IncreasedAttackSpeedBasisPoints => "攻击速度提高",
+            ItemModifierKind.IncreasedPhysicalDamageBasisPoints => "物理伤害提高",
+            ItemModifierKind.IncreasedArmorBasisPoints => "护甲提高",
+            ItemModifierKind.ExtraSupportLinkCapacity => "额外连接容量",
+            _ => kind.ToString(),
+        };
+        return kind.ToString().Contains("BasisPoints", StringComparison.Ordinal)
+            ? $"{name} {value / 100.0:0.#}%"
+            : $"{name} +{value}";
+    }
 
     private AtlasTexture? MetalIcon(MetalCurrencyKind kind)
     {

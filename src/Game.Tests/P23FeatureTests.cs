@@ -102,7 +102,7 @@ public sealed class P23FeatureTests
         Assert.All(starts, start =>
         {
             Assert.Empty(start.Effects);
-            Assert.Equal(2, P1PassiveTree.Neighbors(start.StableId).Count);
+            Assert.Equal(8, P1PassiveTree.Neighbors(start.StableId).Count);
         });
         Assert.Equal(72, masteries.Length);
         Assert.Equal(72, masteries.Select(node => node.MasteryGroup).Distinct(StringComparer.Ordinal).Count());
@@ -118,7 +118,7 @@ public sealed class P23FeatureTests
         var allocation = new PassiveTreeAllocation(start: PassiveStartKind.Physique);
         string[] startNeighbors = P1PassiveTree.Neighbors(P1PassiveTree.StartNode(PassiveStartKind.Physique)).ToArray();
 
-        Assert.Equal(2, startNeighbors.Length);
+        Assert.Equal(8, startNeighbors.Length);
         Assert.True(allocation.TryAllocate(startNeighbors[0], 2));
         Assert.True(allocation.TryAllocate(startNeighbors[1], 2));
         Assert.Equal(2, allocation.Allocated.Count);

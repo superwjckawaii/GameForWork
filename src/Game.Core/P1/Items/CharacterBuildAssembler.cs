@@ -58,6 +58,7 @@ public static class CharacterBuildAssembler
         EquipmentModifiers item = equipment.Modifiers;
         PassiveBuildModifiers passive = passiveTree.CalculateModifiers();
         P205PassiveModifiers advanced = passive.Advanced ?? P205PassiveModifiers.Empty;
+        int specializedWeaponDamage = WeaponPassiveIncrease(loadout, passive, advanced);
         var attributes = new CharacterAttributes(
             checked(baseAttributes.Physique + item.Physique + advanced.Physique),
             checked(baseAttributes.Dexterity + item.Dexterity + advanced.Dexterity),
@@ -106,7 +107,7 @@ public static class CharacterBuildAssembler
             checked(
                 item.IncreasedPhysicalDamageBasisPoints +
                 passive.IncreasedAttackDamageBasisPoints +
-                passive.IncreasedTwoHandDamageBasisPoints),
+                specializedWeaponDamage),
             item.AddedPhysicalDamage,
             checked(item.IncreasedCriticalChanceBasisPoints + advanced.IncreasedCriticalChanceBasisPoints),
             checked(item.IncreasedBleedChanceBasisPoints + passive.IncreasedBleedChanceBasisPoints),
@@ -116,5 +117,30 @@ public static class CharacterBuildAssembler
                 .Select(pair => P1FlaskRules.KindForBase(pair.Value.Base.StableId)).Where(kind => kind.HasValue)
                 .Select(kind => kind!.Value).Distinct().ToArray()),
             weapon);
+    }
+
+    private static int WeaponPassiveIncrease(EquipmentLoadout loadout, PassiveBuildModifiers legacy, P205PassiveModifiers passive)
+    {
+        ItemInstance? main = loadout.Items.GetValueOrDefault(EquipmentSlot.MainHand);
+        ItemInstance? off = loadout.Items.GetValueOrDefault(EquipmentSlot.OffHand);
+        int result = main?.Base.Category switch
+        {
+            ItemCategory.TwoHandWeapon => legacy.IncreasedTwoHandDamageBasisPoints,
+            ItemCategory.OneHandWeapon => passive.SpecializedValue(PassiveEffectKind.IncreasedOneHandDamageBasisPoints),
+            _ => passive.SpecializedValue(PassiveEffectKind.IncreasedUnarmedDamageBasisPoints),
+        };
+        IReadOnlyList<string> tags = main?.Base.ItemTags ?? Array.Empty<string>();
+        if (tags.Contains("sword", StringComparer.Ordinal) || tags.Contains("runeblade", StringComparer.Ordinal))
+            result += passive.SpecializedValue(PassiveEffectKind.IncreasedSwordDamageBasisPoints);
+        if (tags.Contains("axe", StringComparer.Ordinal)) result += passive.SpecializedValue(PassiveEffectKind.IncreasedAxeDamageBasisPoints);
+        if (tags.Contains("mace", StringComparer.Ordinal)) result += passive.SpecializedValue(PassiveEffectKind.IncreasedMaceDamageBasisPoints);
+        if (tags.Contains("dagger", StringComparer.Ordinal)) result += passive.SpecializedValue(PassiveEffectKind.IncreasedDaggerDamageBasisPoints);
+        if (tags.Contains("bow", StringComparer.Ordinal)) result += passive.SpecializedValue(PassiveEffectKind.IncreasedBowDamageBasisPoints);
+        if (tags.Contains("wand", StringComparer.Ordinal)) result += passive.SpecializedValue(PassiveEffectKind.IncreasedWandDamageBasisPoints);
+        if (off?.Base.Category == ItemCategory.OneHandWeapon)
+            result += passive.SpecializedValue(PassiveEffectKind.IncreasedDualWieldDamageBasisPoints);
+        if (off?.Base.ItemTags.Contains("shield", StringComparer.Ordinal) == true)
+            result += passive.SpecializedValue(PassiveEffectKind.IncreasedShieldAttackDamageBasisPoints);
+        return result;
     }
 }

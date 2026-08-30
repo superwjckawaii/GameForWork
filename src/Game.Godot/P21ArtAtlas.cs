@@ -1,5 +1,6 @@
 using GameForWork.Core.P1.Items;
 using GameForWork.Core.P21;
+using GameForWork.Core.P25;
 using Godot;
 
 namespace GameForWork.GodotClient;
@@ -13,7 +14,8 @@ internal sealed class P21ArtAtlas
     public Texture2D? Vfx { get; } = Load("res://assets/p21/vfx/p21-combat-vfx.png");
     public Texture2D? ItemBases { get; } = Load("res://assets/p21/ui/p21-item-bases.png");
     public Texture2D? UniqueItems { get; } = Load("res://assets/p21/ui/p21-unique-items.png");
-    public Texture2D? SkillGems { get; } = Load("res://assets/p21/ui/p21-skill-gems.png");
+    public Texture2D? P25Equipment { get; } = Load("res://assets/p25/ui/p25-equipment-icons.png");
+    public Texture2D? SkillGems { get; } = Load("res://assets/p25/ui/p25-skill-stones.png");
     public Texture2D? Jewels { get; } = Load("res://assets/p21/ui/p21-jewel-atlas.png");
 
     public Texture2D? ItemIcon(ItemInstance item)
@@ -23,12 +25,14 @@ internal sealed class P21ArtAtlas
             try { return Icon(UniqueItems, P21ArtContract.UniqueItemIndex(item.LegendaryRule.StableId), 5); }
             catch (KeyNotFoundException) { }
         }
+        if (item.Base.StableId.StartsWith("p24.base.", StringComparison.Ordinal) && P25Equipment is not null)
+            return Icon(P25Equipment, P25EquipmentArt.IconIndex(item.Base), P25EquipmentArt.Columns);
         return ItemBases is null ? null : Icon(ItemBases, P21ArtContract.ItemBaseIndex(item.Base.StableId), 10);
     }
 
     public Texture2D? SkillIcon(string stableId) => SkillGems is null
         ? null
-        : Icon(SkillGems, P21ArtContract.SkillStoneIndex(stableId), 10);
+        : Icon(SkillGems, P21ArtContract.SkillStoneIndex(stableId), P25SkillStoneArt.Columns);
 
     public Texture2D? JewelIcon(int index) => Jewels is null ? null : Icon(Jewels, index, 3);
 

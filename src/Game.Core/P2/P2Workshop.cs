@@ -61,13 +61,13 @@ public static class P2Workshop
 
     private static P2WorkshopPreview Weapon(ItemInstance item)
     {
-        if (item.Base.Category != ItemCategory.TwoHandWeapon)
+        if (item.Base.Category is not (ItemCategory.TwoHandWeapon or ItemCategory.OneHandWeapon))
         {
-            return Fail("weapon_required", "物理锻造只适用于双手武器。");
+            return Fail("weapon_required", "物理锻造只适用于武器。");
         }
 
-        return AddCrafted(item, ItemModifierKind.IncreasedPhysicalDamageBasisPoints, 2_000,
-            MetalCurrencyKind.TemperingIron, 1, "物理伤害增加 20%");
+        return AddCrafted(item, ItemModifierKind.IncreasedPhysicalDamageBasisPoints, 3_500,
+            MetalCurrencyKind.TemperingIron, 1, "物理伤害增加 35%");
     }
 
     private static P2WorkshopPreview Defense(ItemInstance item)
@@ -79,12 +79,12 @@ public static class P2Workshop
             : ItemModifierKind.None;
         return kind == ItemModifierKind.None
             ? Fail("defense_required", "加固只适用于具有护甲、闪避或护盾的装备。")
-            : AddCrafted(item, kind, 1_500, MetalCurrencyKind.WardSteel, 1, "基础防御增加 15%");
+            : AddCrafted(item, kind, 3_000, MetalCurrencyKind.WardSteel, 1, "基础防御增加 30%");
     }
 
     private static P2WorkshopPreview Vitality(ItemInstance item) => item.Base.Category == ItemCategory.TwoHandWeapon
         ? Fail("accessory_or_armor_required", "生命刻印不适用于武器。")
-        : AddCrafted(item, ItemModifierKind.FlatMaximumLife, 8, MetalCurrencyKind.VitalSilver, 1, "最大生命 +8");
+        : AddCrafted(item, ItemModifierKind.FlatMaximumLife, 40, MetalCurrencyKind.VitalSilver, 1, "最大生命 +40");
 
     private static P2WorkshopPreview AddCrafted(
         ItemInstance item,

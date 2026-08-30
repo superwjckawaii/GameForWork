@@ -240,7 +240,7 @@ public partial class Main : Node
             if (!string.IsNullOrWhiteSpace(directory)) Directory.CreateDirectory(directory);
             File.WriteAllText(_stabilityReportPath, JsonSerializer.Serialize(new
             {
-                Version = "0.2.0",
+                Version = "0.3.0",
                 Mode = _stabilityMode,
                 ElapsedSeconds = elapsedSeconds,
                 InitialWorkingSetBytes = _stabilityInitialWorkingSet,

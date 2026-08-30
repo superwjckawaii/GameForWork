@@ -481,7 +481,7 @@ public partial class P2Dashboard : VBoxContainer
         var equipment = new VBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
         equipmentScroll.AddChild(equipment);
         _metalMode = BuildMetalMode();
-        _metalMode.Name = "金属";
+        _metalMode.Name = "打造";
         sidebar.AddChild(_metalMode);
         _jewelStashPanel = new P205JewelStashPanel { Name = "珠宝", SizeFlagsVertical = SizeFlags.ExpandFill };
         _jewelStashPanel.Initialize(RequireSession);
@@ -562,7 +562,7 @@ public partial class P2Dashboard : VBoxContainer
         AddButton(batch, "按底材整理", () => SortItems(P16ItemSortMode.Base));
         AddButton(batch, "按最高T级整理", () => SortItems(P16ItemSortMode.HighestAffixTier));
 
-        body.AddChild(new Label { Text = "装备制作与附魔已集中到“金属仓与附魔”页；选择物品后切换该页操作。" });
+        body.AddChild(new Label { Text = "装备制作与附魔已集中到“打造”页；选择物品后切换该页操作。" });
         _craftingStatus = new Label { AutowrapMode = TextServer.AutowrapMode.WordSmart };
         body.AddChild(_craftingStatus);
 
@@ -583,7 +583,7 @@ public partial class P2Dashboard : VBoxContainer
 
     private Control BuildMetalMode()
     {
-        _metalPanel = new P9MetalPanel { Name = "金属", SizeFlagsHorizontal = SizeFlags.ExpandFill, SizeFlagsVertical = SizeFlags.ExpandFill };
+        _metalPanel = new P9MetalPanel { Name = "打造", SizeFlagsHorizontal = SizeFlags.ExpandFill, SizeFlagsVertical = SizeFlags.ExpandFill };
         _metalPanel.Initialize(RequireSession, CurrentCraftTarget, Changed);
         return _metalPanel;
     }

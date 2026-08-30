@@ -55,6 +55,18 @@ public sealed class EquipmentLoadout
             return false;
         }
 
+        bool incomingQuiver = item.Base.ItemTags.Contains("quiver", StringComparer.Ordinal);
+        if (slot == EquipmentSlot.OffHand && incomingQuiver &&
+            _items.GetValueOrDefault(EquipmentSlot.MainHand)?.Base.ItemTags.Contains("bow", StringComparer.Ordinal) != true)
+        {
+            return false;
+        }
+        if (slot == EquipmentSlot.OffHand && item.Base.Category == ItemCategory.OneHandWeapon &&
+            _items.GetValueOrDefault(EquipmentSlot.MainHand)?.Base.Category != ItemCategory.OneHandWeapon)
+        {
+            return false;
+        }
+
         if (slot == EquipmentSlot.OffHand &&
             _items.GetValueOrDefault(EquipmentSlot.MainHand) is { } mainHand &&
             mainHand.Base.Category == ItemCategory.TwoHandWeapon &&
@@ -63,11 +75,14 @@ public sealed class EquipmentLoadout
             return false;
         }
 
-        if (item.Base.Category == ItemCategory.TwoHandWeapon)
+        if (slot == EquipmentSlot.MainHand)
         {
             ItemInstance? offHand = _items.GetValueOrDefault(EquipmentSlot.OffHand);
-            if (!item.Base.ItemTags.Contains("bow", StringComparer.Ordinal) ||
-                offHand?.Base.ItemTags.Contains("quiver", StringComparer.Ordinal) != true)
+            bool bow = item.Base.ItemTags.Contains("bow", StringComparer.Ordinal);
+            bool quiver = offHand?.Base.ItemTags.Contains("quiver", StringComparer.Ordinal) == true;
+            bool offHandWeapon = offHand?.Base.Category == ItemCategory.OneHandWeapon;
+            if (item.Base.Category == ItemCategory.TwoHandWeapon && (!bow || !quiver) || quiver && !bow ||
+                offHandWeapon && item.Base.Category != ItemCategory.OneHandWeapon)
                 _items.Remove(EquipmentSlot.OffHand);
         }
 
@@ -89,7 +104,7 @@ public sealed class EquipmentLoadout
     {
         ArgumentNullException.ThrowIfNull(items);
         var result = new EquipmentLoadout();
-        foreach ((EquipmentSlot slot, ItemInstance item) in items)
+        foreach ((EquipmentSlot slot, ItemInstance item) in items.OrderBy(pair => pair.Key == EquipmentSlot.MainHand ? 0 : 1))
         {
             if (!result.TryEquip(slot, P6SocketRules.Ensure(item)))
             {
@@ -109,7 +124,7 @@ public sealed class EquipmentLoadout
         int[] sums = new int[Enum.GetValues<ItemModifierKind>().Length];
         foreach (ItemInstance item in equipped)
         {
-            sums[(int)item.Base.ImplicitModifier] = checked(sums[(int)item.Base.ImplicitModifier] + item.ImplicitValue);
+            sums[(int)item.Base.ImplicitModifier] = checked(sums[(int)item.Base.ImplicitModifier] + item.EffectiveImplicitValue);
             foreach (AffixRoll affix in item.Affixes)
             {
                 sums[(int)affix.Definition.ModifierKind] = checked(
@@ -175,7 +190,7 @@ public sealed class EquipmentLoadout
     public static bool CanEquip(EquipmentSlot slot, ItemCategory category) => category switch
     {
         ItemCategory.TwoHandWeapon => slot == EquipmentSlot.MainHand,
-        ItemCategory.OneHandWeapon => slot == EquipmentSlot.MainHand,
+        ItemCategory.OneHandWeapon => slot is EquipmentSlot.MainHand or EquipmentSlot.OffHand,
         ItemCategory.Shield => slot == EquipmentSlot.OffHand,
         ItemCategory.BodyArmor => slot == EquipmentSlot.Chest,
         ItemCategory.Helmet => slot == EquipmentSlot.Helmet,

@@ -52,8 +52,8 @@ public sealed class P1BuildAndItemTests
     {
         Assert.Equal(1_200, P1PassiveTree.Nodes.Count);
         Assert.Equal(6, P1PassiveTree.Nodes.Count(node => node.Kind == PassiveNodeKind.Start));
-        Assert.Equal(918, P1PassiveTree.Nodes.Count(node => node.Kind == PassiveNodeKind.Small));
-        Assert.Equal(144, P1PassiveTree.Nodes.Count(node => node.Kind == PassiveNodeKind.Notable));
+        Assert.Equal(882, P1PassiveTree.Nodes.Count(node => node.Kind == PassiveNodeKind.Small));
+        Assert.Equal(180, P1PassiveTree.Nodes.Count(node => node.Kind == PassiveNodeKind.Notable));
         Assert.Equal(36, P1PassiveTree.Nodes.Count(node => node.Kind == PassiveNodeKind.Rule));
         Assert.Equal(72, P1PassiveTree.Nodes.Count(node => node.Kind == PassiveNodeKind.Mastery));
         Assert.Equal(24, P1PassiveTree.Nodes.Count(node => node.Kind == PassiveNodeKind.JewelSocket));
@@ -73,7 +73,7 @@ public sealed class P1BuildAndItemTests
     }
 
     [Fact]
-    public void P23ClustersHaveTenRelatedSmallNodesAndSixFreeCareerStarts()
+    public void P25ClustersHaveEightRelatedSmallNodesAndSixCareerStartGardens()
     {
         PassiveNodeDefinition[] clusterSmall = P1PassiveTree.Nodes
             .Where(node => node.Kind == PassiveNodeKind.Small && node.StableId.Contains(".v3.cluster.", StringComparison.Ordinal))
@@ -83,10 +83,14 @@ public sealed class P1BuildAndItemTests
             .ToArray();
 
         Assert.Equal(72, clusters.Length);
-        Assert.All(clusters, cluster => Assert.Equal(10, cluster.Count()));
+        Assert.All(clusters, cluster => Assert.Equal(8, cluster.Count()));
         Assert.Equal(6, P1PassiveTree.Nodes.Count(node => node.Kind == PassiveNodeKind.Start));
         Assert.All(P1PassiveTree.Nodes.Where(node => node.Kind == PassiveNodeKind.Start), node =>
-            Assert.Empty(node.Effects));
+        {
+            Assert.Empty(node.Effects);
+            Assert.Equal(8, P1PassiveTree.Neighbors(node.StableId).Count);
+            Assert.Equal(6, P1PassiveTree.Neighbors(node.StableId).Count(id => id.Contains(".start_garden.", StringComparison.Ordinal)));
+        });
     }
 
     [Fact]
@@ -248,7 +252,8 @@ public sealed class P1BuildAndItemTests
             new SkillConfiguration(P1SkillIds.HeavyStrike, SkillSupport.None));
 
         Assert.InRange(build.Sheet.MaximumLife().Value, 270, 280);
-        Assert.Equal(1_600, build.IncreasedAttackDamageBasisPoints);
+        Assert.Equal(1_600 + build.Equipment.Modifiers.IncreasedPhysicalDamageBasisPoints,
+            build.IncreasedAttackDamageBasisPoints);
         Assert.NotNull(build.Equipment.Weapon);
     }
 

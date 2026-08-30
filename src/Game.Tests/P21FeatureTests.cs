@@ -46,25 +46,21 @@ public sealed class P21FeatureTests
     }
 
     [Fact]
-    public void P24ItemBasesUseDeterministicLegacyAtlasFallbacks()
+    public void P24ItemBasesMustUseTheDedicatedP25Atlas()
     {
         foreach (string stableId in P24ItemCatalog.Bases.Select(item => item.StableId))
-        {
-            int first = P21ArtContract.ItemBaseIndex(stableId);
-            Assert.InRange(first, 0, P21ArtContract.ItemBaseIds.Count - 1);
-            Assert.Equal(first, P21ArtContract.ItemBaseIndex(stableId));
-        }
+            Assert.Throws<KeyNotFoundException>(() => P21ArtContract.ItemBaseIndex(stableId));
     }
 
     [Fact]
-    public void P24SkillStonesUseDeterministicLegacyAtlasFallbacks()
+    public void P24SkillStonesUseDeterministicSemanticAtlasRows()
     {
         IEnumerable<string> stones = P24SkillCatalog.Active.Select(item => item.Combat.StoneId)
             .Concat(P24SkillCatalog.Supports.Select(item => item.StoneId));
         foreach (string stableId in stones)
         {
             int first = P21ArtContract.SkillStoneIndex(stableId);
-            Assert.InRange(first, 0, P21ArtContract.SkillStoneIds.Count - 1);
+            Assert.InRange(first, 0, 89);
             Assert.Equal(first, P21ArtContract.SkillStoneIndex(stableId));
         }
     }

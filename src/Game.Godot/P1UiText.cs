@@ -12,25 +12,23 @@ internal static class P1UiText
     public static string ItemTooltip(ItemInstance item)
     {
         var text = new StringBuilder();
-        text.AppendLine($"{RarityName(item.Rarity)} · {item.DisplayName}");
-        text.AppendLine($"底材：{item.Base.DisplayName} · 物品等级 {item.ItemLevel} · {CategoryName(item.Base.Category)}");
-        text.AppendLine($"公开估值：{P20ItemValue.Estimate(item)} · 出售 {P20ItemValue.SalePrice(item)} 金币");
+        text.AppendLine($"{RarityName(item.Rarity)}·{item.DisplayName}{(item.Quality > 0 ? $"+{item.Quality}" : string.Empty)}");
+        text.AppendLine($"底材：{item.Base.DisplayName}");
+        text.AppendLine($"物品等级 {item.ItemLevel} · {item.Base.Category}");
         text.AppendLine($"需求：等级 {item.Base.RequiredLevel} · 体魄 {item.Base.RequiredPhysique} · " +
             $"灵巧 {item.Base.RequiredDexterity} · 精神 {item.Base.RequiredSpirit} · 能量 {item.Base.RequiredEnergy}");
-        if (item.Quality > 0) text.AppendLine($"品质 +{item.Quality}%");
         if (item.Base.Category is ItemCategory.TwoHandWeapon or ItemCategory.OneHandWeapon)
         {
             int finalMinimum = QualityScale(item.Base.MinimumPhysicalDamage, item.Quality);
             int finalMaximum = QualityScale(item.Base.MaximumPhysicalDamage, item.Quality);
-            text.AppendLine($"物理伤害 {finalMinimum}–{finalMaximum}（底材 {item.Base.MinimumPhysicalDamage}–{item.Base.MaximumPhysicalDamage}）");
+            text.AppendLine($"物理伤害 {finalMinimum}–{finalMaximum}");
             text.AppendLine($"攻击频率 {item.Base.AttacksPerSecondMilli / 1000.0:0.00}/秒 · 暴击 {item.Base.CriticalChanceBasisPoints / 100.0:0.0}%");
         }
 
         if (item.Base.Armor + item.Base.Evasion + item.Base.Shield > 0)
         {
-            text.AppendLine($"护甲 {QualityScale(item.Base.Armor, item.Quality)}（底材 {item.Base.ArmorMinimum}–{item.Base.ArmorMaximum}） · " +
-                $"闪避 {QualityScale(item.Base.Evasion, item.Quality)}（底材 {item.Base.EvasionMinimum}–{item.Base.EvasionMaximum}） · " +
-                $"护盾 {QualityScale(item.Base.Shield, item.Quality)}（底材 {item.Base.ShieldMinimum}–{item.Base.ShieldMaximum}）");
+            text.AppendLine($"护甲 {QualityScale(item.Base.Armor, item.Quality)} · " +
+                $"闪避 {QualityScale(item.Base.Evasion, item.Quality)} · 护盾 {QualityScale(item.Base.Shield, item.Quality)}");
         }
         if (item.Base.BlockChanceBasisPoints > 0)
         {
@@ -39,15 +37,28 @@ internal static class P1UiText
 
         if (item.LinkedSocketCount > 0)
         {
-            text.AppendLine($"连接孔组：{item.LinkedSocketCount} 连");
+            text.AppendLine($"连接孔组：{item.LinkedSocketCount}连");
         }
 
         if (item.Base.ImplicitModifier != ItemModifierKind.None)
         {
-            text.AppendLine($"固有：{Modifier(item.Base.ImplicitModifier, item.ImplicitValue)}");
+            string label = string.IsNullOrWhiteSpace(item.Base.ImplicitText)
+                ? "底材固有"
+                : item.Base.ImplicitText;
+            text.AppendLine($"（基底词缀）{label}：{Modifier(item.Base.ImplicitModifier, item.EffectiveImplicitValue)}");
         }
 
-        foreach (AffixRoll affix in item.Affixes)
+        if (item.Enchantment is not null)
+            text.AppendLine($"（附魔）{item.Enchantment.DisplayName}：{Modifier(item.Enchantment.ModifierKind, item.Enchantment.Value)}");
+
+        if (item.LegendaryRule is not null)
+        {
+            P14UniqueDefinition? unique = P14UniqueItems.All.FirstOrDefault(definition =>
+                definition.StableId == item.LegendaryRule.StableId);
+            text.AppendLine($"（传奇效果）{unique?.RuleText ?? item.LegendaryRule.DisplayText}");
+        }
+
+        foreach (AffixRoll affix in item.Affixes.OrderBy(affix => affix.Definition.Position).ThenBy(affix => affix.Definition.Tier))
         {
             int tier = P1Affixes.TierFor(item.Base, affix.Definition);
             string markers = (affix.Crafted ? "（工匠）" : string.Empty) + (item.IsFractured(affix) ? "（破溃）" : string.Empty);
@@ -66,26 +77,6 @@ internal static class P1UiText
             text.AppendLine($"自动使用：{flask.AutoCondition}");
         }
 
-        if (item.Enchantment is not null)
-        {
-            text.AppendLine($"附魔 · {item.Enchantment.DisplayName}：{Modifier(item.Enchantment.ModifierKind, item.Enchantment.Value)}");
-        }
-
-        if (item.LegendaryRule is not null)
-        {
-            P14UniqueDefinition? unique = P14UniqueItems.All.FirstOrDefault(definition =>
-                definition.StableId == item.LegendaryRule.StableId);
-            if (unique is not null)
-            {
-                text.AppendLine($"传奇规则：{unique.RuleText}");
-            }
-            else if (item.LegendaryRule.StableId == P1Legendary.EchoingOathbreakerRule.StableId)
-            {
-                text.AppendLine("传奇规则：重击总攻击速度降低 30%");
-                text.AppendLine("重击在目标身后产生一次 70% 伤害的余震");
-            }
-        }
-
         text.Append(item.IsIdentified ? "已鉴定" : "未鉴定");
         if (item.IsLocked)
         {
@@ -100,6 +91,8 @@ internal static class P1UiText
         {
             text.Append($" · ☠ 已腐化（{item.CorruptionOutcome}）");
         }
+        text.AppendLine();
+        text.Append($"出售 {P20ItemValue.SalePrice(item)} 金币");
         return text.ToString();
     }
 

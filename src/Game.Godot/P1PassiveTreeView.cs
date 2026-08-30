@@ -29,7 +29,6 @@ public partial class P1PassiveTreeView : Control
     private Vector2 _pressPosition;
     private string? _hovered;
     private string _stateSignature = string.Empty;
-    private Texture2D? _backdrop;
 
     public event Action<string>? NodeSelected;
     public event Action<string>? NodeAllocateRequested;
@@ -40,8 +39,6 @@ public partial class P1PassiveTreeView : Control
     public override void _Ready()
     {
         MouseFilter = MouseFilterEnum.Stop;
-        const string backdrop = "res://assets/p21/trees/p21-passive-backdrop.png";
-        if (ResourceLoader.Exists(backdrop)) _backdrop = GD.Load<Texture2D>(backdrop);
         _nodes = P1PassiveTree.Nodes.OrderBy(node => node.StableId, StringComparer.Ordinal).ToArray();
         BuildLayoutAndIndex();
         Resized += () => { ClampView(); QueueRedraw(); };
@@ -51,13 +48,7 @@ public partial class P1PassiveTreeView : Control
     public override void _Draw()
     {
         DrawRect(new Rect2(Vector2.Zero, Size), new Color("11151d"), true);
-        if (_backdrop is not null)
-        {
-            float extent = P1PassiveTree.LayoutExtent;
-            DrawTextureRect(_backdrop,
-                new Rect2(ToScreen(new Vector2(-extent, -extent)), new Vector2(extent * 2 * _zoom, extent * 2 * _zoom)),
-                false);
-        }
+        DrawBackdrop();
         var drawnEdges = new HashSet<string>(StringComparer.Ordinal);
         foreach (PassiveNodeDefinition node in _nodes)
         {
@@ -68,9 +59,17 @@ public partial class P1PassiveTreeView : Control
                 string edge = string.CompareOrdinal(node.StableId, neighbor) < 0 ? node.StableId + '|' + neighbor : neighbor + '|' + node.StableId;
                 if (!drawnEdges.Add(edge) || !_centers.TryGetValue(neighbor, out Vector2 linked)) continue;
                 bool active = _allocated.Contains(node.StableId) && _allocated.Contains(neighbor);
-                if (!active) continue;
-                DrawLine(to, ToScreen(linked), new Color("6e3f16"), 5.2f, true);
-                DrawLine(to, ToScreen(linked), new Color("f0b84e"), 2.2f, true);
+                Vector2 linkedScreen = ToScreen(linked);
+                if (!VisibleWithMargin(linkedScreen, 80) && !VisibleWithMargin(to, 80)) continue;
+                if (active)
+                {
+                    DrawLine(to, linkedScreen, new Color("6e3f16"), 5.2f, true);
+                    DrawLine(to, linkedScreen, new Color("f0b84e"), 2.2f, true);
+                }
+                else
+                {
+                    DrawLine(to, linkedScreen, new Color("29313d"), Math.Max(.7f, 1.2f * _zoom), true);
+                }
             }
         }
 
@@ -291,6 +290,22 @@ public partial class P1PassiveTreeView : Control
             Vector2 point = area.GetCenter() + new Vector2(node.X, node.Y) / P1PassiveTree.LayoutExtent * area.Size * .44f;
             DrawCircle(point, node.Kind == PassiveNodeKind.Start ? 2.4f : 1.2f,
                 node.Kind == PassiveNodeKind.Start ? AvailableColor : _allocated.Contains(node.StableId) ? AllocatedColor : LockedColor.Lightened(.25f));
+        }
+    }
+
+    private void DrawBackdrop()
+    {
+        Vector2 center = ToScreen(Vector2.Zero);
+        float extent = P1PassiveTree.LayoutExtent;
+        DrawCircle(center, extent * _zoom, new Color("202936"), false, Math.Max(1, 2 * _zoom));
+        foreach (float radius in new[] { 150f, 330f, 510f, 690f, 850f })
+            DrawCircle(center, radius * _zoom, new Color("1d263244"), false, Math.Max(.6f, 1.1f * _zoom));
+        for (int sector = 0; sector < 12; sector++)
+        {
+            float angle = -MathF.PI / 2 + sector * MathF.Tau / 12;
+            Vector2 direction = new(MathF.Cos(angle), MathF.Sin(angle));
+            DrawLine(ToScreen(direction * 105), ToScreen(direction * 875), new Color("1a222d66"),
+                Math.Max(.5f, _zoom), true);
         }
     }
 }

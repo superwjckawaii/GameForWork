@@ -22,7 +22,7 @@ public sealed class P22FeatureTests
     [Fact]
     public void ReleaseTargetsSealVersionSaveAndSixBenchmarkBuilds()
     {
-        Assert.Equal("0.2.0", P22ReleaseTargets.Version);
+        Assert.Equal("0.3.0", P22ReleaseTargets.Version);
         Assert.Equal(P1GameSession.CurrentFormatVersion, P22ReleaseTargets.SaveFormatVersion);
         Assert.Empty(P22ReleaseTargets.ValidateBenchmarkCatalog());
         Assert.Equal([80, 90, 100, 110, 120, 130, 140, 150], P22ReleaseTargets.FontScaleMatrix);

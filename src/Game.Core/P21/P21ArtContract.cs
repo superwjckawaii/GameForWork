@@ -90,8 +90,6 @@ public static class P21ArtContract
     public static int ItemBaseIndex(string stableId)
     {
         if (ItemBaseIndices.TryGetValue(stableId, out int index)) return index;
-        if (stableId.StartsWith("p24.base.", StringComparison.Ordinal))
-            return StableIndex(stableId, ItemBaseIds.Count);
         throw new KeyNotFoundException($"Unknown P21 item base: {stableId}");
     }
 
@@ -99,9 +97,9 @@ public static class P21ArtContract
 
     public static int SkillStoneIndex(string stableId)
     {
+        try { return P25.P25SkillStoneArt.IconIndex(stableId); }
+        catch (KeyNotFoundException) { }
         if (SkillStoneIndices.TryGetValue(stableId, out int index)) return index;
-        if (stableId.StartsWith("p24.skill_stone.", StringComparison.Ordinal))
-            return StableIndex(stableId, SkillStoneIds.Count);
         throw new KeyNotFoundException($"Unknown P21 skill stone: {stableId}");
     }
 

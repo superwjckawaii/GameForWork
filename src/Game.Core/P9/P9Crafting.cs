@@ -291,13 +291,13 @@ public static class P9EnchantmentCatalog
 {
     private static readonly ItemEnchantment[] Entries =
     [
-        new("core.enchant.precision", "精准刻印", ItemModifierKind.FlatAccuracy, 35, 2, 250),
-        new("core.enchant.vigor", "坚生命纹", ItemModifierKind.FlatMaximumLife, 18, 2, 250),
-        new("core.enchant.tempo", "迅击刻印", ItemModifierKind.IncreasedAttackSpeedBasisPoints, 800, 2, 250),
-        new("core.enchant.execution", "处刑铭文", ItemModifierKind.IncreasedPhysicalDamageBasisPoints, 3_500, 3, 2_500),
-        new("core.enchant.bulwark", "壁垒铭文", ItemModifierKind.IncreasedArmorBasisPoints, 3_000, 3, 2_500),
-        new("core.enchant.sovereign", "断界王印", ItemModifierKind.IncreasedPhysicalDamageBasisPoints, 8_000, 4, 25_000),
-        new("core.enchant.immortal", "不灭王印", ItemModifierKind.FlatMaximumLife, 80, 4, 25_000),
+        new("core.enchant.precision", "精准刻印", ItemModifierKind.FlatAccuracy, 100, 2, 250),
+        new("core.enchant.vigor", "坚生命纹", ItemModifierKind.FlatMaximumLife, 60, 2, 250),
+        new("core.enchant.tempo", "迅击刻印", ItemModifierKind.IncreasedAttackSpeedBasisPoints, 1_200, 2, 250),
+        new("core.enchant.execution", "处刑铭文", ItemModifierKind.IncreasedPhysicalDamageBasisPoints, 5_500, 3, 2_500),
+        new("core.enchant.bulwark", "壁垒铭文", ItemModifierKind.IncreasedArmorBasisPoints, 5_000, 3, 2_500),
+        new("core.enchant.sovereign", "断界王印", ItemModifierKind.IncreasedPhysicalDamageBasisPoints, 12_000, 4, 25_000),
+        new("core.enchant.immortal", "不灭王印", ItemModifierKind.FlatMaximumLife, 160, 4, 25_000),
         new("core.enchant.perfect_chain", "完美链印", ItemModifierKind.ExtraSupportLinkCapacity, 1, 4, 25_000),
     ];
 

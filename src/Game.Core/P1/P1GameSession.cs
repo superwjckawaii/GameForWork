@@ -116,7 +116,7 @@ public sealed record P1GameSessionSnapshot(
 
 public sealed class P1GameSession
 {
-    public const int CurrentFormatVersion = 19;
+    public const int CurrentFormatVersion = 20;
     private readonly P1WorldSimulator _simulator = new(new P1MapAttemptResolver());
     private readonly P2CampaignSimulator _campaignSimulator = new();
     private AssembledCharacterBuild _heroBuild;
@@ -237,7 +237,8 @@ public sealed class P1GameSession
     {
         ArgumentNullException.ThrowIfNull(snapshot);
         bool migratingV18 = snapshot.FormatVersion == 18;
-        if ((!migratingV18 && snapshot.FormatVersion != CurrentFormatVersion) || snapshot.SimulationSequence < 0)
+        bool migratingV19 = snapshot.FormatVersion == 19;
+        if ((!migratingV18 && !migratingV19 && snapshot.FormatVersion != CurrentFormatVersion) || snapshot.SimulationSequence < 0)
         {
             throw new InvalidDataException(
                 $"P1 session snapshot version {snapshot.FormatVersion} is unsupported; expected {CurrentFormatVersion}.");
@@ -254,7 +255,7 @@ public sealed class P1GameSession
         P23BaseClass baseClass = migratingV18 ? P23BaseClass.Fighter : snapshot.Player.BaseClass;
         P23ClassDefinition classDefinition = P23ClassCatalog.Get(baseClass);
         PlayerIdentity player = snapshot.Player with { BaseClass = baseClass };
-        PassiveTreeAllocation passives = migratingV18
+        PassiveTreeAllocation passives = migratingV18 || migratingV19
             ? new PassiveTreeAllocation(snapshot.MemoryAshes, classDefinition.PassiveStart)
             : PassiveTreeAllocation.Restore(snapshot.AllocatedPassives, snapshot.MemoryAshes,
                 snapshot.MasterySelections, snapshot.SocketedJewels, classDefinition.PassiveStart);

@@ -1,6 +1,7 @@
 using GameForWork.Core.P1.Combat;
 using GameForWork.Core.P19;
 using GameForWork.Core.P24;
+using GameForWork.Core.P25;
 
 namespace GameForWork.Core.P1.Items;
 
@@ -112,7 +113,8 @@ public static class P1ItemBases
             ? definition
             : throw new KeyNotFoundException($"Unknown item base: {stableId}");
 
-    private static IReadOnlyList<ItemBaseDefinition> Build() => P19Catalog.Bases.Concat(P24ItemCatalog.Bases).ToArray();
+    private static IReadOnlyList<ItemBaseDefinition> Build() => P19Catalog.Bases.Concat(P24ItemCatalog.Bases)
+        .Select(P25ItemImplicitCatalog.Ensure).ToArray();
 }
 
 public enum ItemModifierKind
@@ -217,7 +219,8 @@ public sealed record ItemEnchantment(
 public sealed record LegendaryRule(
     string StableId,
     int HeavyStrikeAttackSpeedMultiplierBasisPoints,
-    int AftershockDamageMultiplierBasisPoints);
+    int AftershockDamageMultiplierBasisPoints,
+    string DisplayText = "");
 
 public sealed record ItemInstance(
     string InstanceId,
@@ -247,6 +250,9 @@ public sealed record ItemInstance(
         .Select(affix => affix.EffectiveValue)
         .DefaultIfEmpty()
         .Max();
+    public int EffectiveImplicitValue => Base.ImplicitModifier == ItemModifierKind.None
+        ? 0
+        : ImplicitValue > 0 ? ImplicitValue : Base.ImplicitMinimumValue;
 
     public ItemInstance WithLocked(bool locked) => this with { IsLocked = locked };
 
@@ -263,15 +269,17 @@ public static class P1Legendary
     public static readonly LegendaryRule EchoingOathbreakerRule = new(
         "core.legendary_rule.echoing_oathbreaker",
         HeavyStrikeAttackSpeedMultiplierBasisPoints: 7_000,
-        AftershockDamageMultiplierBasisPoints: 7_000);
+        AftershockDamageMultiplierBasisPoints: 7_000,
+        DisplayText: "重击攻击速度总降30%；命中后产生一次造成原伤害70%的余震");
 
     public static ItemInstance Create(int itemLevel) => new(
         $"legendary-{itemLevel}-echoing-oathbreaker",
         P1ItemBases.Get("core.base.heavy_battleaxe"),
         Math.Clamp(itemLevel, 1, 10),
         ItemRarity.Legendary,
-        Array.Empty<AffixRoll>(),
+        P25LegendaryCatalog.CreateAffixes(P1ItemBases.Get("core.base.heavy_battleaxe")),
         EchoingOathbreakerRule,
+        ImplicitValue: P1ItemBases.Get("core.base.heavy_battleaxe").ImplicitMaximumValue,
         LinkedSocketCount: 5,
         RolledName: "回响破誓者");
 }

@@ -7,7 +7,10 @@ internal static class P205PassiveTreeCatalog
 
     private sealed record Theme(string Name, string Mastery, PassiveEffectKind Primary, PassiveEffectKind Secondary);
     private sealed record Sector(PassiveBranch Branch, string Name, PassiveEffectKind Attribute, Theme[] Themes);
-    private sealed record Start(PassiveStartKind Kind, string Name, int FirstSector, int SecondSector, float Angle);
+    private sealed record StartTheme(string Name, PassiveEffectKind Primary, PassiveEffectKind Secondary);
+    private sealed record StartAttribute(string Name, PassiveEffect[] Effects);
+    private sealed record Start(PassiveStartKind Kind, string Name, int FirstSector, int SecondSector, float Angle,
+        StartTheme[] Themes, StartAttribute[] Attributes);
 
     private static readonly Sector[] Sectors =
     [
@@ -99,12 +102,38 @@ internal static class P205PassiveTreeCatalog
 
     private static readonly Start[] Starts =
     [
-        new(PassiveStartKind.Physique, "斗士", 0, 1, -1.309f),
-        new(PassiveStartKind.Dexterity, "侠客", 3, 4, .262f),
-        new(PassiveStartKind.Spirit, "灵能使", 6, 7, 1.833f),
-        new(PassiveStartKind.Energy, "秘术师", 9, 10, 3.403f),
-        new(PassiveStartKind.DexteritySpirit, "僧侣", 5, 6, 1.309f),
-        new(PassiveStartKind.PhysiqueEnergy, "隐士", 11, 0, -1.833f),
+        MakeStart(PassiveStartKind.Physique, "斗士", 0, 1, -1.309f,
+            [("双手重兵", PassiveEffectKind.IncreasedTwoHandDamageBasisPoints, PassiveEffectKind.IncreasedAttackSpeedBasisPoints),
+             ("单手锤盾", PassiveEffectKind.IncreasedOneHandDamageBasisPoints, PassiveEffectKind.IncreasedShieldAttackDamageBasisPoints),
+             ("双持战法", PassiveEffectKind.IncreasedDualWieldDamageBasisPoints, PassiveEffectKind.IncreasedAttackSpeedBasisPoints)],
+            [A("灵巧", PassiveEffectKind.FlatDexterity), A("精神", PassiveEffectKind.FlatSpirit), A("能量", PassiveEffectKind.FlatEnergy)]),
+        MakeStart(PassiveStartKind.Dexterity, "侠客", 3, 4, .262f,
+            [("弓与箭袋", PassiveEffectKind.IncreasedBowDamageBasisPoints, PassiveEffectKind.IncreasedProjectileDamageBasisPoints),
+             ("匕首双持", PassiveEffectKind.IncreasedDaggerDamageBasisPoints, PassiveEffectKind.IncreasedCriticalChanceBasisPoints),
+             ("投射陷阱", PassiveEffectKind.IncreasedTrapDamageBasisPoints, PassiveEffectKind.IncreasedProjectileDamageBasisPoints)],
+            [A("体魄", PassiveEffectKind.FlatPhysique), A("精神", PassiveEffectKind.FlatSpirit), A("能量", PassiveEffectKind.FlatEnergy)]),
+        MakeStart(PassiveStartKind.Spirit, "灵能使", 6, 7, 1.833f,
+            [("召唤媒介", PassiveEffectKind.IncreasedMinionDamageBasisPoints, PassiveEffectKind.IncreasedCooldownRecoveryBasisPoints),
+             ("咒术法杖", PassiveEffectKind.IncreasedWandDamageBasisPoints, PassiveEffectKind.IncreasedCurseEffectBasisPoints),
+             ("光环祝福", PassiveEffectKind.IncreasedAuraEffectBasisPoints, PassiveEffectKind.ReducedSkillCostBasisPoints)],
+            [A("体魄", PassiveEffectKind.FlatPhysique), A("灵巧", PassiveEffectKind.FlatDexterity), A("能量", PassiveEffectKind.FlatEnergy)]),
+        MakeStart(PassiveStartKind.Energy, "秘术师", 9, 10, 3.403f,
+            [("法杖秘术", PassiveEffectKind.IncreasedWandDamageBasisPoints, PassiveEffectKind.IncreasedSpellDamageBasisPoints),
+             ("焦点护盾", PassiveEffectKind.IncreasedShieldBasisPoints, PassiveEffectKind.IncreasedEnergyShieldRechargeBasisPoints),
+             ("元素虚界", PassiveEffectKind.IncreasedElementalDamageBasisPoints, PassiveEffectKind.IncreasedVoidDamageBasisPoints)],
+            [A("体魄", PassiveEffectKind.FlatPhysique), A("灵巧", PassiveEffectKind.FlatDexterity), A("精神", PassiveEffectKind.FlatSpirit)]),
+        MakeStart(PassiveStartKind.DexteritySpirit, "僧侣", 5, 6, 1.309f,
+            [("徒手缠带", PassiveEffectKind.IncreasedUnarmedDamageBasisPoints, PassiveEffectKind.IncreasedAttackSpeedBasisPoints),
+             ("灵兽护符", PassiveEffectKind.IncreasedCompanionDamageBasisPoints, PassiveEffectKind.IncreasedMaximumLifeBasisPoints),
+             ("幻身步法", PassiveEffectKind.IncreasedMovementSpeedBasisPoints, PassiveEffectKind.IncreasedCooldownRecoveryBasisPoints)],
+            [A("体魄", PassiveEffectKind.FlatPhysique), A("能量", PassiveEffectKind.FlatEnergy),
+             ("身心均衡", PassiveEffectKind.FlatDexterity, PassiveEffectKind.FlatSpirit)]),
+        MakeStart(PassiveStartKind.PhysiqueEnergy, "隐士", 11, 0, -1.833f,
+            [("符刃交错", PassiveEffectKind.IncreasedOneHandDamageBasisPoints, PassiveEffectKind.IncreasedSpellDamageBasisPoints),
+             ("构装偶像", PassiveEffectKind.IncreasedConstructDamageBasisPoints, PassiveEffectKind.IncreasedCooldownRecoveryBasisPoints),
+             ("魔铠一体", PassiveEffectKind.IncreasedArmorBasisPoints, PassiveEffectKind.IncreasedShieldBasisPoints)],
+            [A("灵巧", PassiveEffectKind.FlatDexterity), A("精神", PassiveEffectKind.FlatSpirit),
+             ("铠术均衡", PassiveEffectKind.FlatPhysique, PassiveEffectKind.FlatEnergy)]),
     ];
 
     public static IReadOnlyList<PassiveNodeDefinition> Build()
@@ -113,6 +142,7 @@ internal static class P205PassiveTreeCatalog
         AddCentralRing(nodes);
         for (int sector = 0; sector < Sectors.Length; sector++) AddTravelSpine(nodes, sector);
         AddStarts(nodes);
+        AddStartGardens(nodes);
         for (int sector = 0; sector < Sectors.Length; sector++)
         {
             AddClusters(nodes, sector);
@@ -188,10 +218,65 @@ internal static class P205PassiveTreeCatalog
     {
         foreach (Start start in Starts)
         {
-            string[] links = [TravelId(start.FirstSector, 15), TravelId(start.SecondSector, 15)];
+            string[] links = Enumerable.Range(0, 3).Select(index => StartGardenId(start.Kind, $"cluster.{index}.small.0"))
+                .Concat(Enumerable.Range(0, 3).Select(index => StartGardenId(start.Kind, $"attribute.{index}.path")))
+                .Concat([TravelId(start.FirstSector, 15), TravelId(start.SecondSector, 15)]).ToArray();
             nodes.Add(new(StartNode(start.Kind), $"{start.Name}起点", Sectors[start.FirstSector].Branch,
                 PassiveNodeKind.Start, null, [], links, MathF.Cos(start.Angle) * 820,
                 MathF.Sin(start.Angle) * 820, -1, start.Kind, "免费且不可退还的职业锚点"));
+        }
+    }
+
+    private static void AddStartGardens(ICollection<PassiveNodeDefinition> nodes)
+    {
+        foreach (Start start in Starts)
+        {
+            string startId = StartNode(start.Kind);
+            float[] offsets = [-.17f, 0, .17f];
+            for (int cluster = 0; cluster < 3; cluster++)
+            {
+                StartTheme theme = start.Themes[cluster];
+                string previous = startId;
+                for (int index = 0; index < 4; index++)
+                {
+                    string id = StartGardenId(start.Kind, $"cluster.{cluster}.small.{index}");
+                    string next = index == 3
+                        ? StartGardenId(start.Kind, $"cluster.{cluster}.notable")
+                        : StartGardenId(start.Kind, $"cluster.{cluster}.small.{index + 1}");
+                    float angle = start.Angle + offsets[cluster];
+                    float radius = 780 - index * 38;
+                    PassiveEffectKind effect = index == 2 ? theme.Secondary : theme.Primary;
+                    nodes.Add(new(id, $"{theme.Name}·{index + 1}", Sectors[start.FirstSector].Branch,
+                        PassiveNodeKind.Small, previous, [new(effect, SmallValue(effect, index))], [previous, next],
+                        MathF.Cos(angle) * radius, MathF.Sin(angle) * radius, -2));
+                    previous = id;
+                }
+                string notable = StartGardenId(start.Kind, $"cluster.{cluster}.notable");
+                string connector = StartGardenId(start.Kind, $"cluster.{cluster}.connector");
+                int targetSector = cluster < 2 ? start.FirstSector : start.SecondSector;
+                float notableAngle = start.Angle + offsets[cluster];
+                float connectorAngle = (SectorAngle(targetSector) + start.Angle) * .5f + (cluster - 1) * .028f;
+                nodes.Add(new(notable, $"{theme.Name}·起势", Sectors[targetSector].Branch, PassiveNodeKind.Notable,
+                    previous, [new(theme.Primary, NotableValue(theme.Primary)), new(theme.Secondary, NotableValue(theme.Secondary))],
+                    [previous, connector], MathF.Cos(notableAngle) * 620, MathF.Sin(notableAngle) * 620, -2));
+                nodes.Add(new(connector, $"{start.Name}·通途 {cluster + 1}", Sectors[targetSector].Branch,
+                    PassiveNodeKind.Small, notable, [new(Sectors[targetSector].Attribute, 10)],
+                    [notable, TravelId(targetSector, 15)], MathF.Cos(connectorAngle) * 675,
+                    MathF.Sin(connectorAngle) * 675, -2));
+            }
+
+            for (int attribute = 0; attribute < 3; attribute++)
+            {
+                StartAttribute bonus = start.Attributes[attribute];
+                float angle = start.Angle + offsets[attribute] * .8f;
+                string path = StartGardenId(start.Kind, $"attribute.{attribute}.path");
+                string notable = StartGardenId(start.Kind, $"attribute.{attribute}.notable");
+                nodes.Add(new(path, $"{bonus.Name}之径", Sectors[start.FirstSector].Branch, PassiveNodeKind.Small,
+                    startId, bonus.Effects.Select(effect => effect with { Value = Math.Min(10, effect.Value) }).ToArray(),
+                    [startId, notable], MathF.Cos(angle) * 852, MathF.Sin(angle) * 852, -2));
+                nodes.Add(new(notable, $"{bonus.Name} +30", Sectors[start.FirstSector].Branch, PassiveNodeKind.Notable,
+                    path, bonus.Effects, [path], MathF.Cos(angle) * 888, MathF.Sin(angle) * 888, -2));
+            }
         }
     }
 
@@ -205,10 +290,10 @@ internal static class P205PassiveTreeCatalog
             Theme theme = sector.Themes[cluster];
             string previous = TravelId(sectorIndex, 2 + cluster * 2);
             float centerRadius = 270 + cluster / 2 * 175;
-            for (int index = 0; index < 10; index++)
+            for (int index = 0; index < 8; index++)
             {
                 string id = ClusterId(sectorIndex, cluster, $"small.{index:00}");
-                string next = index == 9 ? ClusterId(sectorIndex, cluster, "notable.00") : ClusterId(sectorIndex, cluster, $"small.{index + 1:00}");
+                string next = index == 7 ? ClusterId(sectorIndex, cluster, "notable.00") : ClusterId(sectorIndex, cluster, $"small.{index + 1:00}");
                 float radius = centerRadius + index * 16;
                 float angle = baseAngle + offsets[cluster] + (index - 4.5f) * .006f;
                 PassiveEffectKind effect = index % 3 == 2 ? theme.Secondary : theme.Primary;
@@ -305,6 +390,17 @@ internal static class P205PassiveTreeCatalog
     private static string CenterId(int index) => $"core.passive.v3.center.{index:00}";
     private static string TravelId(int sector, int index) => $"core.passive.v3.travel.{sector:00}.{index:00}";
     private static string ClusterId(int sector, int cluster, string suffix) => $"core.passive.v3.cluster.{sector:00}.{cluster:00}.{suffix}";
+    private static string StartGardenId(PassiveStartKind start, string suffix) => $"core.passive.v3.start_garden.{start.ToString().ToLowerInvariant()}.{suffix}";
+    private static Start MakeStart(PassiveStartKind kind, string name, int firstSector, int secondSector, float angle,
+        (string Name, PassiveEffectKind Primary, PassiveEffectKind Secondary)[] themes,
+        params (string Name, PassiveEffectKind Primary, PassiveEffectKind? Secondary)[] attributes) =>
+        new(kind, name, firstSector, secondSector, angle,
+            themes.Select(theme => new StartTheme(theme.Name, theme.Primary, theme.Secondary)).ToArray(),
+            attributes.Select(attribute => new StartAttribute(attribute.Name, attribute.Secondary is { } secondary
+                ? [new(attribute.Primary, 15), new(secondary, 15)]
+                : [new(attribute.Primary, 30)])).ToArray());
+    private static (string Name, PassiveEffectKind Primary, PassiveEffectKind? Secondary) A(string name,
+        PassiveEffectKind primary) => (name, primary, null);
     private static Theme T(string name, string mastery, PassiveEffectKind primary, PassiveEffectKind secondary) => new(name, mastery, primary, secondary);
     private static Sector S(PassiveBranch branch, string name, PassiveEffectKind attribute, params Theme[] themes) => new(branch, name, attribute, themes);
 }

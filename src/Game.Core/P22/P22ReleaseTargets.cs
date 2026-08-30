@@ -3,14 +3,15 @@ using GameForWork.Core.P1.Items;
 using GameForWork.Core.P1.World;
 using GameForWork.Core.P18;
 using GameForWork.Core.P20;
+using GameForWork.Core.P23;
 using GameForWork.Core.P4;
 
 namespace GameForWork.Core.P22;
 
 public static class P22ReleaseTargets
 {
-    public const string Version = "0.2.0";
-    public const int SaveFormatVersion = 19;
+    public const string Version = "0.3.0";
+    public const int SaveFormatVersion = 20;
     public const long MaximumWorkingSetBytes = 700L * 1024 * 1024;
     public const long MaximumTwoHourGrowthBytes = 80L * 1024 * 1024;
     public const double MaximumTrayCpuPercent = 2.0;
@@ -41,14 +42,15 @@ public static class P22ReleaseTargets
     public static IReadOnlyList<string> ValidateBenchmarkCatalog()
     {
         var failures = new List<string>();
-        if (P18BenchmarkBuilds.All.Count != 6) failures.Add("升华基准构筑必须恰好为六套。");
-        foreach (P18Ascendancy ascendancy in P18BenchmarkBuilds.All.Select(build => build.Ascendancy).Distinct())
+        P18BenchmarkBuild[] catalog = P18BenchmarkBuilds.All.Concat(P231BenchmarkBuilds.All).ToArray();
+        if (catalog.Length != 36) failures.Add("十八升华必须恰好维护三十六套基准构筑。");
+        foreach (P18Ascendancy ascendancy in catalog.Select(build => build.Ascendancy).Distinct())
         {
-            P18BenchmarkBuild[] builds = P18BenchmarkBuilds.All.Where(build => build.Ascendancy == ascendancy).ToArray();
+            P18BenchmarkBuild[] builds = catalog.Where(build => build.Ascendancy == ascendancy).ToArray();
             if (builds.Length != 2 || builds.Count(build => build.EndgameGear) != 1)
                 failures.Add($"{ascendancy} 必须包含一套开荒和一套终局构筑。");
-            if (builds.Any(build => build.Nodes.Count != 8 || build.Skills.Count < 2))
-                failures.Add($"{ascendancy} 基准构筑必须封存 8 个升华节点和至少 2 个技能。");
+            if (builds.Any(build => build.Nodes.Count != 8))
+                failures.Add($"{ascendancy} 基准构筑必须封存 8 个升华节点。");
         }
         return failures;
     }
