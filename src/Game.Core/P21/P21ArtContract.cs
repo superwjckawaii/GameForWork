@@ -1,8 +1,6 @@
 using GameForWork.Core.P1.Combat;
-using GameForWork.Core.P1.Items;
 using GameForWork.Core.P14;
 using GameForWork.Core.P17;
-using GameForWork.Core.P19;
 
 namespace GameForWork.Core.P21;
 
@@ -14,8 +12,6 @@ public sealed record P21AnimationRange(P21SpriteAction Action, int StartColumn, 
 public static class P21ArtContract
 {
     private static IReadOnlyDictionary<string, int>? _enemyIndices;
-    private static IReadOnlyDictionary<string, int>? _itemBaseIndices;
-    private static IReadOnlyDictionary<string, int>? _uniqueItemIndices;
     private static IReadOnlyDictionary<string, int>? _skillStoneIndices;
     public const int AnimationColumns = 31;
     public const int DirectionCount = 4;
@@ -40,12 +36,6 @@ public static class P21ArtContract
 
     public static IReadOnlyList<string> EnemyIds { get; } = P1Enemies.NormalEnemies
         .Select(enemy => enemy.StableId).ToArray();
-
-    public static IReadOnlyList<string> ItemBaseIds { get; } = P19Catalog.Bases
-        .OrderBy(item => item.StableId, StringComparer.Ordinal).Select(item => item.StableId).ToArray();
-
-    public static IReadOnlyList<string> UniqueItemIds { get; } = P14UniqueItems.All
-        .OrderBy(item => item.StableId, StringComparer.Ordinal).Select(item => item.StableId).ToArray();
 
     public static IReadOnlyList<string> SkillStoneIds { get; } = P17SkillCatalog.Active
         .Select(skill => skill.StoneId).Concat(P17SkillCatalog.Supports.Select(skill => skill.StoneId)).ToArray();
@@ -87,14 +77,6 @@ public static class P21ArtContract
         return StableIndex(stableId, BossRigCount);
     }
 
-    public static int ItemBaseIndex(string stableId)
-    {
-        if (ItemBaseIndices.TryGetValue(stableId, out int index)) return index;
-        throw new KeyNotFoundException($"Unknown P21 item base: {stableId}");
-    }
-
-    public static int UniqueItemIndex(string stableId) => RequiredIndex(UniqueItemIndices, stableId, "unique item");
-
     public static int SkillStoneIndex(string stableId)
     {
         try { return P25.P25SkillStoneArt.IconIndex(stableId); }
@@ -105,19 +87,8 @@ public static class P21ArtContract
 
     private static IReadOnlyDictionary<string, int> EnemyIndices =>
         _enemyIndices ??= Indexed(EnemyIds);
-    private static IReadOnlyDictionary<string, int> ItemBaseIndices =>
-        _itemBaseIndices ??= Indexed(ItemBaseIds);
-    private static IReadOnlyDictionary<string, int> UniqueItemIndices =>
-        _uniqueItemIndices ??= Indexed(UniqueItemIds);
     private static IReadOnlyDictionary<string, int> SkillStoneIndices =>
         _skillStoneIndices ??= Indexed(SkillStoneIds);
-
-    private static int RequiredIndex(IReadOnlyDictionary<string, int> values, string stableId, string kind)
-    {
-        return values.TryGetValue(stableId, out int index)
-            ? index
-            : throw new KeyNotFoundException($"Unknown P21 {kind}: {stableId}");
-    }
 
     private static IReadOnlyDictionary<string, int> Indexed(IReadOnlyList<string> values) =>
         values.Select((value, index) => (value, index)).ToDictionary(pair => pair.value, pair => pair.index,

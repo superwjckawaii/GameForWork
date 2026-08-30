@@ -741,7 +741,7 @@ public partial class P2Dashboard : VBoxContainer
         VBoxContainer page = Page("AI");
         page.AddChild(new Label
         {
-            Text = "规则只支持一层“全部满足 / 任一满足”。AI 可读取敌人与地图危险度，不读取隐藏掉落结果。",
+            Text = "规则只支持一层“全部满足 / 任一满足”。AI 可读取敌人数量、稀有度和威胁等级，不读取隐藏掉落结果。",
             AutowrapMode = TextServer.AutowrapMode.WordSmart,
         });
         var row = new HFlowContainer();
@@ -759,7 +759,7 @@ public partial class P2Dashboard : VBoxContainer
         OptionButton rarity = AddOptions(row, "稀有度", ["任意", "普通", "精英", "Boss"]);
         var distance = new SpinBox { MinValue = 1, MaxValue = 30, Step = 1, Value = 8, Prefix = "距离≤" };
         row.AddChild(distance);
-        var danger = new SpinBox { MinValue = 0, MaxValue = 100, Step = 5, Value = 50, Prefix = "危险度≥" };
+        var danger = new SpinBox { MinValue = 0, MaxValue = 100, Step = 5, Value = 50, Prefix = "威胁等级≥" };
         row.AddChild(danger);
         var boss = new CheckBox { Text = "Boss 优先" };
         row.AddChild(boss);

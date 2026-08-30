@@ -51,6 +51,8 @@ public partial class Main : Node
     private bool _saveNoticePending;
     private bool _quitAfterSave;
     private Exception? _saveFailure;
+    private Task? _startupBackupWorker;
+    private Exception? _startupBackupFailure;
     private long _lastSaveMilliseconds;
     private int _displayedGold = int.MinValue;
     private double _performanceAccumulator;
@@ -101,6 +103,7 @@ public partial class Main : Node
             GetTree().Quit();
             return;
         }
+        QueueStartupBackup();
         GetTree().AutoAcceptQuit = false;
         GetWindow().CloseRequested += OnCloseRequested;
         _windowController = new WindowController(GetWindow(), _settingsStore, TogglePause, OpenLogs, QuitApplication);
@@ -156,6 +159,7 @@ public partial class Main : Node
             _stabilityPeakWorkingSet = Math.Max(_stabilityPeakWorkingSet, process.WorkingSet64);
         }
         PollSaveWorker();
+        PollStartupBackupWorker();
         UpdateGoldDisplay();
         if (_quitAfterSave && !IsSaveWorkerRunning())
         {
@@ -729,7 +733,6 @@ public partial class Main : Node
         {
             _saveRepository = new SaveRepository(_savesRoot, slot);
             _saveRepository.Initialize();
-            _saveRepository.CreateBackup();
             string? json = _saveRepository.LoadP1SessionJson();
             try
             {
@@ -757,6 +760,36 @@ public partial class Main : Node
             _saveRepository = null;
             _session = null;
             ReportError("p1a.save_initialize_failed", "Save initialization failed; no replacement save was created.", exception);
+        }
+    }
+
+    private void QueueStartupBackup()
+    {
+        SaveRepository? repository = _saveRepository;
+        if (repository is null || _startupBackupWorker is { IsCompleted: false })
+        {
+            return;
+        }
+
+        _startupBackupWorker = Task.Run(() =>
+        {
+            try
+            {
+                repository.CreateAutomaticBackupIfDue(TimeSpan.FromHours(24));
+            }
+            catch (Exception exception)
+            {
+                _startupBackupFailure = exception;
+            }
+        });
+    }
+
+    private void PollStartupBackupWorker()
+    {
+        Exception? failure = Interlocked.Exchange(ref _startupBackupFailure, null);
+        if (failure is not null)
+        {
+            ReportError("p1a.startup_backup_failed", "Background startup backup failed.", failure);
         }
     }
 

@@ -78,6 +78,8 @@ public static class P6SocketRules
     public static ItemInstance Ensure(ItemInstance item)
     {
         ArgumentNullException.ThrowIfNull(item);
+        ItemBaseDefinition canonicalBase = P1ItemBases.Get(item.Base.StableId);
+        item = item with { Base = canonicalBase };
         if (!ProvidesSockets(item.Base.Category) || item.LinkedSocketCount > 0)
         {
             return item;

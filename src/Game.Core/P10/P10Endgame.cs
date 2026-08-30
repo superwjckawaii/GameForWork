@@ -2,11 +2,12 @@ using GameForWork.Core.P1.World;
 using GameForWork.Core.P12;
 using GameForWork.Core.P18;
 using GameForWork.Core.P20;
+using GameForWork.Core.P26;
 
 namespace GameForWork.Core.P10;
 
 public enum P10MapMechanic { Abyss, LifeGarden, RedAltar, BlueAltar }
-public enum P10AtlasTheme { MapSupply, Abyss, LifeGarden, RedAltar, BlueAltar, Boss }
+public enum P10AtlasTheme { MapBasics, MapSupply, Crafting, PacksAndElites, Boss, Abyss, LifeGarden, RedAltar, BlueAltar, Warfront }
 
 public sealed record P10AtlasNode(
     string StableId,
@@ -21,11 +22,14 @@ public sealed record P10AtlasNode(
     float Y,
     int MechanicWeightBasisPoints = 0,
     bool BlocksCompetingMechanic = false,
-    string SpecialRule = "");
+    string SpecialRule = "",
+    int GoldCost = 0,
+    P26AtlasGate Gate = P26AtlasGate.Act5,
+    int Position = 1);
 
 public static class P10AtlasTree
 {
-    public const float LayoutExtent = 820f;
+    public const float LayoutExtent = 720f;
 
     private static readonly IReadOnlyDictionary<string, P10AtlasNode> NodeMap = Build()
         .ToDictionary(node => node.StableId, StringComparer.Ordinal);
@@ -35,30 +39,28 @@ public static class P10AtlasTree
 
     private static IReadOnlyList<P10AtlasNode> Build()
     {
-        string[] themeNames = ["路印回响", "裂渊追猎", "命能培植", "赤誓祭坛", "苍誓祭坛", "终局攻坚"];
-        var result = new List<P10AtlasNode>(360);
-        for (int lane = 0; lane < 12; lane++)
-        for (int index = 0; index < 30; index++)
+        return P26AtlasCatalog.All.Select(node =>
         {
-            P10AtlasTheme theme = (P10AtlasTheme)(lane % 6);
-            string id = $"core.atlas.{lane:00}.{index:00}";
-            string? prerequisite = index == 0 ? null : $"core.atlas.{lane:00}.{index - 1:00}";
-            bool notable = index is 9 or 19 or 29;
-            float angle = -MathF.PI / 2 + lane * MathF.Tau / 12;
-            float radius = 72 + index * 24;
-            string special = !notable ? string.Empty : index switch
+            int lane = (int)node.Category;
+            float x = -630 + lane * 140;
+            float y = -550 + (node.Position - 1) * 100;
+            P10AtlasTheme theme = node.Category switch
             {
-                9 => "该机制出现权重提高，并至少生成一个额外节点",
-                19 => "可屏蔽同组竞争机制，将权重转移给本机制",
-                _ => "Boss 结算时把该机制奖励提升一个档位",
+                P26AtlasCategory.MapBasics => P10AtlasTheme.MapBasics,
+                P26AtlasCategory.Supply => P10AtlasTheme.MapSupply,
+                P26AtlasCategory.Crafting => P10AtlasTheme.Crafting,
+                P26AtlasCategory.PacksAndElites => P10AtlasTheme.PacksAndElites,
+                P26AtlasCategory.Boss => P10AtlasTheme.Boss,
+                P26AtlasCategory.Abyss => P10AtlasTheme.Abyss,
+                P26AtlasCategory.LifeGarden => P10AtlasTheme.LifeGarden,
+                P26AtlasCategory.RedOath => P10AtlasTheme.RedAltar,
+                P26AtlasCategory.BlueOath => P10AtlasTheme.BlueAltar,
+                _ => P10AtlasTheme.Warfront,
             };
-            result.Add(new P10AtlasNode(id,
-                notable ? $"{themeNames[(int)theme]}·枢纽 {index / 10 + 1}" : $"{themeNames[(int)theme]} {index + 1:00}",
-                theme, index / 10, lane * 30 + index, prerequisite, notable ? 900 : 180, notable,
-                MathF.Cos(angle) * radius, MathF.Sin(angle) * radius,
-                notable ? 2_500 : 150, notable && index == 19, special));
-        }
-        return result;
+            return new P10AtlasNode(node.StableId, node.DisplayName, theme, node.Position / 4, lane * 12 + node.Position,
+                node.PrerequisiteId, 0, node.Position is 4 or 8 or 11 or 12, x, y, 0, false, node.Effect,
+                node.GoldCost, node.Gate, node.Position);
+        }).ToArray();
     }
 }
 
@@ -96,21 +98,14 @@ public sealed class P10EndgameState
     public const string CitadelPracticeMapPrefix = "p14-ashen-practice-";
     public const string BreakthroughMapPrefix = "p14-gate-trial-";
     private readonly HashSet<int> _completedTiers = [];
-    private readonly List<(string Name, HashSet<string> Nodes)> _atlasSchemes =
-    [
-        ("续航方案", new HashSet<string>(StringComparer.Ordinal)),
-        ("机制方案", new HashSet<string>(StringComparer.Ordinal)),
-        ("攻坚方案", new HashSet<string>(StringComparer.Ordinal)),
-    ];
+    private readonly HashSet<string> _atlas = new(StringComparer.Ordinal);
     private readonly Dictionary<P10MapMechanic, int> _mechanics = Enum.GetValues<P10MapMechanic>().ToDictionary(kind => kind, _ => 0);
     private readonly HashSet<string> _ascendancy = new(StringComparer.Ordinal);
     public IReadOnlySet<int> CompletedTiers => _completedTiers;
-    public IReadOnlySet<string> AtlasPassives => _atlasSchemes[ActiveAtlasSchemeIndex].Nodes;
-    public IReadOnlyList<string> AtlasSchemeNames => _atlasSchemes.Select(scheme => scheme.Name).ToArray();
-    public int ActiveAtlasSchemeIndex { get; private set; }
+    public IReadOnlySet<string> AtlasPassives => _atlas;
     public IReadOnlyDictionary<P10MapMechanic, int> MechanicEncounters => _mechanics;
     public IReadOnlySet<string> AscendancyPassives => _ascendancy;
-    public int EarnedAtlasPoints => _completedTiers.Count + BonusAtlasPoints;
+    public int EarnedAtlasPoints => P26AtlasCatalog.MaximumNodes;
     public int LifeForce { get; private set; }
     public int RedFavor { get; private set; }
     public int BlueFavor { get; private set; }
@@ -148,7 +143,14 @@ public sealed class P10EndgameState
         foreach (P10MapMechanic mechanic in result)
         {
             _mechanics[mechanic]++;
-            int bonus = 100 + AtlasBonus((P10AtlasTheme)((int)mechanic + 1));
+            P10AtlasTheme theme = mechanic switch
+            {
+                P10MapMechanic.Abyss => P10AtlasTheme.Abyss,
+                P10MapMechanic.LifeGarden => P10AtlasTheme.LifeGarden,
+                P10MapMechanic.RedAltar => P10AtlasTheme.RedAltar,
+                _ => P10AtlasTheme.BlueAltar,
+            };
+            int bonus = 100 + AtlasBonus(theme);
             int quantityBonus = Math.Max(0, map.ItemQuantityBasisPoints);
             switch (mechanic)
             {
@@ -159,34 +161,15 @@ public sealed class P10EndgameState
         }
         if (map.Tier >= 11)
         {
-            CitadelFragments += P20DropFormula.RollScaledCount(1, map.ItemQuantityBasisPoints,
-                seed ^ 0xc17ade1f4a6b9023UL);
+            CitadelFragments += 1;
             while (CitadelFragments >= CitadelFragmentsPerTicket) { CitadelFragments -= CitadelFragmentsPerTicket; CitadelTickets++; }
         }
         return result;
     }
 
-    public bool TryAllocateAtlas(string id)
-    {
-        P10AtlasNode node = P10AtlasTree.Get(id);
-        HashSet<string> atlas = _atlasSchemes[ActiveAtlasSchemeIndex].Nodes;
-        if (atlas.Contains(id) || atlas.Count >= EarnedAtlasPoints || node.PrerequisiteId is not null && !atlas.Contains(node.PrerequisiteId)) return false;
-        return atlas.Add(id);
-    }
-
-    public bool TryRenameAtlasScheme(int index, string name)
-    {
-        if (index is < 0 or > 2 || string.IsNullOrWhiteSpace(name) || name.Trim().Length > 12) return false;
-        _atlasSchemes[index] = (name.Trim(), _atlasSchemes[index].Nodes);
-        return true;
-    }
-
-    public bool TrySwitchAtlasScheme(int index)
-    {
-        if (index is < 0 or > 2 || index == ActiveAtlasSchemeIndex) return false;
-        ActiveAtlasSchemeIndex = index;
-        return true;
-    }
+    public bool TryPurchaseAtlas(string id, TownEconomyState economy, bool warfrontDiscovered = false) =>
+        P26AtlasPurchase.TryPurchase(_atlas, P26AtlasCatalog.Get(id), economy,
+            _completedTiers.DefaultIfEmpty(0).Max(), FinalBreakthroughCompleted, warfrontDiscovered);
 
     public bool TryCompleteFinalBreakthrough(int level, bool trialWon)
     {
@@ -288,14 +271,14 @@ public sealed class P10EndgameState
     public static bool IsCitadelPractice(P1MapItem map) => map.InstanceId.StartsWith(CitadelPracticeMapPrefix, StringComparison.Ordinal);
     public static bool IsBreakthroughTrial(P1MapItem map) => map.InstanceId.StartsWith(BreakthroughMapPrefix, StringComparison.Ordinal);
 
-    public int AtlasBonus(P10AtlasTheme theme) => AtlasPassives.Select(P10AtlasTree.Get).Where(node => node.Theme == theme).Sum(node => node.RewardBasisPoints) / 100;
+    public int AtlasBonus(P10AtlasTheme theme) => AtlasPassives.Select(P10AtlasTree.Get).Count(node => node.Theme == theme) * 10;
 
     public P10EndgameSnapshot Capture() => new(_completedTiers.Order().ToArray(), AtlasPassives.Order().ToArray(),
         new Dictionary<P10MapMechanic, int>(_mechanics), LifeForce, RedFavor, BlueFavor, CitadelFragments,
         CitadelTickets, CitadelDefeated, _ascendancy.Order().ToArray(), BreakthroughPoints,
         FinalBreakthroughCompleted,
-        _atlasSchemes.Select(scheme => new P12AtlasSchemeSnapshot(scheme.Name, scheme.Nodes.Order().ToArray())).ToArray(),
-        ActiveAtlasSchemeIndex, CitadelVictories, MythicReforgeMaterials, MythicGranted,
+        null,
+        0, CitadelVictories, MythicReforgeMaterials, MythicGranted,
         BreakthroughAttempts, BreakthroughVictories, BonusAtlasPoints, SelectedAscendancy,
         Act3AscendancyAwarded, Act5AscendancyAwarded);
 
@@ -303,23 +286,17 @@ public sealed class P10EndgameState
     {
         var state = new P10EndgameState();
         if (snapshot is null) return state;
-        if (snapshot.CompletedTiers.Any(tier => tier is < 1 or > 20) || snapshot.AtlasPassives.Count > 25 ||
+        if (snapshot.CompletedTiers.Any(tier => tier is < 1 or > 20) || snapshot.AtlasPassives.Count > P26AtlasCatalog.MaximumNodes ||
             snapshot.CitadelFragments is < 0 or >= CitadelFragmentsPerTicket || snapshot.CitadelTickets < 0 ||
             snapshot.BreakthroughPoints is < 0 or > MaximumAscendancyPoints || snapshot.AscendancyPassives.Count > snapshot.BreakthroughPoints ||
             snapshot.CitadelVictories < 0 || snapshot.MythicReforgeMaterials < 0 || snapshot.BreakthroughAttempts < 0 ||
             snapshot.BreakthroughVictories < 0 || snapshot.BonusAtlasPoints is < 0 or > 5 || !Enum.IsDefined(snapshot.SelectedAscendancy))
             throw new InvalidDataException("P10 endgame snapshot is invalid.");
         foreach (int tier in snapshot.CompletedTiers) state._completedTiers.Add(tier);
-        IReadOnlyList<P12AtlasSchemeSnapshot> schemes = snapshot.AtlasSchemes ??
-            [new("续航方案", snapshot.AtlasPassives), new("机制方案", []), new("攻坚方案", [])];
-        if (schemes.Count != 3 || snapshot.ActiveAtlasSchemeIndex is < 0 or > 2)
-            throw new InvalidDataException("P12 atlas schemes are invalid.");
-        for (int index = 0; index < 3; index++)
-        {
-            if (!state.TryRenameAtlasScheme(index, schemes[index].Name)) throw new InvalidDataException("P12 atlas scheme name is invalid.");
-            foreach (string id in schemes[index].AllocatedPassives) { P10AtlasTree.Get(id); state._atlasSchemes[index].Nodes.Add(id); }
-        }
-        state.ActiveAtlasSchemeIndex = snapshot.ActiveAtlasSchemeIndex;
+        IEnumerable<string> migratedAtlas = snapshot.AtlasPassives
+            .Concat(snapshot.AtlasSchemes?.SelectMany(scheme => scheme.AllocatedPassives) ?? [])
+            .Where(id => id.StartsWith("p26.atlas.", StringComparison.Ordinal)).Distinct(StringComparer.Ordinal);
+        foreach (string id in migratedAtlas) { P10AtlasTree.Get(id); state._atlas.Add(id); }
         foreach (P10MapMechanic kind in Enum.GetValues<P10MapMechanic>()) state._mechanics[kind] = snapshot.MechanicEncounters.GetValueOrDefault(kind);
         state.LifeForce = snapshot.LifeForce; state.RedFavor = snapshot.RedFavor; state.BlueFavor = snapshot.BlueFavor;
         state.CitadelFragments = snapshot.CitadelFragments; state.CitadelTickets = snapshot.CitadelTickets; state.CitadelDefeated = snapshot.CitadelDefeated;

@@ -4,6 +4,7 @@ using GameForWork.Core.P1.Progression;
 using GameForWork.Core.P3;
 using GameForWork.Core.P12;
 using GameForWork.Core.P18;
+using GameForWork.Core.P26;
 using GameForWork.Core.Simulation;
 using System.Text.Json.Serialization;
 
@@ -58,11 +59,13 @@ public sealed record ExpeditionPolicy(
     int MinimumStorageFreeSlots = 0,
     IReadOnlyList<MapRoute>? RoutePriority = null,
     IReadOnlyList<MapRoute>? BlockedRoutes = null,
-    int MaximumMapDanger = 100,
     MapAltarPreference AltarPreference = MapAltarPreference.Any,
     bool UseRareFragments = false,
     int RouteDecisionTimeoutSeconds = 30,
-    int MaximumMapTier = P1MapItem.MaximumAreaLevel)
+    int MaximumMapTier = P1MapItem.MaximumAreaLevel,
+    P26MapFilter? MapFilter = null,
+    P26MapOrder MapOrder = P26MapOrder.Recommended,
+    P26NoMatchBehavior NoMatchBehavior = P26NoMatchBehavior.Wait)
 {
     public static ExpeditionPolicy Recommended => new(
         RouteSelectionMode.Automatic,
@@ -96,16 +99,12 @@ public sealed record ExpeditionPolicy(
             .Distinct().ToArray();
         foreach (MapRoute priority in priorities)
         {
-            if (candidates.Contains(priority) && formal.DangerFor(priority) <= MaximumMapDanger)
+            if (candidates.Contains(priority))
                 return priority;
         }
 
-        int routePenalty = survivalScore < formal.DangerRating ? 1 : 0;
-        MapRoute[] withinRisk = candidates.Where(route => formal.DangerFor(route) <= MaximumMapDanger).ToArray();
-        if (withinRisk.Length > 0) candidates = withinRisk;
         return candidates
-            .OrderBy(route => P12MapRules.RouteDanger(route) * routePenalty)
-            .ThenBy(route => StableRouteTie(seed, formal.InstanceId, route))
+            .OrderBy(route => StableRouteTie(seed, formal.InstanceId, route))
             .First();
     }
 
@@ -113,14 +112,16 @@ public sealed record ExpeditionPolicy(
     {
         if (MaximumContinuousMaps is < 0 or > 10_000 ||
             StopAfterConsecutiveFailures is < 0 or > 100 || MinimumStorageFreeSlots is < 0 or > 100_000 ||
-            MaximumMapDanger is < 0 or > 100 || RouteDecisionTimeoutSeconds is < 0 or > 300 ||
+            RouteDecisionTimeoutSeconds is < 0 or > 300 ||
             MaximumMapTier is < P1MapItem.MinimumAreaLevel or > P1MapItem.MaximumAreaLevel ||
             (RoutePriority?.Any(route => !Enum.IsDefined(route)) ?? false) ||
-            (BlockedRoutes?.Any(route => !Enum.IsDefined(route)) ?? false))
+            (BlockedRoutes?.Any(route => !Enum.IsDefined(route)) ?? false) || !Enum.IsDefined(MapOrder) ||
+            !Enum.IsDefined(NoMatchBehavior))
         {
             throw new ArgumentOutOfRangeException(nameof(MaximumContinuousMaps));
         }
 
+        MapFilter?.Validate();
         return this;
     }
 
@@ -144,7 +145,13 @@ public sealed record P1MapItem(
     MapRoute? SelectedRoute = null,
     P12MapAltar Altar = P12MapAltar.None,
     IReadOnlyList<string>? Fragments = null,
-    IReadOnlyList<string>? AtlasSnapshot = null)
+    IReadOnlyList<string>? AtlasSnapshot = null,
+    P26CorruptionRule CorruptionRule = P26CorruptionRule.None,
+    bool IsLocked = false,
+    bool IsManualPriority = false,
+    bool IsRunning = false,
+    bool IsQuestMap = false,
+    long AcquiredSequence = 0)
 {
     public const int MinimumTier = 1;
     public const int MaximumTier = 20;
@@ -155,23 +162,32 @@ public sealed record P1MapItem(
     public int MonsterLevel => P16MapTierLevels.MonsterLevel(Tier);
     public IReadOnlyList<MapRoute> EffectiveRouteCandidates => RouteCandidates ?? [];
     public IReadOnlyList<P12MapAffix> EffectiveAffixes => Affixes ?? [];
-    public int DangerRating => Math.Clamp(Tier * 3 + EffectiveAffixes.Sum(affix => affix.Danger) +
-        P12MapRules.RouteDanger(SelectedRoute ?? MapRoute.Safe), 0, 100);
-    public int DangerFor(MapRoute route) => Math.Clamp(Tier * 3 + EffectiveAffixes.Sum(affix => affix.Danger) +
-        P12MapRules.RouteDanger(route), 0, 100);
-    public int ItemQuantityBasisPoints => 10_000 + Quality * 100 + EffectiveAffixes.Sum(affix => affix.QuantityBasisPoints);
+    public bool IsProtected => IsLocked || IsManualPriority || IsRunning || IsQuestMap;
+    private (int Monster, int Item) AffixQuantity => P26MapRules.CorruptionBonus(this);
+    public int MonsterQuantityBasisPoints => Math.Clamp(AffixQuantity.Monster, 0,
+        IsCorrupted ? P26MapRules.CorruptedMonsterQuantityCap : P26MapRules.RareMonsterQuantityCap);
+    public int ItemQuantityBonusBasisPoints => Math.Clamp(Quality * 100 + AffixQuantity.Item, 0,
+        IsCorrupted ? P26MapRules.CorruptedItemQuantityCap : P26MapRules.RareItemQuantityCap);
+    public int ItemQuantityBasisPoints => 10_000 + ItemQuantityBonusBasisPoints;
+    public int MonsterCountBasisPoints => 10_000 + MonsterQuantityBasisPoints;
 
     public P1MapItem EnsureFormal(ulong seed = 0) => P12MapRules.EnsureFormal(this, seed);
 
     public P1MapItem Validate()
     {
-        if (string.IsNullOrWhiteSpace(InstanceId) || Tier is < MinimumTier or > MaximumTier ||
+        if (string.IsNullOrWhiteSpace(InstanceId) || InstanceId.Length > 128 ||
+            Tier is < MinimumTier or > MaximumTier ||
             Quality is < 0 or > 20 || !Enum.IsDefined(Rarity) || !Enum.IsDefined(Altar) ||
-            EffectiveAffixes.Count > 6 || EffectiveRouteCandidates.Count > 3 ||
+            EffectiveAffixes.Count > 4 || EffectiveRouteCandidates.Count > 3 ||
+            EffectiveAffixes.Count(affix => affix.Family == P26MapAffixFamily.DangerousPrefix) > 2 ||
+            EffectiveAffixes.Count(affix => affix.Family == P26MapAffixFamily.RewardSuffix) > 2 ||
+            EffectiveAffixes.GroupBy(affix => P26MapAffixCatalog.Get(affix.Kind).Group)
+                .Any(group => group.Key != P26MapAffixGroup.None && group.Count() > 1) ||
             EffectiveRouteCandidates.Any(route => !Enum.IsDefined(route)) ||
             EffectiveRouteCandidates.Distinct().Count() != EffectiveRouteCandidates.Count ||
             SelectedRoute is not null && !EffectiveRouteCandidates.Contains(SelectedRoute.Value) ||
-            (Fragments?.Count ?? 0) > 4 || (AtlasSnapshot?.Count ?? 0) > 360 ||
+            (Fragments?.Count ?? 0) > 4 || (AtlasSnapshot?.Count ?? 0) > 120 ||
+            !Enum.IsDefined(CorruptionRule) || IsCorrupted != (CorruptionRule != P26CorruptionRule.None) || AcquiredSequence < 0 ||
             (AtlasSnapshot?.Distinct(StringComparer.Ordinal).Count() ?? 0) != (AtlasSnapshot?.Count ?? 0))
         {
             throw new ArgumentOutOfRangeException(nameof(Tier), "Maps require an ID and tier 1 through 20.");

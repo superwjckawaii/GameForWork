@@ -7,6 +7,28 @@ $script:KnownDotnetLocations = @(
     'C:\Program Files\dotnet\dotnet.exe'
 )
 
+function Initialize-NativeConsoleEncoding {
+    # Windows PowerShell 5.1 otherwise decodes UTF-8 output from modern .NET
+    # tools with the active legacy code page, which turns Chinese into mojibake.
+    $utf8 = New-Object System.Text.UTF8Encoding($false)
+    try {
+        [Console]::InputEncoding = $utf8
+        [Console]::OutputEncoding = $utf8
+    }
+    catch {
+        # A redirected host can reject Console encoding changes. OutputEncoding
+        # below still keeps native-process pipes on UTF-8 in that environment.
+    }
+    $script:OutputEncoding = $utf8
+
+    if ($env:OS -eq 'Windows_NT') {
+        $changeCodePage = Join-Path $env:SystemRoot 'System32\chcp.com'
+        if (Test-Path -LiteralPath $changeCodePage) {
+            & $changeCodePage 65001 | Out-Null
+        }
+    }
+}
+
 function Resolve-DotnetBinary {
     param([string]$RequestedPath = $env:DOTNET_BIN)
     if ($RequestedPath -and (Test-Path -LiteralPath $RequestedPath)) {

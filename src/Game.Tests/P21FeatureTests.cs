@@ -10,8 +10,6 @@ public sealed class P21FeatureTests
     public void AssetContractCoversAllStableContent()
     {
         Assert.Equal(48, P21ArtContract.EnemyIds.Count);
-        Assert.Equal(80, P21ArtContract.ItemBaseIds.Count);
-        Assert.Equal(25, P21ArtContract.UniqueItemIds.Count);
         Assert.Equal(78, P21ArtContract.SkillStoneIds.Count);
         Assert.Equal(31, P21ArtContract.AnimationRanges.Sum(range => range.FrameCount));
         Assert.Equal(P21ArtContract.AnimationColumns,
@@ -43,13 +41,6 @@ public sealed class P21FeatureTests
                      .Concat([P14Bosses.Breakthrough.StableId])
                      .Concat(P14Bosses.CitadelStages.Select(item => item.StableId)))
             Assert.InRange(P21ArtContract.BossRig(boss), 0, P21ArtContract.BossRigCount - 1);
-    }
-
-    [Fact]
-    public void P24ItemBasesMustUseTheDedicatedP25Atlas()
-    {
-        foreach (string stableId in P24ItemCatalog.Bases.Select(item => item.StableId))
-            Assert.Throws<KeyNotFoundException>(() => P21ArtContract.ItemBaseIndex(stableId));
     }
 
     [Fact]

@@ -491,7 +491,7 @@ public sealed class P2CampaignSimulator
         int monsterLevel = P16CampaignLevels.MonsterLevel(node);
         IReadOnlyList<P20DefeatedEnemy> defeated = P20DropFormula.ExtractDefeated(timeline, monsterLevel);
         var context = new P20LootContext(node.StableId, monsterLevel, 10_000,
-            Math.Clamp(node.Act * 8 + (node.Kind == CampaignNodeKind.ActBoss ? 20 : 0), 0, 100),
+            0,
             MapRoute.Safe, AllowMaps: false, Completed: completed,
             BossPool: node.Kind == CampaignNodeKind.ActBoss ? "campaign" : string.Empty);
         P20RewardBatch rewards = P20DropFormula.Roll(context, defeated, seed);

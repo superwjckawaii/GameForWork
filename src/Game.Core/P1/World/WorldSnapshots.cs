@@ -2,6 +2,7 @@ using GameForWork.Core.P1.Items;
 using GameForWork.Core.P4;
 using GameForWork.Core.P5;
 using GameForWork.Core.P6;
+using GameForWork.Core.P26;
 
 namespace GameForWork.Core.P1.World;
 
@@ -52,7 +53,11 @@ public sealed record P1WorldSnapshot(
     P1TeamExpeditionSnapshot Mercenaries,
     int TeleporterLevel,
     P5ExpeditionSnapshot? P5Expedition = null,
-    int MaximumUnlockedMapTier = 16);
+    int MaximumUnlockedMapTier = 16,
+    P26MapFilter? MapCraftFilter = null,
+    P26MapFilter? MapSaleFilter = null,
+    P26MapFilter? AutoSellMapFilter = null,
+    long NextMapAcquiredSequence = 1);
 
 public static class P1WorldSnapshots
 {
@@ -80,7 +85,11 @@ public static class P1WorldSnapshots
             CaptureTeam(state.Mercenaries),
             state.Teleporter.Level,
             state.Expedition.Capture(),
-            state.MaximumUnlockedMapTier);
+            state.MaximumUnlockedMapTier,
+            state.MapCraftFilter,
+            state.MapSaleFilter,
+            state.AutoSellMapFilter,
+            state.NextMapAcquiredSequence);
     }
 
     public static P1WorldState Restore(P1WorldSnapshot snapshot)
@@ -112,7 +121,15 @@ public static class P1WorldSnapshots
             storage,
             P5ExpeditionDirector.Restore(snapshot.P5Expedition));
         state.Filter.ReplaceRules(snapshot.FilterRules);
-        state.MapInventory.AddRange(snapshot.MapInventory);
+        state.MapCraftFilter = (snapshot.MapCraftFilter ?? P26MapFilter.All).Validate();
+        state.MapSaleFilter = (snapshot.MapSaleFilter ?? P26MapFilter.All).Validate();
+        state.AutoSellMapFilter = (snapshot.AutoSellMapFilter ?? P26MapFilter.All).Validate();
+        state.RestoreNextMapAcquiredSequence(snapshot.NextMapAcquiredSequence);
+        foreach (P1MapItem source in snapshot.MapInventory)
+        {
+            P1MapItem formal = P26MapRules.NormalizeLegacy(source.EnsureFormal(0), 0);
+            state.AddMap(formal);
+        }
         state.Hero.Restore(snapshot.Hero);
         state.Mercenaries.Restore(snapshot.Mercenaries);
         if (!state.Teleporter.TrySetLevel(snapshot.TeleporterLevel))

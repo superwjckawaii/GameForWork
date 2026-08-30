@@ -3,17 +3,18 @@ using GameForWork.Core.P1.World;
 using GameForWork.Core.P10;
 using GameForWork.Core.P1;
 using GameForWork.Core.P18;
+using GameForWork.Core.P26;
 
 namespace GameForWork.Tests;
 
 public sealed class P10FeatureTests
 {
     [Fact]
-    public void AtlasHasSixFunctionalRoutesAndThreeHundredSixtyNodes()
+    public void AtlasHasTenCategoriesAndOneHundredTwentyGoldNodes()
     {
-        Assert.Equal(360, P10AtlasTree.Nodes.Count);
-        Assert.Equal(6, P10AtlasTree.Nodes.Select(node => node.Theme).Distinct().Count());
-        Assert.Equal(36, P10AtlasTree.Nodes.Count(node => node.Notable));
+        Assert.Equal(120, P10AtlasTree.Nodes.Count);
+        Assert.Equal(10, P10AtlasTree.Nodes.Select(node => node.Theme).Distinct().Count());
+        Assert.Equal(477_000, P10AtlasTree.Nodes.Sum(node => node.GoldCost));
         Assert.All(P10AtlasTree.Nodes, node =>
         {
             Assert.InRange(node.X, -P10AtlasTree.LayoutExtent, P10AtlasTree.LayoutExtent);
@@ -24,16 +25,18 @@ public sealed class P10FeatureTests
     }
 
     [Fact]
-    public void TierCompletionAwardsAtlasPointsAndOneToThreeMechanics()
+    public void TierCompletionUnlocksMechanicsWhileAtlasUsesGold()
     {
         var state = new P10EndgameState();
         IReadOnlyList<P10MapMechanic> mechanics = state.RecordMapCompletion(new P1MapItem("p10-t11", 11), MapRoute.Abyss, 77);
 
         Assert.InRange(mechanics.Count, 1, 3);
-        Assert.Equal(1, state.EarnedAtlasPoints);
+        Assert.Equal(120, state.EarnedAtlasPoints);
         Assert.Contains(11, state.CompletedTiers);
         Assert.Equal(1, state.CitadelFragments);
-        Assert.True(state.TryAllocateAtlas("core.atlas.00.00"));
+        var economy = new TownEconomyState(gold: 100);
+        Assert.True(state.TryPurchaseAtlas("p26.atlas.map.01", economy));
+        Assert.Equal(0, economy.Gold);
     }
 
     [Fact]
@@ -107,7 +110,7 @@ public sealed class P10FeatureTests
     {
         var state = new P10EndgameState();
         state.RecordMapCompletion(new P1MapItem("p10-roundtrip", 15), MapRoute.Safe, 99);
-        Assert.True(state.TryAllocateAtlas("core.atlas.01.00"));
+        Assert.True(state.TryPurchaseAtlas("p26.atlas.supply.01", new TownEconomyState(gold: 100)));
 
         P10EndgameState restored = P10EndgameState.Restore(state.Capture());
         Assert.Equal(state.CompletedTiers.Order(), restored.CompletedTiers.Order());

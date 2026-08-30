@@ -6,6 +6,7 @@ using GameForWork.Core.P4;
 using GameForWork.Core.Persistence;
 using GameForWork.Core.P10;
 using GameForWork.Core.P12;
+using GameForWork.Core.P26;
 
 namespace GameForWork.Tests;
 
@@ -47,19 +48,22 @@ public sealed class P12FeatureTests
         P1MapItem map = new P1MapItem("p12-craft", 6).EnsureFormal(1);
 
         P12MapCraftResult rare = P12MapCrafting.Apply(economy, map, P12MapCraftOperation.AlchemicalRare, 2);
-        P12MapCraftResult corrupted = P12MapCrafting.Apply(economy, rare.Map, P12MapCraftOperation.Corrupt, 3);
-        P12MapCraftResult locked = P12MapCrafting.Apply(economy, corrupted.Map, P12MapCraftOperation.ChaosReroll, 4);
+        P12MapCraftResult corrupted = P12MapCrafting.Apply(economy, rare.Map!, P12MapCraftOperation.Corrupt, 3);
 
         Assert.True(rare.Succeeded);
-        Assert.Equal(P12MapRarity.Rare, rare.Map.Rarity);
-        Assert.InRange(rare.Map.EffectiveAffixes.Count, 4, 6);
+        Assert.Equal(P12MapRarity.Rare, rare.Map!.Rarity);
+        Assert.Equal(4, rare.Map.EffectiveAffixes.Count);
         Assert.True(corrupted.Succeeded);
-        Assert.True(corrupted.Map.IsCorrupted);
-        Assert.False(locked.Succeeded);
+        if (!corrupted.Destroyed)
+        {
+            Assert.True(corrupted.Map!.IsCorrupted);
+            P12MapCraftResult locked = P12MapCrafting.Apply(economy, corrupted.Map, P12MapCraftOperation.ChaosReroll, 4);
+            Assert.False(locked.Succeeded);
+        }
     }
 
     [Fact]
-    public void TeamPolicyHonorsCandidatesBlocksAndDangerCeiling()
+    public void TeamPolicyHonorsCandidatesBlocksAndMapFilter()
     {
         P1MapItem map = new P1MapItem("p12-policy", 12).EnsureFormal(9) with
         {
@@ -69,7 +73,7 @@ public sealed class P12FeatureTests
         {
             RoutePriority = [MapRoute.Abyss, MapRoute.LifeGarden, MapRoute.Safe],
             BlockedRoutes = [MapRoute.Abyss],
-            MaximumMapDanger = 100,
+            MapFilter = new P26MapFilter(MaximumTier: 12),
         };
 
         Assert.Equal(MapRoute.LifeGarden, policy.SelectUnattendedRoute(map, 100, 11));
@@ -95,19 +99,15 @@ public sealed class P12FeatureTests
     }
 
     [Fact]
-    public void AtlasOwnsThreeNamedSchemesAndRoundTripsActiveAllocation()
+    public void AtlasUsesOnePermanentGoldPurchasedAllocationAndRoundTrips()
     {
         var state = new P10EndgameState();
         state.RecordMapCompletion(new P1MapItem("p12-atlas", 1), MapRoute.Safe, 1);
-        Assert.True(state.TryAllocateAtlas("core.atlas.00.00"));
-        Assert.True(state.TryRenameAtlasScheme(1, "裂渊专精"));
-        Assert.True(state.TrySwitchAtlasScheme(1));
+        var economy = new TownEconomyState(gold: 100);
+        Assert.True(state.TryPurchaseAtlas("p26.atlas.map.01", economy));
 
         P10EndgameState restored = P10EndgameState.Restore(state.Capture());
-        Assert.Equal(3, restored.AtlasSchemeNames.Count);
-        Assert.Equal("裂渊专精", restored.AtlasSchemeNames[1]);
-        Assert.Equal(1, restored.ActiveAtlasSchemeIndex);
-        Assert.Empty(restored.AtlasPassives);
+        Assert.Contains("p26.atlas.map.01", restored.AtlasPassives);
     }
 
     [Fact]

@@ -14,7 +14,7 @@ internal static class P1UiText
         var text = new StringBuilder();
         text.AppendLine($"{RarityName(item.Rarity)}·{item.DisplayName}{(item.Quality > 0 ? $"+{item.Quality}" : string.Empty)}");
         text.AppendLine($"底材：{item.Base.DisplayName}");
-        text.AppendLine($"物品等级 {item.ItemLevel} · {item.Base.Category}");
+        text.AppendLine($"物品等级 {item.ItemLevel} · {item.Base.DetailedTypeName}");
         text.AppendLine($"需求：等级 {item.Base.RequiredLevel} · 体魄 {item.Base.RequiredPhysique} · " +
             $"灵巧 {item.Base.RequiredDexterity} · 精神 {item.Base.RequiredSpirit} · 能量 {item.Base.RequiredEnergy}");
         if (item.Base.Category is ItemCategory.TwoHandWeapon or ItemCategory.OneHandWeapon)

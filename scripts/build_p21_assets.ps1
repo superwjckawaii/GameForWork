@@ -307,94 +307,6 @@ function Build-JewelAtlas {
     $atlas.Dispose()
 }
 
-function Paint-FlaskIcons {
-    param(
-        [string]$AtlasPath,
-        [object[]]$SortedBases
-    )
-    $atlas = [System.Drawing.Bitmap]::FromFile($AtlasPath)
-    $copy = New-TransparentBitmap -Width $atlas.Width -Height $atlas.Height
-    $graphics = New-PixelGraphics -Image $copy
-    $graphics.DrawImage($atlas, 0, 0)
-    $palette = @('#b8323f', '#356fbd', '#7f8991', '#55a66d', '#aa66c7')
-    $flaskIndex = 0
-    for ($index = 0; $index -lt $SortedBases.Count; $index++) {
-        if ($SortedBases[$index].Category -ne 'LifeFlask') { continue }
-        $x = ($index % 10) * 32
-        $y = [math]::Floor($index / 10) * 32
-        $graphics.CompositingMode = [System.Drawing.Drawing2D.CompositingMode]::SourceCopy
-        $graphics.FillRectangle([System.Drawing.Brushes]::Transparent, $x, $y, 32, 32)
-        $graphics.CompositingMode = [System.Drawing.Drawing2D.CompositingMode]::SourceOver
-        $liquid = [System.Drawing.ColorTranslator]::FromHtml($palette[$flaskIndex % $palette.Count])
-        $outline = [System.Drawing.SolidBrush]::new([System.Drawing.Color]::FromArgb(255, 29, 27, 32))
-        $glass = [System.Drawing.SolidBrush]::new([System.Drawing.Color]::FromArgb(255, 190, 203, 204))
-        $fill = [System.Drawing.SolidBrush]::new($liquid)
-        $highlight = [System.Drawing.SolidBrush]::new([System.Drawing.Color]::FromArgb(255, 240, 226, 183))
-        $graphics.FillRectangle($outline, $x + 11, $y + 3, 10, 6)
-        $graphics.FillRectangle($glass, $x + 13, $y + 3, 6, 5)
-        $graphics.FillPolygon($outline, [System.Drawing.Point[]]@(
-            [System.Drawing.Point]::new($x + 10, $y + 8), [System.Drawing.Point]::new($x + 22, $y + 8),
-            [System.Drawing.Point]::new($x + 27, $y + 16), [System.Drawing.Point]::new($x + 23, $y + 28),
-            [System.Drawing.Point]::new($x + 9, $y + 28), [System.Drawing.Point]::new($x + 5, $y + 16)))
-        $graphics.FillRectangle($fill, $x + 9, $y + 15, 14, 9)
-        $graphics.FillRectangle($highlight, $x + 10, $y + 11, 3, 9)
-        $outline.Dispose(); $glass.Dispose(); $fill.Dispose(); $highlight.Dispose()
-        $flaskIndex++
-    }
-    $graphics.Dispose()
-    $atlas.Dispose()
-    $copy.Save($AtlasPath, [System.Drawing.Imaging.ImageFormat]::Png)
-    $copy.Dispose()
-}
-
-function Paint-UniqueMarkers {
-    param([string]$AtlasPath)
-    $atlas = [System.Drawing.Bitmap]::FromFile($AtlasPath)
-    $copy = New-TransparentBitmap -Width $atlas.Width -Height $atlas.Height
-    $graphics = New-PixelGraphics -Image $copy
-    $graphics.DrawImage($atlas, 0, 0)
-    for ($index = 0; $index -lt 25; $index++) {
-        $x = ($index % 5) * 32
-        $y = [math]::Floor($index / 5) * 32
-        $color = if ($index -eq 24) { [System.Drawing.Color]::FromArgb(255, 173, 68, 232) } else { [System.Drawing.Color]::FromArgb(255, 221, 170, 61) }
-        $brush = [System.Drawing.SolidBrush]::new($color)
-        $graphics.FillRectangle($brush, $x + 2, $y + 2, 7, 2)
-        $graphics.FillRectangle($brush, $x + 2, $y + 2, 2, 7)
-        $graphics.FillRectangle($brush, $x + 23, $y + 28, 7, 2)
-        $graphics.FillRectangle($brush, $x + 28, $y + 23, 2, 7)
-        $runeX = $x + 13 + ($index % 4)
-        $runeY = $y + 12 + (($index / 4) % 4)
-        $graphics.FillRectangle($brush, $runeX, $runeY, 4, 4)
-        $brush.Dispose()
-    }
-    $graphics.Dispose()
-    $atlas.Dispose()
-    $copy.Save($AtlasPath, [System.Drawing.Imaging.ImageFormat]::Png)
-    $copy.Dispose()
-}
-
-function Paint-BaseMarkers {
-    param([string]$AtlasPath, [int]$Count)
-    $atlas = [System.Drawing.Bitmap]::FromFile($AtlasPath)
-    $copy = New-TransparentBitmap -Width $atlas.Width -Height $atlas.Height
-    $graphics = New-PixelGraphics -Image $copy
-    $graphics.DrawImage($atlas, 0, 0)
-    for ($index = 0; $index -lt $Count; $index++) {
-        $x = ($index % 10) * 32
-        $y = [math]::Floor($index / 10) * 32
-        $shade = 92 + (($index * 37) % 130)
-        $color = [System.Drawing.Color]::FromArgb(255, $shade, [math]::Min(235, 80 + (($index * 61) % 150)), 55 + (($index * 29) % 140))
-        $brush = [System.Drawing.SolidBrush]::new($color)
-        $graphics.FillRectangle($brush, $x + 3 + ($index % 3), $y + 27, 2, 2)
-        $graphics.FillRectangle($brush, $x + 27, $y + 3 + (($index / 3) % 3), 2, 2)
-        $brush.Dispose()
-    }
-    $graphics.Dispose()
-    $atlas.Dispose()
-    $copy.Save($AtlasPath, [System.Drawing.Imaging.ImageFormat]::Png)
-    $copy.Dispose()
-}
-
 function Build-TownPreview {
     param([System.Drawing.Bitmap]$Source, [string]$Destination)
     $output = New-TransparentBitmap -Width 480 -Height 270
@@ -425,40 +337,6 @@ if (-not $SkipAnimations) {
     foreach ($sprite in $bossSprites) { $sprite.Dispose() }
     $bossSource.Dispose()
 }
-
-$catalog = Get-Content -LiteralPath (Join-Path $RepositoryRoot 'src\Game.Core\P19\Data\p19_catalog.json') -Raw | ConvertFrom-Json
-$sortedBases = @($catalog.bases | Sort-Object StableId)
-$categoryCounters = @{}
-$baseSourceIndices = [System.Collections.Generic.List[int]]::new()
-foreach ($base in $sortedBases) {
-    $count = if ($categoryCounters.ContainsKey($base.Category)) { [int]$categoryCounters[$base.Category] } else { 0 }
-    $categoryCounters[$base.Category] = $count + 1
-    $sourceIndex = switch ($base.Category) {
-        'TwoHandWeapon' { ($count % 10) + [math]::Floor($count / 10) * 10 }
-        'OneHandWeapon' { ($count % 10) }
-        'Shield' { 42 + ($count % 8) }
-        'Helmet' { 50 + ($count % 8) }
-        'BodyArmor' { 60 + ($count % 9) }
-        'Gloves' { 70 + ($count % 6) }
-        'Boots' { 80 + ($count % 6) }
-        'Belt' { 90 + ($count % 5) }
-        'Amulet' { 100 + ($count % 6) }
-        'Ring' { 110 + ($count % 7) }
-        'LifeFlask' { 100 + ($count % 6) }
-        default { $count % 120 }
-    }
-    $baseSourceIndices.Add([int]$sourceIndex)
-}
-$equipmentSource = [System.Drawing.Bitmap]::FromFile((Join-Path $sourceRoot 'equipment-master.png'))
-Build-GridAtlas -Source $equipmentSource -SourceColumns 10 -SourceRows 12 -SourceIndices $baseSourceIndices.ToArray() `
-    -Destination (Join-Path $assetRoot 'ui\p21-item-bases.png') -Columns 10 -CellWidth 32 -CellHeight 32 -Padding 2
-Paint-FlaskIcons -AtlasPath (Join-Path $assetRoot 'ui\p21-item-bases.png') -SortedBases $sortedBases
-Paint-BaseMarkers -AtlasPath (Join-Path $assetRoot 'ui\p21-item-bases.png') -Count $sortedBases.Count
-$uniqueIndices = 0..24 | ForEach-Object { 60 + (($_ * 7) % 60) }
-Build-GridAtlas -Source $equipmentSource -SourceColumns 10 -SourceRows 12 -SourceIndices $uniqueIndices `
-    -Destination (Join-Path $assetRoot 'ui\p21-unique-items.png') -Columns 5 -CellWidth 32 -CellHeight 32 -Padding 2
-Paint-UniqueMarkers -AtlasPath (Join-Path $assetRoot 'ui\p21-unique-items.png')
-$equipmentSource.Dispose()
 
 $skillSource = [System.Drawing.Bitmap]::FromFile((Join-Path $sourceRoot 'skill-gem-master.png'))
 Build-GridAtlas -Source $skillSource -SourceColumns 10 -SourceRows 8 -SourceIndices (0..77) `
@@ -502,8 +380,6 @@ $manifest = [ordered]@{
         enemyBodyRigs = 16
         enemyTypes = 48
         bosses = 12
-        itemBases = $sortedBases.Count
-        uniqueItems = 25
         skillGems = 78
         metalCurrencies = 19
         jewels = 3
@@ -511,7 +387,7 @@ $manifest = [ordered]@{
         buildings = 7
         vfx = 48
     }
-    sources = @('actor-master.png', 'boss-master.png', 'equipment-master.png', 'skill-gem-master.png', 'vfx-master.png', 'region-master.png', 'town-master.png',
+    sources = @('actor-master.png', 'boss-master.png', 'skill-gem-master.png', 'vfx-master.png', 'region-master.png', 'town-master.png',
         'app-icon-master.png', 'ui-skin-master.png', 'passive-tree-master.png', 'ascendancy-master.png', 'atlas-tree-master.png')
 }
 $manifest | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $assetRoot 'p21-assets.json') -Encoding utf8

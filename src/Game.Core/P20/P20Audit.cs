@@ -7,7 +7,7 @@ public sealed record P20AuditBracket(
     string Name,
     int MonsterLevel,
     int Tier,
-    int Danger,
+    int MonsterQuantityBonusBasisPoints,
     MapRoute Route,
     bool Boss,
     int QuantityBasisPoints = 10_000);
@@ -46,7 +46,7 @@ public static class P20EconomyAudit
             P20AuditBracket bracket = StandardBrackets[bracketIndex];
             IReadOnlyList<P20DefeatedEnemy> pack = P20DropFormula.SyntheticPack(bracket.MonsterLevel, bracket.Boss);
             var context = new P20LootContext($"audit-{bracket.Name}", bracket.MonsterLevel,
-                bracket.QuantityBasisPoints, bracket.Danger, bracket.Route, bracket.Tier,
+                bracket.QuantityBasisPoints, bracket.MonsterQuantityBonusBasisPoints, bracket.Route, bracket.Tier,
                 P1MapItem.MaximumTier, AllowMaps: bracket.Tier > 0, AllowLegendary: true,
                 Completed: true, BossPool: bracket.Boss ? "warden" : string.Empty);
             long equipment = 0, gold = 0, metals = 0, maps = 0, stones = 0, legendary = 0;
@@ -96,11 +96,11 @@ public static class P20EconomyAudit
         P20AuditResult? boss = results.FirstOrDefault(result => result.Bracket.Name == "Boss");
         P20AuditResult? t16 = results.FirstOrDefault(result => result.Bracket.Name == "T16");
         P20AuditResult? t20 = results.FirstOrDefault(result => result.Bracket.Name == "T20");
-        text.AppendLine($"- T1～T10 基础地图续航目标不低于 1.05；T1 实测 {t1?.AverageMaps:F4}。" +
-            $"T16～T20 目标为 0.90～1.05；本次 T16/T20 实测 {t16?.AverageMaps:F4}/{t20?.AverageMaps:F4}。");
+        text.AppendLine($"- P26 无异界天赋续航目标：T1～T5 为 1.15、T6～T10 为 1.08、T11～T16 为 1.00、T17～T20 为 0.90；" +
+            $"本次 T1/T16/T20 实测 {t1?.AverageMaps:F4}/{t16?.AverageMaps:F4}/{t20?.AverageMaps:F4}。");
         text.AppendLine($"- 普通地图传奇基准为 3.33%（约 1/30）；Boss 直掉基准为 8%，本次 Boss 实测 {boss?.LegendaryRate:P3}。");
-        text.AppendLine("- 地图数量、金币、装备、金属、技能石、完成奖励与固定 Boss 碎片均读取地图数量加成；连接数独立抽取。");
-        text.AppendLine("- 金币出售已改为公开估值的 5%。按 T1 标准约 1,097 金币/小时，现有建筑升级与附魔价格分档保持不变；P22 只根据完整构筑长稳结果做末次微调。");
+        text.AppendLine("- 怪物数量先乘算实际怪物预算，物品数量再乘算装备、金币、金属、地图、技能石与玩法资源；首次/任务/固定 Boss 票券、异界解锁和保证传奇不受数量放大。");
+        text.AppendLine($"- 按 90 秒/节点折算，T1 基线约 {t1?.AverageGold * 40:F0} 金币/小时；地图出售另按 P26 公开公式结算。");
         return text.ToString();
     }
 

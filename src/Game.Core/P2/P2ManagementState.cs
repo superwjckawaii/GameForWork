@@ -219,7 +219,8 @@ public sealed class P2ManagementState
             state._sortingBag.AddRange(snapshot.SortingBag.Take(SortingBagCapacity).Select(P6SocketRules.Ensure));
             state._recovery.AddRange(snapshot.Recovery.Select(P6SocketRules.Ensure));
             state._recovery.AddRange(snapshot.SortingBag.Skip(SortingBagCapacity).Select(P6SocketRules.Ensure));
-            state._buyback.AddRange(snapshot.Buyback.TakeLast(BuybackCapacity));
+            state._buyback.AddRange(snapshot.Buyback.TakeLast(BuybackCapacity)
+                .Select(entry => entry with { Item = P6SocketRules.Ensure(entry.Item) }));
             state._skillStones.AddRange(snapshot.SkillStones);
             state._skillLinks.AddRange(snapshot.SkillLinks);
             state._operationHistory.AddRange(snapshot.OperationHistory.TakeLast(HistoryCapacity));

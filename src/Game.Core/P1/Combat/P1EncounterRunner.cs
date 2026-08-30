@@ -74,6 +74,9 @@ public sealed record P1EncounterResult(
 
 public sealed class P1EncounterRunner
 {
+    private const int StalemateProgressWindowTicks = 1_200;
+    private const int DetailedSimulationTicks = 20_000;
+
     public P1EncounterResult Run(P1EncounterRequest request, ulong seed)
     {
         ArgumentNullException.ThrowIfNull(request);
@@ -94,10 +97,16 @@ public sealed class P1EncounterRunner
         var heroBleeds = new BleedCollection();
         var events = new List<P1CombatEvent>();
         int enemyLife = request.Enemy.Life;
+        int initialEnemyLife = enemyLife;
+        int initialHeroLife = heroResources.Life;
         int heroNextActionTick = 0;
         int enemyNextActionTick = 0;
         int corpseExplosionTick = -1;
         BossPhase? previousBossPhase = null;
+        int minimumHeroLife = heroResources.Life;
+        int minimumEnemyLife = enemyLife;
+        int lastProgressTick = 0;
+        bool stalemate = false;
         int tick;
 
         for (tick = 0; request.MaximumTicks == 0 || tick < request.MaximumTicks; tick++)
@@ -243,6 +252,41 @@ public sealed class P1EncounterRunner
                 events.Add(new P1CombatEvent(tick, P1CombatEventKind.CorpseExplosion, explosionDamage));
             }
 
+            if (heroResources.Life < minimumHeroLife || enemyLife < minimumEnemyLife)
+            {
+                minimumHeroLife = Math.Min(minimumHeroLife, heroResources.Life);
+                minimumEnemyLife = Math.Min(minimumEnemyLife, enemyLife);
+                lastProgressTick = tick;
+            }
+
+            if (heroResources.IsAlive && enemyLife > 0 &&
+                tick - lastProgressTick >= StalemateProgressWindowTicks)
+            {
+                stalemate = true;
+                break;
+            }
+
+            if (heroResources.IsAlive && enemyLife > 0 && tick >= DetailedSimulationTicks)
+            {
+                long heroDamageProgress = (long)(initialHeroLife - minimumHeroLife) * 1_000_000 /
+                    Math.Max(1, initialHeroLife);
+                long enemyDamageProgress = (long)(initialEnemyLife - minimumEnemyLife) * 1_000_000 /
+                    Math.Max(1, initialEnemyLife);
+                if (enemyDamageProgress > heroDamageProgress)
+                {
+                    enemyLife = 0;
+                }
+                else if (heroDamageProgress > enemyDamageProgress)
+                {
+                    heroResources.ApplyDamage(checked(heroResources.Life + heroResources.Shield), tick);
+                }
+                else
+                {
+                    stalemate = true;
+                }
+                break;
+            }
+
             bool pendingCorpseExplosion = corpseExplosionTick > tick;
             if ((!heroResources.IsAlive || enemyLife == 0) && !pendingCorpseExplosion)
             {
@@ -252,7 +296,9 @@ public sealed class P1EncounterRunner
 
         int elapsedTicks = request.MaximumTicks == 0 ? tick + 1 : Math.Min(tick + 1, request.MaximumTicks);
         bool diagnosticLimitReached = request.MaximumTicks > 0 && tick >= request.MaximumTicks;
-        P1BattleOutcome outcome = (heroResources.IsAlive, enemyLife > 0, diagnosticLimitReached) switch
+        P1BattleOutcome outcome = stalemate
+            ? P1BattleOutcome.Draw
+            : (heroResources.IsAlive, enemyLife > 0, diagnosticLimitReached) switch
         {
             (_, _, true) => P1BattleOutcome.Timeout,
             (true, false, false) => P1BattleOutcome.HeroVictory,

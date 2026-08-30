@@ -39,6 +39,18 @@ public enum ItemCategory
     Shield = 10,
 }
 
+public enum WeaponFamily
+{
+    None,
+    Sword,
+    Axe,
+    Mace,
+    Dagger,
+    Bow,
+    Wand,
+    Runeblade,
+}
+
 public enum ItemRarity
 {
     Basic,
@@ -84,6 +96,33 @@ public sealed record ItemBaseDefinition(
 {
     public IReadOnlyList<string> ItemTags => Tags ?? Array.Empty<string>();
 
+    public WeaponFamily WeaponFamily => ItemTags switch
+    {
+        var tags when tags.Contains("runeblade", StringComparer.Ordinal) => WeaponFamily.Runeblade,
+        var tags when tags.Contains("dagger", StringComparer.Ordinal) => WeaponFamily.Dagger,
+        var tags when tags.Contains("bow", StringComparer.Ordinal) => WeaponFamily.Bow,
+        var tags when tags.Contains("wand", StringComparer.Ordinal) => WeaponFamily.Wand,
+        var tags when tags.Contains("axe", StringComparer.Ordinal) => WeaponFamily.Axe,
+        var tags when tags.Contains("mace", StringComparer.Ordinal) => WeaponFamily.Mace,
+        var tags when tags.Contains("sword", StringComparer.Ordinal) || tags.Contains("rapier", StringComparer.Ordinal) => WeaponFamily.Sword,
+        _ => WeaponFamily.None,
+    };
+
+    public string DetailedTypeName => (Category, WeaponFamily) switch
+    {
+        (ItemCategory.TwoHandWeapon, WeaponFamily.Sword) => "双手剑",
+        (ItemCategory.TwoHandWeapon, WeaponFamily.Axe) => "双手斧",
+        (ItemCategory.TwoHandWeapon, WeaponFamily.Mace) => "双手锤",
+        (ItemCategory.TwoHandWeapon, WeaponFamily.Bow) => "弓",
+        (ItemCategory.OneHandWeapon, WeaponFamily.Sword) => "单手剑",
+        (ItemCategory.OneHandWeapon, WeaponFamily.Axe) => "单手斧",
+        (ItemCategory.OneHandWeapon, WeaponFamily.Mace) => "单手锤",
+        (ItemCategory.OneHandWeapon, WeaponFamily.Dagger) => "匕首",
+        (ItemCategory.OneHandWeapon, WeaponFamily.Wand) => "法杖",
+        (ItemCategory.OneHandWeapon, WeaponFamily.Runeblade) => "符刃",
+        _ => Category.ToString(),
+    };
+
     public bool MeetsRequirements(int level, CharacterAttributes attributes) =>
         level >= RequiredLevel &&
         attributes.Physique >= RequiredPhysique &&
@@ -114,7 +153,7 @@ public static class P1ItemBases
             : throw new KeyNotFoundException($"Unknown item base: {stableId}");
 
     private static IReadOnlyList<ItemBaseDefinition> Build() => P19Catalog.Bases.Concat(P24ItemCatalog.Bases)
-        .Select(P25ItemImplicitCatalog.Ensure).ToArray();
+        .Select(P25ItemBaseIdentity.Normalize).Select(P25ItemImplicitCatalog.Ensure).ToArray();
 }
 
 public enum ItemModifierKind

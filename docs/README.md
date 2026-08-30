@@ -6,7 +6,7 @@
 
 - [游戏设计基线](shared/GAME_DESIGN_BASELINE.md)
 - [技术架构](shared/TECHNICAL_ARCHITECTURE.md)
-- [P0～P25 开发计划](shared/DEVELOPMENT_PLAN.md)
+- [P0～P26 开发计划](shared/DEVELOPMENT_PLAN.md)
 - [待讨论与开发决策](shared/OPEN_QUESTIONS.md)
 
 ## v0.1
@@ -38,3 +38,8 @@
 - [P23 六职业底层与主天赋树 V3 实现规格](v0.3/P23_SPECIFICATION.md)
 - [P23.1 十八升华完整实现规格](v0.3/P23_1_SPECIFICATION.md)
 - [P24 五职业配套构筑内容实施规格](v0.3/P24_SPECIFICATION.md)
+
+## v0.4
+
+- [v0.4 玩法与数值打磨总规格](v0.4/V0_4_SPECIFICATION.md)
+- [P26 地图系统与金币异界天赋实施规格](v0.4/P26_SPECIFICATION.md)

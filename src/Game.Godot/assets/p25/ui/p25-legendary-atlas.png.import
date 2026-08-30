@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://cwqo3tavnn1pd"
-path="res://.godot/imported/p25-equipment-icons.png-0c6b855ddb3a13779fa962c17651f352.ctex"
+uid="uid://7alkbhm1g0lh"
+path="res://.godot/imported/p25-legendary-atlas.png-0e801d6d3ea78af7c50100e4e1d7d680.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/p25/ui/p25-equipment-icons.png"
-dest_files=["res://.godot/imported/p25-equipment-icons.png-0c6b855ddb3a13779fa962c17651f352.ctex"]
+source_file="res://assets/p25/ui/p25-legendary-atlas.png"
+dest_files=["res://.godot/imported/p25-legendary-atlas.png-0e801d6d3ea78af7c50100e4e1d7d680.ctex"]
 
 [params]
 

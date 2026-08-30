@@ -48,6 +48,23 @@ public sealed class P4SpatialCombatTests
     }
 
     [Fact]
+    public void UnlimitedSpatialBattleResolvesDeadlockWithoutTimeoutOrUnboundedFrames()
+    {
+        CharacterSheet sheet = new(100, new CharacterAttributes(300, 100, 100, 100),
+            new DefensiveEquipment(20_000, 100, 0), FlatMaximumLife: 10_000, FlatLifeRegeneration: 10_000);
+        var weapon = new WeaponProfile("slow-spatial-progress", 1, 1, 1_000, 0);
+        var skill = new SkillConfiguration(P1SkillIds.HeavyStrike, SkillSupport.None);
+        var build = new P1TeamBuild(sheet, weapon, skill, UseWarCry: false, ActiveSkills: [skill]);
+
+        P4NodeCombatResult result = new P4SpatialCombatRunner().Run(new P4NodeCombatRequest(
+            build, 1, 100, 1, HasElite: true, HasBoss: true, AbyssRoute: false, Formation: 0), 771);
+
+        Assert.NotEqual(P1BattleOutcome.Timeout, result.Outcome);
+        Assert.InRange(result.Ticks, 1, 2_400);
+        Assert.True(result.Frames.Count < 700);
+    }
+
+    [Fact]
     public void WorkshopConsumesRecipeSpecificMetalOnly()
     {
         var economy = new TownEconomyState(metalCurrencies: new Dictionary<MetalCurrencyKind, int>

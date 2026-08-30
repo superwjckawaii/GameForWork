@@ -2,21 +2,115 @@ using GameForWork.Core.P1.Items;
 
 namespace GameForWork.Core.P25;
 
+public static class P25ItemBaseIdentity
+{
+    private static readonly IReadOnlyDictionary<string, WeaponFamily> WeaponFamilies =
+        new Dictionary<string, WeaponFamily>(StringComparer.Ordinal)
+        {
+            ["core.base.rusted_greatsword"] = WeaponFamily.Sword,
+            ["core.base.heavy_battleaxe"] = WeaponFamily.Axe,
+            ["core.base.pole_warhammer"] = WeaponFamily.Mace,
+            ["core.base.ash_glaive"] = WeaponFamily.Axe,
+            ["core.base.warden_maul"] = WeaponFamily.Mace,
+            ["core.base.blood_halberd"] = WeaponFamily.Axe,
+            ["core.base.glass_greatblade"] = WeaponFamily.Sword,
+            ["core.base.oathbreaker_axe"] = WeaponFamily.Axe,
+            ["p19.base.headman_s_sword"] = WeaponFamily.Sword,
+            ["p19.base.ezomyte_blade"] = WeaponFamily.Sword,
+            ["p19.base.imperial_maul"] = WeaponFamily.Mace,
+            ["p19.base.void_axe"] = WeaponFamily.Axe,
+            ["core.base.rusted_warhammer"] = WeaponFamily.Mace,
+            ["p19.base.broad_sword"] = WeaponFamily.Sword,
+            ["p19.base.ceremonial_mace"] = WeaponFamily.Mace,
+            ["p19.base.cutlass"] = WeaponFamily.Sword,
+            ["p19.base.flanged_mace"] = WeaponFamily.Mace,
+            ["p19.base.karui_axe"] = WeaponFamily.Axe,
+            ["p19.base.butcher_axe"] = WeaponFamily.Axe,
+            ["p19.base.harpy_rapier"] = WeaponFamily.Sword,
+        };
+
+    public static ItemBaseDefinition Normalize(ItemBaseDefinition item)
+    {
+        if (!WeaponFamilies.TryGetValue(item.StableId, out WeaponFamily family))
+            return item;
+
+        var tags = item.ItemTags.Where(tag => tag is not ("sword" or "rapier" or "axe" or "mace" or "dagger" or "bow" or "wand" or "runeblade"))
+            .Append(FamilyTag(family)).Distinct(StringComparer.Ordinal).ToArray();
+        return item with { Tags = tags };
+    }
+
+    private static string FamilyTag(WeaponFamily family) => family switch
+    {
+        WeaponFamily.Sword => "sword",
+        WeaponFamily.Axe => "axe",
+        WeaponFamily.Mace => "mace",
+        WeaponFamily.Dagger => "dagger",
+        WeaponFamily.Bow => "bow",
+        WeaponFamily.Wand => "wand",
+        WeaponFamily.Runeblade => "runeblade",
+        _ => throw new ArgumentOutOfRangeException(nameof(family)),
+    };
+}
+
 public static class P25ItemImplicitCatalog
 {
     public static ItemBaseDefinition Ensure(ItemBaseDefinition item)
     {
-        if (item.ImplicitModifier != ItemModifierKind.None) return item;
+        if (item.ImplicitModifier != ItemModifierKind.None)
+            return item with { ImplicitText = ImplicitLabel(item, item.ImplicitModifier) };
         (ItemModifierKind kind, int minimum, int maximum, string text) = Resolve(item);
         return item with
         {
             ImplicitModifier = kind,
             ImplicitMinimumValue = minimum,
             ImplicitMaximumValue = maximum,
-            ImplicitText = string.IsNullOrWhiteSpace(item.ImplicitText)
-                ? text
-                : $"{item.ImplicitText}；{text}",
+            ImplicitText = item.SourceId == "P24" && !string.IsNullOrWhiteSpace(item.ImplicitText)
+                ? $"{item.ImplicitText}；{text}"
+                : text,
         };
+    }
+
+    private static string ImplicitLabel(ItemBaseDefinition item, ItemModifierKind kind)
+    {
+        string identity = item.WeaponFamily switch
+        {
+            WeaponFamily.Sword => "剑锋校准",
+            WeaponFamily.Axe => "斧刃破甲",
+            WeaponFamily.Mace => "重击震荡",
+            WeaponFamily.Dagger => "匕首精准",
+            WeaponFamily.Bow => "弓术校准",
+            WeaponFamily.Wand => "秘术导流",
+            WeaponFamily.Runeblade => "符文灌注",
+            _ => item.DisplayName,
+        };
+        string effect = kind switch
+        {
+            ItemModifierKind.AddedPhysicalDamage => "攻击附加物理伤害",
+            ItemModifierKind.IncreasedPhysicalDamageBasisPoints => "物理伤害提高",
+            ItemModifierKind.FlatAccuracy => "命中值提高",
+            ItemModifierKind.IncreasedAttackSpeedBasisPoints => "攻击速度提高",
+            ItemModifierKind.IncreasedCriticalChanceBasisPoints => "暴击率提高",
+            ItemModifierKind.Physique => "体魄提高",
+            ItemModifierKind.Dexterity => "灵巧提高",
+            ItemModifierKind.Spirit => "精神提高",
+            ItemModifierKind.Energy => "能量提高",
+            ItemModifierKind.FlatMaximumLife => "最大生命提高",
+            ItemModifierKind.FlatMaximumMana => "最大法力提高",
+            ItemModifierKind.IncreasedArmorBasisPoints => "护甲提高",
+            ItemModifierKind.IncreasedEvasionBasisPoints => "闪避提高",
+            ItemModifierKind.IncreasedShieldBasisPoints => "最大能量护盾提高",
+            ItemModifierKind.FireResistanceBasisPoints => "火焰抗性提高",
+            ItemModifierKind.ColdResistanceBasisPoints => "寒霜抗性提高",
+            ItemModifierKind.LightningResistanceBasisPoints => "闪电抗性提高",
+            ItemModifierKind.VoidResistanceBasisPoints => "虚空抗性提高",
+            ItemModifierKind.IncreasedMovementSpeedBasisPoints => "移动速度提高",
+            ItemModifierKind.BlockChanceBasisPoints => "格挡概率提高",
+            ItemModifierKind.SpellSuppressionBasisPoints => "法术压制提高",
+            ItemModifierKind.IncreasedManaRegenerationBasisPoints => "法力恢复提高",
+            ItemModifierKind.ExtraSupportLinkCapacity => "连接容量提高",
+            _ => "底材属性提高",
+        };
+        return $"{identity}：{effect}";
     }
 
     private static (ItemModifierKind Kind, int Minimum, int Maximum, string Text) Resolve(ItemBaseDefinition item)
@@ -78,24 +172,45 @@ public static class P25LegendaryCatalog
 
 public static class P25EquipmentArt
 {
-    public const int Columns = 10;
+    public const int Columns = 13;
+    public const int Rows = 10;
+    public static IReadOnlyList<string> ItemBaseIds { get; } =
+        P19.P19Catalog.Bases.Select(item => item.StableId)
+            .Concat(P24.P24ItemCatalog.Bases.Select(item => item.StableId))
+            .OrderBy(stableId => stableId, StringComparer.Ordinal).ToArray();
+    private static readonly IReadOnlyDictionary<string, int> Indices = ItemBaseIds
+        .Select((stableId, index) => (stableId, index)).ToDictionary(pair => pair.stableId, pair => pair.index,
+            StringComparer.Ordinal);
 
     public static int IconIndex(ItemBaseDefinition itemBase)
     {
-        string category = itemBase.ItemTags.FirstOrDefault(tag => tag is "bow" or "dagger" or "wand" or
-            "quiver" or "focus" or "summoning_focus" or "unarmed_wrap" or "wrap" or
-            "beast_talisman" or "runeblade" or "construct_idol") ?? string.Empty;
-        int column = category switch
-        {
-            "bow" => 0, "dagger" => 1, "wand" => 2, "quiver" => 3, "focus" => 4,
-            "summoning_focus" => 5, "unarmed_wrap" or "wrap" => 6, "beast_talisman" => 7,
-            "runeblade" => 8, "construct_idol" => 9,
-            _ => throw new KeyNotFoundException($"P25 equipment art category missing for {itemBase.StableId}."),
-        };
-        string suffix = itemBase.StableId[(itemBase.StableId.LastIndexOf('.') + 1)..];
-        if (!int.TryParse(suffix, out int variant) || variant is < 1 or > 6)
-            throw new InvalidDataException($"P25 equipment art variant missing for {itemBase.StableId}.");
-        return column + (variant - 1) * Columns;
+        return Indices.TryGetValue(itemBase.StableId, out int index)
+            ? index : throw new KeyNotFoundException($"P25 equipment art mapping missing for {itemBase.StableId}.");
+    }
+}
+
+public static class P25LegendaryArt
+{
+    public const int Columns = 5;
+    public static IReadOnlyList<string> StableIds { get; } =
+    [
+        "core.unique.echoing_oathbreaker", "core.unique.march_without_end", "core.unique.ravens_answer",
+        "core.unique.red_vow", "core.unique.blue_vow", "core.unique.gardeners_sinew", "core.unique.warden_shell",
+        "core.unique.glass_horizon", "core.unique.funeral_bell", "core.unique.black_tide",
+        "core.unique.starless_prayer", "core.unique.last_banner", "core.unique.iron_moon", "core.unique.hollow_guard",
+        "core.unique.thorn_procession", "core.unique.pilgrims_debt", "core.unique.cinder_chain",
+        "core.unique.fourth_testament", "core.unique.silent_anvil", "core.unique.hunters_eclipse",
+        "core.unique.ashes_memory", "core.unique.grave_plate", "core.unique.famine_ring", "core.unique.last_watch",
+        "core.mythic.heart_of_ash",
+    ];
+    private static readonly IReadOnlyDictionary<string, int> Indices = StableIds
+        .Select((stableId, index) => (stableId, index)).ToDictionary(pair => pair.stableId, pair => pair.index,
+            StringComparer.Ordinal);
+
+    public static int IconIndex(string stableId)
+    {
+        return Indices.TryGetValue(stableId, out int index)
+            ? index : throw new KeyNotFoundException($"P25 legendary art mapping missing for {stableId}.");
     }
 }
 

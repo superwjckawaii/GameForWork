@@ -61,10 +61,26 @@ LEGACY = {
     ],
 }
 
-DISPLAY_PREFIX = {
-    "TwoHandWeapon": "远古重武", "OneHandWeapon": "远古单手武器", "Shield": "远古盾牌",
-    "BodyArmor": "远古胸甲", "Helmet": "远古头盔", "Gloves": "远古手套", "Boots": "远古战靴",
-    "Belt": "远古腰带", "Amulet": "远古护符", "Ring": "远古戒指", "LifeFlask": "远古药剂",
+IMPORTED_DISPLAY_NAMES = {
+    "p19.base.headman_s_sword": "断首巨剑", "p19.base.ezomyte_blade": "艾兹麦巨刃",
+    "p19.base.imperial_maul": "帝王重槌", "p19.base.void_axe": "虚界巨斧",
+    "p19.base.broad_sword": "阔刃剑", "p19.base.ceremonial_mace": "仪典战锤",
+    "p19.base.cutlass": "斩浪弯刀", "p19.base.flanged_mace": "破血钉锤",
+    "p19.base.karui_axe": "裂岭战斧", "p19.base.butcher_axe": "屠骨斧",
+    "p19.base.harpy_rapier": "鹰身细剑", "p19.base.linden_kite_shield": "椴木鸢盾",
+    "p19.base.jingling_spirit_shield": "铃鸣灵盾", "p19.base.maple_round_shield": "枫木圆盾",
+    "p19.base.crimson_round_shield": "赤红圆盾", "p19.base.ironwood_buckler": "铁木小盾",
+    "p19.base.ezomyte_tower_shield": "艾兹麦塔盾", "p19.base.supreme_spiked_shield": "至尊刺盾",
+    "p19.base.elegant_ringmail": "雅致环甲", "p19.base.carnal_armour": "血肉战甲",
+    "p19.base.sinner_tricorne": "罪人三角帽", "p19.base.bone_helmet": "骸骨战盔",
+    "p19.base.trapper_mitts": "捕兽手套", "p19.base.samite_gloves": "丝纹手套",
+    "p19.base.stealth_gloves": "潜行手套", "p19.base.spiked_gloves": "刺钉拳套",
+    "p19.base.riveted_boots": "铆钉战靴", "p19.base.ambush_boots": "伏击短靴",
+    "p19.base.vaal_greaves": "瓦尔胫甲", "p19.base.two_toned_boots_evasion_energy_shield": "霜雷双色靴",
+    "p19.base.studded_belt": "钉饰腰带", "p19.base.mechanical_belt": "机械腰带",
+    "p19.base.crystal_belt": "水晶腰带", "p19.base.hexclaw_talisman": "六爪护符",
+    "p19.base.rhex_talisman": "犀角护符", "p19.base.tiger_talisman": "虎牙护符",
+    "p19.base.blue_pearl_amulet": "蓝珍珠护符", "p19.base.vermillion_ring": "朱砂戒指",
 }
 
 FIXED_SELECTION = {
@@ -213,7 +229,10 @@ def load_bases(root: Path) -> tuple[list[dict], list[Path]]:
             else:
                 slug = re.sub(r"[^a-z0-9]+", "_", item["sourceId"].lower()).strip("_")
                 item["stableId"] = f"p19.base.{slug}"
-                item["displayName"] = f"{DISPLAY_PREFIX[category]}·{index + 1}"
+                try:
+                    item["displayName"] = IMPORTED_DISPLAY_NAMES[item["stableId"]]
+                except KeyError as error:
+                    raise ValueError(f"Missing semantic display name for {item['stableId']}") from error
             item["coreSkillCapacity"] = 1 if category in {"TwoHandWeapon", "OneHandWeapon", "BodyArmor"} else 0
             item["supportLinkCapacity"] = {
                 "TwoHandWeapon": 2, "OneHandWeapon": 2, "BodyArmor": 2, "Helmet": 1,

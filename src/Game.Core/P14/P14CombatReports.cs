@@ -18,10 +18,11 @@ public static class P14Preflight
         {
             P12MapAffixKind.ReducedRecovery => "枯竭",
             P12MapAffixKind.MonsterSpeed => "迅猎",
-            P12MapAffixKind.ElementalPressure => "元素易伤",
+            P12MapAffixKind.ElementalShell => "元素甲壳",
+            P12MapAffixKind.VoidShroud => "虚界遮蔽",
             _ => string.Empty,
         }).Where(text => text.Length > 0).Distinct(StringComparer.Ordinal).ToArray();
-        int risk = map.Tier * 4 + map.DangerRating + (map.IsCorrupted ? 20 : 0);
+        int risk = Math.Clamp(map.Tier * 4 + map.MonsterQuantityBasisPoints / 200 + (map.IsCorrupted ? 20 : 0), 0, 100);
         string[] requirements = map.Tier switch
         {
             <= 10 => ["基础生命与主抗性", "至少一项稳定恢复"],
@@ -29,7 +30,7 @@ public static class P14Preflight
             _ => ["完整攻防构筑", "异常处理", "应对该阶级特殊规则"],
         };
         return new(boss.DisplayName, damageTypes, ailments, requirements,
-            $"{boss.EnrageSeconds} 秒后狂暴：伤害与攻击速度提高", risk);
+            "无战斗限时；耗时仅用于效率报告", risk);
     }
 }
 

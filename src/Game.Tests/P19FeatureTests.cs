@@ -81,7 +81,7 @@ public sealed class P19FeatureTests
     [Fact]
     public void OneHundredThousandGeneratedItemsAreLegal()
     {
-        ItemBaseDefinition[] bases = P19Catalog.Bases.ToArray();
+        ItemBaseDefinition[] bases = P19Catalog.Bases.Select(item => P1ItemBases.Get(item.StableId)).ToArray();
         for (int index = 0; index < 100_000; index++)
         {
             ItemBaseDefinition itemBase = bases[index % bases.Length];

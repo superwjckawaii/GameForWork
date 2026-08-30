@@ -4,6 +4,7 @@ using GameForWork.Core.P4;
 using GameForWork.Core.P5;
 using GameForWork.Core.P3;
 using GameForWork.Core.P20;
+using GameForWork.Core.P26;
 
 namespace GameForWork.Core.P1.World;
 
@@ -75,8 +76,8 @@ public static class P1MapRewardGenerator
         map = map.EnsureFormal(seed);
         string bossPool = P20LegendaryDrops.BossPool(map);
         var context = new P20LootContext(map.InstanceId, map.MonsterLevel, map.ItemQuantityBasisPoints,
-            map.DangerFor(route), route, map.Tier, maximumUnlockedTier, AllowMaps: true,
-            Completed: completed, Practice: P5ExpeditionDirector.IsPractice(map), BossPool: bossPool);
+            map.MonsterQuantityBasisPoints, route, map.Tier, maximumUnlockedTier, AllowMaps: true,
+            Completed: completed, Practice: P5ExpeditionDirector.IsPractice(map), BossPool: bossPool, Map: map);
         P20RewardBatch rolled = P20DropFormula.Roll(context, defeated, seed);
         int memoryAshes = completed ? P20DropFormula.RollScaledCount(1, map.ItemQuantityBasisPoints, seed ^ 0x20a5UL) : 0;
         int wardenMarks = completed && bossPool.Length > 0
@@ -84,6 +85,7 @@ public static class P1MapRewardGenerator
             : 0;
         int experience = completed ? ExperiencePerMap : Math.Max(1,
             ExperiencePerMap * defeated.Count / Math.Max(1, P20DropFormula.SyntheticPack(map.MonsterLevel).Count));
+        experience = experience * (10_000 + P26AtlasEffects.ExperienceIncrease(map.AtlasSnapshot)) / 10_000;
         return new P1MapRewards(experience, rolled.Equipment, rolled.Maps,
             new MapStackableRewards(rolled.Gold, 0, memoryAshes, wardenMarks, rolled.SkillStones, rolled.Metals),
             rolled.LegendaryDropped, rolled.Trace);

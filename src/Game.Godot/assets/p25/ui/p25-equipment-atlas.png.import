@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://rulk64g35xs7"
-path="res://.godot/imported/p21-item-bases.png-f856b0e46ffada01547d664720150731.ctex"
+uid="uid://bncfxvlnfrygy"
+path="res://.godot/imported/p25-equipment-atlas.png-cbdab34e5b8ac7789582ce0a796f0083.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/p21/ui/p21-item-bases.png"
-dest_files=["res://.godot/imported/p21-item-bases.png-f856b0e46ffada01547d664720150731.ctex"]
+source_file="res://assets/p25/ui/p25-equipment-atlas.png"
+dest_files=["res://.godot/imported/p25-equipment-atlas.png-cbdab34e5b8ac7789582ce0a796f0083.ctex"]
 
 [params]
 

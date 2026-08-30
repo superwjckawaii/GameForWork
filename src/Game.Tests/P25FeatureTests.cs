@@ -7,6 +7,7 @@ using GameForWork.Core.P21;
 using GameForWork.Core.P23;
 using GameForWork.Core.P24;
 using GameForWork.Core.P25;
+using GameForWork.Core.P6;
 
 namespace GameForWork.Tests;
 
@@ -48,18 +49,57 @@ public sealed class P25FeatureTests
         int bow = P25EquipmentArt.IconIndex(P1ItemBases.Get("p24.base.bow.1"));
         int dagger = P25EquipmentArt.IconIndex(P1ItemBases.Get("p24.base.dagger.1"));
         int quiver = P25EquipmentArt.IconIndex(P1ItemBases.Get("p24.base.quiver.1"));
-        Assert.Equal(0, bow);
-        Assert.Equal(1, dagger);
-        Assert.Equal(3, quiver);
-        Assert.Equal(50, P25EquipmentArt.IconIndex(P1ItemBases.Get("p24.base.bow.6")));
-        Assert.Throws<KeyNotFoundException>(() => P21ArtContract.ItemBaseIndex("p24.base.bow.1"));
+        Assert.NotEqual(bow, dagger);
+        Assert.NotEqual(bow, quiver);
+        Assert.NotEqual(dagger, quiver);
         int[] equipmentIndexes = P24ItemCatalog.Bases.Select(P25EquipmentArt.IconIndex).ToArray();
         Assert.Equal(P24ItemCatalog.Bases.Count, equipmentIndexes.Distinct().Count());
-        Assert.All(equipmentIndexes, index => Assert.InRange(index, 0, 59));
+        Assert.All(equipmentIndexes, index => Assert.InRange(index, 0, 129));
         int[] skillIndexes = P24SkillCatalog.Active.Select(skill => P21ArtContract.SkillStoneIndex(skill.Combat.StoneId))
             .Concat(P24SkillCatalog.Supports.Select(skill => P21ArtContract.SkillStoneIndex(skill.StoneId))).ToArray();
         Assert.Equal(90, skillIndexes.Length);
         Assert.Equal(Enumerable.Range(0, 90), skillIndexes.Order());
+    }
+
+    [Fact]
+    public void EveryBaseAndLegendaryHasOneStableExplicitArtCell()
+    {
+        int[] baseIndexes = P1ItemBases.All.Select(P25EquipmentArt.IconIndex).Order().ToArray();
+        Assert.Equal(Enumerable.Range(0, 130), baseIndexes);
+        Assert.Equal(P14UniqueItems.All.Select(item => item.StableId), P25LegendaryArt.StableIds);
+        Assert.Equal(2, P25LegendaryArt.IconIndex("core.unique.ravens_answer"));
+        Assert.Equal(24, P25LegendaryArt.IconIndex("core.mythic.heart_of_ash"));
+        Assert.Equal(ItemCategory.Helmet, P1ItemBases.Get(P14UniqueItems.All[2].BaseStableId).Category);
+        Assert.Equal(ItemCategory.BodyArmor, P1ItemBases.Get(P14UniqueItems.All[24].BaseStableId).Category);
+    }
+
+    [Fact]
+    public void WeaponSubtypesAndImportedBaseNamesAreSemantic()
+    {
+        Assert.Equal(WeaponFamily.Sword, P1ItemBases.Get("core.base.rusted_greatsword").WeaponFamily);
+        Assert.Equal(WeaponFamily.Axe, P1ItemBases.Get("core.base.heavy_battleaxe").WeaponFamily);
+        Assert.Equal(WeaponFamily.Mace, P1ItemBases.Get("core.base.pole_warhammer").WeaponFamily);
+        Assert.Equal(WeaponFamily.Mace, P1ItemBases.Get("p19.base.flanged_mace").WeaponFamily);
+        Assert.Equal("破血钉锤", P1ItemBases.Get("p19.base.flanged_mace").DisplayName);
+        Assert.Equal("单手锤", P1ItemBases.Get("p19.base.flanged_mace").DetailedTypeName);
+        Assert.DoesNotContain(P1ItemBases.All, item => item.DisplayName.Contains("远古", StringComparison.Ordinal) &&
+            item.DisplayName.Any(char.IsDigit));
+        Assert.All(P1ItemBases.All, item => Assert.DoesNotMatch("[A-Za-z]", item.ImplicitText));
+    }
+
+    [Fact]
+    public void LegacySavedItemsRebindToTheCurrentSemanticBaseDefinition()
+    {
+        ItemBaseDefinition current = P1ItemBases.Get("p19.base.carnal_armour");
+        ItemBaseDefinition legacy = current with { DisplayName = "远古胸甲89", ImplicitText = "legacy implicit" };
+        var saved = new ItemInstance("p25-legacy-base", legacy, 94, ItemRarity.Rare, [], LinkedSocketCount: 4);
+
+        ItemInstance restored = P6SocketRules.Ensure(saved);
+
+        Assert.Equal("血肉战甲", restored.Base.DisplayName);
+        Assert.Equal(current.ImplicitText, restored.Base.ImplicitText);
+        Assert.Same(current, restored.Base);
+        Assert.Equal(4, restored.LinkedSocketCount);
     }
 
     [Fact]

@@ -267,6 +267,51 @@ public sealed class P1CombatRulesTests
     }
 
     [Fact]
+    public void NoProgressDeadlockEndsAsDrawWithoutRestoringBattleTimer()
+    {
+        CharacterSheet hero = StartingSheet() with { FlatLifeRegeneration = 10_000 };
+        SkillUseProfile unusableSkill = SkillRules.BuildHeavyStrike(
+            new SkillConfiguration(P1SkillIds.HeavyStrike, SkillSupport.None),
+            P1Weapons.RustedGreatsword,
+            hero.MaximumLife().Value) with { ManaCost = int.MaxValue };
+        P1EncounterRequest request = EasyEncounter(P1Enemies.CorruptedWorker) with
+        {
+            Hero = hero,
+            HeavyStrikeProfile = unusableSkill,
+            UseWarCry = false,
+            MaximumTicks = 0,
+        };
+
+        P1EncounterResult result = new P1EncounterRunner().Run(request, 2345);
+
+        Assert.Equal(P1BattleOutcome.Draw, result.Outcome);
+        Assert.InRange(result.Ticks, 1_200, 2_400);
+    }
+
+    [Fact]
+    public void ExtremelyLongBattleFastForwardsToProjectedOutcomeInsteadOfTimingOut()
+    {
+        CharacterSheet hero = StartingSheet() with { FlatLifeRegeneration = 10_000 };
+        var slowWeapon = new WeaponProfile("slow-progress", 1, 1, 1_000, 0);
+        P1EncounterRequest request = EasyEncounter(P1Enemies.AbyssWarden) with
+        {
+            Hero = hero,
+            HeroWeapon = slowWeapon,
+            HeavyStrikeProfile = SkillRules.BuildHeavyStrike(
+                new SkillConfiguration(P1SkillIds.HeavyStrike, SkillSupport.None),
+                slowWeapon,
+                hero.MaximumLife().Value),
+            UseWarCry = false,
+            MaximumTicks = 0,
+        };
+
+        P1EncounterResult result = new P1EncounterRunner().Run(request, 9876);
+
+        Assert.NotEqual(P1BattleOutcome.Timeout, result.Outcome);
+        Assert.InRange(result.Ticks, 1, 20_001);
+    }
+
+    [Fact]
     public void BossEncounterEmitsPhaseSummonAndHazardEvents()
     {
         P1EncounterRequest request = EasyEncounter(P1Enemies.AbyssWarden) with

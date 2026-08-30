@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using System.Text;
 using GameForWork.Core.P1.World;
 using GameForWork.Core.P4;
+using GameForWork.Core.P26;
 using GameForWork.Core.Simulation;
 
 namespace GameForWork.Core.P12;
@@ -14,36 +15,116 @@ public enum P12MapAffixKind
     MonsterDamage,
     MonsterSpeed,
     ReducedRecovery,
-    ExtraElites,
     PhysicalResistance,
-    ElementalPressure,
-    IncreasedPackSize,
+    ElementalShell,
+    VoidShroud,
+    Penetration,
+    MultipleProjectiles,
+    AreaDisaster,
+    ElementalPossession,
+    Stronghold,
+    MightyPacks,
+    EliteLeaders,
+    RoyalGuard,
+    TwinThrone,
+    SealedVault,
+    BountifulMark,
+    RoadEcho,
+    AbyssMark,
+    GardenMark,
+    RedOathMark,
+    BlueOathMark,
+    HeadHunterMark,
 }
 
-public sealed record P12MapAffix(P12MapAffixKind Kind, string DisplayName, int Value, int Danger, int QuantityBasisPoints);
+public sealed record P12MapAffix(
+    P12MapAffixKind Kind,
+    string DisplayName,
+    int Value,
+    P26MapAffixFamily Family = P26MapAffixFamily.DangerousPrefix,
+    int Rank = 1,
+    int MonsterQuantityBasisPoints = 0,
+    int ItemQuantityBasisPoints = 0);
 public sealed record P12MapArea(string StableId, string DisplayName, string Environment, string MonsterPool, string BossName);
 public sealed record P12MapCombatModifiers(
     int EnemyLifeBasisPoints = 10_000,
     int EnemyDamageBasisPoints = 10_000,
     int EnemySpeedBasisPoints = 10_000,
     int PlayerRecoveryBasisPoints = 10_000,
-    int PackSizeBasisPoints = 10_000,
-    bool ExtraElites = false)
+    int MonsterQuantityBasisPoints = 10_000,
+    bool ExtraElites = false,
+    int BossLifeBasisPoints = 10_000,
+    int BossDamageBasisPoints = 10_000,
+    int EnemyPhysicalReductionBasisPoints = 0,
+    int EnemyElementalResistanceBasisPoints = 0,
+    int EnemyVoidResistanceBasisPoints = 0,
+    int EnemyPenetrationBasisPoints = 0,
+    int ExtraProjectiles = 0,
+    int ProjectileDamageBasisPoints = 10_000,
+    int EnemyAreaBasisPoints = 10_000,
+    int EnemyAreaDamageBasisPoints = 10_000,
+    int BossCount = 1,
+    int BossAdditionalGuards = 0,
+    int AdditionalRareEnemies = 0)
 {
     public static P12MapCombatModifiers From(P1MapItem map)
     {
-        int Value(P12MapAffixKind kind) => map.EffectiveAffixes.Where(affix => affix.Kind == kind).Sum(affix => affix.Value);
+        int Value(P12MapAffixKind kind)
+        {
+            int value = map.EffectiveAffixes.Where(affix => affix.Kind == kind).Sum(affix => affix.Value);
+            return map.CorruptionRule == P26CorruptionRule.Disorder ? value * 3 / 2 : value;
+        }
         int tierLife = map.Tier == 20 ? 2_500 : 0;
         int tierDamage = map.Tier is 17 or 20 ? 1_500 : 0;
         int tierSpeed = map.Tier == 20 ? 1_000 : 0;
         int tierRecovery = map.Tier == 18 ? 3_000 : 0;
+        int life = 10_000 + tierLife;
+        int damage = 10_000 + tierDamage;
+        life = life * (10_000 + Value(P12MapAffixKind.MonsterLife) * 100) / 10_000;
+        damage = damage * (10_000 + Value(P12MapAffixKind.MonsterDamage) * 100) / 10_000;
+        damage = damage * (10_000 + Value(P12MapAffixKind.ElementalPossession) * 100) / 10_000;
+        int bossLife = 10_000 + Value(P12MapAffixKind.Stronghold) * 100;
+        int strongholdRank = map.EffectiveAffixes.FirstOrDefault(affix => affix.Kind == P12MapAffixKind.Stronghold)?.Rank ?? 0;
+        int bossDamage = 10_000 + (strongholdRank switch { 1 => 1_400, 2 => 2_200, 3 => 2_900, 4 => 3_600, _ => 0 });
+        switch (map.CorruptionRule)
+        {
+            case P26CorruptionRule.BloodTide: damage = damage * 13_600 / 10_000; break;
+            case P26CorruptionRule.Greed: life = life * 17_500 / 10_000; damage = damage * 13_600 / 10_000; break;
+            case P26CorruptionRule.KingDisaster: bossLife = bossLife * 25_000 / 10_000; bossDamage = bossDamage * 16_500 / 10_000; break;
+        }
+        int areaRank = map.EffectiveAffixes.FirstOrDefault(affix => affix.Kind == P12MapAffixKind.AreaDisaster)?.Rank ?? 0;
+        int areaDamage = areaRank switch { 1 => 10_900, 2 => 11_800, 3 => 12_700, 4 => 13_600, _ => 10_000 };
+        int area = 10_000 + Value(P12MapAffixKind.AreaDisaster) * 100;
+        if (map.CorruptionRule == P26CorruptionRule.KingDisaster) area = area * 18_000 / 10_000;
+        P12MapAffix? twin = map.EffectiveAffixes.FirstOrDefault(affix => affix.Kind == P12MapAffixKind.TwinThrone);
+        if (twin is not null)
+        {
+            bossLife = bossLife * twin.Value * 100 / 10_000;
+            bossDamage = bossDamage * (twin.Rank switch { 1 => 9_000, 2 => 9_500, 3 => 10_000, _ => 10_500 }) / 10_000;
+        }
+        int guards = map.EffectiveAffixes.FirstOrDefault(affix => affix.Kind == P12MapAffixKind.RoyalGuard)?.Value ?? 0;
+        int rareEnemies = map.EffectiveAffixes.Where(affix => affix.Kind is P12MapAffixKind.EliteLeaders or P12MapAffixKind.HeadHunterMark)
+            .Sum(affix => affix.Value);
         return new(
-            10_000 + tierLife + (Value(P12MapAffixKind.MonsterLife) + Value(P12MapAffixKind.PhysicalResistance)) * 100,
-            10_000 + tierDamage + (Value(P12MapAffixKind.MonsterDamage) + Value(P12MapAffixKind.ElementalPressure) / 2) * 100,
+            life,
+            damage,
             10_000 + tierSpeed + Value(P12MapAffixKind.MonsterSpeed) * 100,
             Math.Max(2_000, 10_000 - tierRecovery - Value(P12MapAffixKind.ReducedRecovery) * 100),
-            10_000 + Value(P12MapAffixKind.IncreasedPackSize) * 100,
-            map.Tier == 19 || map.EffectiveAffixes.Any(affix => affix.Kind == P12MapAffixKind.ExtraElites));
+            10_000 + map.MonsterQuantityBasisPoints,
+            map.Tier == 19 || map.EffectiveAffixes.Any(affix => affix.Kind is P12MapAffixKind.MightyPacks or P12MapAffixKind.EliteLeaders),
+            bossLife,
+            bossDamage,
+            Value(P12MapAffixKind.PhysicalResistance) * 100,
+            Value(P12MapAffixKind.ElementalShell) * 100,
+            Value(P12MapAffixKind.VoidShroud) * 100,
+            Value(P12MapAffixKind.Penetration) * 100,
+            map.EffectiveAffixes.Any(affix => affix.Kind == P12MapAffixKind.MultipleProjectiles) ? 2 : 0,
+            map.EffectiveAffixes.Any(affix => affix.Kind == P12MapAffixKind.MultipleProjectiles) ? 7_000 : 10_000,
+            area,
+            areaDamage,
+            twin is null ? 1 : 2,
+            guards,
+            rareEnemies);
     }
 }
 
@@ -79,31 +160,11 @@ public static class P12MapRules
 {
     private static readonly IReadOnlyDictionary<int, MapRoute[]> CanonicalRouteSets = Enumerable.Range(1, 7)
         .ToDictionary(mask => mask, mask => Enum.GetValues<MapRoute>().Where(route => (mask & (1 << (int)route)) != 0).ToArray());
-    private static readonly (P12MapAffixKind Kind, string Name, int Min, int Max, int Danger, int Quantity)[] AffixPool =
-    [
-        (P12MapAffixKind.MonsterLife, "顽固", 20, 55, 8, 700),
-        (P12MapAffixKind.MonsterDamage, "凶暴", 15, 45, 12, 950),
-        (P12MapAffixKind.MonsterSpeed, "迅猎", 10, 35, 10, 800),
-        (P12MapAffixKind.ReducedRecovery, "枯竭", 15, 50, 15, 1_100),
-        (P12MapAffixKind.ExtraElites, "群雄", 1, 3, 9, 850),
-        (P12MapAffixKind.PhysicalResistance, "铁壁", 10, 35, 9, 750),
-        (P12MapAffixKind.ElementalPressure, "灾焰", 10, 40, 11, 900),
-        (P12MapAffixKind.IncreasedPackSize, "密集", 8, 25, 6, 1_200),
-    ];
-
-    public static int RouteDanger(MapRoute route) => route switch
-    {
-        MapRoute.Safe => 0,
-        MapRoute.LifeGarden => 8,
-        MapRoute.Abyss => 14,
-        _ => 0,
-    };
-
     public static P1MapItem EnsureFormal(P1MapItem map, ulong seed)
     {
         ArgumentNullException.ThrowIfNull(map);
         if (P12MapCatalog.TryGet(map.AreaId, out _) && map.EffectiveRouteCandidates.Count > 0)
-            return map.Validate();
+            return ApplyImprints(P26MapRules.NormalizeLegacy(map, seed)).Validate();
         ulong stableSeed = StableSeed(seed, map.InstanceId, map.Tier);
         var random = new Pcg32(stableSeed);
         P12MapArea area = P12MapCatalog.Areas[(int)(random.NextUInt() % (uint)P12MapCatalog.Areas.Count)];
@@ -118,19 +179,32 @@ public static class P12MapRules
             < 3_000 => P12MapAltar.BlueOath,
             _ => P12MapAltar.None,
         };
-        return (map with { AreaId = area.StableId, RouteCandidates = candidates, Altar = altar }).Validate();
+        return ApplyImprints(P26MapRules.NormalizeLegacy(map with { AreaId = area.StableId, RouteCandidates = candidates, Altar = altar }, stableSeed)).Validate();
+    }
+
+    private static P1MapItem ApplyImprints(P1MapItem map)
+    {
+        bool abyss = map.EffectiveAffixes.Any(affix => affix.Kind == P12MapAffixKind.AbyssMark);
+        bool garden = map.EffectiveAffixes.Any(affix => affix.Kind == P12MapAffixKind.GardenMark);
+        bool red = map.EffectiveAffixes.Any(affix => affix.Kind == P12MapAffixKind.RedOathMark);
+        bool blue = map.EffectiveAffixes.Any(affix => affix.Kind == P12MapAffixKind.BlueOathMark);
+        P12MapAltar desiredAltar = red ? P12MapAltar.RedOath : blue ? P12MapAltar.BlueOath : map.Altar;
+        bool routesChanged = abyss && !map.EffectiveRouteCandidates.Contains(MapRoute.Abyss) ||
+            garden && !map.EffectiveRouteCandidates.Contains(MapRoute.LifeGarden);
+        if (!routesChanged && desiredAltar == map.Altar) return map;
+        var routes = map.EffectiveRouteCandidates.ToList();
+        if (abyss && !routes.Contains(MapRoute.Abyss))
+            routes = routes.Append(MapRoute.Abyss).Distinct().TakeLast(3).ToList();
+        if (garden && !routes.Contains(MapRoute.LifeGarden))
+            routes = routes.Append(MapRoute.LifeGarden).Distinct().TakeLast(3).ToList();
+        return map with { RouteCandidates = routesChanged ? routes : map.RouteCandidates, Altar = desiredAltar };
     }
 
     public static IReadOnlyList<P12MapAffix> RollAffixes(P12MapRarity rarity, ulong seed)
-    {
-        int count = rarity switch { P12MapRarity.Basic => 0, P12MapRarity.Magic => 2, _ => 4 + (int)(seed % 3) };
-        var random = new Pcg32(seed);
-        return AffixPool.OrderBy(_ => random.NextUInt()).Take(count).Select(template =>
-        {
-            int value = template.Min + (int)(random.NextUInt() % (uint)(template.Max - template.Min + 1));
-            return new P12MapAffix(template.Kind, template.Name, value, template.Danger, template.Quantity);
-        }).ToArray();
-    }
+        => P26MapRules.RollAffixes(rarity, 1, seed);
+
+    public static IReadOnlyList<P12MapAffix> RollAffixes(P12MapRarity rarity, int tier, ulong seed)
+        => P26MapRules.RollAffixes(rarity, tier, seed);
 
     private static ulong StableSeed(ulong seed, string id, int tier)
     {
@@ -141,7 +215,8 @@ public static class P12MapRules
 
 public enum P12MapCraftOperation { PolishQuality, AwakenMagic, AlchemicalRare, ChaosReroll, Corrupt }
 public enum P12BatchFailureBehavior { Keep, Skip, Stop }
-public sealed record P12MapCraftResult(bool Succeeded, P1MapItem Map, MetalCurrencyKind Currency, int Cost, string Summary);
+public sealed record P12MapCraftResult(bool Succeeded, P1MapItem? Map, MetalCurrencyKind Currency, int Cost, string Summary,
+    bool Destroyed = false);
 
 public static class P12MapCrafting
 {
@@ -156,7 +231,7 @@ public static class P12MapCrafting
     };
 
     public static P12MapCraftResult Apply(TownEconomyState economy, P1MapItem source, P12MapCraftOperation operation,
-        ulong seed, int maximumUnlockedTier = P1MapItem.MaximumTier)
+        ulong seed, int maximumUnlockedTier = P1MapItem.MaximumTier, int polishQualityGain = 5)
     {
         ArgumentNullException.ThrowIfNull(economy);
         P1MapItem map = source.EnsureFormal(seed);
@@ -167,6 +242,7 @@ public static class P12MapCrafting
             P12MapCraftOperation.AwakenMagic when map.Rarity != P12MapRarity.Basic => "basic_required",
             P12MapCraftOperation.AlchemicalRare when map.Rarity != P12MapRarity.Basic => "basic_required",
             P12MapCraftOperation.ChaosReroll when map.Rarity != P12MapRarity.Rare => "rare_required",
+            P12MapCraftOperation.Corrupt when map.Rarity != P12MapRarity.Rare => "rare_required",
             P12MapCraftOperation.Corrupt when map.IsCorrupted => "already_corrupted",
             _ when map.IsCorrupted => "map_corrupted",
             _ => null,
@@ -176,26 +252,18 @@ public static class P12MapCrafting
 
         map = operation switch
         {
-            P12MapCraftOperation.PolishQuality => map with { Quality = Math.Min(20, map.Quality + 5) },
-            P12MapCraftOperation.AwakenMagic => map with { Rarity = P12MapRarity.Magic, Affixes = P12MapRules.RollAffixes(P12MapRarity.Magic, seed) },
-            P12MapCraftOperation.AlchemicalRare => map with { Rarity = P12MapRarity.Rare, Affixes = P12MapRules.RollAffixes(P12MapRarity.Rare, seed) },
-            P12MapCraftOperation.ChaosReroll => map with { Affixes = P12MapRules.RollAffixes(P12MapRarity.Rare, seed) },
-            P12MapCraftOperation.Corrupt => Corrupt(map, seed, maximumUnlockedTier),
+            P12MapCraftOperation.PolishQuality => map with { Quality = Math.Min(20, map.Quality + Math.Clamp(polishQualityGain, 1, 20)) },
+            P12MapCraftOperation.AwakenMagic => map with { Rarity = P12MapRarity.Magic, Affixes = P12MapRules.RollAffixes(P12MapRarity.Magic, map.Tier, seed) },
+            P12MapCraftOperation.AlchemicalRare => map with { Rarity = P12MapRarity.Rare, Affixes = P12MapRules.RollAffixes(P12MapRarity.Rare, map.Tier, seed) },
+            P12MapCraftOperation.ChaosReroll => map with { Affixes = P12MapRules.RollAffixes(P12MapRarity.Rare, map.Tier, seed) },
             _ => map,
         };
-        return new(true, map.Validate(), currency, cost, operation.ToString());
-    }
-
-    private static P1MapItem Corrupt(P1MapItem map, ulong seed, int maximumUnlockedTier)
-    {
-        int outcome = (int)(seed % 4);
-        return outcome switch
+        if (operation == P12MapCraftOperation.Corrupt)
         {
-            0 => map with { IsCorrupted = true, Quality = 20 },
-            1 => map with { IsCorrupted = true, Rarity = P12MapRarity.Rare, Affixes = P12MapRules.RollAffixes(P12MapRarity.Rare, seed ^ 0xc0ffeeUL) },
-            2 => map with { IsCorrupted = true, Tier = Math.Min(maximumUnlockedTier, map.Tier + 1) },
-            _ => map with { IsCorrupted = true },
-        };
+            P1MapItem? corrupted = P26MapRules.Corrupt(map, seed, out bool destroyed);
+            return new(true, corrupted, currency, cost, destroyed ? "corruption_destroyed" : $"corruption_{corrupted!.CorruptionRule}", destroyed);
+        }
+        return new(true, map.Validate(), currency, cost, operation.ToString());
     }
 }
 

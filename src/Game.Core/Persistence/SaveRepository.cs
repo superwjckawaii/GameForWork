@@ -7,6 +7,7 @@ public sealed class SaveRepository : IDisposable
 {
     private const int AutoBackupLimit = 5;
     private const int RecoveryLimit = 10;
+    private readonly object _backupSync = new();
     private readonly string _slotDirectory;
     private readonly string _databasePath;
     private SqliteConnection? _connection;
@@ -39,13 +40,14 @@ public sealed class SaveRepository : IDisposable
         EnsureManifest();
         PurgeExpiredTrash();
 
-        if (File.Exists(_databasePath) && !CheckIntegrity(_databasePath))
+        if (File.Exists(_databasePath) && !CheckStartupHealth(_databasePath))
         {
             RecoverCorruptDatabase();
         }
 
         OpenConnection();
         ApplyMigrations();
+        NormalizeOversizedMapIds();
     }
 
     public void SaveSnapshot(int tick, ReadOnlySpan<byte> payload)
@@ -151,26 +153,73 @@ public sealed class SaveRepository : IDisposable
 
     public string CreateBackup(bool manual = false)
     {
+        lock (_backupSync)
+        {
+            return CreateBackupCore(manual);
+        }
+    }
+
+    public string? CreateAutomaticBackupIfDue(TimeSpan minimumInterval)
+    {
+        if (minimumInterval < TimeSpan.Zero)
+        {
+            throw new ArgumentOutOfRangeException(nameof(minimumInterval));
+        }
+
+        lock (_backupSync)
+        {
+            string? latest = Directory.EnumerateFiles(BackupDirectory, "auto_*.db")
+                .OrderByDescending(File.GetLastWriteTimeUtc)
+                .FirstOrDefault();
+            if (latest is not null && DateTime.UtcNow - File.GetLastWriteTimeUtc(latest) < minimumInterval)
+            {
+                return null;
+            }
+
+            return CreateBackupCore(manual: false);
+        }
+    }
+
+    private string CreateBackupCore(bool manual)
+    {
         if (!File.Exists(_databasePath))
         {
             throw new InvalidOperationException("The save database does not exist.");
         }
 
-        if (_connection is not null)
-        {
-            using SqliteCommand checkpoint = _connection.CreateCommand();
-            checkpoint.CommandText = "PRAGMA wal_checkpoint(TRUNCATE);";
-            checkpoint.ExecuteNonQuery();
-            _connection.Close();
-        }
+        Directory.CreateDirectory(BackupDirectory);
         string kind = manual ? "manual" : "auto";
         string path = Path.Combine(BackupDirectory, $"{kind}_{DateTimeOffset.UtcNow:yyyyMMdd_HHmmss_fff}.db");
-        File.Copy(_databasePath, path, overwrite: false);
-        OpenConnection();
-        if (!manual)
+        string temporaryPath = path + ".tmp";
+        try
         {
-            TrimFiles(BackupDirectory, "auto_*.db", AutoBackupLimit);
+            var sourceBuilder = new SqliteConnectionStringBuilder
+            {
+                DataSource = _databasePath,
+                Mode = SqliteOpenMode.ReadOnly,
+                Pooling = false,
+            };
+            var destinationBuilder = new SqliteConnectionStringBuilder
+            {
+                DataSource = temporaryPath,
+                Mode = SqliteOpenMode.ReadWriteCreate,
+                Pooling = false,
+            };
+            using var source = new SqliteConnection(sourceBuilder.ToString());
+            using var destination = new SqliteConnection(destinationBuilder.ToString());
+            source.Open();
+            destination.Open();
+            source.BackupDatabase(destination);
+            destination.Close();
+            File.Move(temporaryPath, path, overwrite: false);
         }
+        catch
+        {
+            if (File.Exists(temporaryPath)) File.Delete(temporaryPath);
+            throw;
+        }
+
+        if (!manual) TrimFiles(BackupDirectory, "auto_*.db", AutoBackupLimit);
 
         return path;
     }
@@ -281,6 +330,28 @@ public sealed class SaveRepository : IDisposable
             using SqliteCommand command = connection.CreateCommand();
             command.CommandText = "PRAGMA integrity_check;";
             return string.Equals(command.ExecuteScalar()?.ToString(), "ok", StringComparison.OrdinalIgnoreCase);
+        }
+        catch (SqliteException)
+        {
+            return false;
+        }
+    }
+
+    private static bool CheckStartupHealth(string databasePath)
+    {
+        try
+        {
+            var builder = new SqliteConnectionStringBuilder
+            {
+                DataSource = databasePath,
+                Mode = SqliteOpenMode.ReadOnly,
+                Pooling = false,
+            };
+            using var connection = new SqliteConnection(builder.ToString());
+            connection.Open();
+            using SqliteCommand command = connection.CreateCommand();
+            command.CommandText = "SELECT schema_version FROM save_meta WHERE id = 1;";
+            return command.ExecuteScalar() is not null;
         }
         catch (SqliteException)
         {
@@ -424,6 +495,56 @@ public sealed class SaveRepository : IDisposable
             """;
         command.Parameters.AddWithValue("$now", DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
         command.ExecuteNonQuery();
+        transaction.Commit();
+    }
+
+    private void NormalizeOversizedMapIds()
+    {
+        SqliteConnection connection = RequireConnection();
+        using (SqliteCommand validJson = connection.CreateCommand())
+        {
+            validJson.CommandText = "SELECT COALESCE((SELECT json_valid(state_json) FROM p1_state WHERE id = 1), 0);";
+            if (Convert.ToInt32(validJson.ExecuteScalar(), System.Globalization.CultureInfo.InvariantCulture) == 0)
+            {
+                return;
+            }
+        }
+
+        using SqliteCommand countCommand = connection.CreateCommand();
+        countCommand.CommandText = """
+            SELECT COUNT(*)
+            FROM json_each(json_extract((SELECT state_json FROM p1_state WHERE id = 1), '$.World.MapInventory'))
+            WHERE length(CAST(json_extract(value, '$.InstanceId') AS TEXT)) > 128;
+            """;
+        int oversized = Convert.ToInt32(countCommand.ExecuteScalar(), System.Globalization.CultureInfo.InvariantCulture);
+        if (oversized == 0)
+        {
+            return;
+        }
+
+        long now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        using SqliteTransaction transaction = connection.BeginTransaction();
+        using SqliteCommand normalize = connection.CreateCommand();
+        normalize.Transaction = transaction;
+        normalize.CommandText = """
+            WITH normalized(maps) AS (
+                SELECT json_group_array(json(
+                    CASE
+                        WHEN length(CAST(json_extract(value, '$.InstanceId') AS TEXT)) > 128
+                        THEN json_set(value, '$.InstanceId',
+                            'legacy-map-' || $token || '-' || printf('%06d', CAST(key AS INTEGER)))
+                        ELSE value
+                    END))
+                FROM json_each(json_extract((SELECT state_json FROM p1_state WHERE id = 1), '$.World.MapInventory'))
+            )
+            UPDATE p1_state
+            SET state_json = json_set(state_json, '$.World.MapInventory', json((SELECT maps FROM normalized))),
+                updated_utc_ms = $now
+            WHERE id = 1;
+            """;
+        normalize.Parameters.AddWithValue("$token", now.ToString("x", System.Globalization.CultureInfo.InvariantCulture));
+        normalize.Parameters.AddWithValue("$now", now);
+        normalize.ExecuteNonQuery();
         transaction.Commit();
     }
 

@@ -1,5 +1,6 @@
 using GameForWork.Core.P1.Items;
 using GameForWork.Core.P20;
+using GameForWork.Core.P6;
 
 namespace GameForWork.Core.P1.World;
 
@@ -384,7 +385,7 @@ public sealed class ExpeditionBackpack
     public void Replace(IEnumerable<ItemInstance> items)
     {
         ArgumentNullException.ThrowIfNull(items);
-        ItemInstance[] replacement = items.ToArray();
+        ItemInstance[] replacement = items.Select(P6SocketRules.Ensure).ToArray();
         if (replacement.Length > Capacity)
         {
             throw new InvalidDataException("Expedition backpack snapshot exceeds its capacity.");

@@ -1,5 +1,6 @@
 using GameForWork.Core.Combat;
 using GameForWork.Core.Persistence;
+using System.Text.Json;
 
 namespace GameForWork.Tests;
 
@@ -118,6 +119,66 @@ public sealed class ReplayAndPersistenceTests
                 Assert.Equal(expected, recovered.LoadLatestSnapshot());
                 Assert.Single(Directory.EnumerateFiles(recovered.RecoveryDirectory, "corrupt_*.db"));
             }
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void AutomaticBackupSkipsARecentCopy()
+    {
+        string root = CreateTemporaryDirectory();
+        try
+        {
+            using var repository = new SaveRepository(root, 1);
+            repository.Initialize();
+            string first = repository.CreateAutomaticBackupIfDue(TimeSpan.FromHours(24))!;
+
+            string? second = repository.CreateAutomaticBackupIfDue(TimeSpan.FromHours(24));
+
+            Assert.True(File.Exists(first));
+            Assert.Null(second);
+            Assert.Single(Directory.EnumerateFiles(repository.BackupDirectory, "auto_*.db"));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void StartupNormalizesRunawayLegacyMapIdsWithoutDroppingMaps()
+    {
+        string root = CreateTemporaryDirectory();
+        try
+        {
+            string runaway = string.Concat(Enumerable.Repeat("map-", 80)) + "source";
+            using (var repository = new SaveRepository(root, 1))
+            {
+                repository.Initialize();
+                repository.SaveP1SessionJson(JsonSerializer.Serialize(new
+                {
+                    World = new
+                    {
+                        MapInventory = new[]
+                        {
+                            new { InstanceId = runaway, AreaLevel = 7 },
+                            new { InstanceId = "normal-map", AreaLevel = 8 },
+                        },
+                    },
+                }));
+            }
+
+            using var reopened = new SaveRepository(root, 1);
+            reopened.Initialize();
+            using JsonDocument document = JsonDocument.Parse(reopened.LoadP1SessionJson()!);
+            JsonElement maps = document.RootElement.GetProperty("World").GetProperty("MapInventory");
+
+            Assert.Equal(2, maps.GetArrayLength());
+            Assert.StartsWith("legacy-map-", maps[0].GetProperty("InstanceId").GetString());
+            Assert.Equal("normal-map", maps[1].GetProperty("InstanceId").GetString());
         }
         finally
         {

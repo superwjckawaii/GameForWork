@@ -16,8 +16,6 @@ $expected = [ordered]@{
     'regions\p21-region-atlas.png' = @(1024, 432)
     'town\p21-town-district.png' = @(480, 270)
     'town\p21-building-atlas.png' = @(640, 240)
-    'ui\p21-item-bases.png' = @(320, 256)
-    'ui\p21-unique-items.png' = @(160, 160)
     'ui\p21-skill-gems.png' = @(320, 256)
     'ui\p21-metal-atlas.png' = @(160, 128)
     'ui\p21-jewel-atlas.png' = @(96, 32)
@@ -44,7 +42,7 @@ foreach ($entry in $expected.GetEnumerator()) {
     } finally { $image.Dispose() }
 }
 
-foreach ($source in @('actor-master.png', 'boss-master.png', 'equipment-master.png', 'skill-gem-master.png',
+foreach ($source in @('actor-master.png', 'boss-master.png', 'skill-gem-master.png',
         'vfx-master.png', 'region-master.png', 'town-master.png', 'visual-direction-board.png', 'app-icon-master.png',
         'ui-skin-master.png', 'passive-tree-master.png', 'ascendancy-master.png', 'atlas-tree-master.png')) {
     if (-not (Test-Path -LiteralPath (Join-Path $sourceRoot $source))) { throw "Missing P21 editable source: $source" }
@@ -134,48 +132,14 @@ function Assert-CellOccupancy {
 Assert-TransparentGutters 'characters\p21-actor-animation.png' 31 20 48 64
 Assert-TransparentGutters 'enemies\p21-enemy-animation.png' 31 64 48 64
 Assert-TransparentGutters 'enemies\p21-boss-animation.png' 31 48 72 80
-Assert-TransparentGutters 'ui\p21-item-bases.png' 10 8 32 32
-Assert-TransparentGutters 'ui\p21-unique-items.png' 5 5 32 32
 Assert-TransparentGutters 'ui\p21-skill-gems.png' 10 8 32 32
 Assert-TransparentGutters 'ui\p21-metal-atlas.png' 5 4 32 32
 Assert-TransparentGutters 'ui\p21-jewel-atlas.png' 3 1 32 32
 Assert-TransparentGutters 'vfx\p21-combat-vfx.png' 8 6 64 64
 
-Assert-UniqueCells 'ui\p21-item-bases.png' 10 80 32
-Assert-UniqueCells 'ui\p21-unique-items.png' 5 25 32
 Assert-UniqueCells 'ui\p21-skill-gems.png' 10 78 32
 Assert-UniqueCells 'ui\p21-metal-atlas.png' 5 19 32
-Assert-CellOccupancy 'ui\p21-item-bases.png' 10 80 32 55
-Assert-CellOccupancy 'ui\p21-unique-items.png' 5 25 32 55
 Assert-CellOccupancy 'ui\p21-skill-gems.png' 10 78 32 90
-
-function Assert-ItemVisualTiers {
-    $catalog = Get-Content -LiteralPath (Join-Path $RepositoryRoot 'src\Game.Core\P19\Data\p19_catalog.json') -Raw -Encoding UTF8 | ConvertFrom-Json
-    $bases = @($catalog.bases | Sort-Object StableId)
-    $bitmap = [System.Drawing.Bitmap]::FromFile((Join-Path $assetRoot 'ui\p21-item-bases.png'))
-    $gold = [System.Drawing.ColorTranslator]::FromHtml('#d9bd72').ToArgb()
-    try {
-        $highTierCount = 0
-        for ($index = 0; $index -lt $bases.Count; $index++) {
-            $left = ($index % 10) * 32
-            $top = [math]::Floor($index / 10) * 32
-            # PixelOffsetMode.Half rasterizes the 1px corner stroke one pixel
-            # toward the cell origin.
-            $hasRoyalCorner = $bitmap.GetPixel($left + 3, $top + 2).ToArgb() -eq $gold
-            if ([int]$bases[$index].requiredLevel -ge 60) {
-                $highTierCount++
-                if (-not $hasRoyalCorner) {
-                    throw "High-tier base lacks advanced pixel treatment: $($bases[$index].stableId)"
-                }
-            } elseif ($hasRoyalCorner) {
-                throw "Low/mid-tier base incorrectly uses the endgame treatment: $($bases[$index].stableId)"
-            }
-        }
-        if ($highTierCount -lt 8) { throw "Expected at least eight endgame base icons, found $highTierCount" }
-    } finally { $bitmap.Dispose() }
-}
-
-Assert-ItemVisualTiers
 
 $iconPath = Join-Path $assetRoot 'brand\p21-app-icon.ico'
 if (-not (Test-Path -LiteralPath $iconPath) -or (Get-Item -LiteralPath $iconPath).Length -lt 1kb) {
@@ -184,9 +148,9 @@ if (-not (Test-Path -LiteralPath $iconPath) -or (Get-Item -LiteralPath $iconPath
 
 $manifestPath = Join-Path $assetRoot 'p21-assets.json'
 $manifest = Get-Content -LiteralPath $manifestPath -Raw -Encoding UTF8 | ConvertFrom-Json
-if ($manifest.counts.itemBases -ne 80 -or $manifest.counts.skillGems -ne 78 -or
+if ($manifest.counts.skillGems -ne 78 -or
     $manifest.counts.enemyTypes -ne 48 -or $manifest.animation.columns -ne 31) {
     throw 'P21 asset manifest counts do not match the frozen content contract.'
 }
 
-Write-Host '[p21-assets] PASS: dimensions, transparent gutters, stable counts, visual tiers and unique icons.'
+Write-Host '[p21-assets] PASS: dimensions, transparent gutters, stable counts and unique icons.'

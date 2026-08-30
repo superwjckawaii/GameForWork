@@ -12,9 +12,8 @@ internal sealed class P21ArtAtlas
     public Texture2D? Bosses { get; } = Load("res://assets/p21/enemies/p21-boss-animation.png");
     public Texture2D? Regions { get; } = Load("res://assets/p21/regions/p21-region-atlas.png");
     public Texture2D? Vfx { get; } = Load("res://assets/p21/vfx/p21-combat-vfx.png");
-    public Texture2D? ItemBases { get; } = Load("res://assets/p21/ui/p21-item-bases.png");
-    public Texture2D? UniqueItems { get; } = Load("res://assets/p21/ui/p21-unique-items.png");
-    public Texture2D? P25Equipment { get; } = Load("res://assets/p25/ui/p25-equipment-icons.png");
+    public Texture2D? UniqueItems { get; } = Load("res://assets/p25/ui/p25-legendary-atlas.png");
+    public Texture2D? P25Equipment { get; } = Load("res://assets/p25/ui/p25-equipment-atlas.png");
     public Texture2D? SkillGems { get; } = Load("res://assets/p25/ui/p25-skill-stones.png");
     public Texture2D? Jewels { get; } = Load("res://assets/p21/ui/p21-jewel-atlas.png");
 
@@ -22,12 +21,10 @@ internal sealed class P21ArtAtlas
     {
         if (item.LegendaryRule is not null && UniqueItems is not null)
         {
-            try { return Icon(UniqueItems, P21ArtContract.UniqueItemIndex(item.LegendaryRule.StableId), 5); }
+            try { return Icon(UniqueItems, P25LegendaryArt.IconIndex(item.LegendaryRule.StableId), P25LegendaryArt.Columns); }
             catch (KeyNotFoundException) { }
         }
-        if (item.Base.StableId.StartsWith("p24.base.", StringComparison.Ordinal) && P25Equipment is not null)
-            return Icon(P25Equipment, P25EquipmentArt.IconIndex(item.Base), P25EquipmentArt.Columns);
-        return ItemBases is null ? null : Icon(ItemBases, P21ArtContract.ItemBaseIndex(item.Base.StableId), 10);
+        return P25Equipment is null ? null : Icon(P25Equipment, P25EquipmentArt.IconIndex(item.Base), P25EquipmentArt.Columns);
     }
 
     public Texture2D? SkillIcon(string stableId) => SkillGems is null

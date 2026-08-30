@@ -29,7 +29,7 @@ public sealed class P20FeatureTests
         P20AuditResult t16 = first.Single(result => result.Bracket.Name == "T16");
         P20AuditResult t20 = first.Single(result => result.Bracket.Name == "T20");
         P20AuditResult boss = first.Single(result => result.Bracket.Name == "Boss");
-        Assert.InRange(t1.AverageMaps, 1.05, 1.14);
+        Assert.InRange(t1.AverageMaps, 1.10, 1.20);
         Assert.InRange(t16.AverageMaps, 0.90, 1.05);
         Assert.InRange(t20.AverageMaps, 0.90, 1.05);
         Assert.InRange(t1.LegendaryRate, 0.02, 0.05);
@@ -37,16 +37,16 @@ public sealed class P20FeatureTests
     }
 
     [Fact]
-    public void QuantityScalesFixedBossProgressAndCitadelFragments()
+    public void QuantityDoesNotScaleFixedBossProgressOrCitadelFragments()
     {
         var director = new P5ExpeditionDirector();
         var doubled = new P1MapItem("quantity-map", 12, Quality: 20);
         director.RecordResolved(doubled, succeeded: true, seed: 12);
-        Assert.InRange(director.MapsTowardNextFragment, 1, 2);
+        Assert.Equal(1, director.MapsTowardNextFragment);
 
         var endgame = new P10EndgameState();
         endgame.RecordMapCompletion(doubled, MapRoute.Safe, 12);
-        Assert.InRange(endgame.CitadelFragments, 1, 2);
+        Assert.Equal(1, endgame.CitadelFragments);
     }
 
     [Fact]

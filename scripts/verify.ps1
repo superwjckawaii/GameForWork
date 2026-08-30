@@ -10,6 +10,7 @@ $repositoryRoot = Split-Path -Parent $PSScriptRoot
 $solutionPath = Join-Path $repositoryRoot 'GameForWork.sln'
 $godotProject = Join-Path $repositoryRoot 'src\Game.Godot'
 . (Join-Path $PSScriptRoot 'native-tools.ps1')
+Initialize-NativeConsoleEncoding
 
 $dotnetBinary = Resolve-DotnetBinary
 Set-DotnetEnvironment -DotnetBinary $dotnetBinary
@@ -22,6 +23,24 @@ Write-Host "[verify] godot=$godotBinary"
 
 Invoke-NativeChecked -FilePath $dotnetBinary -Arguments @('restore', $solutionPath) -Label 'Restore solution'
 Invoke-NativeChecked -FilePath $dotnetBinary -Arguments @('build', $solutionPath, '--no-restore', '--configuration', $Configuration) -Label 'Build solution'
+Invoke-NativeChecked -FilePath $godotBinary -Arguments @('--headless', '--path', $godotProject, '--editor', '--quit') -Label 'Godot import check' -RejectGodotErrors
+if ($Configuration -ne 'Debug') {
+    Invoke-NativeChecked -FilePath $dotnetBinary -Arguments @(
+        'build', (Join-Path $godotProject 'GameForWork.csproj'), '--no-restore', '--configuration', 'Debug'
+    ) -Label 'Build Godot startup assembly'
+}
+Invoke-NativeChecked -FilePath $godotBinary -Arguments @('--headless', '--path', $godotProject, '--quit-after', '10') -Label 'Godot startup check' -RejectGodotErrors
+
+if ($Launch) {
+    $guiGodot = $godotBinary -replace '_console\.exe$', '.exe'
+    if (-not (Test-Path -LiteralPath $guiGodot)) {
+        $guiGodot = $godotBinary
+    }
+
+    Write-Host '[verify] Build and startup checks passed; launching the client while the remaining tests continue.'
+    Start-Process -FilePath $guiGodot -ArgumentList @('--path', $godotProject)
+}
+
 Invoke-NativeChecked -FilePath $dotnetBinary -Arguments @('test', (Join-Path $repositoryRoot 'src\Game.Tests\Game.Tests.csproj'), '--no-build', '--configuration', $Configuration) -Label 'Run unit tests'
 $auditRoot = Join-Path $repositoryRoot 'artifacts\release-gate'
 New-Item -ItemType Directory -Path $auditRoot -Force | Out-Null
@@ -41,21 +60,4 @@ if ((Get-Content -LiteralPath $combatAudit -Raw) -ne
     (Get-Content -LiteralPath (Join-Path $repositoryRoot 'docs\v0.2\P22_COMBAT_AUDIT.md') -Raw)) {
     throw 'Generated P22 combat audit differs from the committed release audit.'
 }
-Invoke-NativeChecked -FilePath $godotBinary -Arguments @('--headless', '--path', $godotProject, '--editor', '--quit') -Label 'Godot import check' -RejectGodotErrors
-if ($Configuration -ne 'Debug') {
-    Invoke-NativeChecked -FilePath $dotnetBinary -Arguments @(
-        'build', (Join-Path $godotProject 'GameForWork.csproj'), '--no-restore', '--configuration', 'Debug'
-    ) -Label 'Build Godot startup assembly'
-}
-Invoke-NativeChecked -FilePath $godotBinary -Arguments @('--headless', '--path', $godotProject, '--quit-after', '10') -Label 'Godot startup check' -RejectGodotErrors
-
 Write-Host '[verify] PASS: assets, restore, build, tests, audits, Godot import and startup all succeeded.'
-if ($Launch) {
-    $guiGodot = $godotBinary -replace '_console\.exe$', '.exe'
-    if (-not (Test-Path -LiteralPath $guiGodot)) {
-        $guiGodot = $godotBinary
-    }
-
-    Write-Host '[verify] Launching the P1 client.'
-    Start-Process -FilePath $guiGodot -ArgumentList @('--path', $godotProject)
-}

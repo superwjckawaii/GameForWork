@@ -6,6 +6,7 @@ using GameForWork.Core.P1.Progression;
 using GameForWork.Core.P1.Combat;
 using GameForWork.Core.P5;
 using GameForWork.Core.P6;
+using GameForWork.Core.P26;
 
 namespace GameForWork.Core.P1.World;
 
@@ -277,10 +278,41 @@ public sealed class P1WorldState
     public LootFilter Filter { get; } = new();
     public TeleporterState Teleporter { get; } = new();
     public List<P1MapItem> MapInventory { get; } = [];
+    public P26MapFilter MapCraftFilter { get; set; } = P26MapFilter.All;
+    public P26MapFilter MapSaleFilter { get; set; } = P26MapFilter.All;
+    public P26MapFilter AutoSellMapFilter { get; set; } = P26MapFilter.All;
+    private long _nextMapAcquiredSequence = 1;
     public P1TeamExpeditionState Hero { get; }
     public P1TeamExpeditionState Mercenaries { get; }
     public IReadOnlyList<P1TeamExpeditionState> Teams => [Hero, Mercenaries];
     public int MaximumUnlockedMapTier { get; private set; } = 16;
+
+    public void AddMap(P1MapItem map)
+    {
+        ArgumentNullException.ThrowIfNull(map);
+        P1MapItem sequenced = map.AcquiredSequence > 0 ? map : map with { AcquiredSequence = _nextMapAcquiredSequence++ };
+        _nextMapAcquiredSequence = Math.Max(_nextMapAcquiredSequence, sequenced.AcquiredSequence + 1);
+        MapInventory.Add(sequenced);
+        EnforceMapInventoryLimit();
+    }
+
+    public void AddMaps(IEnumerable<P1MapItem> maps)
+    {
+        foreach (P1MapItem map in maps) AddMap(map);
+    }
+
+    public void EnforceMapInventoryLimit()
+    {
+        IReadOnlyList<P1MapItem> retained = P26MapRules.EnforceInventoryLimit(MapInventory, AutoSellMapFilter,
+            out int gold, out _);
+        if (retained.Count == MapInventory.Count) return;
+        MapInventory.Clear();
+        MapInventory.AddRange(retained);
+        Economy.AddDispositionProceeds(gold, 0);
+    }
+
+    internal long NextMapAcquiredSequence => _nextMapAcquiredSequence;
+    internal void RestoreNextMapAcquiredSequence(long value) => _nextMapAcquiredSequence = Math.Max(1, value);
 
     public void UnlockFinalMapTiers() => MaximumUnlockedMapTier = P1MapItem.MaximumAreaLevel;
 
@@ -475,7 +507,7 @@ public sealed class P1WorldSimulator(IP1MapAttemptResolver attemptResolver)
             if (enteredAsFormalMap && team.WaitForRouteDecision(queuedMap, offline)) continue;
             MapRoute route = queuedMap.SelectedRoute ?? team.Policy.SelectUnattendedRoute(
                 queuedMap, Math.Clamp(team.Progression.Level, 1, 100), worldSeed);
-            if (queuedMap.Tier > team.Policy.MaximumMapTier || queuedMap.DangerFor(route) > team.Policy.MaximumMapDanger)
+            if (queuedMap.Tier > team.Policy.MaximumMapTier || !(team.Policy.MapFilter ?? GameForWork.Core.P26.P26MapFilter.All).Matches(queuedMap))
             {
                 team.Stop("map_policy_limit");
                 continue;
@@ -564,7 +596,7 @@ public sealed class P1WorldSimulator(IP1MapAttemptResolver attemptResolver)
         P1MapRewards rewards = P1MapRewardGenerator.Generate(expedition.Map, expedition.Route,
             seed ^ 0x9e3779b97f4a7c15UL, state.MaximumUnlockedMapTier, run);
         state.Economy.AddRewards(rewards.Stackables);
-        state.MapInventory.AddRange(rewards.Maps);
+        state.AddMaps(rewards.Maps);
         LootProcessingResult processed = LootProcessor.Process(
             rewards.Equipment,
             state.Storage,

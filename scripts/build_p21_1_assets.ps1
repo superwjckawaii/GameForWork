@@ -47,119 +47,6 @@ function New-Pen([System.Drawing.Color]$color, [int]$width) {
     return $pen
 }
 
-function Draw-ItemGlyph {
-    param([System.Drawing.Graphics]$Graphics, [int]$X, [int]$Y, [string]$Category, [uint32]$Hash,
-        [int]$Index, [ValidateRange(0,2)][int]$VisualTier = 0, [switch]$Unique)
-    $palette = @('#aeb7c2', '#b88a54', '#6ca8bd', '#c65d42', '#8d6ac0', '#7fb076', '#d1aa43')
-    $main = Get-Color $palette[$Hash % $palette.Count]
-    if ($Unique) { $main = Get-Color '#d4a642' }
-    $dark = Get-Color '#171b24'
-    $light = [System.Drawing.Color]::FromArgb(255, [math]::Min(255, $main.R + 55), [math]::Min(255, $main.G + 55), [math]::Min(255, $main.B + 55))
-    $outline = New-Pen $dark 5
-    $fill = New-Pen $main 3
-    $shine = New-Pen $light 1
-    $brush = [System.Drawing.SolidBrush]::new($main)
-    $darkBrush = [System.Drawing.SolidBrush]::new($dark)
-    $lightBrush = [System.Drawing.SolidBrush]::new($light)
-    switch ($Category) {
-        { $_ -in 'TwoHandWeapon', 'OneHandWeapon' } {
-            $Graphics.DrawLine($outline, $X + 8, $Y + 25, $X + 24, $Y + 7)
-            $Graphics.DrawLine($fill, $X + 8, $Y + 25, $X + 24, $Y + 7)
-            $Graphics.DrawLine($shine, $X + 11, $Y + 22, $X + 23, $Y + 9)
-            $Graphics.DrawLine($outline, $X + 6, $Y + 20, $X + 13, $Y + 27)
-            $Graphics.DrawLine($fill, $X + 7, $Y + 20, $X + 13, $Y + 26)
-        }
-        'Shield' {
-            $points = [System.Drawing.Point[]]@([System.Drawing.Point]::new($X+7,$Y+7),[System.Drawing.Point]::new($X+25,$Y+7),[System.Drawing.Point]::new($X+23,$Y+21),[System.Drawing.Point]::new($X+16,$Y+27),[System.Drawing.Point]::new($X+9,$Y+21))
-            $Graphics.FillPolygon($darkBrush, $points); $Graphics.DrawPolygon($fill, $points)
-            $Graphics.FillRectangle($lightBrush, $X+14, $Y+10, 3, 12)
-        }
-        'Helmet' {
-            $Graphics.FillRectangle($darkBrush, $X+7, $Y+13, 18, 12); $Graphics.FillRectangle($brush, $X+9, $Y+14, 14, 9)
-            $Graphics.FillRectangle($darkBrush, $X+10, $Y+8, 12, 7); $Graphics.FillRectangle($lightBrush, $X+12, $Y+9, 8, 4)
-            $Graphics.FillRectangle($darkBrush, $X+15, $Y+15, 3, 10)
-        }
-        'BodyArmor' {
-            $points = [System.Drawing.Point[]]@([System.Drawing.Point]::new($X+6,$Y+10),[System.Drawing.Point]::new($X+12,$Y+7),[System.Drawing.Point]::new($X+20,$Y+7),[System.Drawing.Point]::new($X+26,$Y+10),[System.Drawing.Point]::new($X+22,$Y+26),[System.Drawing.Point]::new($X+10,$Y+26))
-            $Graphics.FillPolygon($darkBrush,$points); $Graphics.DrawPolygon($fill,$points); $Graphics.DrawLine($shine,$X+12,$Y+10,$X+12,$Y+22)
-        }
-        'Gloves' {
-            $Graphics.FillRectangle($darkBrush,$X+8,$Y+11,16,15); $Graphics.FillRectangle($brush,$X+10,$Y+14,12,10)
-            for($finger=0;$finger -lt 4;$finger++){ $Graphics.FillRectangle($lightBrush,$X+10+$finger*3,$Y+8+($finger%2),2,8) }
-        }
-        'Boots' {
-            $Graphics.FillRectangle($darkBrush,$X+10,$Y+7,10,15); $Graphics.FillRectangle($brush,$X+12,$Y+9,6,12)
-            $Graphics.FillRectangle($darkBrush,$X+9,$Y+20,16,7); $Graphics.FillRectangle($lightBrush,$X+12,$Y+21,10,3)
-        }
-        'Belt' {
-            $Graphics.FillRectangle($darkBrush,$X+4,$Y+12,24,9); $Graphics.FillRectangle($brush,$X+6,$Y+14,20,5)
-            $Graphics.FillRectangle($darkBrush,$X+13,$Y+11,7,11); $Graphics.FillRectangle($lightBrush,$X+15,$Y+13,3,7)
-        }
-        'Amulet' {
-            $Graphics.DrawEllipse($outline,$X+7,$Y+5,18,18); $Graphics.DrawEllipse($fill,$X+8,$Y+6,16,16)
-            $Graphics.FillRectangle($darkBrush,$X+13,$Y+20,7,7); $Graphics.FillRectangle($lightBrush,$X+15,$Y+21,3,4)
-        }
-        'Ring' {
-            $Graphics.DrawEllipse($outline,$X+7,$Y+9,18,16); $Graphics.DrawEllipse($fill,$X+8,$Y+10,16,14)
-            $Graphics.FillPolygon($lightBrush,[System.Drawing.Point[]]@([System.Drawing.Point]::new($X+16,$Y+4),[System.Drawing.Point]::new($X+21,$Y+9),[System.Drawing.Point]::new($X+16,$Y+13),[System.Drawing.Point]::new($X+11,$Y+9)))
-        }
-        default {
-            $Graphics.FillRectangle($darkBrush,$X+10,$Y+5,12,6); $Graphics.FillRectangle($lightBrush,$X+13,$Y+6,6,4)
-            $Graphics.FillPolygon($darkBrush,[System.Drawing.Point[]]@([System.Drawing.Point]::new($X+9,$Y+10),[System.Drawing.Point]::new($X+23,$Y+10),[System.Drawing.Point]::new($X+26,$Y+19),[System.Drawing.Point]::new($X+21,$Y+27),[System.Drawing.Point]::new($X+11,$Y+27),[System.Drawing.Point]::new($X+6,$Y+19)))
-            $Graphics.FillRectangle($brush,$X+10,$Y+16,12,8); $Graphics.FillRectangle($lightBrush,$X+11,$Y+14,3,9)
-        }
-    }
-    # Base-item progression must be readable even at taskbar size. Mid-tier
-    # items receive worked-metal rivets; endgame bases receive a second bright
-    # contour and an ember/arcane inlay without changing the stable 32px cell.
-    if ($VisualTier -ge 1) {
-        $worked = if ($VisualTier -eq 2) { Get-Color '#d9bd72' } else { Get-Color '#879bad' }
-        $workedBrush = [System.Drawing.SolidBrush]::new($worked)
-        $Graphics.FillRectangle($workedBrush, $X + 4, $Y + 5, 2, 2)
-        $Graphics.FillRectangle($workedBrush, $X + 26, $Y + 23, 2, 2)
-        $Graphics.FillRectangle($workedBrush, $X + 6, $Y + 26, 2, 1)
-        if ($VisualTier -eq 2) {
-            $arcane = Get-Color $(if (($Hash -band 1) -eq 0) { '#67c7d8' } else { '#e08b43' })
-            $royalPen = New-Pen $worked 1
-            $arcaneBrush = [System.Drawing.SolidBrush]::new($arcane)
-            $Graphics.DrawLine($royalPen, $X + 3, $Y + 3, $X + 9, $Y + 3)
-            $Graphics.DrawLine($royalPen, $X + 3, $Y + 3, $X + 3, $Y + 9)
-            $Graphics.DrawLine($royalPen, $X + 23, $Y + 3, $X + 29, $Y + 3)
-            $Graphics.DrawLine($royalPen, $X + 29, $Y + 3, $X + 29, $Y + 9)
-            $Graphics.FillRectangle($arcaneBrush, $X + 15, $Y + 3, 3, 2)
-            $Graphics.FillRectangle($arcaneBrush, $X + 27, $Y + 14, 2, 3)
-            $royalPen.Dispose(); $arcaneBrush.Dispose()
-        }
-        $workedBrush.Dispose()
-    }
-    $markerX = $X + 3 + [int]($Hash % 5); $markerY = $Y + 26 - [int](($Hash / 7) % 5)
-    $Graphics.FillRectangle($lightBrush, $markerX, $markerY, 2, 2)
-    for ($bit = 0; $bit -lt 7; $bit++) {
-        $markerBrush = if ((($Index + 1) -band (1 -shl $bit)) -ne 0) { $lightBrush } else { $brush }
-        $Graphics.FillRectangle($markerBrush, $X + 2 + $bit * 4, $Y + 28, 2, 2)
-    }
-    $outline.Dispose(); $fill.Dispose(); $shine.Dispose(); $brush.Dispose(); $darkBrush.Dispose(); $lightBrush.Dispose()
-}
-
-function Build-ItemAtlases {
-    $catalog = Get-Content -LiteralPath (Join-Path $RepositoryRoot 'src\Game.Core\P19\Data\p19_catalog.json') -Raw | ConvertFrom-Json
-    $bases = @($catalog.bases | Sort-Object StableId)
-    $atlas = New-Bitmap 320 256; $graphics = New-Graphics $atlas
-    for($index=0;$index -lt $bases.Count;$index++){
-        $requiredLevel = [int]$bases[$index].requiredLevel
-        $visualTier = if ($requiredLevel -ge 60) { 2 } elseif ($requiredLevel -ge 30) { 1 } else { 0 }
-        Draw-ItemGlyph $graphics (($index%10)*32) ([math]::Floor($index/10)*32) ([string]$bases[$index].Category) (Get-Hash ([string]$bases[$index].StableId)) $index $visualTier
-    }
-    $graphics.Dispose(); $atlas.Save((Join-Path $uiRoot 'p21-item-bases.png'),[System.Drawing.Imaging.ImageFormat]::Png); $atlas.Dispose()
-
-    $unique = New-Bitmap 160 160; $graphics = New-Graphics $unique
-    $categories = @('TwoHandWeapon','Shield','Helmet','BodyArmor','Gloves','Boots','Belt','Amulet','Ring','LifeFlask')
-    for($index=0;$index -lt 25;$index++){
-        Draw-ItemGlyph $graphics (($index%5)*32) ([math]::Floor($index/5)*32) $categories[$index%$categories.Count] (Get-Hash "unique-$index") $index 2 -Unique
-    }
-    $graphics.Dispose(); $unique.Save((Join-Path $uiRoot 'p21-unique-items.png'),[System.Drawing.Imaging.ImageFormat]::Png); $unique.Dispose()
-}
-
 function Build-SkillAtlas {
     $atlas = New-Bitmap 320 256; $graphics = New-Graphics $atlas
     $colors = @('#d9573f','#e77b32','#d5ad36','#58a8cc','#557bd1','#8d5bd0','#52aa73','#b24b68')
@@ -315,7 +202,6 @@ function Build-Brand {
     $icon.Dispose();$source.Dispose()
 }
 
-Build-ItemAtlases
 Build-SkillAtlas
 Build-UiSkin
 Build-TreeArt

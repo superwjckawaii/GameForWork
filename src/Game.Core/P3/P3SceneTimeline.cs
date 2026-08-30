@@ -228,7 +228,9 @@ public static class P3SceneTimelineBuilder
                     ? (eliteNode ? 6 : 4) + (int)(random.NextUInt() % 5)
                     : abyssRoute ? 12 + (int)(random.NextUInt() % 13) : 8 + (int)(random.NextUInt() % 9);
             if (mapModifiers is not null)
-                enemyCount = Math.Max(1, checked(enemyCount * mapModifiers.PackSizeBasisPoints / 10_000));
+                enemyCount = Math.Max(1, checked(enemyCount * mapModifiers.MonsterQuantityBasisPoints / 10_000));
+            if (bossNode && mapModifiers is not null)
+                enemyCount = checked(enemyCount + mapModifiers.BossAdditionalGuards + mapModifiers.BossCount - 1);
             totalWaves++;
             ulong encounterSeed = ((ulong)random.NextUInt() << 32) | random.NextUInt();
             long start = now;
@@ -251,7 +253,19 @@ public static class P3SceneTimelineBuilder
                 EnemyDamageBasisPoints: mapModifiers?.EnemyDamageBasisPoints ?? 10_000,
                 EnemySpeedBasisPoints: mapModifiers?.EnemySpeedBasisPoints ?? 10_000,
                 PlayerRecoveryBasisPoints: mapModifiers?.PlayerRecoveryBasisPoints ?? 10_000,
-                BossStableId: bossNode ? plannedNode?.BossStableId ?? mapPlan?.FinalBossStableId ?? string.Empty : string.Empty), encounterSeed);
+                BossStableId: bossNode ? plannedNode?.BossStableId ?? mapPlan?.FinalBossStableId ?? string.Empty : string.Empty,
+                BossLifeBasisPoints: mapModifiers?.BossLifeBasisPoints ?? 10_000,
+                BossDamageBasisPoints: mapModifiers?.BossDamageBasisPoints ?? 10_000,
+                EnemyPhysicalReductionBasisPoints: mapModifiers?.EnemyPhysicalReductionBasisPoints ?? 0,
+                EnemyElementalResistanceBasisPoints: mapModifiers?.EnemyElementalResistanceBasisPoints ?? 0,
+                EnemyVoidResistanceBasisPoints: mapModifiers?.EnemyVoidResistanceBasisPoints ?? 0,
+                EnemyPenetrationBasisPoints: mapModifiers?.EnemyPenetrationBasisPoints ?? 0,
+                ExtraEnemyProjectiles: mapModifiers?.ExtraProjectiles ?? 0,
+                EnemyProjectileDamageBasisPoints: mapModifiers?.ProjectileDamageBasisPoints ?? 10_000,
+                EnemyAreaBasisPoints: mapModifiers?.EnemyAreaBasisPoints ?? 10_000,
+                EnemyAreaDamageBasisPoints: mapModifiers?.EnemyAreaDamageBasisPoints ?? 10_000,
+                BossCount: bossNode ? mapModifiers?.BossCount ?? 1 : 1,
+                AdditionalRareEnemies: mapModifiers?.AdditionalRareEnemies ?? 0), encounterSeed);
             spatialFrames.AddRange(result.Frames.Select(frame => frame with { AtMilliseconds = start + frame.AtMilliseconds }));
             AppendSpatialEvents(events, result, start, nodeIndex, maximumLife, maximumMana, maximumShield);
             long duration = checked((long)result.Ticks * TickMilliseconds);

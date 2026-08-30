@@ -3,6 +3,7 @@ using GameForWork.Core.P10;
 using GameForWork.Core.P14;
 using GameForWork.Core.P1.World;
 using GameForWork.Core.P18;
+using GameForWork.Core.P26;
 using Godot;
 
 namespace GameForWork.GodotClient;
@@ -15,13 +16,10 @@ public partial class P10AtlasTreeView : Control
     private float _zoom = .22f;
     private bool _dragging;
     private Vector2 _press;
-    private Texture2D? _backdrop;
 
     public void Initialize(Func<P1GameSession> session, Action<string> changed)
     {
         _session = session; _changed = changed; MouseFilter = MouseFilterEnum.Stop;
-        const string backdrop = "res://assets/p21/trees/p21-atlas-backdrop.png";
-        if (ResourceLoader.Exists(backdrop)) _backdrop = GD.Load<Texture2D>(backdrop);
         Resized += () => { ClampView(); QueueRedraw(); };
         QueueRedraw();
     }
@@ -30,12 +28,13 @@ public partial class P10AtlasTreeView : Control
     {
         DrawRect(new Rect2(Vector2.Zero, Size), new Color("10151d"), true);
         Vector2 origin = Size / 2 + _pan;
-        if (_backdrop is not null)
+        for (int lane = 0; lane < 10; lane++)
         {
-            float side = P10AtlasTree.LayoutExtent * 2 * _zoom;
-            DrawTextureRect(_backdrop, new Rect2(origin - new Vector2(side, side) / 2, new Vector2(side, side)), false);
+            float x = origin.X + (-630 + lane * 140) * _zoom;
+            DrawRect(new Rect2(x - 48 * _zoom, origin.Y - 610 * _zoom, 96 * _zoom, 1_220 * _zoom),
+                lane % 2 == 0 ? new Color("18202b80") : new Color("11192380"), true);
         }
-        foreach (P10AtlasNode node in P10AtlasTree.Nodes)
+        foreach (P10AtlasNode node in P10AtlasTree.Nodes.Where(node => node.Theme != P10AtlasTheme.Warfront))
         {
             Vector2 point = NodePosition(node, origin);
             bool allocated = _session?.Invoke().Endgame.AtlasPassives.Contains(node.StableId) == true;
@@ -61,7 +60,9 @@ public partial class P10AtlasTreeView : Control
             if (mouse.Pressed) { _dragging = false; _press = mouse.Position; }
             else if (!_dragging && Hit(mouse.Position) is { } node)
             {
-                _changed?.Invoke(_session!().TryAllocateAtlasPassive(node.StableId) ? $"异界天赋已分配：{node.DisplayName}。" : "节点不可达或异界天赋点不足。");
+                _changed?.Invoke(_session!().TryAllocateAtlasPassive(node.StableId)
+                    ? $"已花费 {node.GoldCost:N0} 金币购买：{node.DisplayName}。"
+                    : "无法购买：请检查金币、前置节点和 T 阶/突破门槛。");
                 QueueRedraw();
             }
             AcceptEvent();
@@ -74,8 +75,7 @@ public partial class P10AtlasTreeView : Control
         else if (inputEvent is InputEventMouseMotion hover)
         {
             P10AtlasNode? node = Hit(hover.Position);
-            TooltipText = node is null ? string.Empty : $"{node.DisplayName}\n{ThemeName(node.Theme)}收益提高 {node.RewardBasisPoints / 100.0:0.#}% · 出现权重 +{node.MechanicWeightBasisPoints / 100.0:0.#}%" +
-                (string.IsNullOrEmpty(node.SpecialRule) ? string.Empty : $"\n规则：{node.SpecialRule}");
+            TooltipText = node is null ? string.Empty : $"{ThemeName(node.Theme)} · 第 {node.Position} 点 · {node.GoldCost:N0} 金币\n{node.DisplayName}\n{node.SpecialRule}\n解锁：{GateName(node.Gate)}";
         }
         else if (inputEvent is InputEventMouseButton wheel && wheel.Pressed &&
                  wheel.ButtonIndex is MouseButton.WheelUp or MouseButton.WheelDown)
@@ -97,12 +97,23 @@ public partial class P10AtlasTreeView : Control
         _pan = new Vector2(Math.Clamp(_pan.X, -limitX, limitX), Math.Clamp(_pan.Y, -limitY, limitY));
     }
 
-    private P10AtlasNode? Hit(Vector2 screen) => P10AtlasTree.Nodes.Select(node => (node, distance: NodePosition(node, Size / 2 + _pan).DistanceTo(screen)))
+    private P10AtlasNode? Hit(Vector2 screen) => P10AtlasTree.Nodes.Where(node => node.Theme != P10AtlasTheme.Warfront)
+        .Select(node => (node, distance: NodePosition(node, Size / 2 + _pan).DistanceTo(screen)))
         .Where(entry => entry.distance <= (entry.node.Notable ? 13 : 9) * Math.Clamp(_zoom * 2.4f, .55f, 1.3f))
         .OrderBy(entry => entry.distance).Select(entry => entry.node).FirstOrDefault();
     private Vector2 NodePosition(P10AtlasNode node, Vector2 origin) => origin + new Vector2(node.X, node.Y) * _zoom;
     private static string ThemeName(P10AtlasTheme theme) => theme switch
-    { P10AtlasTheme.MapSupply => "地图续航", P10AtlasTheme.Abyss => "裂渊", P10AtlasTheme.LifeGarden => "命能花园", P10AtlasTheme.RedAltar => "赤誓祭坛", P10AtlasTheme.BlueAltar => "苍誓祭坛", _ => "攻坚" };
+    {
+        P10AtlasTheme.MapBasics => "地图基础", P10AtlasTheme.MapSupply => "地图续航", P10AtlasTheme.Crafting => "地图打造",
+        P10AtlasTheme.PacksAndElites => "怪群精英", P10AtlasTheme.Boss => "Boss攻坚", P10AtlasTheme.Abyss => "深渊",
+        P10AtlasTheme.LifeGarden => "命能花园", P10AtlasTheme.RedAltar => "赤誓祭坛",
+        P10AtlasTheme.BlueAltar => "苍誓祭坛", _ => "战阵前线"
+    };
+    private static string GateName(P26AtlasGate gate) => gate switch
+    {
+        P26AtlasGate.Act5 => "第五幕", P26AtlasGate.Tier5 => "完成 T5", P26AtlasGate.Tier10 => "完成 T10",
+        P26AtlasGate.Tier16 => "完成 T16", P26AtlasGate.FinalBreakthrough => "最终突破", _ => "完成 T20"
+    };
 }
 
 public partial class P10EndgamePanel : Control
@@ -111,8 +122,6 @@ public partial class P10EndgamePanel : Control
     private Action<string>? _changed;
     private Label? _summary;
     private P10AtlasTreeView? _atlas;
-    private OptionButton? _schemes;
-    private LineEdit? _schemeName;
     private Button? _breakthrough;
     private Label? _preflight;
     private string _signature = string.Empty;
@@ -132,20 +141,6 @@ public partial class P10EndgamePanel : Control
         var top = new VBoxContainer();
         _summary = new Label { AutowrapMode = TextServer.AutowrapMode.WordSmart };
         top.AddChild(_summary);
-        var schemeBar = new HFlowContainer(); top.AddChild(schemeBar);
-        schemeBar.AddChild(new Label { Text = "异界方案" });
-        _schemes = new OptionButton(); schemeBar.AddChild(_schemes);
-        for (int index = 0; index < 3; index++) _schemes.AddItem($"方案 {index + 1}", index);
-        _schemes.ItemSelected += index =>
-        {
-            if ((int)index == session().Endgame.ActiveAtlasSchemeIndex) return;
-            changed(session().TrySwitchAtlasScheme((int)index) ? "已消耗 1 份记忆灰烬并切换异界方案。" : "记忆灰烬不足，无法切换方案。");
-            Refresh(true);
-        };
-        _schemeName = new LineEdit { PlaceholderText = "方案名", CustomMinimumSize = new Vector2(120, 0), MaxLength = 12 };
-        schemeBar.AddChild(_schemeName);
-        var rename = new Button { Text = "重命名" }; schemeBar.AddChild(rename);
-        rename.Pressed += () => { changed(session().TryRenameAtlasScheme(session().Endgame.ActiveAtlasSchemeIndex, _schemeName.Text) ? "异界方案已重命名。" : "请输入 1–12 个字符。"); Refresh(true); };
         overlay.AddChild(Hud(top));
         overlay.AddChild(new Control { SizeFlagsVertical = SizeFlags.ExpandFill, MouseFilter = MouseFilterEnum.Ignore });
 
@@ -184,19 +179,13 @@ public partial class P10EndgamePanel : Control
     {
         if (_session is null) return;
         P10EndgameState state = _session().Endgame;
-        string signature = $"{state.EarnedAtlasPoints}:{state.AtlasPassives.Count}:{state.LifeForce}:{state.RedFavor}:{state.BlueFavor}:{state.CitadelFragments}:{state.CitadelTickets}:{state.BreakthroughPoints}:{state.SelectedAscendancy}:{state.AscendancyPassives.Count}:{state.ActiveAtlasSchemeIndex}:{state.FinalBreakthroughCompleted}:{state.CitadelVictories}:{state.MythicReforgeMaterials}:{_session().World.Economy.MemoryAshes}";
+        string signature = $"{state.AtlasPassives.Count}:{state.LifeForce}:{state.RedFavor}:{state.BlueFavor}:{state.CitadelFragments}:{state.CitadelTickets}:{state.BreakthroughPoints}:{state.SelectedAscendancy}:{state.AscendancyPassives.Count}:{state.FinalBreakthroughCompleted}:{state.CitadelVictories}:{state.MythicReforgeMaterials}:{_session().World.Economy.Gold}";
         if (!force && signature == _signature) return;
         _signature = signature;
-        _summary!.Text = $"T1–T16 常规异界 · T17–T20 {(state.FinalBreakthroughCompleted ? "已开放" : "未开放")} · 首次完成 {state.CompletedTiers.Count}/20 · 异界点 {state.AtlasPassives.Count}/{state.EarnedAtlasPoints} · " +
+        _summary!.Text = $"T1–T16 常规异界 · T17–T20 {(state.FinalBreakthroughCompleted ? "已开放" : "未开放")} · 首次完成 {state.CompletedTiers.Count}/20 · 异界天赋 {state.AtlasPassives.Count}/120 · 金币 {_session().World.Economy.Gold:N0} · " +
             $"命能 {state.LifeForce} · 赤誓 {state.RedFavor} · 苍誓 {state.BlueFavor}\n" +
             $"天垒碎片 {state.CitadelFragments}/{P10EndgameState.CitadelFragmentsPerTicket} · 门票 {state.CitadelTickets} · " +
-            $"升华 {P18AscendancyCatalog.DisplayName(state.SelectedAscendancy)} · 升华点 {state.AscendancyPassives.Count}/{state.BreakthroughPoints} · 记忆灰烬 {_session().World.Economy.MemoryAshes} · 天垒胜利 {state.CitadelVictories} · 神话重铸 {state.MythicReforgeMaterials}";
-        if (_schemes is not null)
-        {
-            for (int index = 0; index < 3; index++) _schemes.SetItemText(index, state.AtlasSchemeNames[index]);
-            _schemes.Select(state.ActiveAtlasSchemeIndex);
-        }
-        if (_schemeName is not null) _schemeName.Text = state.AtlasSchemeNames[state.ActiveAtlasSchemeIndex];
+            $"升华 {P18AscendancyCatalog.DisplayName(state.SelectedAscendancy)} · 升华点 {state.AscendancyPassives.Count}/{state.BreakthroughPoints} · 天垒胜利 {state.CitadelVictories} · 神话重铸 {state.MythicReforgeMaterials}";
         if (_breakthrough is not null)
         {
             _breakthrough.Text = state.FinalBreakthroughCompleted ? "门扉突破已完成" :

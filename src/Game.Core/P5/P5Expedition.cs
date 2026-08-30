@@ -121,7 +121,10 @@ public sealed class P5ExpeditionDirector
                 Math.Min(world.MaximumUnlockedMapTier, team.Policy.MaximumMapTier), team.Policy);
             if (inventoryIndex < 0)
             {
-                Stop(team, dispatch, "maps_exhausted");
+                if (team.Policy.NoMatchBehavior == GameForWork.Core.P26.P26NoMatchBehavior.Stop)
+                    Stop(team, dispatch, "maps_exhausted");
+                else
+                    _dispatches[team.Kind] = dispatch with { Status = "waiting_for_matching_map" };
                 return false;
             }
 
@@ -177,11 +180,7 @@ public sealed class P5ExpeditionDirector
             return;
         }
 
-        int routeBasisPoints = route == MapRoute.Abyss ? 15_000 : 10_000;
-        int progress = P20.P20DropFormula.RollScaledCount(1,
-            map.ItemQuantityBasisPoints * routeBasisPoints / 10_000,
-            seed ^ 0x5f17c6a28d3b4091UL);
-        MapsTowardNextFragment += progress;
+        MapsTowardNextFragment += 1;
         while (MapsTowardNextFragment >= MapsPerFragment)
         {
             MapsTowardNextFragment -= MapsPerFragment;
@@ -259,23 +258,27 @@ public sealed class P5ExpeditionDirector
         ExpeditionPolicy policy)
     {
         int[] eligible = maps.Select((map, index) => (map, index))
-            .Where(pair => pair.map.Tier <= maximumUnlockedTier && MatchesRoute(pair.map, target, policy) &&
-                MatchesRisk(pair.map, target, policy))
+            .Where(pair => !pair.map.IsProtected && pair.map.Tier <= maximumUnlockedTier && MatchesRoute(pair.map, target, policy) &&
+                MatchesAltar(pair.map, policy.AltarPreference) &&
+                (policy.MapFilter ?? GameForWork.Core.P26.P26MapFilter.All).Matches(pair.map))
             .Select(pair => pair.index).ToArray();
         if (eligible.Length == 0)
         {
             return -1;
         }
 
-        IEnumerable<(P1MapItem map, int index)> ranked = eligible.Select(index => (map: maps[index], index))
-            .OrderByDescending(pair => AltarScore(pair.map, policy.AltarPreference));
-        return target == P5ExpeditionTarget.HighestTierMaps || mode == P5DispatchMode.HighestAvailable
-            ? eligible.Select(index => (map: maps[index], index))
-                .OrderByDescending(pair => pair.map.Tier)
-                .ThenByDescending(pair => AltarScore(pair.map, policy.AltarPreference))
-                .ThenBy(pair => pair.map.InstanceId, StringComparer.Ordinal)
-                .First().index
-            : ranked.First().index;
+        IEnumerable<(P1MapItem map, int index)> candidates = eligible.Select(index => (map: maps[index], index));
+        IEnumerable<(P1MapItem map, int index)> ranked = policy.MapOrder switch
+        {
+            GameForWork.Core.P26.P26MapOrder.TierAscending => candidates.OrderBy(pair => pair.map.Tier).ThenBy(pair => pair.map.AcquiredSequence),
+            GameForWork.Core.P26.P26MapOrder.OldestFirst => candidates.OrderBy(pair => pair.map.AcquiredSequence).ThenByDescending(pair => pair.map.Tier),
+            _ => candidates.OrderByDescending(pair => pair.map.Tier)
+                .ThenByDescending(pair => pair.map.ItemQuantityBonusBasisPoints)
+                .ThenByDescending(pair => pair.map.MonsterQuantityBasisPoints)
+                .ThenBy(pair => pair.map.AcquiredSequence)
+                .ThenBy(pair => pair.map.InstanceId, StringComparer.Ordinal),
+        };
+        return ranked.First().index;
     }
 
     private static bool MatchesRoute(P1MapItem map, P5ExpeditionTarget target, ExpeditionPolicy policy)
@@ -292,27 +295,12 @@ public sealed class P5ExpeditionDirector
             : map.EffectiveRouteCandidates.Any(route => !(policy.BlockedRoutes ?? []).Contains(route));
     }
 
-    private static bool MatchesRisk(P1MapItem map, P5ExpeditionTarget target, ExpeditionPolicy policy)
+    private static bool MatchesAltar(P1MapItem map, MapAltarPreference preference) => preference switch
     {
-        MapRoute? requested = target switch
-        {
-            P5ExpeditionTarget.SafeMaps => MapRoute.Safe,
-            P5ExpeditionTarget.AbyssMaps => MapRoute.Abyss,
-            P5ExpeditionTarget.LifeGardenMaps => MapRoute.LifeGarden,
-            _ => null,
-        };
-        return requested is not null
-            ? map.DangerFor(requested.Value) <= policy.MaximumMapDanger
-            : map.EffectiveRouteCandidates.Any(route => !(policy.BlockedRoutes ?? []).Contains(route) &&
-                map.DangerFor(route) <= policy.MaximumMapDanger);
-    }
-
-    private static int AltarScore(P1MapItem map, MapAltarPreference preference) => preference switch
-    {
-        MapAltarPreference.Avoid => map.Altar == GameForWork.Core.P12.P12MapAltar.None ? 2 : 0,
-        MapAltarPreference.RedOath => map.Altar == GameForWork.Core.P12.P12MapAltar.RedOath ? 2 : 0,
-        MapAltarPreference.BlueOath => map.Altar == GameForWork.Core.P12.P12MapAltar.BlueOath ? 2 : 0,
-        _ => 1,
+        MapAltarPreference.Avoid => map.Altar == GameForWork.Core.P12.P12MapAltar.None,
+        MapAltarPreference.RedOath => map.Altar == GameForWork.Core.P12.P12MapAltar.RedOath,
+        MapAltarPreference.BlueOath => map.Altar == GameForWork.Core.P12.P12MapAltar.BlueOath,
+        _ => true,
     };
 
     private void Stop(P1TeamExpeditionState team, P5TeamDispatchSnapshot dispatch, string reason)

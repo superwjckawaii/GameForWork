@@ -7,6 +7,7 @@ using GameForWork.Core.P5;
 using GameForWork.Core.P10;
 using GameForWork.Core.P12;
 using GameForWork.Core.P14;
+using GameForWork.Core.P26;
 using GameForWork.Core.Simulation;
 
 namespace GameForWork.Core.P20;
@@ -17,7 +18,7 @@ public sealed record P20LootContext(
     string SourceId,
     int MonsterLevel,
     int QuantityBasisPoints,
-    int Danger,
+    int MonsterQuantityBonusBasisPoints,
     MapRoute Route,
     int SourceTier = 0,
     int MaximumUnlockedTier = P1MapItem.MaximumTier,
@@ -25,7 +26,8 @@ public sealed record P20LootContext(
     bool AllowLegendary = true,
     bool Completed = true,
     bool Practice = false,
-    string BossPool = "");
+    string BossPool = "",
+    P1MapItem? Map = null);
 
 public sealed record P20DropTrace(
     int DefeatedEnemies,
@@ -38,7 +40,7 @@ public sealed record P20DropTrace(
     int SkillStoneCount,
     bool LegendaryDropped,
     int QuantityBasisPoints,
-    int Danger);
+    int MonsterQuantityBonusBasisPoints);
 
 public sealed record P20RewardBatch(
     IReadOnlyList<ItemInstance> Equipment,
@@ -55,10 +57,10 @@ public static class P20DropFormula
     public const int MagicBudget = 250;
     public const int RareBudget = 800;
     public const int BossBudget = 3_000;
-    public const int BaseMapReturnBasisPoints = 10_800;
+    public const int BaseMapReturnBasisPoints = 11_500;
     public const int RegularLegendaryChanceBasisPoints = 333;
     public const int BossLegendaryChanceBasisPoints = 800;
-    public const int PinnacleMapReturnBasisPoints = 9_000;
+    public const int PinnacleMapReturnBasisPoints = 9_200;
     private const int EquipmentCost = 2_400;
     private const int MetalCost = 6_000;
     private const int SkillStoneCost = 80_000;
@@ -72,13 +74,21 @@ public static class P20DropFormula
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(defeated);
         var random = new Pcg32(seed);
-        long baseBudget = defeated.Sum(EnemyBudget);
+        long baseBudget = defeated.Sum(enemy => EnemyBudget(enemy, context.Map?.AtlasSnapshot));
         int levelMultiplier = Math.Clamp(8_000 + context.MonsterLevel * 30, 8_000, 11_600);
-        int dangerMultiplier = 10_000 + Math.Clamp(context.Danger, 0, 100) * 50;
-        long effectiveBudget = Scale(Scale(Scale(baseBudget, levelMultiplier), dangerMultiplier),
+        int monsterMultiplier = 10_000 + Math.Clamp(context.MonsterQuantityBonusBasisPoints, 0, 12_000);
+        long effectiveBudget = Scale(Scale(Scale(baseBudget, levelMultiplier), monsterMultiplier),
             Math.Max(0, context.QuantityBasisPoints));
+        P12MapAffix? vault = context.Map?.EffectiveAffixes.FirstOrDefault(affix => affix.Kind == P12MapAffixKind.SealedVault);
+        if (vault is not null)
+        {
+            int chestBudget = vault.Rank switch { 1 => 800, 2 => 1_000, 3 => 1_200, _ => 1_500 };
+            effectiveBudget += Scale(Scale(baseBudget, chestBudget * vault.Value), context.QuantityBasisPoints);
+        }
+        bool bossDefeated = defeated.Any(enemy => enemy.Rarity == EnemyRarity.Boss);
 
-        int equipmentRoute = context.Route == MapRoute.Safe ? 12_000 : context.Route == MapRoute.LifeGarden ? 10_500 : 9_500;
+        int equipmentRoute = (context.Route == MapRoute.Safe ? 12_000 : context.Route == MapRoute.LifeGarden ? 10_500 : 9_500) +
+            P26AtlasEffects.EquipmentQuantityIncrease(context.Map?.AtlasSnapshot, bossDefeated);
         int equipmentCount = Math.Min(40, RollRatio(random, Scale(effectiveBudget, equipmentRoute), EquipmentCost));
         var equipment = new List<ItemInstance>(equipmentCount + 1);
         for (int index = 0; index < equipmentCount; index++)
@@ -87,7 +97,10 @@ public static class P20DropFormula
             ItemBaseDefinition itemBase = PickBase(source.MonsterLevel, random);
             ItemRarity rarity = itemBase.Category == ItemCategory.LifeFlask
                 ? ItemRarity.Basic
-                : RollRarity(source.Rarity, context.Danger, random);
+                : RollRarity(source.Rarity,
+                    P26AtlasEffects.EquipmentRarityIncrease(context.Map?.AtlasSnapshot, source.Rarity) +
+                    (context.Map?.EffectiveAffixes.FirstOrDefault(affix => affix.Kind == P12MapAffixKind.BountifulMark)?.Value ?? 0) * 100,
+                    random);
             int itemLevel = Math.Min(120, source.MonsterLevel + (source.Rarity == EnemyRarity.Boss ? 2 :
                 source.Rarity == EnemyRarity.Rare ? 1 : 0));
             ulong itemSeed = NextSeed(random);
@@ -107,18 +120,21 @@ public static class P20DropFormula
                 $"drop-{context.SourceId}-{unique.StableId.Split('.')[^1]}-{seed:x8}"));
         }
 
-        int goldRoute = context.Route == MapRoute.Safe ? 12_500 : 10_000;
+        int goldRoute = (context.Route == MapRoute.Safe ? 12_500 : 10_000) +
+            P26AtlasEffects.GoldIncrease(context.Map?.AtlasSnapshot, bossDefeated);
         int gold = RollRatio(random, Scale(effectiveBudget, goldRoute), 400);
-        int metalRoute = context.Route == MapRoute.LifeGarden ? 14_000 : context.Route == MapRoute.Abyss ? 12_000 : 10_000;
+        int metalRoute = (context.Route == MapRoute.LifeGarden ? 14_000 : context.Route == MapRoute.Abyss ? 12_000 : 10_000) +
+            P26AtlasEffects.MetalIncrease(context.Map?.AtlasSnapshot, bossDefeated);
         int metalCount = Math.Min(20, RollRatio(random, Scale(effectiveBudget, metalRoute), MetalCost));
         IReadOnlyList<MetalCurrencyStack> metals = RollMetals(random, metalCount, context.Route);
-        int stoneRoute = context.Route == MapRoute.Abyss ? 30_000 : 10_000;
+        int stoneRoute = (context.Route == MapRoute.Abyss ? 30_000 : 10_000) +
+            P26AtlasEffects.SkillStoneIncrease(context.Map?.AtlasSnapshot, bossDefeated);
         int skillStones = Math.Min(5, RollRatio(random, Scale(effectiveBudget, stoneRoute), SkillStoneCost));
         IReadOnlyList<P1MapItem> maps = context.AllowMaps && context.Completed && !context.Practice
             ? RollMaps(context, random)
             : [];
         var trace = new P20DropTrace(defeated.Count, baseBudget, effectiveBudget, equipment.Count, gold,
-            metalCount, maps.Count, skillStones, legendary, context.QuantityBasisPoints, context.Danger);
+            metalCount, maps.Count, skillStones, legendary, context.QuantityBasisPoints, context.MonsterQuantityBonusBasisPoints);
         return new P20RewardBatch(equipment, maps, gold, metals, skillStones, legendary, trace);
     }
 
@@ -180,10 +196,10 @@ public static class P20DropFormula
         IReadOnlyList<P20DefeatedEnemy> defeated, ulong seed)
     {
         var random = new Pcg32(seed);
-        long baseBudget = defeated.Sum(EnemyBudget);
+        long baseBudget = defeated.Sum(enemy => EnemyBudget(enemy, context.Map?.AtlasSnapshot));
         int levelMultiplier = Math.Clamp(8_000 + context.MonsterLevel * 30, 8_000, 11_600);
-        int dangerMultiplier = 10_000 + Math.Clamp(context.Danger, 0, 100) * 50;
-        long effectiveBudget = Scale(Scale(Scale(baseBudget, levelMultiplier), dangerMultiplier),
+        int monsterMultiplier = 10_000 + Math.Clamp(context.MonsterQuantityBonusBasisPoints, 0, 12_000);
+        long effectiveBudget = Scale(Scale(Scale(baseBudget, levelMultiplier), monsterMultiplier),
             Math.Max(0, context.QuantityBasisPoints));
         int equipmentRoute = context.Route == MapRoute.Safe ? 12_000 : context.Route == MapRoute.LifeGarden ? 10_500 : 9_500;
         int equipment = Math.Min(40, RollRatio(random, Scale(effectiveBudget, equipmentRoute), EquipmentCost));
@@ -199,16 +215,16 @@ public static class P20DropFormula
         int maps = 0;
         if (context.AllowMaps && context.Completed && !context.Practice)
         {
-            long expected = (long)MapReturnBasisPoints(context.SourceTier) * context.QuantityBasisPoints / 10_000 *
-                            (10_000 + context.Danger * 20) / 10_000;
+            long expected = (long)MapReturnBasisPoints(context.SourceTier) * context.QuantityBasisPoints / 10_000;
             maps = Math.Min(4, RollRatio(random, expected, 10_000));
         }
         return new P20DropTrace(defeated.Count, baseBudget, effectiveBudget, equipment, gold,
-            metals, maps, stones, legendary, context.QuantityBasisPoints, context.Danger);
+            metals, maps, stones, legendary, context.QuantityBasisPoints, context.MonsterQuantityBonusBasisPoints);
     }
 
-    private static long EnemyBudget(P20DefeatedEnemy enemy) =>
-        (long)EnemyCoefficient(enemy.Rarity) * (8_000 + Math.Clamp(enemy.ThreatPoints, 1, 4) * 1_000) / 10_000;
+    private static long EnemyBudget(P20DefeatedEnemy enemy, IReadOnlyList<string>? atlas) =>
+        (long)EnemyCoefficient(enemy.Rarity) * (8_000 + Math.Clamp(enemy.ThreatPoints, 1, 4) * 1_000) / 10_000 *
+        (10_000 + P26AtlasEffects.EnemyBudgetIncrease(atlas, enemy.Rarity)) / 10_000;
 
     private static int LegendaryChance(P20LootContext context)
     {
@@ -250,7 +266,7 @@ public static class P20DropFormula
         return candidates[^1];
     }
 
-    private static ItemRarity RollRarity(EnemyRarity source, int danger, Pcg32 random)
+    private static ItemRarity RollRarity(EnemyRarity source, int increasedBasisPoints, Pcg32 random)
     {
         (int magic, int rare) = source switch
         {
@@ -259,7 +275,8 @@ public static class P20DropFormula
             EnemyRarity.Boss => (4_000, 4_000),
             _ => (2_500, 700),
         };
-        rare = Math.Min(7_500, rare + Math.Clamp(danger, 0, 100) * 10);
+        magic = Math.Min(8_500, magic * (10_000 + Math.Max(0, increasedBasisPoints)) / 10_000);
+        rare = Math.Min(7_500, rare * (10_000 + Math.Max(0, increasedBasisPoints)) / 10_000);
         int roll = random.NextBasisPoints();
         if (roll < rare) return ItemRarity.Rare;
         if (roll < rare + magic) return ItemRarity.Magic;
@@ -268,8 +285,9 @@ public static class P20DropFormula
 
     private static IReadOnlyList<P1MapItem> RollMaps(P20LootContext context, Pcg32 random)
     {
+        bool boss = context.Map is not null;
         long expected = (long)MapReturnBasisPoints(context.SourceTier) * context.QuantityBasisPoints / 10_000 *
-                        (10_000 + context.Danger * 20) / 10_000;
+            (10_000 + P26AtlasEffects.MapQuantityIncrease(context.Map?.AtlasSnapshot, boss)) / 10_000;
         int count = Math.Min(4, RollRatio(random, expected, 10_000));
         var result = new List<P1MapItem>(count);
         for (int index = 0; index < count; index++)
@@ -277,14 +295,30 @@ public static class P20DropFormula
             int tierRoll = random.NextBasisPoints();
             int delta = tierRoll switch { < 2_500 => -1, < 7_500 => 0, < 9_500 => 1, _ => 2 };
             int tier = Math.Clamp(context.SourceTier + delta, 1, context.MaximumUnlockedTier);
-            string id = $"map-{context.SourceId}-{index}-{random.NextUInt():x8}";
+            byte[] sourceHash = System.Security.Cryptography.SHA256.HashData(
+                System.Text.Encoding.UTF8.GetBytes(context.SourceId));
+            string sourceToken = Convert.ToHexString(sourceHash.AsSpan(0, 6)).ToLowerInvariant();
+            string id = $"map-{sourceToken}-t{tier:00}-{index}-{random.NextUInt():x8}";
             result.Add(new P1MapItem(id, tier).EnsureFormal(random.NextUInt()));
+        }
+        P12MapAffix? roadEcho = context.Map?.EffectiveAffixes.FirstOrDefault(affix => affix.Kind == P12MapAffixKind.RoadEcho);
+        int roadChance = (roadEcho?.Value ?? 0) * 100;
+        if (roadEcho is not null && P26AtlasEffects.Has(context.Map?.AtlasSnapshot, "p26.atlas.supply.07")) roadChance *= 2;
+        if (roadChance > 0 && random.NextBasisPoints() < Math.Min(10_000, roadChance))
+        {
+            int tier = Math.Clamp(context.SourceTier, 1, context.MaximumUnlockedTier);
+            result.Add(new P1MapItem($"map-road-echo-t{tier:00}-{random.NextUInt():x8}", tier).EnsureFormal(random.NextUInt()));
         }
         return result;
     }
 
-    private static int MapReturnBasisPoints(int sourceTier) =>
-        sourceTier >= 16 ? PinnacleMapReturnBasisPoints : BaseMapReturnBasisPoints;
+    private static int MapReturnBasisPoints(int sourceTier) => sourceTier switch
+    {
+        <= 5 => BaseMapReturnBasisPoints,
+        <= 10 => 10_800,
+        <= 16 => 10_000,
+        _ => PinnacleMapReturnBasisPoints,
+    };
 
     private static IReadOnlyList<MetalCurrencyStack> RollMetals(Pcg32 random, int count, MapRoute route)
     {
