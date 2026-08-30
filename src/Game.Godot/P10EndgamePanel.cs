@@ -22,6 +22,7 @@ public partial class P10AtlasTreeView : Control
         _session = session; _changed = changed; MouseFilter = MouseFilterEnum.Stop;
         const string backdrop = "res://assets/p21/trees/p21-atlas-backdrop.png";
         if (ResourceLoader.Exists(backdrop)) _backdrop = GD.Load<Texture2D>(backdrop);
+        Resized += () => { ClampView(); QueueRedraw(); };
         QueueRedraw();
     }
 
@@ -68,7 +69,7 @@ public partial class P10AtlasTreeView : Control
         else if (inputEvent is InputEventMouseMotion motion && motion.ButtonMask.HasFlag(MouseButtonMask.Left))
         {
             if (!_dragging && motion.Position.DistanceTo(_press) > 7) _dragging = true;
-            if (_dragging) { _pan += motion.Relative; QueueRedraw(); AcceptEvent(); }
+            if (_dragging) { _pan += motion.Relative; ClampView(); QueueRedraw(); AcceptEvent(); }
         }
         else if (inputEvent is InputEventMouseMotion hover)
         {
@@ -83,8 +84,17 @@ public partial class P10AtlasTreeView : Control
             Vector2 world = (wheel.Position - origin) / _zoom;
             _zoom = Math.Clamp(_zoom * (wheel.ButtonIndex == MouseButton.WheelUp ? 1.12f : .89f), .16f, 1.5f);
             _pan = wheel.Position - Size / 2 - world * _zoom;
+            ClampView();
             QueueRedraw(); AcceptEvent();
         }
+    }
+
+    private void ClampView()
+    {
+        float half = P10AtlasTree.LayoutExtent * _zoom;
+        float limitX = Math.Max(0, half - Size.X / 2);
+        float limitY = Math.Max(0, half - Size.Y / 2);
+        _pan = new Vector2(Math.Clamp(_pan.X, -limitX, limitX), Math.Clamp(_pan.Y, -limitY, limitY));
     }
 
     private P10AtlasNode? Hit(Vector2 screen) => P10AtlasTree.Nodes.Select(node => (node, distance: NodePosition(node, Size / 2 + _pan).DistanceTo(screen)))

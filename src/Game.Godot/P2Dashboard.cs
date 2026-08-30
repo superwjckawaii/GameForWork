@@ -22,6 +22,9 @@ namespace GameForWork.GodotClient;
 
 public partial class P2Dashboard : VBoxContainer
 {
+    private static readonly Vector2I CharacterWindowPreferredSize = new(1180, 800);
+    private static readonly Vector2I CharacterWindowMinimumSize = new(900, 640);
+    private const int CharacterWindowGap = 12;
     private const int ContextEquip = 1;
     private const int ContextUnequip = 2;
     private const int ContextTransfer = 3;
@@ -44,6 +47,13 @@ public partial class P2Dashboard : VBoxContainer
     private Control? _overviewPage;
     private Control? _storyPage;
     private Control? _characterPage;
+    private Window? _characterWindow;
+    private Button? _characterButton;
+    private bool _characterWindowPairInitialized;
+    private bool _syncingCharacterWindowPair;
+    private Vector2I _pairedMainPosition;
+    private Vector2I _pairedMainSize;
+    private Vector2I _pairedCharacterPosition;
     private Control? _townPage;
     private Control? _expeditionPage;
     private TabContainer? _characterModes;
@@ -134,6 +144,11 @@ public partial class P2Dashboard : VBoxContainer
         _creationPanel!.Visible = session is null;
         _fullPanel!.Visible = session is not null;
         _miniPanel!.Visible = false;
+        if (session is null)
+        {
+            _characterWindow?.Hide();
+            _characterWindowPairInitialized = false;
+        }
         Refresh();
     }
 
@@ -145,6 +160,11 @@ public partial class P2Dashboard : VBoxContainer
         }
 
         _miniMode = mini;
+        if (mini)
+        {
+            _characterWindow?.Hide();
+            _characterWindowPairInitialized = false;
+        }
         _fullPanel!.Visible = !mini;
         _miniPanel!.Visible = mini;
         Refresh();
@@ -152,6 +172,7 @@ public partial class P2Dashboard : VBoxContainer
 
     public void Tick(double delta)
     {
+        SyncCharacterWindowPair();
         _refreshAccumulator += delta;
         if (_refreshAccumulator >= 0.25)
         {
@@ -261,6 +282,7 @@ public partial class P2Dashboard : VBoxContainer
         _journeyStatus = new Label { SizeFlagsHorizontal = SizeFlags.ExpandFill, AutowrapMode = TextServer.AutowrapMode.WordSmart };
         journeyBar.AddChild(_journeyStatus);
         _journeyGo = AddButton(journeyBar, "前往", NavigateToCurrentJourney);
+        _characterButton = AddButton(journeyBar, "角色与物品", OpenCharacterWindow);
         AddButton(journeyBar, "旅程手册", ShowHandbook);
         AddButton(journeyBar, "重播教学", ReplayTutorial);
         _warningBar = new HBoxContainer { Visible = false };
@@ -277,7 +299,25 @@ public partial class P2Dashboard : VBoxContainer
         _expeditionPage = BuildExpeditionPage();
         _mainTabs.AddChild(_expeditionPage);
         _characterPage = BuildCharacterItemsPage();
-        _mainTabs.AddChild(_characterPage);
+        _characterPage.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
+        _characterWindow = new Window
+        {
+            Title = "角色与物品",
+            Size = CharacterWindowPreferredSize,
+            MinSize = CharacterWindowMinimumSize,
+            Visible = false,
+            ForceNative = true,
+            Transient = true,
+            Exclusive = false,
+            WrapControls = false,
+        };
+        _characterWindow.CloseRequested += () =>
+        {
+            _characterWindow.Hide();
+            _characterWindowPairInitialized = false;
+        };
+        _characterWindow.AddChild(_characterPage);
+        AddChild(_characterWindow);
         _townPage = BuildTownPage();
         _mainTabs.AddChild(_townPage);
         BuildJourneyDialogs();
@@ -375,7 +415,7 @@ public partial class P2Dashboard : VBoxContainer
     private Control BuildCharacterItemsPage()
     {
         VBoxContainer page = Page("角色与物品");
-        var header = new HBoxContainer();
+        var header = new HFlowContainer();
         page.AddChild(header);
         _characterSelector = AddOptions(header, "当前角色", ["主角"]);
         _characterSelector.ItemSelected += index =>
@@ -397,11 +437,15 @@ public partial class P2Dashboard : VBoxContainer
         _characterStatus = new Label
         {
             SizeFlagsHorizontal = SizeFlags.ExpandFill,
-            HorizontalAlignment = HorizontalAlignment.Right,
+            AutowrapMode = TextServer.AutowrapMode.WordSmart,
         };
-        header.AddChild(_characterStatus);
+        page.AddChild(_characterStatus);
 
-        var workspace = new HBoxContainer { SizeFlagsVertical = SizeFlags.ExpandFill };
+        var workspace = new HSplitContainer
+        {
+            SizeFlagsHorizontal = SizeFlags.ExpandFill,
+            SizeFlagsVertical = SizeFlags.ExpandFill,
+        };
         workspace.AddThemeConstantOverride("separation", 12);
         page.AddChild(workspace);
         _characterModes = new TabContainer
@@ -429,7 +473,7 @@ public partial class P2Dashboard : VBoxContainer
             if (_passiveMode is not null && _characterModes.GetTabControl((int)index) == _passiveMode && _characterSidebar is not null)
                 _characterSidebar.CurrentTab = 2;
         };
-        var sidebar = new TabContainer { CustomMinimumSize = new Vector2(304, 0), SizeFlagsVertical = SizeFlags.ExpandFill };
+        var sidebar = new TabContainer { CustomMinimumSize = new Vector2(280, 0), SizeFlagsVertical = SizeFlags.ExpandFill };
         _characterSidebar = sidebar;
         workspace.AddChild(sidebar);
         var equipmentScroll = new ScrollContainer { Name = "装备", SizeFlagsVertical = SizeFlags.ExpandFill, SizeFlagsHorizontal = SizeFlags.ExpandFill };
@@ -815,7 +859,7 @@ public partial class P2Dashboard : VBoxContainer
     {
         _itemMenu = new PopupMenu();
         _itemMenu.IdPressed += OnContextAction;
-        AddChild(_itemMenu);
+        _characterWindow!.AddChild(_itemMenu);
         _confirmDialog = new ConfirmationDialog { Title = "确认操作", OkButtonText = "确认" };
         _confirmDialog.Confirmed += () =>
         {
@@ -824,7 +868,7 @@ public partial class P2Dashboard : VBoxContainer
             action?.Invoke();
         };
         _confirmDialog.Canceled += () => _pendingConfirmation = null;
-        AddChild(_confirmDialog);
+        _characterWindow.AddChild(_confirmDialog);
     }
 
     private P1ItemGrid BuildGrid(ItemContainerKind kind, int columns, int capacity, float cellSize)
@@ -1303,7 +1347,13 @@ public partial class P2Dashboard : VBoxContainer
 
     private void RefreshUnlockedPages(P1GameSession session)
     {
-        SetHidden(_mainTabs!, _characterPage!, !session.Journey.TutorialAllowsPage(P8JourneyStep.EquipItem));
+        bool characterLocked = !session.Journey.TutorialAllowsPage(P8JourneyStep.EquipItem);
+        if (_characterButton is not null) _characterButton.Disabled = characterLocked;
+        if (characterLocked)
+        {
+            _characterWindow?.Hide();
+            _characterWindowPairInitialized = false;
+        }
         SetHidden(_mainTabs!, _townPage!, !session.Journey.TutorialAllowsPage(P8JourneyStep.CraftItem, requireGateCompletion: true));
         SetHidden(_mainTabs!, _expeditionPage!, !session.Campaign.Completed);
         if (_characterModes is not null)
@@ -1368,17 +1418,26 @@ public partial class P2Dashboard : VBoxContainer
     private void Navigate(P8JourneyDestination destination)
     {
         if (_mainTabs is null) return;
-        Control main = destination switch
+        bool characterDestination = destination is P8JourneyDestination.Equipment or P8JourneyDestination.Skills or
+            P8JourneyDestination.Passives;
+        Control? main = destination switch
         {
             P8JourneyDestination.Overview => _overviewPage!,
             P8JourneyDestination.Story => _storyPage!,
             P8JourneyDestination.Expedition => _expeditionPage!,
             P8JourneyDestination.Town => _townPage!,
-            _ => _characterPage!,
+            _ => null,
         };
-        int mainIndex = _mainTabs.GetTabIdxFromControl(main);
-        if (mainIndex >= 0 && !_mainTabs.IsTabHidden(mainIndex)) _mainTabs.CurrentTab = mainIndex;
-        if (_characterModes is null) return;
+        if (main is not null)
+        {
+            int mainIndex = _mainTabs.GetTabIdxFromControl(main);
+            if (mainIndex >= 0 && !_mainTabs.IsTabHidden(mainIndex)) _mainTabs.CurrentTab = mainIndex;
+        }
+        if (_characterModes is null)
+        {
+            if (characterDestination) OpenCharacterWindow();
+            return;
+        }
         Control? mode = destination switch
         {
             P8JourneyDestination.Equipment => _equipmentMode,
@@ -1390,6 +1449,84 @@ public partial class P2Dashboard : VBoxContainer
         {
             int modeIndex = _characterModes.GetTabIdxFromControl(mode);
             if (modeIndex >= 0 && !_characterModes.IsTabHidden(modeIndex)) _characterModes.CurrentTab = modeIndex;
+        }
+        if (characterDestination) OpenCharacterWindow();
+    }
+
+    private void OpenCharacterWindow()
+    {
+        if (_session is null || _characterWindow is null || _characterButton?.Disabled == true) return;
+        _expandWindow?.Invoke();
+        if (!_characterWindow.Visible)
+        {
+            Rect2I bounds = PrepareCharacterWindowBounds();
+            _characterWindowPairInitialized = false;
+            _characterWindow.Popup(bounds);
+        }
+        SyncCharacterWindowPair();
+        Refresh();
+    }
+
+    private Rect2I PrepareCharacterWindowBounds()
+    {
+        Window mainWindow = GetWindow();
+        Rect2I usable = DisplayServer.ScreenGetUsableRect(mainWindow.CurrentScreen);
+        Vector2I mainSize = mainWindow.Size;
+        int availableWidth = usable.Size.X - mainSize.X - CharacterWindowGap;
+        int characterWidth = Math.Min(CharacterWindowPreferredSize.X,
+            Math.Max(CharacterWindowMinimumSize.X, availableWidth));
+        int characterHeight = Math.Min(CharacterWindowPreferredSize.Y,
+            Math.Max(CharacterWindowMinimumSize.Y, usable.Size.Y));
+        var characterSize = new Vector2I(characterWidth, characterHeight);
+
+        int groupWidth = mainSize.X + CharacterWindowGap + characterSize.X;
+        int groupHeight = Math.Max(mainSize.Y, characterSize.Y);
+        int maximumMainX = Math.Max(usable.Position.X, usable.End.X - groupWidth);
+        int maximumMainY = Math.Max(usable.Position.Y, usable.End.Y - groupHeight);
+        var fittedMainPosition = new Vector2I(
+            Math.Clamp(mainWindow.Position.X, usable.Position.X, maximumMainX),
+            Math.Clamp(mainWindow.Position.Y, usable.Position.Y, maximumMainY));
+        mainWindow.Position = fittedMainPosition;
+        return new Rect2I(
+            fittedMainPosition + new Vector2I(mainSize.X + CharacterWindowGap, 0),
+            characterSize);
+    }
+
+    private void SyncCharacterWindowPair()
+    {
+        if (_characterWindow?.Visible != true || !IsInsideTree() || _syncingCharacterWindowPair) return;
+        _syncingCharacterWindowPair = true;
+        try
+        {
+            Window mainWindow = GetWindow();
+            Vector2I mainPosition = mainWindow.Position;
+            Vector2I mainSize = mainWindow.Size;
+            Vector2I characterPosition = _characterWindow.Position;
+            Vector2I offset = new(mainSize.X + CharacterWindowGap, 0);
+
+            if (!_characterWindowPairInitialized)
+            {
+                _characterWindow.Position = mainPosition + offset;
+            }
+            else if (mainPosition != _pairedMainPosition || mainSize != _pairedMainSize)
+            {
+                _characterWindow.Position = mainPosition + offset;
+            }
+            else if (characterPosition != _pairedCharacterPosition)
+            {
+                mainWindow.Position = characterPosition - offset;
+                mainPosition = mainWindow.Position;
+                _characterWindow.Position = mainPosition + offset;
+            }
+
+            _pairedMainPosition = mainWindow.Position;
+            _pairedMainSize = mainWindow.Size;
+            _pairedCharacterPosition = _characterWindow.Position;
+            _characterWindowPairInitialized = true;
+        }
+        finally
+        {
+            _syncingCharacterWindowPair = false;
         }
     }
 
@@ -1454,7 +1591,7 @@ public partial class P2Dashboard : VBoxContainer
         bool overviewActive = _mainTabs?.GetTabControl(_mainTabs.CurrentTab) == _overviewPage;
         bool storyActive = _mainTabs?.GetTabControl(_mainTabs.CurrentTab) == _storyPage;
         bool expeditionActive = _mainTabs?.GetTabControl(_mainTabs.CurrentTab) == _expeditionPage;
-        bool characterActive = _mainTabs?.GetTabControl(_mainTabs.CurrentTab) == _characterPage;
+        bool characterActive = _characterWindow?.Visible == true;
         bool townActive = _mainTabs?.GetTabControl(_mainTabs.CurrentTab) == _townPage;
         _worldView!.Session = _session;
         if (overviewActive) _worldView.QueueRedraw();

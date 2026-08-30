@@ -44,6 +44,7 @@ public partial class P1PassiveTreeView : Control
         if (ResourceLoader.Exists(backdrop)) _backdrop = GD.Load<Texture2D>(backdrop);
         _nodes = P1PassiveTree.Nodes.OrderBy(node => node.StableId, StringComparer.Ordinal).ToArray();
         BuildLayoutAndIndex();
+        Resized += () => { ClampView(); QueueRedraw(); };
         QueueRedraw();
     }
 
@@ -154,10 +155,11 @@ public partial class P1PassiveTreeView : Control
         PassiveNodeDefinition start = P1PassiveTree.Get(P1PassiveTree.StartNode(_start));
         _zoom = .72f;
         _pan = -new Vector2(start.X, start.Y) * _zoom;
+        ClampView();
         QueueRedraw();
     }
 
-    public void FitAll() { _zoom = .27f; _pan = Vector2.Zero; QueueRedraw(); }
+    public void FitAll() { _zoom = .27f; _pan = Vector2.Zero; ClampView(); QueueRedraw(); }
 
     public void ClearPlan() { _planned.Clear(); QueueRedraw(); }
 
@@ -191,7 +193,7 @@ public partial class P1PassiveTreeView : Control
         if (_leftPressed)
         {
             if (!_dragging && motion.Position.DistanceTo(_pressPosition) >= DragThreshold) _dragging = true;
-            if (_dragging) { _pan += motion.Relative; QueueRedraw(); AcceptEvent(); return; }
+            if (_dragging) { _pan += motion.Relative; ClampView(); QueueRedraw(); AcceptEvent(); return; }
         }
         PassiveNodeDefinition? hovered = HitTest(motion.Position);
         string? next = hovered?.StableId;
@@ -243,7 +245,15 @@ public partial class P1PassiveTreeView : Control
     }
 
     private void ZoomAt(Vector2 position, float factor)
-    { Vector2 before = ToWorld(position); _zoom = Math.Clamp(_zoom * factor, .18f, 1.5f); _pan = position - Size / 2 - before * _zoom; QueueRedraw(); }
+    { Vector2 before = ToWorld(position); _zoom = Math.Clamp(_zoom * factor, .18f, 1.5f); _pan = position - Size / 2 - before * _zoom; ClampView(); QueueRedraw(); }
+
+    private void ClampView()
+    {
+        float half = P1PassiveTree.LayoutExtent * _zoom;
+        float limitX = Math.Max(0, half - Size.X / 2);
+        float limitY = Math.Max(0, half - Size.Y / 2);
+        _pan = new Vector2(Math.Clamp(_pan.X, -limitX, limitX), Math.Clamp(_pan.Y, -limitY, limitY));
+    }
 
     private void SelectNode(string? stableId)
     { SelectedStableId = stableId; if (stableId is not null) NodeSelected?.Invoke(stableId); QueueRedraw(); }

@@ -32,6 +32,20 @@ public static class P2ThemeFactory
         theme.SetStylebox("panel", "TabContainer", accentPanel);
         theme.SetStylebox("panel", "PopupPanel", skin is null ? Frame("10151c", "c09a55", 2) : PixelFrame(skin, 7));
         theme.SetStylebox("panel", "TooltipPanel", skin is null ? Frame("10151c", "c09a55", 2) : PixelFrame(skin, 7));
+        theme.SetStylebox("panel", "PopupMenu", skin is null ? Frame("10151c", "c09a55", 2) : PixelFrame(skin, 7));
+        theme.SetStylebox("hover", "PopupMenu", buttonHover);
+        theme.SetStylebox("separator", "PopupMenu", new StyleBoxLine
+        {
+            Color = new Color("4d5662"),
+            Thickness = 1,
+            GrowBegin = -4,
+            GrowEnd = -4,
+        });
+        theme.SetColor("font_color", "PopupMenu", new Color("ddd5c7"));
+        theme.SetColor("font_hover_color", "PopupMenu", new Color("fff0c6"));
+        theme.SetColor("font_disabled_color", "PopupMenu", new Color("736f69"));
+        theme.SetConstant("item_start_padding", "PopupMenu", 8);
+        theme.SetConstant("item_end_padding", "PopupMenu", 8);
         theme.SetStylebox("tab_selected", "TabBar", skin is null ? Frame("202630", "c09a55", 2) : PixelFrame(skin, 6));
         theme.SetStylebox("tab_unselected", "TabBar", buttonNormal);
         theme.SetStylebox("tab_hovered", "TabBar", buttonHover);

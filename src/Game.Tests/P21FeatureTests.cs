@@ -1,5 +1,6 @@
 using GameForWork.Core.P14;
 using GameForWork.Core.P21;
+using GameForWork.Core.P24;
 
 namespace GameForWork.Tests;
 
@@ -42,5 +43,29 @@ public sealed class P21FeatureTests
                      .Concat([P14Bosses.Breakthrough.StableId])
                      .Concat(P14Bosses.CitadelStages.Select(item => item.StableId)))
             Assert.InRange(P21ArtContract.BossRig(boss), 0, P21ArtContract.BossRigCount - 1);
+    }
+
+    [Fact]
+    public void P24ItemBasesUseDeterministicLegacyAtlasFallbacks()
+    {
+        foreach (string stableId in P24ItemCatalog.Bases.Select(item => item.StableId))
+        {
+            int first = P21ArtContract.ItemBaseIndex(stableId);
+            Assert.InRange(first, 0, P21ArtContract.ItemBaseIds.Count - 1);
+            Assert.Equal(first, P21ArtContract.ItemBaseIndex(stableId));
+        }
+    }
+
+    [Fact]
+    public void P24SkillStonesUseDeterministicLegacyAtlasFallbacks()
+    {
+        IEnumerable<string> stones = P24SkillCatalog.Active.Select(item => item.Combat.StoneId)
+            .Concat(P24SkillCatalog.Supports.Select(item => item.StoneId));
+        foreach (string stableId in stones)
+        {
+            int first = P21ArtContract.SkillStoneIndex(stableId);
+            Assert.InRange(first, 0, P21ArtContract.SkillStoneIds.Count - 1);
+            Assert.Equal(first, P21ArtContract.SkillStoneIndex(stableId));
+        }
     }
 }

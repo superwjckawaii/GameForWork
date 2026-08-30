@@ -114,6 +114,7 @@ public partial class P18AscendancyTreeView : Control
         MouseFilter = MouseFilterEnum.Stop;
         const string backdrops = "res://assets/p21/trees/p21-ascendancy-backdrops.png";
         if (ResourceLoader.Exists(backdrops)) _backdrops = GD.Load<Texture2D>(backdrops);
+        Resized += () => { ClampView(); QueueRedraw(); };
     }
 
     public override void _Draw()
@@ -184,7 +185,7 @@ public partial class P18AscendancyTreeView : Control
         else if (inputEvent is InputEventMouseMotion motion && motion.ButtonMask.HasFlag(MouseButtonMask.Left))
         {
             if (!_dragging && motion.Position.DistanceTo(_press) > 6) _dragging = true;
-            if (_dragging) { _pan += motion.Relative; QueueRedraw(); AcceptEvent(); }
+            if (_dragging) { _pan += motion.Relative; ClampView(); QueueRedraw(); AcceptEvent(); }
         }
         else if (inputEvent is InputEventMouseMotion hover)
         {
@@ -198,8 +199,18 @@ public partial class P18AscendancyTreeView : Control
             Vector2 world = (wheel.Position - origin) / _zoom;
             _zoom = Math.Clamp(_zoom * (wheel.ButtonIndex == MouseButton.WheelUp ? 1.12f : .89f), .5f, 1.6f);
             _pan = wheel.Position - Size / 2 - world * _zoom;
+            ClampView();
             QueueRedraw(); AcceptEvent();
         }
+    }
+
+    private void ClampView()
+    {
+        const float extent = 240f;
+        float half = extent * _zoom;
+        float limitX = Math.Max(0, half - Size.X / 2);
+        float limitY = Math.Max(0, half - Size.Y / 2);
+        _pan = new Vector2(Math.Clamp(_pan.X, -limitX, limitX), Math.Clamp(_pan.Y, -limitY, limitY));
     }
 
     private P18AscendancyNode? Hit(Vector2 position)

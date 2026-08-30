@@ -87,11 +87,23 @@ public static class P21ArtContract
         return StableIndex(stableId, BossRigCount);
     }
 
-    public static int ItemBaseIndex(string stableId) => RequiredIndex(ItemBaseIndices, stableId, "item base");
+    public static int ItemBaseIndex(string stableId)
+    {
+        if (ItemBaseIndices.TryGetValue(stableId, out int index)) return index;
+        if (stableId.StartsWith("p24.base.", StringComparison.Ordinal))
+            return StableIndex(stableId, ItemBaseIds.Count);
+        throw new KeyNotFoundException($"Unknown P21 item base: {stableId}");
+    }
 
     public static int UniqueItemIndex(string stableId) => RequiredIndex(UniqueItemIndices, stableId, "unique item");
 
-    public static int SkillStoneIndex(string stableId) => RequiredIndex(SkillStoneIndices, stableId, "skill stone");
+    public static int SkillStoneIndex(string stableId)
+    {
+        if (SkillStoneIndices.TryGetValue(stableId, out int index)) return index;
+        if (stableId.StartsWith("p24.skill_stone.", StringComparison.Ordinal))
+            return StableIndex(stableId, SkillStoneIds.Count);
+        throw new KeyNotFoundException($"Unknown P21 skill stone: {stableId}");
+    }
 
     private static IReadOnlyDictionary<string, int> EnemyIndices =>
         _enemyIndices ??= Indexed(EnemyIds);

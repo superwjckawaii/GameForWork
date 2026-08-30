@@ -530,6 +530,7 @@ public partial class Main : Node
     private void EnsureStandardWindow()
     {
         if (_windowController?.IsMini == true) _windowController.ToggleMode();
+        if (_windowController?.IsLarge == true) _windowController.ToggleLarge();
         UpdateWindowModeInterface();
     }
 
