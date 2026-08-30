@@ -167,17 +167,22 @@ foreach ($family in @('sword','axe','mace')) {
 }
 
 $p24Groups = @(
-    [pscustomobject]@{ Key='bow'; Count=6; Master='ranged'; Column=0 },
-    [pscustomobject]@{ Key='dagger'; Count=6; Master='ranged'; Column=1 },
-    [pscustomobject]@{ Key='wand'; Count=6; Master='ranged'; Column=2 },
-    [pscustomobject]@{ Key='quiver'; Count=5; Master='ranged'; Column=3 },
-    [pscustomobject]@{ Key='focus'; Count=5; Master='ranged'; Column=4 },
-    [pscustomobject]@{ Key='summoning_focus'; Count=5; Master='class'; Column=0 },
-    [pscustomobject]@{ Key='unarmed_wrap'; Count=5; Master='class'; Column=1 },
-    [pscustomobject]@{ Key='beast_talisman'; Count=4; Master='class'; Column=2 },
-    [pscustomobject]@{ Key='runeblade'; Count=4; Master='class'; Column=3 },
-    [pscustomobject]@{ Key='construct_idol'; Count=4; Master='class'; Column=4 }
+    [pscustomobject]@{ Key='bow'; Count=6; Master='ranged'; Column=0; Rows=@(0,1,2,3,4,5) },
+    [pscustomobject]@{ Key='dagger'; Count=6; Master='ranged'; Column=1; Rows=@(0,1,2,3,4,5) },
+    [pscustomobject]@{ Key='wand'; Count=6; Master='ranged'; Column=2; Rows=@(0,1,2,3,4,5) },
+    [pscustomobject]@{ Key='quiver'; Count=5; Master='ranged'; Column=3; Rows=@(0,1,2,3,5) },
+    [pscustomobject]@{ Key='focus'; Count=5; Master='ranged'; Column=4; Rows=@(0,1,2,3,5) },
+    [pscustomobject]@{ Key='summoning_focus'; Count=5; Master='class'; Column=0; Rows=@(0,1,2,3,5) },
+    [pscustomobject]@{ Key='unarmed_wrap'; Count=5; Master='class'; Column=1; Rows=@(0,1,2,3,5) },
+    [pscustomobject]@{ Key='beast_talisman'; Count=4; Master='class'; Column=2; Rows=@(0,2,4,5) },
+    [pscustomobject]@{ Key='runeblade'; Count=4; Master='class'; Column=3; Rows=@(0,2,4,5) },
+    [pscustomobject]@{ Key='construct_idol'; Count=4; Master='class'; Column=4; Rows=@(0,2,4,5) }
 )
+foreach ($group in $p24Groups) {
+    if ($group.Rows.Count -ne $group.Count -or $group.Rows[0] -ne 0 -or $group.Rows[-1] -ne 5) {
+        throw "P25 special-art progression for $($group.Key) must cover its catalog count and highest source tier."
+    }
+}
 $p24 = foreach ($group in $p24Groups) { for ($variant = 1; $variant -le $group.Count; $variant++) {
     [pscustomobject]@{ StableId="p24.base.$($group.Key).$variant"; DisplayName=$group.Key; Category='P24';
         RequiredLevel=1+($variant-1)*15; Tags=@($group.Key); Group=$group; Variant=$variant }
@@ -201,7 +206,8 @@ try {
         $item = $all[$index]
         if ($item.StableId -like 'p24.base.*') {
             $source = $sources[$item.Group.Master]
-            $sourceCell = Get-CellRectangle $source $item.Group.Column ($item.Variant - 1) 5 6
+            $sourceRow = $item.Group.Rows[$item.Variant - 1]
+            $sourceCell = Get-CellRectangle $source $item.Group.Column $sourceRow 5 6
             Draw-FittedIcon $graphics $source $sourceCell $index $item.Category @($item.Tags)
         } elseif ($weaponFamilies.ContainsKey($item.StableId)) {
             $family = $weaponFamilies[$item.StableId]

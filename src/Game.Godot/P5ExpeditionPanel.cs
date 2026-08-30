@@ -182,12 +182,12 @@ public partial class P5ExpeditionPanel : VBoxContainer
             P1MapItem formal = source.EnsureFormal(session.Seed ^ (ulong)index);
             if (!ReferenceEquals(source, formal)) session.World.MapInventory[index] = formal;
         }
-        (P1MapItem Map, int Index)[] visibleMaps = session.World.MapInventory
+        var mapGroups = session.World.MapInventory
             .Select((map, index) => (Map: map, Index: index))
-            .OrderByDescending(entry => entry.Map.Tier)
-            .ThenBy(entry => entry.Map.AreaId, StringComparer.Ordinal)
-            .ThenBy(entry => entry.Map.AcquiredSequence)
-            .Take(200).ToArray();
+            .GroupBy(entry => (entry.Map.Tier, entry.Map.AreaId))
+            .OrderByDescending(group => group.Key.Tier)
+            .ThenBy(group => group.Key.AreaId, StringComparer.Ordinal)
+            .ToArray();
         _resources.Text =
             $"地图 {session.World.MapInventory.Count}　深渊监守者碎片 {session.World.Expedition.AbyssWardenFragments}/{P5ExpeditionDirector.FragmentsPerTicket}　" +
             $"Boss 门票 {session.World.Expedition.AbyssWardenTickets}";
@@ -199,31 +199,47 @@ public partial class P5ExpeditionPanel : VBoxContainer
             _mapSignature = mapSignature;
             Clear(_mapInventory);
             if (_selectedMapIndex >= session.World.MapInventory.Count) _selectedMapIndex = session.World.MapInventory.Count - 1;
-            int previousTier = -1;
-            string previousArea = string.Empty;
-            for (int index = 0; index < visibleMaps.Length; index++)
+            _mapInventory.AddChild(new Label
             {
-                int mapIndex = visibleMaps[index].Index;
-                P1MapItem map = visibleMaps[index].Map;
+                Text = "地图仓按阶级与区域汇总；点击一组可预览并操作其中价值最高的一张。",
+                AutowrapMode = TextServer.AutowrapMode.WordSmart,
+                Modulate = new Color("b7c1d4"),
+            });
+            foreach (var group in mapGroups)
+            {
+                var entries = group.ToArray();
+                var representative = entries
+                    .OrderByDescending(entry => entry.Map.IsCorrupted)
+                    .ThenByDescending(entry => entry.Map.Rarity)
+                    .ThenByDescending(entry => entry.Map.ItemQuantityBonusBasisPoints)
+                    .ThenByDescending(entry => entry.Map.MonsterQuantityBasisPoints)
+                    .ThenByDescending(entry => entry.Map.Quality)
+                    .ThenBy(entry => entry.Map.AcquiredSequence)
+                    .First();
+                int mapIndex = representative.Index;
+                P1MapItem map = representative.Map;
                 P12MapArea area = ResolveArea(map);
-                if (map.Tier != previousTier || !string.Equals(area.StableId, previousArea, StringComparison.Ordinal))
-                {
-                    _mapInventory.AddChild(new Label { Text = $"T{map.Tier} · {area.DisplayName}" });
-                    previousTier = map.Tier; previousArea = area.StableId;
-                }
+                int rare = entries.Count(entry => entry.Map.Rarity == P12MapRarity.Rare);
+                int magic = entries.Count(entry => entry.Map.Rarity == P12MapRarity.Magic);
+                int corrupted = entries.Count(entry => entry.Map.IsCorrupted);
+                int locked = entries.Count(entry => entry.Map.IsLocked);
+                bool selected = _selectedMapIndex >= 0 && _selectedMapIndex < session.World.MapInventory.Count &&
+                    session.World.MapInventory[_selectedMapIndex].Tier == group.Key.Tier &&
+                    string.Equals(session.World.MapInventory[_selectedMapIndex].AreaId, group.Key.AreaId, StringComparison.Ordinal);
                 var button = new Button
                 {
-                    Text = $"{RarityMark(map.Rarity)} T{map.Tier} · Lv{map.MonsterLevel} {area.DisplayName}　Q{map.Quality}" + (map.IsCorrupted ? "　腐化" : string.Empty),
+                    Text = $"T{map.Tier} · {area.DisplayName}　×{entries.Length}　稀有 {rare} / 魔法 {magic}" +
+                           (corrupted > 0 ? $"　腐化 {corrupted}" : string.Empty) +
+                           (locked > 0 ? $"　锁定 {locked}" : string.Empty),
                     Alignment = HorizontalAlignment.Left,
-                    TooltipText = DescribeMap(map),
-                    ButtonPressed = mapIndex == _selectedMapIndex,
+                    TooltipText = $"该组共 {entries.Length} 张；最高物品数量 +{entries.Max(entry => entry.Map.ItemQuantityBonusBasisPoints) / 100.0:0}%、" +
+                                  $"最高怪物数量 +{entries.Max(entry => entry.Map.MonsterQuantityBasisPoints) / 100.0:0}%。\n点击后选中组内价值最高的一张进行单图操作。",
+                    ButtonPressed = selected,
                     ToggleMode = true,
                 };
                 button.Pressed += () => { _selectedMapIndex = mapIndex; _mapSignature = string.Empty; RefreshState(); };
                 _mapInventory.AddChild(button);
             }
-            if (session.World.MapInventory.Count > visibleMaps.Length)
-                _mapInventory.AddChild(new Label { Text = $"另有 {session.World.MapInventory.Count - visibleMaps.Length} 张地图；使用筛选器批量处理。" });
             if (session.World.MapInventory.Count == 0) _mapInventory.AddChild(new Label { Text = "地图仓库为空" });
             _mapInventory.AddChild(new HSeparator());
             _mapInventory.AddChild(new Label
@@ -514,9 +530,9 @@ public partial class P5ExpeditionPanel : VBoxContainer
     {
         if (_mapDetails is null) return;
         if (_selectedMapIndex < 0 || _selectedMapIndex >= session.World.MapInventory.Count)
-        { _mapDetails.Text = "选择路印后可查看词缀、候选收益路线并加工。"; return; }
+        { _mapDetails.Text = "选择一个地图分组后，可预览该组价值最高的一张并进行单图加工。批量打造、出售和远征仍统一使用筛选器。"; return; }
         P1MapItem map = session.World.MapInventory[_selectedMapIndex];
-        _mapDetails.Text = DescribeMap(map);
+        _mapDetails.Text = "当前组代表地图：\n" + DescribeMap(map);
         var lockButton = new Button { Text = map.IsLocked ? "解除地图锁定" : "锁定地图",
             TooltipText = "锁定地图不会被批量打造、出售、满仓自动出售或自动远征消耗。" };
         lockButton.Pressed += () =>

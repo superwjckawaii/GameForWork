@@ -299,7 +299,7 @@ public partial class P2Dashboard : VBoxContainer
         _expeditionPage = BuildExpeditionPage();
         _mainTabs.AddChild(_expeditionPage);
         _characterPage = BuildCharacterItemsPage();
-        _characterPage.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
+        _characterPage.SizeFlagsVertical = SizeFlags.ExpandFill;
         _characterWindow = new Window
         {
             Title = "角色与物品",
@@ -310,13 +310,33 @@ public partial class P2Dashboard : VBoxContainer
             Transient = true,
             Exclusive = false,
             WrapControls = false,
+            Borderless = true,
         };
-        _characterWindow.CloseRequested += () =>
+        void CloseCharacterWindow()
         {
             _characterWindow.Hide();
             _characterWindowPairInitialized = false;
-        };
-        _characterWindow.AddChild(_characterPage);
+        }
+        _characterWindow.CloseRequested += CloseCharacterWindow;
+        var characterFrame = new PanelContainer();
+        characterFrame.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
+        characterFrame.AddThemeStyleboxOverride("panel", new StyleBoxFlat
+        {
+            BgColor = new Color("0e1118"),
+            BorderColor = new Color("8f7043"),
+            BorderWidthLeft = 1,
+            BorderWidthTop = 1,
+            BorderWidthRight = 1,
+            BorderWidthBottom = 1,
+        });
+        var characterContent = new VBoxContainer();
+        characterContent.AddThemeConstantOverride("separation", 0);
+        characterFrame.AddChild(characterContent);
+        var characterTitleBar = new P3SecondaryTitleBar();
+        characterTitleBar.Initialize(_characterWindow, "角色与物品", CloseCharacterWindow);
+        characterContent.AddChild(characterTitleBar);
+        characterContent.AddChild(_characterPage);
+        _characterWindow.AddChild(characterFrame);
         AddChild(_characterWindow);
         _townPage = BuildTownPage();
         _mainTabs.AddChild(_townPage);
