@@ -408,6 +408,7 @@ public sealed class P1GameSession
 
         int skillStoneRewardsBefore = World.Economy.SkillStones;
         Dictionary<ExpeditionTeamKind, int> completedBefore = World.Teams.ToDictionary(team => team.Kind, team => team.MapsCompleted);
+        Dictionary<ExpeditionTeamKind, int> failedBefore = World.Teams.ToDictionary(team => team.Kind, team => team.MapsFailed);
         P1OfflineResult result = _simulator.Simulate(
             World,
             simulatedMilliseconds,
@@ -419,6 +420,9 @@ public sealed class P1GameSession
         foreach (P1TeamExpeditionState team in World.Teams)
         {
             int completed = team.MapsCompleted - completedBefore[team.Kind];
+            int failed = team.MapsFailed - failedBefore[team.Kind];
+            if (failed > 0 && team.LastRun is { Succeeded: false, Route: MapRoute.Warfront } failedRun)
+                Endgame.RecordWarfrontAttempt(failedRun.Map.Tier, false);
             if (completed <= 0 || team.LastRun is not { Succeeded: true } run) continue;
             bool special = P10EndgameState.IsCitadel(run.Map) || P10EndgameState.IsCitadelPractice(run.Map) ||
                            P10EndgameState.IsBreakthroughTrial(run.Map);
@@ -437,6 +441,8 @@ public sealed class P1GameSession
                 }
             }
         }
+        EnsureWarfrontDiscoveryMap();
+        SynchronizeWarfrontRouteCandidates();
         int ashes = World.Economy.TakeMemoryAshes();
         if (ashes > 0)
         {
@@ -460,6 +466,43 @@ public sealed class P1GameSession
             RefreshHeroTeamBuild();
         if (result.TotalMapsCompleted > 0) RefreshMercenaryPartyBuild();
         return result;
+    }
+
+    private void EnsureWarfrontDiscoveryMap()
+    {
+        if (Endgame.WarfrontGuaranteeIssued || !Endgame.CompletedTiers.Any(tier => tier >= 5)) return;
+        int index = World.MapInventory.FindIndex(map => map.Tier >= 6);
+        if (index < 0)
+        {
+            P1MapItem guaranteed = new P1MapItem($"p27-warfront-discovery-{SimulationSequence:000000}", 6)
+                .EnsureFormal(Seed ^ (ulong)SimulationSequence ^ 0x703237776172UL);
+            World.AddMap(guaranteed);
+            index = World.MapInventory.FindIndex(map => map.InstanceId == guaranteed.InstanceId);
+        }
+        if (index >= 0)
+        {
+            P1MapItem map = World.MapInventory[index];
+            MapRoute[] routes = map.EffectiveRouteCandidates.Append(MapRoute.Warfront).Distinct().TakeLast(3).ToArray();
+            World.MapInventory[index] = map with { RouteCandidates = routes };
+            Endgame.MarkWarfrontGuaranteeIssued();
+        }
+    }
+
+    private void SynchronizeWarfrontRouteCandidates()
+    {
+        if (!Endgame.WarfrontDiscovered) return;
+        for (int index = 0; index < World.MapInventory.Count; index++)
+        {
+            P1MapItem map = World.MapInventory[index];
+            if (map.Tier < 6 || map.EffectiveRouteCandidates.Contains(MapRoute.Warfront)) continue;
+            byte[] hash = System.Security.Cryptography.SHA256.HashData(
+                System.Text.Encoding.UTF8.GetBytes($"{Seed}|{map.InstanceId}|p27-warfront"));
+            if (BitConverter.ToUInt32(hash, 0) % 10 != 0) continue;
+            World.MapInventory[index] = map with
+            {
+                RouteCandidates = map.EffectiveRouteCandidates.Append(MapRoute.Warfront).Distinct().TakeLast(3).ToArray(),
+            };
+        }
     }
 
     private void AdvanceTownSystems(long simulatedMilliseconds)
@@ -1138,7 +1181,8 @@ public sealed class P1GameSession
         RefreshMercenaryPartyBuild();
     }
 
-    public bool TryAllocateAtlasPassive(string stableId) => Endgame.TryPurchaseAtlas(stableId, World.Economy);
+    public bool TryAllocateAtlasPassive(string stableId) => Endgame.TryPurchaseAtlas(
+        stableId, World.Economy, Endgame.WarfrontDiscovered);
 
     public bool TrySelectMastery(string stableId, int option)
     {

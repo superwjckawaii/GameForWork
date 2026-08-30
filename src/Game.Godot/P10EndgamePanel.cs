@@ -34,7 +34,7 @@ public partial class P10AtlasTreeView : Control
             DrawRect(new Rect2(x - 48 * _zoom, origin.Y - 610 * _zoom, 96 * _zoom, 1_220 * _zoom),
                 lane % 2 == 0 ? new Color("18202b80") : new Color("11192380"), true);
         }
-        foreach (P10AtlasNode node in P10AtlasTree.Nodes.Where(node => node.Theme != P10AtlasTheme.Warfront))
+        foreach (P10AtlasNode node in VisibleNodes())
         {
             Vector2 point = NodePosition(node, origin);
             bool allocated = _session?.Invoke().Endgame.AtlasPassives.Contains(node.StableId) == true;
@@ -97,7 +97,10 @@ public partial class P10AtlasTreeView : Control
         _pan = new Vector2(Math.Clamp(_pan.X, -limitX, limitX), Math.Clamp(_pan.Y, -limitY, limitY));
     }
 
-    private P10AtlasNode? Hit(Vector2 screen) => P10AtlasTree.Nodes.Where(node => node.Theme != P10AtlasTheme.Warfront)
+    private IEnumerable<P10AtlasNode> VisibleNodes() => P10AtlasTree.Nodes.Where(node =>
+        node.Theme != P10AtlasTheme.Warfront || _session?.Invoke().Endgame.WarfrontDiscovered == true);
+
+    private P10AtlasNode? Hit(Vector2 screen) => VisibleNodes()
         .Select(node => (node, distance: NodePosition(node, Size / 2 + _pan).DistanceTo(screen)))
         .Where(entry => entry.distance <= (entry.node.Notable ? 13 : 9) * Math.Clamp(_zoom * 2.4f, .55f, 1.3f))
         .OrderBy(entry => entry.distance).Select(entry => entry.node).FirstOrDefault();
@@ -179,11 +182,12 @@ public partial class P10EndgamePanel : Control
     {
         if (_session is null) return;
         P10EndgameState state = _session().Endgame;
-        string signature = $"{state.AtlasPassives.Count}:{state.LifeForce}:{state.RedFavor}:{state.BlueFavor}:{state.CitadelFragments}:{state.CitadelTickets}:{state.BreakthroughPoints}:{state.SelectedAscendancy}:{state.AscendancyPassives.Count}:{state.FinalBreakthroughCompleted}:{state.CitadelVictories}:{state.MythicReforgeMaterials}:{_session().World.Economy.Gold}";
+        string signature = $"{state.AtlasPassives.Count}:{state.LifeForce}:{state.RedFavor}:{state.BlueFavor}:{state.WarfrontDiscovered}:{state.WarfrontMerit}:{state.WarfrontReputation}:{state.CitadelFragments}:{state.CitadelTickets}:{state.BreakthroughPoints}:{state.SelectedAscendancy}:{state.AscendancyPassives.Count}:{state.FinalBreakthroughCompleted}:{state.CitadelVictories}:{state.MythicReforgeMaterials}:{_session().World.Economy.Gold}";
         if (!force && signature == _signature) return;
         _signature = signature;
         _summary!.Text = $"T1–T16 常规异界 · T17–T20 {(state.FinalBreakthroughCompleted ? "已开放" : "未开放")} · 首次完成 {state.CompletedTiers.Count}/20 · 异界天赋 {state.AtlasPassives.Count}/120 · 金币 {_session().World.Economy.Gold:N0} · " +
-            $"命能 {state.LifeForce} · 赤誓 {state.RedFavor} · 苍誓 {state.BlueFavor}\n" +
+            $"命能 {state.LifeForce} · 赤誓 {state.RedFavor} · 苍誓 {state.BlueFavor} · " +
+            $"亡旗 {(state.WarfrontDiscovered ? $"战功 {state.WarfrontMerit} / 声望 {state.WarfrontReputation}" : "未发现")}\n" +
             $"天垒碎片 {state.CitadelFragments}/{P10EndgameState.CitadelFragmentsPerTicket} · 门票 {state.CitadelTickets} · " +
             $"升华 {P18AscendancyCatalog.DisplayName(state.SelectedAscendancy)} · 升华点 {state.AscendancyPassives.Count}/{state.BreakthroughPoints} · 天垒胜利 {state.CitadelVictories} · 神话重铸 {state.MythicReforgeMaterials}";
         if (_breakthrough is not null)

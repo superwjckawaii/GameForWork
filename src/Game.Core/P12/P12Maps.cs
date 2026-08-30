@@ -158,8 +158,9 @@ public static class P12MapCatalog
 
 public static class P12MapRules
 {
+    private static readonly MapRoute[] InitialRoutes = [MapRoute.Safe, MapRoute.Abyss, MapRoute.LifeGarden];
     private static readonly IReadOnlyDictionary<int, MapRoute[]> CanonicalRouteSets = Enumerable.Range(1, 7)
-        .ToDictionary(mask => mask, mask => Enum.GetValues<MapRoute>().Where(route => (mask & (1 << (int)route)) != 0).ToArray());
+        .ToDictionary(mask => mask, mask => InitialRoutes.Where(route => (mask & (1 << (int)route)) != 0).ToArray());
     public static P1MapItem EnsureFormal(P1MapItem map, ulong seed)
     {
         ArgumentNullException.ThrowIfNull(map);
@@ -168,7 +169,7 @@ public static class P12MapRules
         ulong stableSeed = StableSeed(seed, map.InstanceId, map.Tier);
         var random = new Pcg32(stableSeed);
         P12MapArea area = P12MapCatalog.Areas[(int)(random.NextUInt() % (uint)P12MapCatalog.Areas.Count)];
-        MapRoute[] routes = Enum.GetValues<MapRoute>();
+        MapRoute[] routes = InitialRoutes;
         int candidateCount = 1 + (int)(random.NextUInt() % 3);
         MapRoute[] rolled = routes.OrderBy(_ => random.NextUInt()).Take(candidateCount).ToArray();
         int mask = rolled.Aggregate(0, (value, route) => value | 1 << (int)route);

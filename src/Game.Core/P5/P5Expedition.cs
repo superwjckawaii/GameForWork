@@ -11,6 +11,7 @@ public enum P5ExpeditionTarget
     HighestTierMaps,
     AbyssWarden,
     AbyssWardenPractice,
+    WarfrontMaps,
 }
 
 public enum P5DispatchMode
@@ -138,6 +139,7 @@ public sealed class P5ExpeditionDirector
                 P5ExpeditionTarget.SafeMaps => MapRoute.Safe,
                 P5ExpeditionTarget.LifeGardenMaps => MapRoute.LifeGarden,
                 P5ExpeditionTarget.AbyssMaps => MapRoute.Abyss,
+                P5ExpeditionTarget.WarfrontMaps => MapRoute.Warfront,
                 _ => null,
             };
             route = requestedRoute ?? map.SelectedRoute ??
@@ -288,6 +290,7 @@ public sealed class P5ExpeditionDirector
             P5ExpeditionTarget.SafeMaps => MapRoute.Safe,
             P5ExpeditionTarget.AbyssMaps => MapRoute.Abyss,
             P5ExpeditionTarget.LifeGardenMaps => MapRoute.LifeGarden,
+            P5ExpeditionTarget.WarfrontMaps => MapRoute.Warfront,
             _ => null,
         };
         return requested is not null

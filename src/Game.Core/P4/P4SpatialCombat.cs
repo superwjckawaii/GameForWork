@@ -10,6 +10,7 @@ using GameForWork.Core.P14;
 using GameForWork.Core.P17;
 using GameForWork.Core.P18;
 using GameForWork.Core.P23;
+using GameForWork.Core.P27;
 
 namespace GameForWork.Core.P4;
 
@@ -166,7 +167,8 @@ public sealed record P4NodeCombatRequest(
     int EnemyAreaBasisPoints = 10_000,
     int EnemyAreaDamageBasisPoints = 10_000,
     int BossCount = 1,
-    int AdditionalRareEnemies = 0);
+    int AdditionalRareEnemies = 0,
+    EnemyFamily? EncounterFamily = null);
 
 public sealed record P4NodeCombatResult(
     P1BattleOutcome Outcome,
@@ -649,7 +651,10 @@ public sealed class P4SpatialCombatRunner
     private static List<P4EnemyUnit> CreateEnemies(P4NodeCombatRequest request, Pcg32 random)
     {
         var result = new List<P4EnemyUnit>(request.EnemyCount);
-        IReadOnlyList<EnemyProfile> pool = P1Enemies.ForMonsterLevel(request.AreaLevel);
+        IReadOnlyList<EnemyProfile> pool = P1Enemies.ForEncounter(request.AreaLevel, request.EncounterFamily);
+        // P27 intentionally permits extreme packs: one repeated monster, or an entire pack
+        // drawn from a single combat role. It does not synthesize a front/back/support template.
+        IReadOnlyList<EnemyProfile> packPool = P27MonsterCatalog.SelectPackPool(pool, random);
         int magicCount = request.AreaLevel >= 8 && request.EnemyCount >= 6 ? Math.Clamp(request.EnemyCount / 4, 2, 6) : 0;
         for (int index = 0; index < request.EnemyCount; index++)
         {
@@ -664,7 +669,7 @@ public sealed class P4SpatialCombatRunner
             bool elite = rarity is EnemyRarity.Magic or EnemyRarity.Rare;
             EnemyProfile profile = boss
                 ? string.IsNullOrEmpty(request.BossStableId) ? P1Enemies.AbyssWarden : P14Bosses.CombatProfile(request.BossStableId)
-                : pool[(int)(random.NextUInt() % (uint)pool.Count)];
+                : packPool[(int)(random.NextUInt() % (uint)packPool.Count)];
             IReadOnlyList<EliteAffix> affixes = EnemyRules.RollAffixes(random, rarity);
             ScaledEnemy scaled = EnemyRules.Scale(profile, request.AreaLevel, affixes, request.AbyssRoute, rarity);
             int lifeScale = boss ? 10_000 : rarity == EnemyRarity.Rare ? 7_000 : rarity == EnemyRarity.Magic ? 5_000 : 4_500;
@@ -956,6 +961,7 @@ public sealed class P4SpatialCombatRunner
     {
         foreach (P4EnemyUnit enemy in enemies.Where(enemy => enemy.Life > 0))
         {
+            EnemySkillProfile activeSkill = enemy.Profile.EffectiveSkills[enemy.ActionSequence % enemy.Profile.EffectiveSkills.Count];
             P14BossDefinition? bossDefinition = enemy.Boss ? P14Bosses.TryGet(enemy.Profile.StableId) : null;
             if (bossDefinition is not null)
             {
@@ -975,8 +981,8 @@ public sealed class P4SpatialCombatRunner
                         enemy.Position, heroPosition, $"{skill.DisplayName}|{skill.Telegraph}|{skill.DamageType}|{skill.Avoidable}"));
                 }
             }
-            int range = enemy.Boss ? EnemyRange(enemy.Role) : enemy.Profile.AttackRangeRaw;
-            if (enemy.Profile.Skill is EnemySkillKind.HeavySlam or EnemySkillKind.GroundHazard or EnemySkillKind.CorpseBurst)
+            int range = enemy.Boss ? EnemyRange(enemy.Role) : Math.Max(enemy.Profile.AttackRangeRaw, activeSkill.RangeRaw);
+            if (activeSkill.Area)
                 range = checked((int)((long)range * request.EnemyAreaBasisPoints / 10_000));
             long distance = P4Point.DistanceSquared(enemy.Position, heroPosition);
             if (distance > (long)range * range ||
@@ -1010,6 +1016,24 @@ public sealed class P4SpatialCombatRunner
             }
 
             int attacksPerSecond = checked((int)((long)enemy.Scaled.AttacksPerSecondMilli * request.EnemySpeedBasisPoints / 10_000));
+            if (activeSkill.Kind is EnemySkillKind.HealingBloom or EnemySkillKind.RepairPulse)
+            {
+                int restored = 0;
+                foreach (P4EnemyUnit ally in enemies.Where(unit => unit.Life > 0 &&
+                             InRange(enemy.Position, unit.Position, Math.Max(3_000, activeSkill.RangeRaw))))
+                {
+                    int before = ally.Life;
+                    ally.Life = Math.Min(ally.MaximumLife, ally.Life + Math.Max(1, ally.MaximumLife * 4 / 100));
+                    restored += ally.Life - before;
+                }
+                events.Add(Event(tick, P4SpatialEventKind.EnemyAttack, enemy.EntityId, "allies", restored,
+                    enemy.Position, enemy.Position, $"{activeSkill.DisplayName}|support-heal"));
+                int supportInterval = Math.Max(8, checked((20_000 + attacksPerSecond - 1) / attacksPerSecond));
+                enemy.NextActionTick = tick + Math.Max(8,
+                    checked(supportInterval * activeSkill.CooldownMultiplierBasisPoints / 10_000));
+                enemy.ActionSequence++;
+                continue;
+            }
             int encounterDamage = enemy.Boss
                 ? checked((int)((long)request.EnemyDamageBasisPoints * request.BossDamageBasisPoints / 10_000))
                 : request.EnemyDamageBasisPoints;
@@ -1027,20 +1051,11 @@ public sealed class P4SpatialCombatRunner
                 IsSpell: enemy.Role == P4UnitRole.Caster), random);
             int divisor = Math.Max(6, 8 + request.EnemyCount / 3);
             int damage = hit.Hit ? hit.FinalPhysicalDamage / divisor : 0;
-            int skillMultiplier = enemy.Profile.Skill switch
-            {
-                EnemySkillKind.HeavySlam => 15_000,
-                EnemySkillKind.Charge when enemy.NextActionTick <= 3 => 16_000,
-                EnemySkillKind.GroundHazard => 13_500,
-                EnemySkillKind.CorpseBurst => 12_500,
-                EnemySkillKind.ArcaneBolt => 12_000,
-                EnemySkillKind.Volley => 9_000,
-                _ => 10_000,
-            };
-            if (enemies.Any(unit => unit.Life > 0 && unit.Profile.Skill == EnemySkillKind.WarAura))
+            int skillMultiplier = activeSkill.DamageMultiplierBasisPoints;
+            if (enemies.Any(unit => unit.Life > 0 && unit.Profile.EffectiveSkills.Any(skill => skill.Kind == EnemySkillKind.WarAura)))
                 skillMultiplier = checked(skillMultiplier * 11_000 / 10_000);
             damage = checked(damage * skillMultiplier / 10_000);
-            if (enemy.Profile.Skill is EnemySkillKind.HeavySlam or EnemySkillKind.GroundHazard or EnemySkillKind.CorpseBurst)
+            if (activeSkill.Area)
                 damage = checked(damage * request.EnemyAreaDamageBasisPoints / 10_000);
             if (request.ExtraEnemyProjectiles > 0 && enemy.Role is P4UnitRole.Ranged or P4UnitRole.Caster)
                 damage = checked(damage * (1 + request.ExtraEnemyProjectiles) * request.EnemyProjectileDamageBasisPoints / 10_000);
@@ -1055,15 +1070,16 @@ public sealed class P4SpatialCombatRunner
                 damage = Math.Max(1, damage * (10_000 - guardReductionBasisPoints) / 10_000);
             if (damage > 0 && hero.Life * 2L <= hero.MaximumLife && ascendancy.Has(P18NodeIds.BloodLowLifeCore))
                 damage = Math.Max(1, damage * 7_500 / 10_000);
-            bool spell = enemy.Role == P4UnitRole.Caster;
+            bool spell = enemy.Role == P4UnitRole.Caster || activeSkill.DamageType != EnemyDamageType.Physical;
             if (damage > 0 && spell)
             {
-                int resistance = enemy.Profile.Family switch
+                int resistance = activeSkill.DamageType switch
                 {
-                    EnemyFamily.FrostwildPack => request.Build.Sheet.ColdResistanceBasisPoints,
-                    EnemyFamily.BloodforgeConstruct or EnemyFamily.AshenLegion => request.Build.Sheet.FireResistanceBasisPoints,
-                    EnemyFamily.VoidCult or EnemyFamily.RiftBeast => request.Build.Sheet.VoidResistanceBasisPoints,
-                    _ => request.Build.Sheet.LightningResistanceBasisPoints,
+                    EnemyDamageType.Cold => request.Build.Sheet.ColdResistanceBasisPoints,
+                    EnemyDamageType.Fire => request.Build.Sheet.FireResistanceBasisPoints,
+                    EnemyDamageType.Void => request.Build.Sheet.VoidResistanceBasisPoints,
+                    EnemyDamageType.Lightning => request.Build.Sheet.LightningResistanceBasisPoints,
+                    _ => 0,
                 };
                 int effectiveResistance = Math.Max(0, request.Build.Sheet.CappedResistance(resistance) - request.EnemyPenetrationBasisPoints);
                 damage = Math.Max(1, damage * (10_000 - effectiveResistance) / 10_000);
@@ -1119,12 +1135,15 @@ public sealed class P4SpatialCombatRunner
                 hero.ApplyDamage(damage, tick);
             }
 
-            string attackDetail = bossDefinition is null ? enemy.Profile.Skill.ToString() :
+            string attackDetail = bossDefinition is null ?
+                $"{activeSkill.DisplayName}|{activeSkill.Telegraph}|{activeSkill.DamageType}|{activeSkill.Avoidable}" :
                 bossDefinition.Skills[Math.Abs(enemy.NextActionTick / 8) % bossDefinition.Skills.Count].DisplayName;
             events.Add(Event(tick, P4SpatialEventKind.EnemyAttack, enemy.EntityId, "hero", damage,
                 enemy.Position, heroPosition, attackDetail));
             int interval = Math.Max(8, checked((20_000 + attacksPerSecond - 1) / attacksPerSecond));
+            interval = Math.Max(8, checked(interval * activeSkill.CooldownMultiplierBasisPoints / 10_000));
             enemy.NextActionTick = tick + interval;
+            enemy.ActionSequence++;
         }
     }
 
@@ -1662,6 +1681,7 @@ public sealed class P4SpatialCombatRunner
         public int StunnedUntilTick { get; set; }
         public int StunImmuneUntilTick { get; set; }
         public bool KillCharged { get; set; }
+        public int ActionSequence { get; set; }
     }
 
     private sealed record PendingBlade(

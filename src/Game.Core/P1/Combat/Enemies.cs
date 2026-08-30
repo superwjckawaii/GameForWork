@@ -1,17 +1,71 @@
 using GameForWork.Core.Simulation;
+using GameForWork.Core.P27;
 
 namespace GameForWork.Core.P1.Combat;
 
-public enum EnemyFamily { AshenLegion, FrostwildPack, DrownedDead, BloodforgeConstruct, VoidCult, RiftBeast, Boss }
+public enum EnemyFamily
+{
+    AshenLegion,
+    FrostwildPack,
+    DrownedDead,
+    BloodforgeConstruct,
+    VoidCult,
+    RiftBeast,
+    Boss,
+    LifeGarden,
+    RedOath,
+    BlueOath,
+    Warfront,
+}
 public enum EnemyRole { Melee, Ranged, Caster, Charger, Summoner, Support }
 public enum EnemyRarity { Normal, Magic, Rare, Boss }
-public enum EnemySkillKind { BasicStrike, HeavySlam, Charge, Volley, ArcaneBolt, GroundHazard, CorpseBurst, SummonSwarm, WarAura }
+public enum EnemySkillKind
+{
+    BasicStrike,
+    HeavySlam,
+    Charge,
+    Volley,
+    ArcaneBolt,
+    GroundHazard,
+    CorpseBurst,
+    SummonSwarm,
+    WarAura,
+    RootSnare,
+    HealingBloom,
+    Sacrifice,
+    Execution,
+    DelayedNova,
+    ChainLightning,
+    ShieldLink,
+    Burrow,
+    SuppressingVolley,
+    Artillery,
+    RepairPulse,
+}
+public enum EnemyDamageType { Physical, Fire, Cold, Lightning, Void }
+
+public sealed record EnemySkillProfile(
+    EnemySkillKind Kind,
+    string DisplayName,
+    EnemyDamageType DamageType,
+    int DamageMultiplierBasisPoints,
+    int CooldownMultiplierBasisPoints = 10_000,
+    int RangeRaw = 0,
+    bool Area = false,
+    string Telegraph = "",
+    bool Avoidable = true);
 
 public sealed record EnemyProfile(
     string StableId, string DisplayName, int Life, int MinimumPhysicalDamage, int MaximumPhysicalDamage,
     int Armor, int Evasion, int Accuracy, int MovementSpeedRawPerSecond, int AttacksPerSecondMilli, int ThreatPoints,
     EnemyFamily Family = EnemyFamily.AshenLegion, EnemyRole Role = EnemyRole.Melee,
-    EnemySkillKind Skill = EnemySkillKind.BasicStrike, int AttackRangeRaw = 1_200);
+    EnemySkillKind Skill = EnemySkillKind.BasicStrike, int AttackRangeRaw = 1_200,
+    IReadOnlyList<EnemySkillProfile>? Skills = null)
+{
+    public IReadOnlyList<EnemySkillProfile> EffectiveSkills => Skills is { Count: > 0 }
+        ? Skills
+        : [P27MonsterCatalog.DefaultSkill(Skill, Family, AttackRangeRaw)];
+}
 
 public static class P1Enemies
 {
@@ -20,7 +74,7 @@ public static class P1Enemies
     public static readonly EnemyProfile OathlessGuard = E("oathless_guard", "失誓守卫", EnemyFamily.AshenLegion, EnemyRole.Melee, EnemySkillKind.HeavySlam, 70, 7, 10, 25, 3, 55, 1_800, 800, 2);
     public static readonly EnemyProfile AbyssWarden = new("core.enemy.abyss_warden", "裂渊监守者", 250, 8, 12, 20, 5, 70, 2_000, 1_000, 0, EnemyFamily.Boss, EnemyRole.Melee, EnemySkillKind.HeavySlam, 2_000);
 
-    public static IReadOnlyList<EnemyProfile> NormalEnemies { get; } =
+    private static IReadOnlyList<EnemyProfile> LegacyEnemies { get; } =
     [
         CorruptedWorker,
         GateHound,
@@ -77,6 +131,11 @@ public static class P1Enemies
         E("rift_broodmother", "裂界育母", EnemyFamily.RiftBeast, EnemyRole.Summoner, EnemySkillKind.SummonSwarm, 98, 8, 14, 18, 6, 66, 1_500, 620, 4, 5_500),
     ];
 
+    public static IReadOnlyList<EnemyProfile> NormalEnemies { get; } = LegacyEnemies
+        .Select(P27MonsterCatalog.EnrichLegacy)
+        .Concat(P27MonsterCatalog.AdditionalEnemies)
+        .ToArray();
+
     public static IReadOnlyList<EnemyProfile> ForMonsterLevel(int monsterLevel)
     {
         EnemyFamily family = monsterLevel switch
@@ -89,6 +148,13 @@ public static class P1Enemies
             _ => EnemyFamily.RiftBeast,
         };
         return monsterLevel >= 70 ? NormalEnemies : NormalEnemies.Where(enemy => enemy.Family == family).ToArray();
+    }
+
+    public static IReadOnlyList<EnemyProfile> ForEncounter(int monsterLevel, EnemyFamily? family)
+    {
+        IReadOnlyList<EnemyProfile> pool = family is null ? ForMonsterLevel(monsterLevel) :
+            NormalEnemies.Where(enemy => enemy.Family == family).ToArray();
+        return pool.Count > 0 ? pool : ForMonsterLevel(monsterLevel);
     }
 
     private static EnemyProfile E(string id, string name, EnemyFamily family, EnemyRole role, EnemySkillKind skill,

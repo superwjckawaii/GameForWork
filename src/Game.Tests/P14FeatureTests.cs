@@ -29,9 +29,9 @@ public sealed class P14FeatureTests
             Assert.False(string.IsNullOrWhiteSpace(flask.AutoCondition));
             Assert.True(flask.MaximumCharges >= flask.ChargesPerUse);
         });
-        Assert.Equal(48, P1Enemies.NormalEnemies.Count);
+        Assert.Equal(80, P1Enemies.NormalEnemies.Count);
         Assert.Equal(18, Enum.GetValues<EliteAffix>().Length);
-        Assert.Equal(8, P14Bosses.MapBosses.Count);
+        Assert.Equal(12, P14Bosses.MapBosses.Count);
     }
 
     [Fact]
@@ -88,7 +88,7 @@ public sealed class P14FeatureTests
     {
         P14BossDefinition[] bosses = P14Bosses.MapBosses.Concat([P14Bosses.Breakthrough])
             .Concat(P14Bosses.CitadelStages).ToArray();
-        Assert.Equal(12, bosses.Length);
+        Assert.Equal(16, bosses.Length);
         Assert.All(bosses, boss =>
         {
             Assert.True(boss.Skills.Count >= 3);

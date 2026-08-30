@@ -9,7 +9,7 @@ public sealed class P21FeatureTests
     [Fact]
     public void AssetContractCoversAllStableContent()
     {
-        Assert.Equal(48, P21ArtContract.EnemyIds.Count);
+        Assert.Equal(80, P21ArtContract.EnemyIds.Count);
         Assert.Equal(78, P21ArtContract.SkillStoneIds.Count);
         Assert.Equal(31, P21ArtContract.AnimationRanges.Sum(range => range.FrameCount));
         Assert.Equal(P21ArtContract.AnimationColumns,

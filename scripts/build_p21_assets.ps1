@@ -8,6 +8,7 @@ $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Drawing
 
 $sourceRoot = Join-Path $RepositoryRoot 'src\Game.Godot\art-source\p21\imagegen'
+$p27SourceRoot = Join-Path $RepositoryRoot 'src\Game.Godot\art-source\p27\imagegen'
 $assetRoot = Join-Path $RepositoryRoot 'src\Game.Godot\assets\p21'
 $directories = @(
     $assetRoot,
@@ -326,8 +327,11 @@ if (-not $SkipAnimations) {
 
     $enemySprites = [System.Collections.Generic.List[System.Drawing.Bitmap]]::new()
     for ($index = 5; $index -lt 21; $index++) { $enemySprites.Add((Get-GridSprite -Atlas $actorSource -Index $index -Columns 5 -Rows 5)) }
+    $p27MonsterSource = [System.Drawing.Bitmap]::FromFile((Join-Path $p27SourceRoot 'p27-monster-family-master.png'))
+    for ($index = 0; $index -lt 10; $index++) { $enemySprites.Add((Get-GridSprite -Atlas $p27MonsterSource -Index $index -Columns 5 -Rows 2)) }
     Build-AnimationAtlas -Sprites $enemySprites -Destination (Join-Path $assetRoot 'enemies\p21-enemy-animation.png') -CellWidth 48 -CellHeight 64 -Padding 7
     foreach ($sprite in $enemySprites) { $sprite.Dispose() }
+    $p27MonsterSource.Dispose()
     $actorSource.Dispose()
 
     $bossSource = [System.Drawing.Bitmap]::FromFile((Join-Path $sourceRoot 'boss-master.png'))
@@ -377,9 +381,10 @@ $manifest = [ordered]@{
     }
     counts = [ordered]@{
         actorRigs = 5
-        enemyBodyRigs = 16
-        enemyTypes = 48
-        bosses = 12
+        enemyBodyRigs = 26
+        enemyTypes = 80
+        bossBodyRigs = 12
+        bosses = 24
         skillGems = 78
         metalCurrencies = 19
         jewels = 3
@@ -388,7 +393,8 @@ $manifest = [ordered]@{
         vfx = 48
     }
     sources = @('actor-master.png', 'boss-master.png', 'skill-gem-master.png', 'vfx-master.png', 'region-master.png', 'town-master.png',
-        'app-icon-master.png', 'ui-skin-master.png', 'passive-tree-master.png', 'ascendancy-master.png', 'atlas-tree-master.png')
+        'app-icon-master.png', 'ui-skin-master.png', 'passive-tree-master.png', 'ascendancy-master.png', 'atlas-tree-master.png',
+        'p27/p27-monster-family-master.png')
 }
 $manifest | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $assetRoot 'p21-assets.json') -Encoding utf8
 Write-Host "P21 assets generated at $assetRoot"

@@ -6,7 +6,7 @@ using GameForWork.Core.P26;
 
 namespace GameForWork.Core.P10;
 
-public enum P10MapMechanic { Abyss, LifeGarden, RedAltar, BlueAltar }
+public enum P10MapMechanic { Abyss, LifeGarden, RedAltar, BlueAltar, Warfront }
 public enum P10AtlasTheme { MapBasics, MapSupply, Crafting, PacksAndElites, Boss, Abyss, LifeGarden, RedAltar, BlueAltar, Warfront }
 
 public sealed record P10AtlasNode(
@@ -87,7 +87,11 @@ public sealed record P10EndgameSnapshot(
     int BonusAtlasPoints = 0,
     P18Ascendancy SelectedAscendancy = P18Ascendancy.None,
     bool Act3AscendancyAwarded = false,
-    bool Act5AscendancyAwarded = false);
+    bool Act5AscendancyAwarded = false,
+    bool WarfrontDiscovered = false,
+    int WarfrontMerit = 0,
+    int WarfrontReputation = 0,
+    bool WarfrontGuaranteeIssued = false);
 
 public sealed record P12AtlasSchemeSnapshot(string Name, IReadOnlyList<string> AllocatedPassives);
 
@@ -123,6 +127,10 @@ public sealed class P10EndgameState
     public P18Ascendancy SelectedAscendancy { get; private set; }
     public bool Act3AscendancyAwarded { get; private set; }
     public bool Act5AscendancyAwarded { get; private set; }
+    public bool WarfrontDiscovered { get; private set; }
+    public int WarfrontMerit { get; private set; }
+    public int WarfrontReputation { get; private set; }
+    public bool WarfrontGuaranteeIssued { get; private set; }
     public const int MaximumAscendancyPoints = 8;
 
     public IReadOnlyList<P10MapMechanic> RecordMapCompletion(P1MapItem map, MapRoute route, ulong seed)
@@ -132,11 +140,13 @@ public sealed class P10EndgameState
         var selected = new List<P10MapMechanic>(2);
         if (route == MapRoute.Abyss) selected.Add(P10MapMechanic.Abyss);
         if (route == MapRoute.LifeGarden) selected.Add(P10MapMechanic.LifeGarden);
+        if (route == MapRoute.Warfront) selected.Add(P10MapMechanic.Warfront);
         if (map.Altar == P12MapAltar.RedOath) selected.Add(P10MapMechanic.RedAltar);
         if (map.Altar == P12MapAltar.BlueOath) selected.Add(P10MapMechanic.BlueAltar);
         if (selected.Count == 0)
         {
-            P10MapMechanic[] choices = Enum.GetValues<P10MapMechanic>();
+            P10MapMechanic[] choices = [P10MapMechanic.Abyss, P10MapMechanic.LifeGarden,
+                P10MapMechanic.RedAltar, P10MapMechanic.BlueAltar];
             selected.Add(choices[(int)((seed + (ulong)map.Tier) % (ulong)choices.Length)]);
         }
         P10MapMechanic[] result = selected.Distinct().Take(3).ToArray();
@@ -148,7 +158,8 @@ public sealed class P10EndgameState
                 P10MapMechanic.Abyss => P10AtlasTheme.Abyss,
                 P10MapMechanic.LifeGarden => P10AtlasTheme.LifeGarden,
                 P10MapMechanic.RedAltar => P10AtlasTheme.RedAltar,
-                _ => P10AtlasTheme.BlueAltar,
+                P10MapMechanic.BlueAltar => P10AtlasTheme.BlueAltar,
+                _ => P10AtlasTheme.Warfront,
             };
             int bonus = 100 + AtlasBonus(theme);
             int quantityBonus = Math.Max(0, map.ItemQuantityBasisPoints);
@@ -157,6 +168,7 @@ public sealed class P10EndgameState
                 case P10MapMechanic.LifeGarden: LifeForce = checked(LifeForce + map.Tier * bonus / 100 * quantityBonus / 10_000); break;
                 case P10MapMechanic.RedAltar: RedFavor = checked(RedFavor + bonus * quantityBonus / 10_000); break;
                 case P10MapMechanic.BlueAltar: BlueFavor = checked(BlueFavor + bonus * quantityBonus / 10_000); break;
+                case P10MapMechanic.Warfront: RecordWarfrontAttempt(map.Tier, true); break;
             }
         }
         if (map.Tier >= 11)
@@ -166,6 +178,16 @@ public sealed class P10EndgameState
         }
         return result;
     }
+
+    public void RecordWarfrontAttempt(int tier, bool succeeded)
+    {
+        if (tier is < 1 or > 20) throw new ArgumentOutOfRangeException(nameof(tier));
+        WarfrontDiscovered = true;
+        WarfrontMerit = checked(WarfrontMerit + tier * (succeeded ? 10 : 3));
+        if (succeeded) WarfrontReputation = checked(WarfrontReputation + 1 + tier / 5);
+    }
+
+    public void MarkWarfrontGuaranteeIssued() => WarfrontGuaranteeIssued = true;
 
     public bool TryPurchaseAtlas(string id, TownEconomyState economy, bool warfrontDiscovered = false) =>
         P26AtlasPurchase.TryPurchase(_atlas, P26AtlasCatalog.Get(id), economy,
@@ -280,7 +302,8 @@ public sealed class P10EndgameState
         null,
         0, CitadelVictories, MythicReforgeMaterials, MythicGranted,
         BreakthroughAttempts, BreakthroughVictories, BonusAtlasPoints, SelectedAscendancy,
-        Act3AscendancyAwarded, Act5AscendancyAwarded);
+        Act3AscendancyAwarded, Act5AscendancyAwarded, WarfrontDiscovered,
+        WarfrontMerit, WarfrontReputation, WarfrontGuaranteeIssued);
 
     public static P10EndgameState Restore(P10EndgameSnapshot? snapshot)
     {
@@ -290,7 +313,8 @@ public sealed class P10EndgameState
             snapshot.CitadelFragments is < 0 or >= CitadelFragmentsPerTicket || snapshot.CitadelTickets < 0 ||
             snapshot.BreakthroughPoints is < 0 or > MaximumAscendancyPoints || snapshot.AscendancyPassives.Count > snapshot.BreakthroughPoints ||
             snapshot.CitadelVictories < 0 || snapshot.MythicReforgeMaterials < 0 || snapshot.BreakthroughAttempts < 0 ||
-            snapshot.BreakthroughVictories < 0 || snapshot.BonusAtlasPoints is < 0 or > 5 || !Enum.IsDefined(snapshot.SelectedAscendancy))
+            snapshot.BreakthroughVictories < 0 || snapshot.BonusAtlasPoints is < 0 or > 5 || !Enum.IsDefined(snapshot.SelectedAscendancy) ||
+            snapshot.WarfrontMerit < 0 || snapshot.WarfrontReputation < 0)
             throw new InvalidDataException("P10 endgame snapshot is invalid.");
         foreach (int tier in snapshot.CompletedTiers) state._completedTiers.Add(tier);
         IEnumerable<string> migratedAtlas = snapshot.AtlasPassives
@@ -311,6 +335,10 @@ public sealed class P10EndgameState
         state.SelectedAscendancy = snapshot.SelectedAscendancy;
         state.Act3AscendancyAwarded = snapshot.Act3AscendancyAwarded;
         state.Act5AscendancyAwarded = snapshot.Act5AscendancyAwarded;
+        state.WarfrontDiscovered = snapshot.WarfrontDiscovered;
+        state.WarfrontMerit = snapshot.WarfrontMerit;
+        state.WarfrontReputation = snapshot.WarfrontReputation;
+        state.WarfrontGuaranteeIssued = snapshot.WarfrontGuaranteeIssued;
         foreach (string id in snapshot.AscendancyPassives)
         {
             if (id.StartsWith("core.ascendancy.iron_oath.", StringComparison.Ordinal)) continue;

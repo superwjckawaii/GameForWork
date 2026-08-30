@@ -11,7 +11,7 @@ $assetRoot = Join-Path $RepositoryRoot 'src\Game.Godot\assets\p21'
 $sourceRoot = Join-Path $RepositoryRoot 'src\Game.Godot\art-source\p21\imagegen'
 $expected = [ordered]@{
     'characters\p21-actor-animation.png' = @(1488, 1280)
-    'enemies\p21-enemy-animation.png' = @(1488, 4096)
+    'enemies\p21-enemy-animation.png' = @(1488, 6656)
     'enemies\p21-boss-animation.png' = @(2232, 3840)
     'regions\p21-region-atlas.png' = @(1024, 432)
     'town\p21-town-district.png' = @(480, 270)
@@ -46,6 +46,9 @@ foreach ($source in @('actor-master.png', 'boss-master.png', 'skill-gem-master.p
         'vfx-master.png', 'region-master.png', 'town-master.png', 'visual-direction-board.png', 'app-icon-master.png',
         'ui-skin-master.png', 'passive-tree-master.png', 'ascendancy-master.png', 'atlas-tree-master.png')) {
     if (-not (Test-Path -LiteralPath (Join-Path $sourceRoot $source))) { throw "Missing P21 editable source: $source" }
+}
+if (-not (Test-Path -LiteralPath (Join-Path $RepositoryRoot 'src\Game.Godot\art-source\p27\imagegen\p27-monster-family-master.png'))) {
+    throw 'Missing P27 editable monster-family source.'
 }
 
 function Assert-TransparentGutters {
@@ -130,7 +133,7 @@ function Assert-CellOccupancy {
 }
 
 Assert-TransparentGutters 'characters\p21-actor-animation.png' 31 20 48 64
-Assert-TransparentGutters 'enemies\p21-enemy-animation.png' 31 64 48 64
+Assert-TransparentGutters 'enemies\p21-enemy-animation.png' 31 104 48 64
 Assert-TransparentGutters 'enemies\p21-boss-animation.png' 31 48 72 80
 Assert-TransparentGutters 'ui\p21-skill-gems.png' 10 8 32 32
 Assert-TransparentGutters 'ui\p21-metal-atlas.png' 5 4 32 32
@@ -149,7 +152,8 @@ if (-not (Test-Path -LiteralPath $iconPath) -or (Get-Item -LiteralPath $iconPath
 $manifestPath = Join-Path $assetRoot 'p21-assets.json'
 $manifest = Get-Content -LiteralPath $manifestPath -Raw -Encoding UTF8 | ConvertFrom-Json
 if ($manifest.counts.skillGems -ne 78 -or
-    $manifest.counts.enemyTypes -ne 48 -or $manifest.animation.columns -ne 31) {
+    $manifest.counts.enemyTypes -ne 80 -or $manifest.counts.enemyBodyRigs -ne 26 -or
+    $manifest.counts.bossBodyRigs -ne 12 -or $manifest.counts.bosses -ne 24 -or $manifest.animation.columns -ne 31) {
     throw 'P21 asset manifest counts do not match the frozen content contract.'
 }
 

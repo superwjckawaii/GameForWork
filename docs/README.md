@@ -6,7 +6,7 @@
 
 - [游戏设计基线](shared/GAME_DESIGN_BASELINE.md)
 - [技术架构](shared/TECHNICAL_ARCHITECTURE.md)
-- [P0～P26 开发计划](shared/DEVELOPMENT_PLAN.md)
+- [P0～P27 开发计划](shared/DEVELOPMENT_PLAN.md)
 - [待讨论与开发决策](shared/OPEN_QUESTIONS.md)
 
 ## v0.1
@@ -43,3 +43,4 @@
 
 - [v0.4 玩法与数值打磨总规格](v0.4/V0_4_SPECIFICATION.md)
 - [P26 地图系统与金币异界天赋实施规格](v0.4/P26_SPECIFICATION.md)
+- [P27 怪物生态、首领与亡旗战阵实施规格](v0.4/P27_SPECIFICATION.md)

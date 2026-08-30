@@ -21,6 +21,7 @@ public enum MapRoute
     Safe,
     Abyss,
     LifeGarden,
+    Warfront,
 }
 
 public enum MapAltarPreference

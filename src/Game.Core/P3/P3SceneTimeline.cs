@@ -7,6 +7,7 @@ using GameForWork.Core.Simulation;
 using GameForWork.Core.P4;
 using GameForWork.Core.P12;
 using GameForWork.Core.P14;
+using GameForWork.Core.P27;
 
 namespace GameForWork.Core.P3;
 
@@ -133,7 +134,10 @@ public static class P3SceneTimelineBuilder
             node.Kind == CampaignNodeKind.EliteCombat,
             node.Kind == CampaignNodeKind.ActBoss,
             abyssRoute: false,
-            seed);
+            seed,
+            areaId: $"core.campaign.act{node.Act}",
+            finalBossStableId: node.Kind == CampaignNodeKind.ActBoss
+                ? P14Bosses.CampaignBosses[node.Act - 1].StableId : "");
     }
 
     public static P3SceneTimeline BuildMapAttempt(
@@ -157,7 +161,8 @@ public static class P3SceneTimelineBuilder
             abyssRoute: route == MapRoute.Abyss,
             seed,
             modifiers,
-            plan);
+            plan,
+            map.AreaId);
     }
 
     public static long TravelMilliseconds(int tileDistance, int movementSpeedBasisPoints)
@@ -183,7 +188,9 @@ public static class P3SceneTimelineBuilder
         bool abyssRoute,
         ulong seed,
         P12MapCombatModifiers? mapModifiers = null,
-        P14MapPlan? mapPlan = null)
+        P14MapPlan? mapPlan = null,
+        string areaId = "",
+        string finalBossStableId = "")
     {
         var random = new Pcg32(seed);
         var events = new List<P3SceneEvent>();
@@ -219,7 +226,8 @@ public static class P3SceneTimelineBuilder
             }
 
             bool campaign = stableId.StartsWith("campaign:", StringComparison.Ordinal);
-            bool bossNode = plannedNode?.Kind == P14MapNodeKind.Boss || finalBoss && nodeIndex == nodeCount;
+            bool bossNode = plannedNode?.Kind is P14MapNodeKind.Boss or P14MapNodeKind.WarfrontOfficer or P14MapNodeKind.WarfrontCommander ||
+                            finalBoss && nodeIndex == nodeCount;
             bool eliteNode = plannedNode?.Kind == P14MapNodeKind.Elite ||
                              !bossNode && (forceElite && nodeIndex % 2 == 0 || !campaign && nodeIndex == nodeCount - 1);
             int enemyCount = plannedNode?.EnemyCount > 0 ? plannedNode.EnemyCount : bossNode
@@ -253,7 +261,7 @@ public static class P3SceneTimelineBuilder
                 EnemyDamageBasisPoints: mapModifiers?.EnemyDamageBasisPoints ?? 10_000,
                 EnemySpeedBasisPoints: mapModifiers?.EnemySpeedBasisPoints ?? 10_000,
                 PlayerRecoveryBasisPoints: mapModifiers?.PlayerRecoveryBasisPoints ?? 10_000,
-                BossStableId: bossNode ? plannedNode?.BossStableId ?? mapPlan?.FinalBossStableId ?? string.Empty : string.Empty,
+                BossStableId: bossNode ? plannedNode?.BossStableId ?? mapPlan?.FinalBossStableId ?? finalBossStableId ?? string.Empty : string.Empty,
                 BossLifeBasisPoints: mapModifiers?.BossLifeBasisPoints ?? 10_000,
                 BossDamageBasisPoints: mapModifiers?.BossDamageBasisPoints ?? 10_000,
                 EnemyPhysicalReductionBasisPoints: mapModifiers?.EnemyPhysicalReductionBasisPoints ?? 0,
@@ -265,13 +273,15 @@ public static class P3SceneTimelineBuilder
                 EnemyAreaBasisPoints: mapModifiers?.EnemyAreaBasisPoints ?? 10_000,
                 EnemyAreaDamageBasisPoints: mapModifiers?.EnemyAreaDamageBasisPoints ?? 10_000,
                 BossCount: bossNode ? mapModifiers?.BossCount ?? 1 : 1,
-                AdditionalRareEnemies: mapModifiers?.AdditionalRareEnemies ?? 0), encounterSeed);
+                AdditionalRareEnemies: mapModifiers?.AdditionalRareEnemies ?? 0,
+                EncounterFamily: mapPlan is null ? null : P27MonsterCatalog.FamilyForEncounter(
+                    areaId, plannedNode?.Kind, mapPlan.Altar, nodeIndex, encounterSeed)), encounterSeed);
             spatialFrames.AddRange(result.Frames.Select(frame => frame with { AtMilliseconds = start + frame.AtMilliseconds }));
             AppendSpatialEvents(events, result, start, nodeIndex, maximumLife, maximumMana, maximumShield);
             long duration = checked((long)result.Ticks * TickMilliseconds);
             now = checked(now + duration);
             encounters.Add(new P3EncounterSegment(nodeIndex, 1,
-                bossNode ? plannedNode?.BossStableId ?? mapPlan?.FinalBossStableId ?? P1Enemies.AbyssWarden.StableId : "core.enemy.group", eliteNode, bossNode,
+                bossNode ? plannedNode?.BossStableId ?? mapPlan?.FinalBossStableId ?? finalBossStableId ?? P1Enemies.AbyssWarden.StableId : "core.enemy.group", eliteNode, bossNode,
                 start, duration, result.Outcome, result.Ticks, result.FinalHash, []));
             heroLife = result.HeroLife;
             heroMana = result.HeroMana;

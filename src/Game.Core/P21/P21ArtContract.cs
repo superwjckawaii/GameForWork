@@ -16,7 +16,7 @@ public static class P21ArtContract
     public const int AnimationColumns = 31;
     public const int DirectionCount = 4;
     public const int ActorRigCount = 5;
-    public const int EnemyBodyRigCount = 16;
+    public const int EnemyBodyRigCount = 26;
     public const int BossRigCount = 12;
     public const int ActorCellWidth = 48;
     public const int ActorCellHeight = 64;
@@ -57,7 +57,20 @@ public static class P21ArtContract
     public static int EnemyRig(string stableId)
     {
         int index = EnemyIndices.TryGetValue(stableId, out int resolved) ? resolved : -1;
-        return index < 0 ? StableIndex(stableId, EnemyBodyRigCount) : index % EnemyBodyRigCount;
+        if (index < 0) return StableIndex(stableId, EnemyBodyRigCount);
+        if (index < 40) return index % 16;
+        if (index < 48) return 16 + (index - 40) % 2 * 5;
+        EnemyFamily family = P1Enemies.NormalEnemies[index].Family;
+        int familyOffset = family switch
+        {
+            EnemyFamily.LifeGarden => 1,
+            EnemyFamily.RedOath => 2,
+            EnemyFamily.BlueOath => 3,
+            EnemyFamily.Warfront => 4,
+            _ => 0,
+        };
+        int withinFamily = P1Enemies.NormalEnemies.Take(index).Count(enemy => enemy.Family == family);
+        return 16 + familyOffset + withinFamily % 2 * 5;
     }
 
     public static int EnemyVariant(string stableId)
@@ -69,7 +82,7 @@ public static class P21ArtContract
     public static int BossRig(string stableId)
     {
         for (int index = 0; index < P14Bosses.MapBosses.Count; index++)
-            if (P14Bosses.MapBosses[index].StableId == stableId) return index;
+            if (P14Bosses.MapBosses[index].StableId == stableId) return index % BossRigCount;
         if (stableId == P14Bosses.Breakthrough.StableId) return 9;
         if (stableId == P14Bosses.CitadelStages[0].StableId) return 8;
         if (stableId == P14Bosses.CitadelStages[1].StableId) return 10;

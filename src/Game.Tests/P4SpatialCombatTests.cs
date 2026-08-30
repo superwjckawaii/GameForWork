@@ -10,14 +10,14 @@ namespace GameForWork.Tests;
 public sealed class P4SpatialCombatTests
 {
     [Fact]
-    public void WholeEnemyGroupSpawnsTogetherAndUsesDistinctPositions()
+    public void WholeEnemyGroupSpawnsTogetherWithoutForcedRoleComposition()
     {
         P4NodeCombatResult result = Run(PowerfulBuild(), 12, seed: 71);
         P4SpatialFrame first = result.Frames[0];
 
         Assert.Equal(12, first.Enemies.Count);
         Assert.Equal(12, first.Enemies.Select(enemy => enemy.Position).Distinct().Count());
-        Assert.True(first.Enemies.Select(enemy => enemy.Role).Distinct().Count() >= 4);
+        Assert.InRange(first.Enemies.Select(enemy => enemy.Role).Distinct().Count(), 1, 6);
         Assert.All(first.Enemies, enemy => Assert.True(enemy.Life > 0));
     }
 

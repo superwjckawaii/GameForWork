@@ -36,10 +36,10 @@ public sealed class P16FeatureTests
     }
 
     [Fact]
-    public void MonsterCatalogHasSixFamiliesEightMembersAndEighteenAffixes()
+    public void MonsterCatalogHasTenFamiliesEightMembersAndEighteenAffixes()
     {
-        Assert.Equal(48, P1Enemies.NormalEnemies.Count);
-        Assert.Equal(6, P1Enemies.NormalEnemies.Select(enemy => enemy.Family).Distinct().Count());
+        Assert.Equal(80, P1Enemies.NormalEnemies.Count);
+        Assert.Equal(10, P1Enemies.NormalEnemies.Select(enemy => enemy.Family).Distinct().Count());
         Assert.All(P1Enemies.NormalEnemies.GroupBy(enemy => enemy.Family), family => Assert.Equal(8, family.Count()));
         Assert.Equal(18, Enum.GetValues<EliteAffix>().Length);
         IReadOnlyList<EliteAffix> rare = EnemyRules.RollAffixes(new Pcg32(16), EnemyRarity.Rare);

@@ -80,7 +80,11 @@ public static class P14UniqueItems
     }
 }
 
-public enum P14MapNodeKind { Entrance, Encounter, RouteChoice, AbyssFissure, GardenPlot, Altar, Elite, Boss }
+public enum P14MapNodeKind
+{
+    Entrance, Encounter, RouteChoice, AbyssFissure, GardenPlot, Altar, Elite, Boss,
+    WarfrontEncounter, WarfrontOfficer, WarfrontCommander,
+}
 public sealed record P14MapNode(int Index, P14MapNodeKind Kind, string DisplayName, int EnemyCount, bool Optional = false,
     string BossStableId = "");
 public sealed record P14MapPlan(
@@ -106,6 +110,18 @@ public static class P14MapPlanner
                     new(3, P14MapNodeKind.Boss, P14Bosses.CitadelStages[1].DisplayName, 7, BossStableId: P14Bosses.CitadelStages[1].StableId),
                     new(4, P14MapNodeKind.Boss, P14Bosses.CitadelStages[2].DisplayName, 5, BossStableId: P14Bosses.CitadelStages[2].StableId)],
                 P12MapAltar.None, atlas, 1, P14Bosses.CitadelStages[2].StableId);
+        if (route == MapRoute.Warfront)
+        {
+            P14BossDefinition officer = P14Bosses.WarfrontOfficers[(int)(seed % (ulong)P14Bosses.WarfrontOfficers.Count)];
+            return new(map.InstanceId, route,
+                [new(1, P14MapNodeKind.WarfrontEncounter, "侦察接敌", 9),
+                    new(2, P14MapNodeKind.WarfrontEncounter, "突破前线", 14),
+                    new(3, P14MapNodeKind.RouteChoice, "战地补给抉择", 0),
+                    new(4, P14MapNodeKind.WarfrontOfficer, officer.DisplayName, 7, BossStableId: officer.StableId),
+                    new(5, P14MapNodeKind.WarfrontCommander, P14Bosses.WarfrontCommander.DisplayName, 9,
+                        BossStableId: P14Bosses.WarfrontCommander.StableId)],
+                map.Altar, atlas, 3, P14Bosses.WarfrontCommander.StableId);
+        }
         var random = new Pcg32(seed ^ (ulong)map.Tier << 32);
         int count = 5 + (int)(random.NextUInt() % 4);
         int choice = 2 + (int)(random.NextUInt() % 2);
@@ -125,7 +141,7 @@ public static class P14MapPlanner
                 _ when map.Altar != P12MapAltar.None && nodes.All(node => node.Kind != P14MapNodeKind.Altar) => P14MapNodeKind.Altar,
                 _ => index == count - 1 ? P14MapNodeKind.Elite : P14MapNodeKind.Encounter,
             };
-            int enemies = kind is P14MapNodeKind.RouteChoice or P14MapNodeKind.Altar ? 0 :
+            int enemies = kind == P14MapNodeKind.RouteChoice ? 0 :
                 8 + map.Tier / 2 + (int)(random.NextUInt() % 7);
             nodes.Add(new(index, kind, NodeName(kind, map.Altar), enemies, kind == P14MapNodeKind.Altar));
         }
@@ -142,6 +158,9 @@ public static class P14MapPlanner
         P14MapNodeKind.GardenPlot => "命能苗圃",
         P14MapNodeKind.Altar => altar == P12MapAltar.RedOath ? "赤誓祭坛" : "苍誓祭坛",
         P14MapNodeKind.Elite => "精英据点",
+        P14MapNodeKind.WarfrontEncounter => "亡旗军阵",
+        P14MapNodeKind.WarfrontOfficer => "军官阵地",
+        P14MapNodeKind.WarfrontCommander => "统帅本阵",
         _ => "地图遭遇",
     };
 }
@@ -153,14 +172,37 @@ public sealed record P14BossDefinition(
 
 public static class P14Bosses
 {
-    private static readonly string[] Names = ["灼痕督军", "沉棺祭司", "绞枝母体", "无旗将军", "苔冠巨兽", "碎光监工", "默祷院长", "黑帆船长"];
-    public static IReadOnlyList<P14BossDefinition> MapBosses { get; } = Enumerable.Range(0, 8).Select(index =>
-        new P14BossDefinition($"core.boss.map.{index + 1:00}", Names[index], P12MapCatalog.Areas[index].StableId,
+    public static IReadOnlyList<P14BossDefinition> CampaignBosses { get; } =
+    [
+        CampaignBoss(1, "余烬守门人", "火墙分割战场"),
+        CampaignBoss(2, "谷仓吞噬者", "吞食尸体恢复生命"),
+        CampaignBoss(3, "溺亡圣徒", "钟波与潮汐交替"),
+        CampaignBoss(4, "无光领路人", "熄灭视野后发动追猎"),
+        CampaignBoss(5, "界外之物", "三阶段重组技能序列"),
+    ];
+
+    public static IReadOnlyList<P14BossDefinition> MapBosses { get; } = P12MapCatalog.Areas.Select((area, index) =>
+        new P14BossDefinition($"core.boss.map.{index + 1:00}", area.BossName, area.StableId,
         [
-            new("扇形重击", "物理", "红边扇形蓄力", true),
-            new("追猎冲锋", "物理", "箭头与闪烁路径", true),
-            new("余烬爆发", "火焰", "环形描边收缩", true),
-        ], 5_000, 90, index % 2 == 0 ? "召唤同族" : "生成危险地面")).ToArray();
+            new(index % 3 == 0 ? "断阵重击" : "裂界挥扫", "物理", "红边扇形蓄力", true),
+            new(index % 3 == 1 ? "追猎冲锋" : "回响投射", index % 2 == 0 ? "火焰" : "冰霜", "箭头与闪烁路径", true),
+            new(index % 3 == 2 ? "星骸坠落" : "区域爆发", index % 2 == 0 ? "火焰" : "虚空", "环形描边收缩", true),
+        ], 5_000, 90 + index * 3, index % 2 == 0 ? "召唤区域同族并改变站位" : "生成持续危险地面")).ToArray();
+
+    public static IReadOnlyList<P14BossDefinition> WarfrontOfficers { get; } =
+    [
+        new("p27.boss.warfront.iron_banner", "铁旗校尉", "p27.warfront",
+            [new("盾墙推进", "物理", "长方形推进区", true), new("猎首号令", "物理", "红色锁定箭头", true)],
+            5_000, 105, "半血后召集盾墙卫士"),
+        new("p27.boss.warfront.ember_cannon", "烬炮监军", "p27.warfront",
+            [new("三点炮击", "火焰", "三枚橙色落点", true), new("压制齐射", "物理", "平行箭道", true)],
+            5_000, 105, "交替封锁近场与远场"),
+    ];
+
+    public static P14BossDefinition WarfrontCommander { get; } = new(
+        "p27.boss.warfront.last_marshal", "末旗统帅", "p27.warfront",
+        [new("全军突击", "物理", "多条冲锋箭道", true), new("亡旗炮阵", "火焰", "五枚递进落点", true),
+            new("战阵处决", "物理", "赤色收缩扇面", true)], 4_000, 150, "军官阵亡后继承其技能并进入末旗阶段");
 
     public static P14BossDefinition Breakthrough { get; } = new("core.boss.gate_trial", "百级门扉化身", "core.endgame.gate_trial",
         [new("门扉碾压", "物理", "交叉重线", true), new("灵能浪潮", "法术", "蓝色双环", true), new("终末审判", "混合", "全屏倒计时", true)],
@@ -174,17 +216,39 @@ public static class P14Bosses
     ];
 
     public static P14BossDefinition ForArea(string areaId) => MapBosses.FirstOrDefault(boss => boss.AreaStableId == areaId) ?? MapBosses[0];
-    public static P14BossDefinition? TryGet(string stableId) => MapBosses.Concat([Breakthrough]).Concat(CitadelStages)
+    private static IEnumerable<P14BossDefinition> AllBosses => CampaignBosses.Concat(MapBosses)
+        .Concat(WarfrontOfficers).Append(WarfrontCommander).Append(Breakthrough).Concat(CitadelStages);
+
+    public static P14BossDefinition? TryGet(string stableId) => AllBosses
         .FirstOrDefault(item => item.StableId == stableId);
 
     public static EnemyProfile CombatProfile(string stableId)
     {
-        P14BossDefinition boss = MapBosses.Concat([Breakthrough]).Concat(CitadelStages)
+        P14BossDefinition boss = AllBosses
             .FirstOrDefault(item => item.StableId == stableId) ?? MapBosses[0];
-        bool endgame = boss == Breakthrough || CitadelStages.Contains(boss);
+        bool endgame = boss == Breakthrough || CitadelStages.Contains(boss) || WarfrontOfficers.Contains(boss) || boss == WarfrontCommander;
+        EnemySkillProfile[] skills = boss.Skills.Select((skill, index) => new EnemySkillProfile(
+            (index % 3) switch { 0 => EnemySkillKind.HeavySlam, 1 => EnemySkillKind.Charge, _ => EnemySkillKind.DelayedNova },
+            skill.DisplayName,
+            skill.DamageType switch
+            {
+                "火焰" => EnemyDamageType.Fire,
+                "冰霜" => EnemyDamageType.Cold,
+                "闪电" or "法术" => EnemyDamageType.Lightning,
+                "虚空" or "混合" => EnemyDamageType.Void,
+                _ => EnemyDamageType.Physical,
+            },
+            13_500 + index * 1_500, 11_000 + index * 1_500, index == 1 ? 5_500 : 2_400,
+            index != 1, skill.Telegraph, skill.Avoidable)).ToArray();
         return new EnemyProfile(boss.StableId, boss.DisplayName, endgame ? 520 : 310,
-            endgame ? 13 : 9, endgame ? 21 : 15, endgame ? 38 : 24, 8, 78, 2_100, 1_000, 0);
+            endgame ? 13 : 9, endgame ? 21 : 15, endgame ? 38 : 24, 8, 78, 2_100, 1_000, 0,
+            EnemyFamily.Boss, EnemyRole.Melee, skills[0].Kind, skills[0].RangeRaw, skills);
     }
+
+    private static P14BossDefinition CampaignBoss(int act, string name, string rule) => new(
+        $"p27.boss.campaign.act{act}", name, $"core.campaign.act{act}",
+        [new("阶段重击", "物理", "扇形蓄力", true), new("幕终异象", act is 1 or 2 ? "火焰" : "虚空", "收缩双环", true),
+            new("追猎技", "物理", "闪烁路径", true)], 5_000, 90 + act * 8, rule);
 }
 
 public sealed record P14AltarChoice(string StableId, string Cost, string Reward, int RiskStacks);

@@ -314,6 +314,7 @@ public partial class P5ExpeditionPanel : VBoxContainer
         target.AddItem("安全探索", (int)P5ExpeditionTarget.SafeMaps);
         target.AddItem("裂渊追猎", (int)P5ExpeditionTarget.AbyssMaps);
         target.AddItem("命能花园", (int)P5ExpeditionTarget.LifeGardenMaps);
+        target.AddItem("亡旗战阵", (int)P5ExpeditionTarget.WarfrontMaps);
         target.AddItem("最高阶推进", (int)P5ExpeditionTarget.HighestTierMaps);
         target.AddItem("深渊监守者", (int)P5ExpeditionTarget.AbyssWarden);
         target.AddItem("Boss 练习", (int)P5ExpeditionTarget.AbyssWardenPractice);
@@ -359,7 +360,13 @@ public partial class P5ExpeditionPanel : VBoxContainer
             P5ExpeditionTarget selectedTarget = (P5ExpeditionTarget)target.GetItemId(target.Selected);
             P5DispatchMode selectedMode = (P5DispatchMode)mode.GetItemId(mode.Selected);
             P1TeamExpeditionState team = kind == ExpeditionTeamKind.Hero ? _session!().World.Hero : _session!().World.Mercenaries;
-            MapRoute preferred = selectedTarget switch { P5ExpeditionTarget.AbyssMaps => MapRoute.Abyss, P5ExpeditionTarget.LifeGardenMaps => MapRoute.LifeGarden, _ => MapRoute.Safe };
+            MapRoute preferred = selectedTarget switch
+            {
+                P5ExpeditionTarget.AbyssMaps => MapRoute.Abyss,
+                P5ExpeditionTarget.LifeGardenMaps => MapRoute.LifeGarden,
+                P5ExpeditionTarget.WarfrontMaps => MapRoute.Warfront,
+                _ => MapRoute.Safe,
+            };
             var blocked = new List<MapRoute>();
             if (blockAbyss.ButtonPressed && preferred != MapRoute.Abyss) blocked.Add(MapRoute.Abyss);
             if (blockGarden.ButtonPressed && preferred != MapRoute.LifeGarden) blocked.Add(MapRoute.LifeGarden);
@@ -368,7 +375,7 @@ public partial class P5ExpeditionPanel : VBoxContainer
             _session!().SetExpeditionPolicy(kind, team.Policy with
             {
                 PreferredRoute = preferred,
-                RoutePriority = new[] { preferred, MapRoute.Safe, MapRoute.LifeGarden, MapRoute.Abyss }.Distinct().ToArray(),
+                RoutePriority = new[] { preferred, MapRoute.Safe, MapRoute.LifeGarden, MapRoute.Abyss, MapRoute.Warfront }.Distinct().ToArray(),
                 BlockedRoutes = blocked,
                 MaximumMapTier = (int)maximumTier.Value,
                 MapFilter = new P26MapFilter((int)minimumTier.Value, (int)maximumTier.Value,
@@ -439,6 +446,7 @@ public partial class P5ExpeditionPanel : VBoxContainer
         P5ExpeditionTarget.SafeMaps => "安全探索",
         P5ExpeditionTarget.AbyssMaps => "裂渊追猎",
         P5ExpeditionTarget.LifeGardenMaps => "命能花园",
+        P5ExpeditionTarget.WarfrontMaps => "亡旗战阵",
         P5ExpeditionTarget.HighestTierMaps => "最高阶推进",
         P5ExpeditionTarget.AbyssWarden => "深渊监守者",
         P5ExpeditionTarget.AbyssWardenPractice => "Boss 练习",
@@ -584,7 +592,7 @@ public partial class P5ExpeditionPanel : VBoxContainer
     private static string RarityMark(P12MapRarity rarity) => rarity switch
     { P12MapRarity.Basic => "普通", P12MapRarity.Magic => "魔法", _ => "稀有" };
     private static string RouteName(MapRoute route) => route switch
-    { MapRoute.Safe => "安全探索", MapRoute.Abyss => "裂渊追猎", _ => "命能花园" };
+    { MapRoute.Safe => "安全探索", MapRoute.Abyss => "裂渊追猎", MapRoute.LifeGarden => "命能花园", _ => "亡旗战阵" };
 
     private sealed record TeamControls(OptionButton Target, OptionButton Mode, Label Status);
 }

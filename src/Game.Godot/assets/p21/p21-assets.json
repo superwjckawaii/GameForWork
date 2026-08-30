@@ -33,9 +33,10 @@
   },
   "counts": {
     "actorRigs": 5,
-    "enemyBodyRigs": 16,
-    "enemyTypes": 48,
-    "bosses": 12,
+    "enemyBodyRigs": 26,
+    "enemyTypes": 80,
+    "bossBodyRigs": 12,
+    "bosses": 24,
     "skillGems": 78,
     "metalCurrencies": 19,
     "jewels": 3,
@@ -54,6 +55,7 @@
     "ui-skin-master.png",
     "passive-tree-master.png",
     "ascendancy-master.png",
-    "atlas-tree-master.png"
+    "atlas-tree-master.png",
+    "p27/p27-monster-family-master.png"
   ]
 }
