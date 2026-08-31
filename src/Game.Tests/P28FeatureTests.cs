@@ -85,6 +85,31 @@ public sealed class P28FeatureTests
     }
 
     [Theory]
+    [InlineData(P28AltarMode.Normal, P28Cost.BossLife, 12_000, 10_000)]
+    [InlineData(P28AltarMode.HighPressure, P28Cost.BossLife, 17_500, 15_000)]
+    [InlineData(P28AltarMode.HighPressure, P28Cost.BossDamage, 17_500, 15_000)]
+    [InlineData(P28AltarMode.Extreme, P28Cost.BossLife, 25_000, 20_000)]
+    [InlineData(P28AltarMode.Extreme, P28Cost.BossDamage, 25_000, 20_000)]
+    public void BlueDifficultyReplacesBaseLifeAndDamageInsteadOfMultiplyingTwice(
+        P28AltarMode mode, P28Cost cost, int expectedLife, int expectedDamage)
+    {
+        int magnitude = cost == P28Cost.BossLife ? 2_000 : 2_500;
+        var choice = new P28Choice("blue.test", "测试苍誓", P28RewardPreference.HighBases, cost,
+            magnitude, "test", "苍誓守卫", "测试代价");
+        var rule = new P28EncounterRule(P28Mechanic.Blue, Choice: choice);
+        var plan = new P14MapPlan("blue-modifier-test", MapRoute.Safe,
+            [new(1, P14MapNodeKind.Altar, "苍誓祭坛", 8, Gameplay: rule),
+             new(2, P14MapNodeKind.Boss, "最终Boss", 5)],
+            P12MapAltar.BlueOath, Atlas, 0, "core.boss.map.01");
+        P1MapItem map = Map(MapRoute.Safe, P12MapAltar.BlueOath, new(Blue: mode));
+
+        P28EncounterModifiers modifiers = P28EncounterModifiers.For(plan, 2, map);
+
+        Assert.Equal(expectedLife, modifiers.Life);
+        Assert.Equal(expectedDamage, modifiers.Damage);
+    }
+
+    [Theory]
     [InlineData(P28WarfrontMode.Normal, 5, 1)]
     [InlineData(P28WarfrontMode.Expanded, 7, 2)]
     [InlineData(P28WarfrontMode.Decisive, 9, 2)]

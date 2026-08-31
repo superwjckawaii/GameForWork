@@ -28,23 +28,27 @@ public sealed record P28EncounterModifiers(int Life = 10_000, int Damage = 10_00
         }
         if (nodeIndex == plan.Nodes[^1].Index)
         {
-            foreach (P14MapNode altar in plan.Nodes.Where(n => n.Gameplay?.Mechanic == P28Mechanic.Blue))
+            P14MapNode[] blueAltars = plan.Nodes.Where(n => n.Gameplay?.Mechanic == P28Mechanic.Blue).ToArray();
+            P28AltarMode blue = P28Gameplay.Policy(map).Blue;
+            foreach (P14MapNode altar in blueAltars)
             {
                 P28Choice choice = altar.Gameplay!.Choice!;
                 result = choice.Cost switch
                 {
-                    P28Cost.BossLife => result with { Life = P28Gameplay.Scale(result.Life, 10_000 + choice.Magnitude) },
-                    P28Cost.BossDamage => result with { Damage = P28Gameplay.Scale(result.Damage, 10_000 + choice.Magnitude) },
+                    P28Cost.BossLife when blue == P28AltarMode.Normal =>
+                        result with { Life = P28Gameplay.Scale(result.Life, 10_000 + choice.Magnitude) },
+                    P28Cost.BossDamage when blue == P28AltarMode.Normal =>
+                        result with { Damage = P28Gameplay.Scale(result.Damage, 10_000 + choice.Magnitude) },
                     P28Cost.BossSpeed => result with { Speed = P28Gameplay.Scale(result.Speed, 10_000 + choice.Magnitude) },
                     P28Cost.BossPhase => result with { ExtraPhase = true }, _ => result,
                 };
-                P28AltarMode blue = P28Gameplay.Policy(map).Blue;
+            }
+            if (blueAltars.Length > 0 && blue != P28AltarMode.Normal)
                 result = result with
                 {
-                    Life = P28Gameplay.Scale(result.Life, blue == P28AltarMode.Extreme ? 25_000 : blue == P28AltarMode.HighPressure ? 17_500 : 10_000),
-                    Damage = P28Gameplay.Scale(result.Damage, blue == P28AltarMode.Extreme ? 20_000 : blue == P28AltarMode.HighPressure ? 15_000 : 10_000),
+                    Life = P28Gameplay.Scale(result.Life, blue == P28AltarMode.Extreme ? 25_000 : 17_500),
+                    Damage = P28Gameplay.Scale(result.Damage, blue == P28AltarMode.Extreme ? 20_000 : 15_000),
                 };
-            }
         }
         return result;
     }
