@@ -42,7 +42,9 @@ public sealed record P1TeamExpeditionSnapshot(
     ExpeditionPolicy? ActivePolicySnapshot = null,
     ExpeditionPolicy? PendingPolicy = null,
     P1MapRunResult? ActiveRun = null,
-    long RouteDecisionRemainingMilliseconds = 0);
+    long RouteDecisionRemainingMilliseconds = 0,
+    int ConsecutiveCompletedWithoutMapDrop = 0,
+    IReadOnlyDictionary<string, int>? LegendaryPoolMisses = null);
 
 public sealed record P1WorldSnapshot(
     TownEconomySnapshot Economy,
@@ -163,5 +165,7 @@ public static class P1WorldSnapshots
         team.ActivePolicySnapshot,
         team.PendingPolicy,
         team.ActiveRun,
-        team.RouteDecisionRemainingMilliseconds);
+        team.RouteDecisionRemainingMilliseconds,
+        team.ConsecutiveCompletedWithoutMapDrop,
+        new Dictionary<string, int>(team.LegendaryPoolMisses));
 }

@@ -3,6 +3,7 @@ using GameForWork.Core.P1.Items;
 using GameForWork.Core.P1.Progression;
 using GameForWork.Core.P14;
 using GameForWork.Core.P20;
+using GameForWork.Core.P29;
 using Godot;
 
 namespace GameForWork.GodotClient;
@@ -15,6 +16,8 @@ internal static class P1UiText
         text.AppendLine($"{RarityName(item.Rarity)}·{item.DisplayName}{(item.Quality > 0 ? $"+{item.Quality}" : string.Empty)}");
         text.AppendLine($"底材：{item.Base.DisplayName}");
         text.AppendLine($"物品等级 {item.ItemLevel} · {item.Base.DetailedTypeName}");
+        text.AppendLine($"底材阶级：{P29DropCatalog.BaseTierName(P29DropCatalog.BaseTier(item.Base))}");
+        if (!string.IsNullOrWhiteSpace(item.DropSource)) text.AppendLine($"掉落来源：{P29DropCatalog.SourceDisplay(item.DropSource)}");
         text.AppendLine($"需求：等级 {item.Base.RequiredLevel} · 体魄 {item.Base.RequiredPhysique} · " +
             $"灵巧 {item.Base.RequiredDexterity} · 精神 {item.Base.RequiredSpirit} · 能量 {item.Base.RequiredEnergy}");
         if (item.Base.Category is ItemCategory.TwoHandWeapon or ItemCategory.OneHandWeapon)
@@ -47,6 +50,8 @@ internal static class P1UiText
                 : item.Base.ImplicitText;
             text.AppendLine($"（基底词缀）{label}：{Modifier(item.Base.ImplicitModifier, item.EffectiveImplicitValue)}");
         }
+        foreach (ItemBaseImplicit implicitModifier in item.Base.ExtraImplicits)
+            text.AppendLine($"（基底词缀）{implicitModifier.DisplayText}");
 
         if (item.Enchantment is not null)
             text.AppendLine($"（附魔）{item.Enchantment.DisplayName}：{Modifier(item.Enchantment.ModifierKind, item.Enchantment.Value)}");
@@ -202,6 +207,16 @@ internal static class P1UiText
         ItemModifierKind.BlockChanceBasisPoints => "格挡概率",
         ItemModifierKind.SpellSuppressionBasisPoints => "法术压制概率",
         ItemModifierKind.FlatLifeRegeneration => "每秒生命恢复",
+        ItemModifierKind.IncreasedCooldownRecoveryBasisPoints => "冷却恢复速度增加",
+        ItemModifierKind.IncreasedFlaskChargeGainBasisPoints => "药剂充能获取增加",
+        ItemModifierKind.IncreasedFlaskDurationBasisPoints => "药剂持续时间增加",
+        ItemModifierKind.IncreasedMaximumLifeBasisPoints => "最大生命增加",
+        ItemModifierKind.IncreasedMaximumManaBasisPoints => "最大法力增加",
+        ItemModifierKind.IncreasedMaximumShieldBasisPoints => "最大护盾增加",
+        ItemModifierKind.MaximumAllResistanceBasisPoints => "四元素最大抗性",
+        ItemModifierKind.MoreRareBossDamageBasisPoints => "对稀有与Boss伤害总增",
+        ItemModifierKind.ActiveSkillGemLevels => "主动技能石等级",
+        ItemModifierKind.SupportSkillGemLevels => "辅助技能石等级",
         _ => kind.ToString(),
     };
 

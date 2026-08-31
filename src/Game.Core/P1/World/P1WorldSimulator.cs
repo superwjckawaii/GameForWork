@@ -7,6 +7,7 @@ using GameForWork.Core.P1.Combat;
 using GameForWork.Core.P5;
 using GameForWork.Core.P6;
 using GameForWork.Core.P26;
+using GameForWork.Core.P20;
 
 namespace GameForWork.Core.P1.World;
 
@@ -42,6 +43,25 @@ public sealed class P1TeamExpeditionState
     public int ConsecutiveFailures { get; private set; }
     public int MapsRunSincePolicyApplied { get; private set; }
     public long RouteDecisionRemainingMilliseconds { get; private set; }
+    public int ConsecutiveCompletedWithoutMapDrop { get; private set; }
+    private readonly Dictionary<string, int> _legendaryPoolMisses = new(StringComparer.Ordinal);
+    public IReadOnlyDictionary<string, int> LegendaryPoolMisses => _legendaryPoolMisses;
+
+    public bool RecordCompletedMapDrop(int mapCount, int threshold)
+    {
+        if (mapCount > 0) { ConsecutiveCompletedWithoutMapDrop = 0; return false; }
+        ConsecutiveCompletedWithoutMapDrop++;
+        if (ConsecutiveCompletedWithoutMapDrop < threshold) return false;
+        ConsecutiveCompletedWithoutMapDrop = 0; return true;
+    }
+
+    public bool ShouldGuaranteeLegendary(string pool, bool dropped)
+    {
+        if (dropped) { _legendaryPoolMisses[pool] = 0; return false; }
+        int misses = _legendaryPoolMisses.GetValueOrDefault(pool);
+        if (misses >= 10) { _legendaryPoolMisses[pool] = 0; return true; }
+        _legendaryPoolMisses[pool] = misses + 1; return false;
+    }
 
     public bool WaitForRouteDecision(P1MapItem map, bool offline)
     {
@@ -222,6 +242,10 @@ public sealed class P1TeamExpeditionState
         ConsecutiveFailures = snapshot.ConsecutiveFailures;
         MapsRunSincePolicyApplied = snapshot.MapsRunSincePolicyApplied;
         RouteDecisionRemainingMilliseconds = snapshot.RouteDecisionRemainingMilliseconds;
+        ConsecutiveCompletedWithoutMapDrop = Math.Max(0, snapshot.ConsecutiveCompletedWithoutMapDrop);
+        _legendaryPoolMisses.Clear();
+        foreach (var pair in snapshot.LegendaryPoolMisses ?? new Dictionary<string, int>())
+            if (!string.IsNullOrWhiteSpace(pair.Key) && pair.Value is >= 0 and <= 10) _legendaryPoolMisses[pair.Key] = pair.Value;
         if (snapshot.ActiveMap is not null)
         {
             StartMap(snapshot.ActiveMap, snapshot.ActiveRoute, snapshot.RemainingMapTimeMilliseconds, snapshot.ActiveRun);
@@ -608,9 +632,26 @@ public sealed class P1WorldSimulator(IP1MapAttemptResolver attemptResolver)
         P1MapRewards rewards = P1MapRewardGenerator.Generate(expedition.Map, expedition.Route,
             seed ^ 0x9e3779b97f4a7c15UL, state.MaximumUnlockedMapTier, run);
         state.Economy.AddRewards(rewards.Stackables);
-        state.AddMaps(rewards.Maps);
+        var maps = rewards.Maps.ToList();
+        bool sameTierGuarantee = P26AtlasEffects.Has(expedition.Map.AtlasSnapshot, "p26.atlas.supply.12");
+        int pityThreshold = P26AtlasEffects.Has(expedition.Map.AtlasSnapshot, "p26.atlas.supply.08") ? 2 : 3;
+        bool needsSameTier = sameTierGuarantee && !maps.Any(map => map.Tier == expedition.Map.Tier);
+        bool pityMap = expedition.Team.RecordCompletedMapDrop(maps.Count + (needsSameTier ? 1 : 0), pityThreshold);
+        if (needsSameTier || pityMap)
+            maps.Add(new P1MapItem($"p29-map-pity-{expedition.Team.Kind}-{expedition.Team.MapsCompleted:000000}", expedition.Map.Tier)
+                .EnsureFormal(seed ^ 0x7032396d6170UL));
+        state.AddMaps(maps);
+        var equipment = rewards.Equipment.ToList();
+        string legendaryPool = P20LegendaryDrops.PoolForMap(expedition.Map, expedition.Route);
+        if (expedition.Team.ShouldGuaranteeLegendary(legendaryPool, rewards.LegendaryDropped))
+        {
+            GameForWork.Core.P14.P14UniqueDefinition unique = P20LegendaryDrops.Pick(legendaryPool, new GameForWork.Core.Simulation.Pcg32(seed ^ 0x703239756e69UL));
+            equipment.Add(GameForWork.Core.P14.P14UniqueItems.Create(unique.StableId, Math.Min(120, expedition.Map.MonsterLevel + 2),
+                $"p29-legendary-pity-{expedition.Team.Kind}-{expedition.Team.MapsCompleted:000000}") with
+                { DropSource = $"p29.source.legendary.{legendaryPool}" });
+        }
         LootProcessingResult processed = LootProcessor.Process(
-            rewards.Equipment,
+            equipment,
             state.Storage,
             state.Filter,
             runPolicy.StorageFullBehavior);

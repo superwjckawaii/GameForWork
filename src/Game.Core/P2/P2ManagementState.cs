@@ -807,16 +807,20 @@ public sealed class P2ManagementState
         }
     }
 
-    public SkillStoneInstance AddDroppedSkillStone(ulong seed, bool recordHistory = true, int quality = 0, bool mutated = false)
+    public SkillStoneInstance AddDroppedSkillStone(ulong seed, bool recordHistory = true, int quality = 0, bool mutated = false,
+        IReadOnlySet<string>? preferredDefinitions = null)
     {
         SkillStoneDefinition[] pool = P2SkillStones.DropPool.Where(item => !mutated || item.Kind == SkillStoneKind.Active)
+            .Where(item => _skillStones.Count(stone => stone.DefinitionId == item.StableId && stone.Mutated == mutated) < 5)
             .OrderBy(item => item.StableId, StringComparer.Ordinal).ToArray();
         if (pool.Length == 0)
         {
-            throw new InvalidOperationException("Skill stone drop pool is empty.");
+            if (recordHistory) AddHistory("技能石掉落池均已达到同名持有上限 5，未生成额外技能石。");
+            return _skillStones.OrderBy(stone => stone.InstanceId, StringComparer.Ordinal).First();
         }
         var random = new Pcg32(seed);
-        int Weight(SkillStoneDefinition candidate) => _skillStones.Any(stone => stone.DefinitionId == candidate.StableId) ? 1 : 3;
+        int Weight(SkillStoneDefinition candidate) => (_skillStones.Any(stone => stone.DefinitionId == candidate.StableId) ? 1 : 3) *
+            (preferredDefinitions?.Contains(candidate.StableId) == true ? 4 : 1);
         int totalWeight = pool.Sum(Weight);
         int roll = (int)(random.NextUInt() % (uint)totalWeight);
         SkillStoneDefinition definition = pool[^1];
@@ -836,6 +840,9 @@ public sealed class P2ManagementState
         if (recordHistory) AddHistory($"获得技能石：{definition.DisplayName}。");
         return stone;
     }
+
+    public int HeldSkillStoneCount(string definitionId, bool mutated) =>
+        _skillStones.Count(stone => stone.DefinitionId == definitionId && stone.Mutated == mutated);
 
     private SkillStoneInstance? Stone(string? instanceId) => string.IsNullOrEmpty(instanceId)
         ? null

@@ -1,4 +1,5 @@
 using GameForWork.Core.P1.Items;
+using GameForWork.Core.P29;
 
 namespace GameForWork.Core.P25;
 
@@ -57,7 +58,8 @@ public static class P25ItemImplicitCatalog
     public static ItemBaseDefinition Ensure(ItemBaseDefinition item)
     {
         if (item.ImplicitModifier != ItemModifierKind.None)
-            return item with { ImplicitText = ImplicitLabel(item, item.ImplicitModifier) };
+            return item with { ImplicitText = item.SourceId == "P29" && !string.IsNullOrWhiteSpace(item.ImplicitText)
+                ? item.ImplicitText : ImplicitLabel(item, item.ImplicitModifier) };
         (ItemModifierKind kind, int minimum, int maximum, string text) = Resolve(item);
         return item with
         {
@@ -173,11 +175,12 @@ public static class P25LegendaryCatalog
 public static class P25EquipmentArt
 {
     public const int Columns = 13;
-    public const int Rows = 10;
+    public const int Rows = 12;
     public static IReadOnlyList<string> ItemBaseIds { get; } =
         P19.P19Catalog.Bases.Select(item => item.StableId)
             .Concat(P24.P24ItemCatalog.Bases.Select(item => item.StableId))
-            .OrderBy(stableId => stableId, StringComparer.Ordinal).ToArray();
+            .OrderBy(stableId => stableId, StringComparer.Ordinal)
+            .Concat(P29WarfrontBases.All.Select(item => item.StableId)).ToArray();
     private static readonly IReadOnlyDictionary<string, int> Indices = ItemBaseIds
         .Select((stableId, index) => (stableId, index)).ToDictionary(pair => pair.stableId, pair => pair.index,
             StringComparer.Ordinal);
@@ -201,6 +204,9 @@ public static class P25LegendaryArt
         "core.unique.thorn_procession", "core.unique.pilgrims_debt", "core.unique.cinder_chain",
         "core.unique.fourth_testament", "core.unique.silent_anvil", "core.unique.hunters_eclipse",
         "core.unique.ashes_memory", "core.unique.grave_plate", "core.unique.famine_ring", "core.unique.last_watch",
+        "p29.unique.rift_fang", "p29.unique.deep_echo", "p29.unique.seed_of_rebirth", "p29.unique.thorned_bark",
+        "p29.unique.executioners_due", "p29.unique.blood_tithe", "p29.unique.frozen_moment", "p29.unique.starfall_lens",
+        "p29.unique.commanders_burden", "p29.unique.broken_standard", "p29.unique.wayfarers_compass", "p29.unique.void_balance",
         "core.mythic.heart_of_ash",
     ];
     private static readonly IReadOnlyDictionary<string, int> Indices = StableIds
@@ -297,6 +303,18 @@ public static class P25LegendaryRules
         "core.unique.famine_ring" => new(IncomingDamageMultiplierBasisPoints: 10_000,
             FlaskChargeGainMultiplierBasisPoints: 20_000, IncreasedFlaskEffectBasisPoints: 5_000),
         "core.unique.last_watch" => new(IncomingDamageMultiplierBasisPoints: Math.Max(7_500, 10_000 - context.BastionStacks * 500)),
+        "p29.unique.rift_fang" => new(context.Boss ? 15_500 : 10_000),
+        "p29.unique.deep_echo" => new(context.ReturningProjectile ? 14_800 : 11_200, ExtraProjectileChains: 1),
+        "p29.unique.seed_of_rebirth" => new(context.FullLife ? 12_500 : 10_000, RestoreLifeBasisPoints: context.FullLife ? 0 : 400),
+        "p29.unique.thorned_bark" => new(IncomingDamageMultiplierBasisPoints: context.Blocked ? 10_000 : 8_000),
+        "p29.unique.executioners_due" => new(context.Boss ? 20_000 : 10_000),
+        "p29.unique.blood_tithe" => new(16_000, RestoreLifeBasisPoints: -2_000),
+        "p29.unique.frozen_moment" => new(context.Boss ? 14_000 : 10_000),
+        "p29.unique.starfall_lens" => new(context.Evaded ? 13_500 : 10_000, ExtraProjectileChains: context.Evaded ? 3 : 0),
+        "p29.unique.commanders_burden" => new(context.Boss ? 14_500 : 10_000, IncreasedArmorBasisPoints: context.Boss ? 0 : 7_500),
+        "p29.unique.broken_standard" => new(IncreasedMovementSpeedBasisPoints: 3_500),
+        "p29.unique.wayfarers_compass" => new(IncomingDamageMultiplierBasisPoints: context.Moving ? 8_500 : 10_000, IncreasedMovementSpeedBasisPoints: 3_000),
+        "p29.unique.void_balance" => new(13_500, IncomingDamageMultiplierBasisPoints: 8_800),
         "core.mythic.heart_of_ash" => new(13_000, ReviveOnce: true),
         _ => throw new KeyNotFoundException($"Unknown P25 legendary effect: {stableId}"),
     };

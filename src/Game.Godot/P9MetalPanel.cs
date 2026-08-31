@@ -5,6 +5,7 @@ using GameForWork.Core.P4;
 using GameForWork.Core.P6;
 using GameForWork.Core.P9;
 using GameForWork.Core.P14;
+using GameForWork.Core.P29;
 using Godot;
 
 namespace GameForWork.GodotClient;
@@ -219,6 +220,39 @@ public partial class P9MetalPanel : VBoxContainer
             };
             _garden.AddChild(button);
         }
+        if (target is not null)
+        {
+            foreach (AffixRoll affix in target.Item.Affixes.Where(affix => !affix.Crafted))
+            {
+                string family = affix.Definition.StableFamilyId;
+                var red = new Button
+                {
+                    Text = $"赤誓升降：{affix.Definition.DisplayName}\n{P29ResourceCrafting.RedFavorCost} 赤誓",
+                    TooltipText = "选择该非制作词缀，50%随机提升一级或降低一级；边界档位会向合法方向变化。",
+                    Disabled = session.Endgame.RedFavor < P29ResourceCrafting.RedFavorCost || !target.Item.CanModify,
+                };
+                red.Pressed += () => Confirm($"随机升降 {affix.Definition.DisplayName} 的词缀档位？\n消耗：{P29ResourceCrafting.RedFavorCost} 赤誓", () =>
+                {
+                    P9CraftTarget? current = _target?.Invoke(); if (current is null) return;
+                    P29ResourceCraftResult result = new P2ItemCommandService(_session!(), current.Character, current.MercenaryId)
+                        .CraftP29Red(current.Container, current.Index, family); _changed?.Invoke(result.Summary);
+                });
+                _garden.AddChild(red);
+            }
+            var blue = new Button
+            {
+                Text = $"苍誓随机品质 0–40%\n{P29ResourceCrafting.BlueFavorCost} 苍誓",
+                TooltipText = "覆盖当前品质，结果在 0–40% 间均匀随机，可能降低。",
+                Disabled = session.Endgame.BlueFavor < P29ResourceCrafting.BlueFavorCost || !target.Item.CanModify,
+            };
+            blue.Pressed += () => Confirm($"随机重置品质为 0–40%？\n消耗：{P29ResourceCrafting.BlueFavorCost} 苍誓", () =>
+            {
+                P9CraftTarget? current = _target?.Invoke(); if (current is null) return;
+                P29ResourceCraftResult result = new P2ItemCommandService(_session!(), current.Character, current.MercenaryId)
+                    .CraftP29Blue(current.Container, current.Index); _changed?.Invoke(result.Summary);
+            });
+            _garden.AddChild(blue);
+        }
     }
 
     private static string GardenName(P14GardenCraft craft) => craft switch
@@ -228,6 +262,14 @@ public partial class P9MetalPanel : VBoxContainer
         P14GardenCraft.BiasLife => "生命偏向重铸",
         P14GardenCraft.BiasDefense => "防御偏向重铸",
         P14GardenCraft.BiasSpell => "法术偏向重铸",
+        P14GardenCraft.BiasSpeed => "速度偏向重铸",
+        P14GardenCraft.BiasCritical => "暴击偏向重铸",
+        P14GardenCraft.ReplaceLife => "生命偏向替换",
+        P14GardenCraft.ReplaceDefense => "防御偏向替换",
+        P14GardenCraft.ReplaceAttack => "攻击偏向替换",
+        P14GardenCraft.ReplaceSpell => "法术偏向替换",
+        P14GardenCraft.ReplaceSpeed => "速度偏向替换",
+        P14GardenCraft.ReplaceCritical => "暴击偏向替换",
         _ => "攻击偏向重铸",
     };
 

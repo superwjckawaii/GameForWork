@@ -1,5 +1,8 @@
 using System.Text;
 using GameForWork.Core.P1.World;
+using GameForWork.Core.P10;
+using GameForWork.Core.P12;
+using GameForWork.Core.P26;
 
 namespace GameForWork.Core.P20;
 
@@ -10,7 +13,10 @@ public sealed record P20AuditBracket(
     int MonsterQuantityBonusBasisPoints,
     MapRoute Route,
     bool Boss,
-    int QuantityBasisPoints = 10_000);
+    int QuantityBasisPoints = 10_000,
+    P12MapAltar Altar = P12MapAltar.None,
+    bool FullAtlas = false,
+    bool Corrupted = false);
 
 public sealed record P20AuditResult(
     P20AuditBracket Bracket,
@@ -31,10 +37,13 @@ public static class P20EconomyAudit
     [
         new("剧情", 35, 0, 25, MapRoute.Safe, false),
         new("T1", 70, 1, 13, MapRoute.Safe, false),
+        new("T6", 78, 6, 30, MapRoute.Safe, false),
         new("T10", 84, 10, 42, MapRoute.Abyss, false),
+        new("T11", 86, 11, 48, MapRoute.Safe, false),
         new("T16", 94, 16, 63, MapRoute.LifeGarden, false),
         new("T20", 100, 20, 80, MapRoute.Abyss, false),
         new("Boss", 100, 20, 100, MapRoute.Abyss, true),
+        .. Mechanics(),
     ];
 
     public static IReadOnlyList<P20AuditResult> Run(int samplesPerBracket = 100_000, ulong seed = 0x20ec0a11UL)
@@ -45,10 +54,16 @@ public static class P20EconomyAudit
         {
             P20AuditBracket bracket = StandardBrackets[bracketIndex];
             IReadOnlyList<P20DefeatedEnemy> pack = P20DropFormula.SyntheticPack(bracket.MonsterLevel, bracket.Boss);
+            IReadOnlyList<string>? atlas = bracket.FullAtlas ? P10AtlasTree.Nodes.Select(node => node.StableId).ToArray() : null;
+            P1MapItem? map = bracket.Tier <= 0 ? null : new P1MapItem($"audit-map-{bracketIndex}", bracket.Tier,
+                P12MapCatalog.Areas[bracketIndex % P12MapCatalog.Areas.Count].StableId,
+                bracket.Corrupted ? P12MapRarity.Rare : P12MapRarity.Basic, Altar: bracket.Altar,
+                AtlasSnapshot: atlas, IsCorrupted: bracket.Corrupted,
+                CorruptionRule: bracket.Corrupted ? P26CorruptionRule.Greed : P26CorruptionRule.None);
             var context = new P20LootContext($"audit-{bracket.Name}", bracket.MonsterLevel,
                 bracket.QuantityBasisPoints, bracket.MonsterQuantityBonusBasisPoints, bracket.Route, bracket.Tier,
                 P1MapItem.MaximumTier, AllowMaps: bracket.Tier > 0, AllowLegendary: true,
-                Completed: true, BossPool: bracket.Boss ? "warden" : string.Empty);
+                Completed: true, BossPool: bracket.Boss ? "warden" : string.Empty, Map: map);
             long equipment = 0, gold = 0, metals = 0, maps = 0, stones = 0, legendary = 0;
             var distribution = new int[42];
             for (int index = 0; index < samplesPerBracket; index++)
@@ -73,11 +88,21 @@ public static class P20EconomyAudit
         return results;
     }
 
+    public static void ValidateSustain(IReadOnlyList<P20AuditResult> results, double maximumDeviation = 0.05)
+    {
+        foreach ((string name, double target) in new[] { ("T1", 1.15), ("T6", 1.08), ("T11", 1.00), ("T16", 1.00), ("T20", 0.90) })
+        {
+            double actual = results.Single(result => result.Bracket.Name == name).AverageMaps;
+            if (Math.Abs(actual - target) / target > maximumDeviation)
+                throw new InvalidOperationException($"P29 sustain audit failed for {name}: {actual:F4}, target {target:F4}.");
+        }
+    }
+
     public static string RenderMarkdown(IReadOnlyList<P20AuditResult> results)
     {
         ArgumentNullException.ThrowIfNull(results);
         var text = new StringBuilder();
-        text.AppendLine("# P20 经济蒙特卡洛审计").AppendLine();
+        text.AppendLine("# P29 经济蒙特卡洛审计").AppendLine();
         text.AppendLine($"每个档位样本数：{results.FirstOrDefault()?.Samples ?? 0:N0}。种子固定，整数基点抽样可复现。").AppendLine();
         text.AppendLine("| 档位 | 装备/节点 | 装备 P10/P50/P90 | 金币/节点 | 金属/节点 | 地图/节点 | 技能石/节点 | 传奇率 |");
         text.AppendLine("|---|---:|---:|---:|---:|---:|---:|---:|");
@@ -114,5 +139,22 @@ public static class P20EconomyAudit
             if (cumulative >= target) return value;
         }
         return distribution.Count - 1;
+    }
+
+    private static IReadOnlyList<P20AuditBracket> Mechanics()
+    {
+        var result = new List<P20AuditBracket>();
+        foreach ((string name, MapRoute route, P12MapAltar altar) in new[]
+                 {
+                     ("深渊", MapRoute.Abyss, P12MapAltar.None), ("命能", MapRoute.LifeGarden, P12MapAltar.None),
+                     ("赤誓", MapRoute.Safe, P12MapAltar.RedOath), ("苍誓", MapRoute.Safe, P12MapAltar.BlueOath),
+                     ("战阵", MapRoute.Warfront, P12MapAltar.None),
+                 })
+        {
+            result.Add(new($"{name}-普通", 94, 16, 63, route, false, 10_000, altar));
+            result.Add(new($"{name}-高压", 94, 16, 100, route, false, 17_500, altar, FullAtlas: true));
+            result.Add(new($"{name}-极限腐化", 100, 20, 160, route, true, 30_000, altar, FullAtlas: true, Corrupted: true));
+        }
+        return result;
     }
 }

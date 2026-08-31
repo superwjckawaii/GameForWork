@@ -29,7 +29,17 @@ public sealed record EquipmentModifiers(
     int IncreasedMovementSpeedBasisPoints = 0,
     int BlockChanceBasisPoints = 0,
     int SpellSuppressionBasisPoints = 0,
-    int FlatLifeRegeneration = 0);
+    int FlatLifeRegeneration = 0,
+    int IncreasedCooldownRecoveryBasisPoints = 0,
+    int IncreasedFlaskChargeGainBasisPoints = 0,
+    int IncreasedFlaskDurationBasisPoints = 0,
+    int IncreasedMaximumLifeBasisPoints = 0,
+    int IncreasedMaximumManaBasisPoints = 0,
+    int IncreasedMaximumShieldBasisPoints = 0,
+    int MaximumAllResistanceBasisPoints = 0,
+    int MoreRareBossDamageBasisPoints = 0,
+    int ActiveSkillGemLevels = 0,
+    int SupportSkillGemLevels = 0);
 
 public sealed record EquipmentSummary(
     DefensiveEquipment Defense,
@@ -125,6 +135,8 @@ public sealed class EquipmentLoadout
         foreach (ItemInstance item in equipped)
         {
             sums[(int)item.Base.ImplicitModifier] = checked(sums[(int)item.Base.ImplicitModifier] + item.EffectiveImplicitValue);
+            foreach (ItemBaseImplicit implicitModifier in item.Base.ExtraImplicits)
+                sums[(int)implicitModifier.ModifierKind] = checked(sums[(int)implicitModifier.ModifierKind] + implicitModifier.Value);
             foreach (AffixRoll affix in item.Affixes)
             {
                 sums[(int)affix.Definition.ModifierKind] = checked(
@@ -162,20 +174,30 @@ public sealed class EquipmentLoadout
             sums[(int)ItemModifierKind.IncreasedMovementSpeedBasisPoints],
             sums[(int)ItemModifierKind.BlockChanceBasisPoints],
             sums[(int)ItemModifierKind.SpellSuppressionBasisPoints],
-            sums[(int)ItemModifierKind.FlatLifeRegeneration]);
+            sums[(int)ItemModifierKind.FlatLifeRegeneration],
+            sums[(int)ItemModifierKind.IncreasedCooldownRecoveryBasisPoints],
+            sums[(int)ItemModifierKind.IncreasedFlaskChargeGainBasisPoints],
+            sums[(int)ItemModifierKind.IncreasedFlaskDurationBasisPoints],
+            sums[(int)ItemModifierKind.IncreasedMaximumLifeBasisPoints],
+            sums[(int)ItemModifierKind.IncreasedMaximumManaBasisPoints],
+            sums[(int)ItemModifierKind.IncreasedMaximumShieldBasisPoints],
+            sums[(int)ItemModifierKind.MaximumAllResistanceBasisPoints],
+            sums[(int)ItemModifierKind.MoreRareBossDamageBasisPoints],
+            sums[(int)ItemModifierKind.ActiveSkillGemLevels],
+            sums[(int)ItemModifierKind.SupportSkillGemLevels]);
         ItemInstance? weaponItem = _items.GetValueOrDefault(EquipmentSlot.MainHand);
         return new EquipmentSummary(
             new DefensiveEquipment(armor, evasion, shield),
             modifiers,
-            equipped.Sum(item => item.Base.CoreSkillCapacity),
-            equipped.Sum(item => item.Base.SupportLinkCapacity + item.ExtraSupportLinkCapacity),
+            equipped.Sum(item => item.Base.CoreSkillCapacity) + (equipped.Any(item => item.Base.StableId == "p29.base.warfront.marshal_decree") ? 1 : 0),
+            equipped.Sum(item => item.Base.SupportLinkCapacity) + sums[(int)ItemModifierKind.ExtraSupportLinkCapacity],
             weaponItem?.Base.Category is ItemCategory.TwoHandWeapon or ItemCategory.OneHandWeapon ? QualityWeapon(weaponItem) : null,
             weaponItem?.LegendaryRule,
             _items.GetValueOrDefault(EquipmentSlot.OffHand)?.Base.ItemTags.Contains("shield", StringComparer.Ordinal) == true,
             equipped.Sum(item => item.Base.BlockChanceBasisPoints));
     }
 
-    private static int QualityScale(int value, int quality) => checked(value * (100 + Math.Clamp(quality, 0, 20)) / 100);
+    private static int QualityScale(int value, int quality) => checked(value * (100 + Math.Clamp(quality, 0, 40)) / 100);
 
     private static WeaponProfile QualityWeapon(ItemInstance item)
     {

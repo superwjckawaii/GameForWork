@@ -2,6 +2,7 @@ using GameForWork.Core.P1.Combat;
 using GameForWork.Core.P19;
 using GameForWork.Core.P24;
 using GameForWork.Core.P25;
+using GameForWork.Core.P29;
 
 namespace GameForWork.Core.P1.Items;
 
@@ -92,9 +93,11 @@ public sealed record ItemBaseDefinition(
     int BlockChanceBasisPoints = 0,
     int MovementPenaltyBasisPoints = 0,
     int SocketLimit = 0,
-    string ImplicitText = "")
+    string ImplicitText = "",
+    IReadOnlyList<ItemBaseImplicit>? AdditionalImplicits = null)
 {
     public IReadOnlyList<string> ItemTags => Tags ?? Array.Empty<string>();
+    public IReadOnlyList<ItemBaseImplicit> ExtraImplicits => AdditionalImplicits ?? Array.Empty<ItemBaseImplicit>();
 
     public WeaponFamily WeaponFamily => ItemTags switch
     {
@@ -152,9 +155,11 @@ public static class P1ItemBases
             ? definition
             : throw new KeyNotFoundException($"Unknown item base: {stableId}");
 
-    private static IReadOnlyList<ItemBaseDefinition> Build() => P19Catalog.Bases.Concat(P24ItemCatalog.Bases)
+    private static IReadOnlyList<ItemBaseDefinition> Build() => P19Catalog.Bases.Concat(P24ItemCatalog.Bases).Concat(P29WarfrontBases.All)
         .Select(P25ItemBaseIdentity.Normalize).Select(P25ItemImplicitCatalog.Ensure).ToArray();
 }
+
+public sealed record ItemBaseImplicit(ItemModifierKind ModifierKind, int Value, string DisplayText);
 
 public enum ItemModifierKind
 {
@@ -185,6 +190,16 @@ public enum ItemModifierKind
     BlockChanceBasisPoints,
     SpellSuppressionBasisPoints,
     FlatLifeRegeneration,
+    IncreasedCooldownRecoveryBasisPoints,
+    IncreasedFlaskChargeGainBasisPoints,
+    IncreasedFlaskDurationBasisPoints,
+    IncreasedMaximumLifeBasisPoints,
+    IncreasedMaximumManaBasisPoints,
+    IncreasedMaximumShieldBasisPoints,
+    MaximumAllResistanceBasisPoints,
+    MoreRareBossDamageBasisPoints,
+    ActiveSkillGemLevels,
+    SupportSkillGemLevels,
 }
 
 public enum AffixPosition
@@ -279,7 +294,8 @@ public sealed record ItemInstance(
     bool IsCorrupted = false,
     string CorruptionOutcome = "",
     bool IsKeyItem = false,
-    string RolledName = "")
+    string RolledName = "",
+    string DropSource = "")
 {
     public string DisplayName => string.IsNullOrWhiteSpace(RolledName) ? Base.DisplayName : RolledName;
     public int PrefixCount => Affixes.Count(affix => affix.Definition.Position == AffixPosition.Prefix);

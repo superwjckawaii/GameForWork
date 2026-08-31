@@ -16,7 +16,7 @@ public sealed class P25FeatureTests
     [Fact]
     public void EveryEquipmentBaseHasARollableImplicit()
     {
-        Assert.Equal(130, P1ItemBases.All.Count);
+        Assert.Equal(148, P1ItemBases.All.Count);
         Assert.All(P1ItemBases.All, itemBase =>
         {
             Assert.NotEqual(ItemModifierKind.None, itemBase.ImplicitModifier);
@@ -65,12 +65,12 @@ public sealed class P25FeatureTests
     public void EveryBaseAndLegendaryHasOneStableExplicitArtCell()
     {
         int[] baseIndexes = P1ItemBases.All.Select(P25EquipmentArt.IconIndex).Order().ToArray();
-        Assert.Equal(Enumerable.Range(0, 130), baseIndexes);
+        Assert.Equal(Enumerable.Range(0, 148), baseIndexes);
         Assert.Equal(P14UniqueItems.All.Select(item => item.StableId), P25LegendaryArt.StableIds);
         Assert.Equal(2, P25LegendaryArt.IconIndex("core.unique.ravens_answer"));
-        Assert.Equal(24, P25LegendaryArt.IconIndex("core.mythic.heart_of_ash"));
+        Assert.Equal(36, P25LegendaryArt.IconIndex("core.mythic.heart_of_ash"));
         Assert.Equal(ItemCategory.Helmet, P1ItemBases.Get(P14UniqueItems.All[2].BaseStableId).Category);
-        Assert.Equal(ItemCategory.BodyArmor, P1ItemBases.Get(P14UniqueItems.All[24].BaseStableId).Category);
+        Assert.Equal(ItemCategory.BodyArmor, P1ItemBases.Get(P14UniqueItems.All[36].BaseStableId).Category);
     }
 
     [Fact]
@@ -105,7 +105,7 @@ public sealed class P25FeatureTests
     [Fact]
     public void EveryLegendaryHasConcreteRuleAffixesAndRuntimeHandler()
     {
-        Assert.Equal(25, P14UniqueItems.All.Count);
+        Assert.Equal(37, P14UniqueItems.All.Count);
         Assert.All(P14UniqueItems.All, definition =>
         {
             Assert.Contains(definition.RuleText, character => char.IsDigit(character));

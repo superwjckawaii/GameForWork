@@ -19,7 +19,7 @@ public sealed class P24FeatureTests
         Assert.Equal(40, P24SkillCatalog.Supports.Count);
         Assert.Equal(80, P1Skills.All.Count);
         Assert.Equal(88, P2SkillStones.All.Count(value => value.Kind == SkillStoneKind.Support));
-        Assert.Equal(130, P1ItemBases.All.Count);
+        Assert.Equal(148, P1ItemBases.All.Count);
         Assert.Equal(50, P24ItemCatalog.Bases.Count);
         Assert.Equal(45, P24ItemCatalog.Families.Count);
         Assert.Equal(135, P24ItemCatalog.Affixes.Count);

@@ -6,6 +6,7 @@ using GameForWork.Core.P6;
 using GameForWork.Core.P4;
 using GameForWork.Core.P9;
 using GameForWork.Core.P14;
+using GameForWork.Core.P29;
 
 namespace GameForWork.Core.P2;
 
@@ -267,6 +268,36 @@ public sealed class P2ItemCommandService(
         session.Management.AddHistory($"命能加工：{craft}，消耗 {cost} 命能。");
         session.RecordJourneyEvent(P8JourneyEvent.CraftedItem);
         return new(true, $"{craft} 完成，消耗 {cost} 命能。", result, cost);
+    }
+
+    public P29ResourceCraftResult CraftP29Red(ItemContainerKind source, int index, string affixFamilyId)
+    {
+        ItemInstance? item = PeekIncludingEquipped(source, index);
+        if (item is null) return new(false, "物品不存在。", null, P29ResourceCrafting.RedFavorCost);
+        if (session.Endgame.RedFavor < P29ResourceCrafting.RedFavorCost) return new(false, "赤誓收益不足。", null, P29ResourceCrafting.RedFavorCost);
+        P29ResourceCraftResult result = P29ResourceCrafting.ShiftAffixTier(item, affixFamilyId, CraftSeed(index));
+        if (!result.Succeeded || !Replace(source, index, result.Result!)) return result with { Succeeded = false };
+        if (!session.Endgame.TrySpendRedFavor(result.Cost)) throw new InvalidOperationException("Red favor changed during crafting.");
+        FinishResourceCraft(source, result.Summary); return result;
+    }
+
+    public P29ResourceCraftResult CraftP29Blue(ItemContainerKind source, int index)
+    {
+        ItemInstance? item = PeekIncludingEquipped(source, index);
+        if (item is null) return new(false, "物品不存在。", null, P29ResourceCrafting.BlueFavorCost);
+        if (session.Endgame.BlueFavor < P29ResourceCrafting.BlueFavorCost) return new(false, "苍誓收益不足。", null, P29ResourceCrafting.BlueFavorCost);
+        P29ResourceCraftResult result = P29ResourceCrafting.RerollQuality(item, CraftSeed(index));
+        if (!result.Succeeded || !Replace(source, index, result.Result!)) return result with { Succeeded = false };
+        if (!session.Endgame.TrySpendBlueFavor(result.Cost)) throw new InvalidOperationException("Blue favor changed during crafting.");
+        FinishResourceCraft(source, result.Summary); return result;
+    }
+
+    private ulong CraftSeed(int index) => session.Seed ^ (ulong)session.Endgame.GameplayOperationSequence * 0x9e3779b97f4a7c15UL ^ (ulong)index;
+    private void FinishResourceCraft(ItemContainerKind source, string summary)
+    {
+        session.Endgame.CompleteGameplayOperation();
+        if (source == ItemContainerKind.Equipped) session.NotifyEquipmentChanged(character);
+        session.Management.AddHistory(summary); session.RecordJourneyEvent(P8JourneyEvent.CraftedItem);
     }
 
     public P2ItemCommandResult TryUnequip(EquipmentSlot slot)

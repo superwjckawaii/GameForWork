@@ -1,6 +1,7 @@
 using GameForWork.Core.P1.Items;
 using GameForWork.Core.P20;
 using GameForWork.Core.P6;
+using GameForWork.Core.P29;
 
 namespace GameForWork.Core.P1.World;
 
@@ -69,7 +70,10 @@ public sealed record LootFilterRule(
     int? MinimumAffixTier = null,
     int? MaximumAffixTier = null,
     int? MinimumEstimatedValue = null,
-    int? MaximumEstimatedValue = null)
+    int? MaximumEstimatedValue = null,
+    P29BaseTier? BaseTier = null,
+    string? DropSource = null,
+    bool RequireGameplayBiasedBase = false)
 {
     public bool Matches(ItemInstance item)
     {
@@ -79,6 +83,9 @@ public sealed record LootFilterRule(
             Category is not null && item.Base.Category != Category ||
             BaseStableId is not null && item.Base.StableId != BaseStableId ||
             BaseTag is not null && !item.Base.ItemTags.Contains(BaseTag, StringComparer.Ordinal) ||
+            BaseTier is not null && P29DropCatalog.BaseTier(item.Base) != BaseTier ||
+            DropSource is not null && !item.DropSource.Contains(DropSource, StringComparison.OrdinalIgnoreCase) ||
+            RequireGameplayBiasedBase && !P29DropCatalog.IsGameplayBiased(item) ||
             Slot is not null && item.Base.PrimarySlot != Slot ||
             MinimumItemLevel is not null && item.ItemLevel < MinimumItemLevel ||
             MaximumItemLevel is not null && item.ItemLevel > MaximumItemLevel ||

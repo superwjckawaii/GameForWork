@@ -22,8 +22,8 @@ public sealed class P2ManagementTests
             {
                 ItemCategory.Gloves => 11,
                 ItemCategory.Boots => 6,
-                ItemCategory.Belt => 5,
-                _ => 10,
+                ItemCategory.Belt => 11,
+                _ => 16,
             };
             Assert.Equal(expected, P1ItemBases.All.Count(item => item.Category == category));
             int families = P1Affixes.For(category, 60)

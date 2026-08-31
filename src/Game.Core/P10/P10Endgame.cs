@@ -94,7 +94,8 @@ public sealed record P10EndgameSnapshot(
     int WarfrontReputation = 0,
     bool WarfrontGuaranteeIssued = false,
     IReadOnlyDictionary<P28RewardPreference, int>? BlueMisses = null,
-    long GameplayOperationSequence = 0);
+    long GameplayOperationSequence = 0,
+    string LastWarfrontBaseId = "");
 
 public sealed record P12AtlasSchemeSnapshot(string Name, IReadOnlyList<string> AllocatedPassives);
 
@@ -137,7 +138,9 @@ public sealed class P10EndgameState
     private readonly Dictionary<P28RewardPreference, int> _blueMisses = [];
     public IReadOnlyDictionary<P28RewardPreference, int> BlueMisses => _blueMisses;
     public long GameplayOperationSequence { get; private set; }
+    public string LastWarfrontBaseId { get; private set; } = string.Empty;
     public void CompleteGameplayOperation() => GameplayOperationSequence = checked(GameplayOperationSequence + 1);
+    public void RecordWarfrontBase(string stableId) { LastWarfrontBaseId = stableId; CompleteGameplayOperation(); }
     public void DiscoverWarfront() => WarfrontDiscovered = true;
     public int SupplyTier => WarfrontReputation >= 60 ? 3 : WarfrontReputation >= 15 ? 2 : 1;
     public bool TrySpendWarfrontMerit(int amount)
@@ -268,6 +271,16 @@ public sealed class P10EndgameState
         LifeForce -= amount;
         return true;
     }
+    public bool TrySpendRedFavor(int amount)
+    {
+        if (amount <= 0 || RedFavor < amount) return false;
+        RedFavor -= amount; return true;
+    }
+    public bool TrySpendBlueFavor(int amount)
+    {
+        if (amount <= 0 || BlueFavor < amount) return false;
+        BlueFavor -= amount; return true;
+    }
     public bool TryConsumeCitadelTicket()
     {
         if (CitadelTickets <= 0) return false;
@@ -311,7 +324,7 @@ public sealed class P10EndgameState
         0, CitadelVictories, MythicReforgeMaterials, MythicGranted,
         BreakthroughAttempts, BreakthroughVictories, BonusAtlasPoints, SelectedAscendancy,
         Act3AscendancyAwarded, Act5AscendancyAwarded, WarfrontDiscovered,
-        WarfrontMerit, WarfrontReputation, WarfrontGuaranteeIssued, new Dictionary<P28RewardPreference, int>(_blueMisses), GameplayOperationSequence);
+        WarfrontMerit, WarfrontReputation, WarfrontGuaranteeIssued, new Dictionary<P28RewardPreference, int>(_blueMisses), GameplayOperationSequence, LastWarfrontBaseId);
 
     public static P10EndgameState Restore(P10EndgameSnapshot? snapshot)
     {
@@ -349,6 +362,7 @@ public sealed class P10EndgameState
         state.WarfrontReputation = snapshot.WarfrontReputation;
         state.WarfrontGuaranteeIssued = snapshot.WarfrontGuaranteeIssued;
         state.GameplayOperationSequence = snapshot.GameplayOperationSequence;
+        state.LastWarfrontBaseId = snapshot.LastWarfrontBaseId ?? string.Empty;
         foreach (var pair in snapshot.BlueMisses ?? new Dictionary<P28RewardPreference, int>()) state._blueMisses[pair.Key] = pair.Value;
         foreach (string id in snapshot.AscendancyPassives)
         {

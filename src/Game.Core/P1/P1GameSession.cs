@@ -16,6 +16,7 @@ using GameForWork.Core.P23;
 using GameForWork.Core.P24;
 using GameForWork.Core.P26;
 using GameForWork.Core.P28;
+using GameForWork.Core.P29;
 
 namespace GameForWork.Core.P1;
 
@@ -443,6 +444,9 @@ public sealed class P1GameSession
         if (!special)
         {
             P28RewardLedger rewards = P28Rewards.Roll(run, seed);
+            P28Mechanic? rewardMechanic = rewards.Encounters.Where(encounter => encounter.Kills > 0)
+                .Select(encounter => (P28Mechanic?)encounter.Node.Gameplay?.Mechanic).FirstOrDefault(mechanic => mechanic is not null);
+            IReadOnlySet<string>? themedSkills = rewardMechanic is null ? null : P29SkillDropCatalog.For(rewardMechanic.Value);
             bool pity = Endgame.RecordGameplay(rewards, P28Gameplay.Has(run.Map.AtlasSnapshot, "blue", 11));
             World.Economy.AddRewards(rewards.Stackables);
             World.AddMaps(rewards.Maps);
@@ -451,10 +455,10 @@ public sealed class P1GameSession
             World.Economy.AddDispositionProceeds(processed.GoldGained, processed.IronScrapsGained);
             team.Backpack.Replace(team.Backpack.Items.Concat(processed.NotableItems));
             if (processed.ExpeditionMustStop) team.Stop("storage_full");
-            for (int i = 0; i < rewards.Stackables.SkillStones - rewards.QualityStones - rewards.MutatedStones; i++) Management.AddDroppedSkillStone(seed ^ (uint)i ^ 0x703238ccUL);
+            for (int i = 0; i < rewards.Stackables.SkillStones - rewards.QualityStones - rewards.MutatedStones; i++) Management.AddDroppedSkillStone(seed ^ (uint)i ^ 0x703238ccUL, preferredDefinitions: themedSkills);
             for (int i = 0; i < rewards.QualityStones + rewards.MutatedStones; i++)
                 Management.AddDroppedSkillStone(seed ^ (uint)i ^ 0x703238abUL, quality: 20,
-                    mutated: i < rewards.MutatedStones);
+                    mutated: i < rewards.MutatedStones, preferredDefinitions: themedSkills);
             if (pity && rewards.BlueTarget is { } target)
             {
                 if (target == P28RewardPreference.SkillStones) Management.AddDroppedSkillStone(seed ^ 0xb1eeUL);
@@ -489,22 +493,22 @@ public sealed class P1GameSession
 
     public bool TryExchangeWarfrontSupply(P28RewardPreference preference)
     {
-        if (!Endgame.WarfrontDiscovered || preference is not (P28RewardPreference.Weapons or P28RewardPreference.Armor or
-            P28RewardPreference.Jewelry or P28RewardPreference.Materials)) return false;
-        int tier = Endgame.SupplyTier;
+        if (preference is not (P28RewardPreference.Weapons or P28RewardPreference.Armor or P28RewardPreference.Jewelry or P28RewardPreference.Materials)) return false;
+        return TryExchangeWarfrontSupply(Endgame.SupplyTier);
+    }
+
+    public bool TryExchangeWarfrontSupply(int tier)
+    {
+        if (!Endgame.WarfrontDiscovered || tier is < 1 or > 3 || tier > Endgame.SupplyTier) return false;
         int cost = tier * 50;
-        if (!Endgame.TrySpendWarfrontMerit(cost)) return false;
+        if (Endgame.WarfrontMerit < cost) return false;
         ulong seed = Seed ^ (ulong)Endgame.GameplayOperationSequence * 0x9e3779b97f4a7c15UL;
-        Endgame.CompleteGameplayOperation();
-        if (preference == P28RewardPreference.Materials)
-            World.Economy.AddRewards(new(0, 0, 0, 0, 0, [new(tier == 3 ? MetalCurrencyKind.ExaltedGold : MetalCurrencyKind.AlchemicalGold, tier * 3)]));
-        else
-        {
-            int level = Math.Min(120, P16MapTierLevels.MonsterLevel(Endgame.CompletedTiers.DefaultIfEmpty(6).Max()) + tier - 1);
-            ItemInstance item = P28Rewards.Equipment(preference, level, true, seed, $"p28-supply-{Endgame.GameplayOperationSequence}");
-            if (!World.Storage.TryStore(item)) Management.AddToRecovery(item, "军需兑换：仓库已满");
-        }
-        Management.AddHistory($"兑换 {tier} 阶军需，消耗 {cost} 战功。");
+        ItemInstance item = P29WarfrontRewards.Create(tier, seed, Endgame.LastWarfrontBaseId,
+            $"p29-supply-{Endgame.GameplayOperationSequence}");
+        if (!Endgame.TrySpendWarfrontMerit(cost)) return false;
+        Endgame.RecordWarfrontBase(item.Base.StableId);
+        if (!World.Storage.TryStore(item)) Management.AddToRecovery(item, "战功军需兑换：仓库已满");
+        Management.AddHistory($"兑换 {tier} 阶战功基底 {item.Base.DisplayName}，消耗 {cost} 战功。");
         return true;
     }
 

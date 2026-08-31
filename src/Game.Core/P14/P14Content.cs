@@ -61,6 +61,18 @@ public static class P14UniqueItems
         new("core.unique.grave_plate", "墓门重甲", "core.base.crude_chainmail", "护甲的20%同时用于降低法术击中伤害"),
         new("core.unique.famine_ring", "饥馑指环", "core.base.iron_ring", "击杀获得的药剂充能翻倍，药剂效果提高50%，生命恢复总降30%"),
         new("core.unique.last_watch", "终夜守望", "core.base.warlord_helm", "受到未格挡击中获得1层壁垒，最多5层；每层受到击中伤害降低5%"),
+        new("p29.unique.rift_fang", "裂渊獠牙", "p19.base.karui_axe", "近战命中稀有或首领时造成55%更多伤害；击败普通敌人不触发"),
+        new("p29.unique.deep_echo", "深层回音", "core.base.oracle_crown", "每次连锁使该技能造成12%更多伤害，最多叠加4次"),
+        new("p29.unique.seed_of_rebirth", "复生之种", "core.base.spirit_amulet", "生命低于35%时每秒恢复4%最大生命，满生命时伤害提高25%"),
+        new("p29.unique.thorned_bark", "荆生树皮", "core.base.bastion_plate", "受到未格挡击中后获得20%总伤害减免，持续2秒"),
+        new("p29.unique.executioners_due", "行刑者之偿", "p19.base.headman_s_sword", "流血敌人低于20%生命时受到100%更多伤害"),
+        new("p29.unique.blood_tithe", "血税契据", "core.base.ember_ring", "消耗生命的技能造成60%更多伤害；生命恢复总降20%"),
+        new("p29.unique.frozen_moment", "凝滞一刻", "core.base.focus_ring", "对首领的首次命中冻结其行动1秒，并造成40%更多伤害"),
+        new("p29.unique.starfall_lens", "坠星透镜", "core.base.ember_amulet", "法术暴击后下一次法术额外连锁3次并造成35%更多伤害"),
+        new("p29.unique.commanders_burden", "统帅之负", "core.base.ration_belt", "附近每名敌人使护甲提高15%，最多75%；仅一名敌人时伤害提高45%"),
+        new("p29.unique.broken_standard", "折断军旗", "core.base.ritual_gloves", "击败稀有敌人后8秒内攻击和施法速度提高35%"),
+        new("p29.unique.wayfarers_compass", "界行罗盘", "core.base.march_boots", "移动速度提高30%；移动后3秒内受到的击中伤害降低15%"),
+        new("p29.unique.void_balance", "虚空天平", "core.base.iron_ring", "四元素抗性相同时造成35%更多伤害，否则受到的元素伤害降低12%"),
         new("core.mythic.heart_of_ash", "灰烬之心", "core.base.triune_carapace", "三阶段继承药剂与战吼状态；每场战斗首次濒死以50%生命和护盾重燃，随后8秒造成30%更多伤害", true),
     ];
 
@@ -229,10 +241,16 @@ public static class P14AtlasRules
     }
 }
 
-public enum P14GardenCraft { KeepPrefixes, KeepSuffixes, BiasLife, BiasDefense, BiasAttack, BiasSpell }
+public enum P14GardenCraft
+{
+    KeepPrefixes, KeepSuffixes,
+    BiasLife, BiasDefense, BiasAttack, BiasSpell, BiasSpeed, BiasCritical,
+    ReplaceLife, ReplaceDefense, ReplaceAttack, ReplaceSpell, ReplaceSpeed, ReplaceCritical,
+}
 public static class P14GardenCrafting
 {
-    public static int Cost(P14GardenCraft craft) => craft is P14GardenCraft.KeepPrefixes or P14GardenCraft.KeepSuffixes ? 80 : 40;
+    public static int Cost(P14GardenCraft craft) => IsReplacement(craft) ? 200 :
+        craft is P14GardenCraft.KeepPrefixes or P14GardenCraft.KeepSuffixes ? 80 : 40;
     public static IReadOnlyList<AffixRoll> SelectRetained(ItemInstance item, P14GardenCraft craft) => craft switch
     {
         P14GardenCraft.KeepPrefixes => item.Affixes.Where(affix => affix.Definition.Position == AffixPosition.Prefix).ToArray(),
@@ -246,6 +264,7 @@ public static class P14GardenCrafting
     {
         if (!CanApply(item, craft)) throw new InvalidOperationException("命能加工要求可修改的稀有装备及至少一条合法目标词缀。");
         var random = new Pcg32(seed);
+        if (IsReplacement(craft)) return Replace(item, craft, random);
         bool keep = craft is P14GardenCraft.KeepPrefixes or P14GardenCraft.KeepSuffixes;
         var affixes = keep ? SelectRetained(item, craft).ToList() : new List<AffixRoll>();
         int target = keep ? affixes.Count + 3 : 4 + (int)(random.NextUInt() % 3);
@@ -267,7 +286,8 @@ public static class P14GardenCrafting
     }
 
     public static bool CanApply(ItemInstance item, P14GardenCraft craft) => Enum.IsDefined(craft) && item.CanModify && item.Rarity == ItemRarity.Rare &&
-        (craft is P14GardenCraft.KeepPrefixes or P14GardenCraft.KeepSuffixes || Legal(item).Any(d => Tagged(d, craft)));
+        (craft is P14GardenCraft.KeepPrefixes or P14GardenCraft.KeepSuffixes || Legal(item).Any(d => Tagged(d, BiasOf(craft)))) &&
+        (!IsReplacement(craft) || CanReplace(item, craft));
     private static IEnumerable<AffixDefinition> Legal(ItemInstance item) => P1Affixes.For(item.Base, item.ItemLevel)
         .Where(d => d.WeightFor(item.Base) > 0 && d.ModifierKind switch
         {
@@ -276,13 +296,63 @@ public static class P14GardenCrafting
             ItemModifierKind.IncreasedShieldBasisPoints => item.Base.Shield > 0,
             _ => true
         });
-    public static bool Tagged(AffixDefinition d, P14GardenCraft craft) => craft switch
+    public static bool Tagged(AffixDefinition d, P14GardenCraft craft) => BiasOf(craft) switch
     {
         P14GardenCraft.BiasLife => d.ModTags?.Contains("life") == true || d.ModifierKind is ItemModifierKind.FlatMaximumLife or ItemModifierKind.FlatLifeRegeneration,
         P14GardenCraft.BiasDefense => d.ModTags?.Contains("defences") == true || d.ModifierKind is ItemModifierKind.IncreasedArmorBasisPoints or ItemModifierKind.IncreasedEvasionBasisPoints or ItemModifierKind.IncreasedShieldBasisPoints,
         P14GardenCraft.BiasSpell => d.ModTags?.Contains("caster") == true || d.ModTags?.Contains("spell") == true,
+        P14GardenCraft.BiasSpeed => d.ModTags?.Contains("speed") == true || d.ModifierKind is ItemModifierKind.IncreasedAttackSpeedBasisPoints or ItemModifierKind.IncreasedMovementSpeedBasisPoints or ItemModifierKind.IncreasedCooldownRecoveryBasisPoints,
+        P14GardenCraft.BiasCritical => d.ModTags?.Contains("critical") == true || d.ModifierKind == ItemModifierKind.IncreasedCriticalChanceBasisPoints,
         _ => d.ModTags?.Contains("attack") == true || d.ModifierKind is ItemModifierKind.AddedPhysicalDamage or ItemModifierKind.IncreasedPhysicalDamageBasisPoints or ItemModifierKind.IncreasedAttackSpeedBasisPoints,
     };
+
+    public static bool IsReplacement(P14GardenCraft craft) => craft is >= P14GardenCraft.ReplaceLife and <= P14GardenCraft.ReplaceCritical;
+
+    private static P14GardenCraft BiasOf(P14GardenCraft craft) => craft switch
+    {
+        P14GardenCraft.ReplaceLife => P14GardenCraft.BiasLife,
+        P14GardenCraft.ReplaceDefense => P14GardenCraft.BiasDefense,
+        P14GardenCraft.ReplaceAttack => P14GardenCraft.BiasAttack,
+        P14GardenCraft.ReplaceSpell => P14GardenCraft.BiasSpell,
+        P14GardenCraft.ReplaceSpeed => P14GardenCraft.BiasSpeed,
+        P14GardenCraft.ReplaceCritical => P14GardenCraft.BiasCritical,
+        _ => craft,
+    };
+
+    private static bool CanReplace(ItemInstance item, P14GardenCraft craft) => item.Affixes
+        .Where(removed => !removed.Crafted && !item.IsFractured(removed)).Any(removed =>
+        {
+            AffixRoll[] remaining = item.Affixes.Where(affix => !ReferenceEquals(affix, removed)).ToArray();
+            return Legal(item).Any(definition => Tagged(definition, BiasOf(craft)) &&
+                remaining.Count(affix => affix.Definition.Position == definition.Position) < 3 &&
+                remaining.All(affix => affix.Definition.MutualExclusionGroup != definition.MutualExclusionGroup));
+        });
+
+    private static ItemInstance Replace(ItemInstance item, P14GardenCraft craft, Pcg32 random)
+    {
+        AffixRoll[] removable = item.Affixes.Where(affix => !affix.Crafted && !item.IsFractured(affix)).ToArray();
+        var choices = removable.Select(removed =>
+        {
+            List<AffixRoll> remaining = item.Affixes.Where(affix => !ReferenceEquals(affix, removed)).ToList();
+            AffixDefinition[] candidates = Legal(item).Where(definition => Tagged(definition, BiasOf(craft)) &&
+                remaining.Count(affix => affix.Definition.Position == definition.Position) < 3 &&
+                remaining.All(affix => affix.Definition.MutualExclusionGroup != definition.MutualExclusionGroup)).ToArray();
+            return (remaining, candidates);
+        }).Where(choice => choice.candidates.Length > 0).ToArray();
+        if (choices.Length == 0) throw new InvalidOperationException("移除后没有合法的偏向替换词缀。");
+        (List<AffixRoll> affixes, AffixDefinition[] pool) = choices[(int)(random.NextUInt() % (uint)choices.Length)];
+        int total = pool.Sum(definition => definition.WeightFor(item.Base));
+        int roll = (int)(random.NextUInt() % (uint)total);
+        AffixDefinition selected = pool[^1];
+        foreach (AffixDefinition definition in pool)
+        {
+            roll -= definition.WeightFor(item.Base);
+            if (roll < 0) { selected = definition; break; }
+        }
+        int value = selected.MinimumValue + (int)(random.NextUInt() % (uint)(selected.MaximumValue - selected.MinimumValue + 1));
+        affixes.Add(new(selected, value));
+        return item with { Affixes = affixes };
+    }
 }
 
 public sealed record P14GardenCraftResult(bool Succeeded, string Summary, ItemInstance? Result, int Cost);

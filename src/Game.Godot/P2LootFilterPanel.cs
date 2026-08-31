@@ -1,6 +1,7 @@
 using GameForWork.Core.P1;
 using GameForWork.Core.P1.Items;
 using GameForWork.Core.P1.World;
+using GameForWork.Core.P29;
 using Godot;
 
 namespace GameForWork.GodotClient;
@@ -28,6 +29,9 @@ public partial class P2LootFilterPanel : VBoxContainer
     private LineEdit? _baseTag;
     private SpinBox? _bestAffixTier;
     private SpinBox? _worstAffixTier;
+    private OptionButton? _baseTier;
+    private LineEdit? _dropSource;
+    private CheckBox? _gameplayBiased;
     private CheckBox? _schemeNeed;
     private OptionButton? _disposition;
     private int _editingIndex = -1;
@@ -106,6 +110,10 @@ public partial class P2LootFilterPanel : VBoxContainer
         _category = AddOptions(body, "装备类别", ["任意", .. Enum.GetNames<ItemCategory>()]);
         _slot = AddOptions(body, "装备槽位", ["任意", .. Enum.GetNames<EquipmentSlot>()]);
         _base = AddOptions(body, "指定底材", ["任意", .. P1ItemBases.All.OrderBy(item => item.DisplayName).Select(item => item.DisplayName)]);
+        _baseTier = AddOptions(body, "底材阶级", ["任意", "普通", "进阶", "高阶", "巅峰"]);
+        body.AddChild(new Label { Text = "掉落来源（留空为任意，可输入族群/Boss/玩法）" });
+        _dropSource = new LineEdit { PlaceholderText = "例如 Warfront / boss / RedOath" }; body.AddChild(_dropSource);
+        _gameplayBiased = new CheckBox { Text = "仅保留与当前玩法偏向匹配的底材" }; body.AddChild(_gameplayBiased);
         var itemLevelRow = new HBoxContainer();
         body.AddChild(itemLevelRow);
         _minimumItemLevel = AddSpin(itemLevelRow, "最低物品等级（0=任意）", 0, 120);
@@ -189,6 +197,9 @@ public partial class P2LootFilterPanel : VBoxContainer
         P1ItemBases.All.OrderBy(item => item.DisplayName).Select((item, index) => (item, index))
             .Where(entry => entry.item.StableId == baseId).ToList().ForEach(entry => _base!.Select(entry.index + 1));
         if (baseId is null) _base!.Select(0);
+        _baseTier!.Select(rule?.BaseTier is null ? 0 : (int)rule.BaseTier.Value);
+        _dropSource!.Text = rule?.DropSource ?? string.Empty;
+        _gameplayBiased!.ButtonPressed = rule?.RequireGameplayBiasedBase ?? false;
         _minimumItemLevel!.Value = rule?.MinimumItemLevel ?? 0;
         _maximumItemLevel!.Value = rule?.MaximumItemLevel ?? 0;
         _minimumEstimatedValue!.Value = rule?.MinimumEstimatedValue ?? 0;
@@ -235,7 +246,10 @@ public partial class P2LootFilterPanel : VBoxContainer
             MinimumAffixTier: _worstAffixTier!.Value <= 0 ? null : (int)_worstAffixTier.Value,
             MaximumAffixTier: _bestAffixTier!.Value <= 0 ? null : (int)_bestAffixTier.Value,
             MinimumEstimatedValue: _minimumEstimatedValue!.Value <= 0 ? null : (int)_minimumEstimatedValue.Value,
-            MaximumEstimatedValue: _maximumEstimatedValue!.Value <= 0 ? null : (int)_maximumEstimatedValue.Value);
+            MaximumEstimatedValue: _maximumEstimatedValue!.Value <= 0 ? null : (int)_maximumEstimatedValue.Value,
+            BaseTier: _baseTier!.Selected <= 0 ? null : (P29BaseTier)_baseTier.Selected,
+            DropSource: string.IsNullOrWhiteSpace(_dropSource!.Text) ? null : _dropSource.Text.Trim(),
+            RequireGameplayBiasedBase: _gameplayBiased!.ButtonPressed);
         if (_editingIndex >= 0 && _editingIndex < rules.Count) rules[_editingIndex] = rule;
         else rules.Add(rule);
         Replace(rules, previous is null ? "过滤规则已新增。" : "过滤规则已更新。");
@@ -290,6 +304,9 @@ public partial class P2LootFilterPanel : VBoxContainer
         if (rule.MaximumLinkedSockets is not null) conditions.Add($"连接≤{rule.MaximumLinkedSockets}");
         if (rule.AffixFamilyId is not null) conditions.Add($"{rule.AffixFamilyId}≥{rule.MinimumAffixValue ?? 0}");
         if (rule.BaseTag is not null) conditions.Add($"底材标签={rule.BaseTag}");
+        if (rule.BaseTier is not null) conditions.Add($"底材阶级={P29DropCatalog.BaseTierName(rule.BaseTier.Value)}");
+        if (rule.DropSource is not null) conditions.Add($"来源包含={rule.DropSource}");
+        if (rule.RequireGameplayBiasedBase) conditions.Add("玩法偏向底材");
         if (rule.MaximumAffixTier is not null) conditions.Add($"最高T≤{rule.MaximumAffixTier}");
         if (rule.MinimumAffixTier is not null) conditions.Add($"最低T≥{rule.MinimumAffixTier}");
         if (rule.RequireCurrentSchemeNeed) conditions.Add("当前方案缺口");

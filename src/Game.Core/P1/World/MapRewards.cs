@@ -80,7 +80,7 @@ public static class P1MapRewardGenerator
             Completed: completed, Practice: P5ExpeditionDirector.IsPractice(map), BossPool: bossPool, Map: map);
         P20RewardBatch rolled = P20DropFormula.Roll(context, defeated, seed);
         int memoryAshes = completed ? P20DropFormula.RollScaledCount(1, map.ItemQuantityBasisPoints, seed ^ 0x20a5UL) : 0;
-        int wardenMarks = completed && bossPool.Length > 0
+        int wardenMarks = completed && P5ExpeditionDirector.IsBoss(map)
             ? P20DropFormula.RollScaledCount(1, map.ItemQuantityBasisPoints, seed ^ 0x20b5UL)
             : 0;
         int experience = completed ? ExperiencePerMap : Math.Max(1,

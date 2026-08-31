@@ -158,12 +158,11 @@ public partial class P10EndgamePanel : Control
         _breakthrough = new Button { Text = "门扉突破试炼", TooltipText = "达到 100 级后免费重复挑战；胜利开放 101–120 级和 T17–T20。" };
         _breakthrough.Pressed += () => { changed(session().TryChallengeFinalBreakthrough() ? "百级门扉试炼已排入主角远征。" : "需要 100 级、未完成突破且主角队空闲。"); Refresh(true); };
         bossActions.AddChild(_breakthrough);
-        foreach (var entry in new[] { (GameForWork.Core.P28.P28RewardPreference.Weapons, "武器"),
-            (GameForWork.Core.P28.P28RewardPreference.Armor, "护甲"), (GameForWork.Core.P28.P28RewardPreference.Jewelry, "饰品"),
-            (GameForWork.Core.P28.P28RewardPreference.Materials, "材料") })
+        for (int tier = 1; tier <= 3; tier++)
         {
-            var supply = new Button { Text = $"兑换{entry.Item2}军需", TooltipText = "发现亡旗战阵后可用战功重复兑换；声望0/15/60解锁1/2/3阶，费用50/100/150战功。满仓放入回收。" };
-            supply.Pressed += () => { changed(session().TryExchangeWarfrontSupply(entry.Item1) ? "军需已兑换。" : "尚未发现战阵或战功不足。"); Refresh(true); };
+            int selectedTier = tier;
+            var supply = new Button { Text = $"兑换 T{tier} 战功基底", TooltipText = "从该阶戒指/项链/腰带共6种强力基底中等概率获取；同一种底材不会连续出现。费用50/100/150战功。" };
+            supply.Pressed += () => { changed(session().TryExchangeWarfrontSupply(selectedTier) ? $"T{selectedTier} 战功基底已入仓。" : "该军需阶级未解锁或战功不足。"); Refresh(true); };
             bossActions.AddChild(supply);
         }
         _preflight = new Label { AutowrapMode = TextServer.AutowrapMode.WordSmart };

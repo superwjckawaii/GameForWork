@@ -6,7 +6,7 @@
 
 - [游戏设计基线](shared/GAME_DESIGN_BASELINE.md)
 - [技术架构](shared/TECHNICAL_ARCHITECTURE.md)
-- [P0～P27 开发计划](shared/DEVELOPMENT_PLAN.md)
+- [P0～P29 开发计划](shared/DEVELOPMENT_PLAN.md)
 - [待讨论与开发决策](shared/OPEN_QUESTIONS.md)
 
 ## v0.1
@@ -45,3 +45,5 @@
 - [P26 地图系统与金币异界天赋实施规格](v0.4/P26_SPECIFICATION.md)
 - [P27 怪物生态、首领与亡旗战阵实施规格](v0.4/P27_SPECIFICATION.md)
 - [P28 五玩法闭环、战斗机制与逐图结算](v0.4/P28_SPECIFICATION.md)
+- [P29 掉落池、玩法做装与经济审计](v0.4/P29_SPECIFICATION.md)
+- [P29 经济蒙特卡洛审计](v0.4/P29_ECONOMY_AUDIT.md)

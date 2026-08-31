@@ -134,6 +134,7 @@ public static class P28Rewards
                 int itemLevel = Math.Min(120, map.MonsterLevel + (rule.Mechanic == P28Mechanic.Garden && Has(branch, 7) ? 1 : 0) +
                     (rule.Mechanic == P28Mechanic.Blue && Has(branch, 9) ? 2 : 0));
                 ItemInstance item = Equipment(preference, itemLevel, high, Next(), $"p28-{map.InstanceId}-{encounter.Node.Index}-{i}");
+                item = item with { DropSource = $"p29.source.{rule.Mechanic}.{(high ? "rare" : "normal")}".ToLowerInvariant() };
                 if (rule.Mechanic == P28Mechanic.Garden)
                 {
                     if (random.NextBasisPoints() < (Has(branch, 5) ? 6_000 : 3_000))

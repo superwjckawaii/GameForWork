@@ -121,7 +121,7 @@ public partial class P2SkillStonePanel : VBoxContainer
                     : string.Empty,
                 ExpandIcon = true,
                 IconAlignment = HorizontalAlignment.Center,
-                TooltipText = P7SkillTooltip.Build(stone, "技能石背包"),
+                TooltipText = P7SkillTooltip.Build(stone, "技能石背包", management.HeldSkillStoneCount(stone.DefinitionId, stone.Mutated)),
                 CustomMinimumSize = new Vector2(44, 44),
             };
             cell.AddThemeColorOverride("font_color", stoneColor);
@@ -301,7 +301,7 @@ public partial class P2SkillStonePanel : VBoxContainer
 
 public static class P7SkillTooltip
 {
-    public static string Build(SkillStoneInstance stone, string location)
+    public static string Build(SkillStoneInstance stone, string location, int held = 0)
     {
         SkillStoneDefinition definition = stone.Definition;
         string tags = definition.Kind == SkillStoneKind.Active ? definition.Tags.ToString() : definition.SupportedTags.ToString();
@@ -323,7 +323,7 @@ public static class P7SkillTooltip
             compatibility = $"\n辅助条件：全部[{definition.RequiredAllCapabilities}] · 任一[{definition.RequiredAnyCapabilities}] · 排除[{definition.ExcludedCapabilities}]";
         }
         return $"{definition.DisplayName}\n{(definition.Kind == SkillStoneKind.Active ? "主动" : "辅助")}技能石 · Lv.{stone.Level}/20 · XP {stone.Experience}\n品质 {stone.Quality}（连接技能伤害提高 {stone.Quality}%）{(stone.Mutated ? " · 异变：有效技能等级+1" : "")}\n" +
-               $"标签：{tags}{mechanics}{compatibility}\n{definition.Description}\n位置：{location}\n来源：" +
+               $"标签：{tags}{mechanics}{compatibility}\n{definition.Description}\n持有：{(held > 0 ? held : 1)}/5（同名上限）\n位置：{location}\n来源：" +
                (stone.InstanceId.StartsWith("starter-", StringComparison.Ordinal) ? "初始技能" : "战斗掉落");
     }
 }
