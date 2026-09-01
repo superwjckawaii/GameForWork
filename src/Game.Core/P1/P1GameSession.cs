@@ -1508,7 +1508,9 @@ public sealed class P1GameSession
             entry.Stone.Level + (entry.Stone.Mutated ? 1 : 0),
             entry.Stone.InstanceId,
             P24SupportsFor(entry.Stone.DefinitionId),
-            entry.Stone.Quality + entry.Link.SupportStoneInstanceIds.Sum(id => Management.SkillStones.FirstOrDefault(s => s.InstanceId == id)?.Quality ?? 0)))
+            entry.Stone.Quality,
+            P30SupportsFor(entry.Stone.DefinitionId),
+            P30SupportLinksFor(entry.Stone.DefinitionId)))
         .Where(configuration => !string.IsNullOrEmpty(configuration.SkillId))
         .ToArray();
 
@@ -1548,17 +1550,47 @@ public sealed class P1GameSession
             .ToArray();
     }
 
+    private IReadOnlyList<string> P30SupportsFor(string activeDefinitionId)
+    {
+        SkillStoneInstance? active = Management.SkillStones.FirstOrDefault(item => item.DefinitionId == activeDefinitionId);
+        SkillLinkConfiguration? link = active is null
+            ? null
+            : Management.SkillLinks.FirstOrDefault(item => item.ActiveStoneInstanceId == active.InstanceId);
+        return (link?.SupportStoneInstanceIds ?? [])
+            .Select(id => Management.SkillStones.Single(item => item.InstanceId == id).Definition.P30SupportId)
+            .Where(value => !string.IsNullOrEmpty(value))
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+    }
+
+    private IReadOnlyList<P30LinkedSupport> P30SupportLinksFor(string activeDefinitionId)
+    {
+        SkillStoneInstance? active = Management.SkillStones.FirstOrDefault(item => item.DefinitionId == activeDefinitionId);
+        SkillLinkConfiguration? link = active is null
+            ? null
+            : Management.SkillLinks.FirstOrDefault(item => item.ActiveStoneInstanceId == active.InstanceId);
+        return (link?.SupportStoneInstanceIds ?? [])
+            .Select(id => Management.SkillStones.Single(item => item.InstanceId == id))
+            .Where(stone => !string.IsNullOrEmpty(stone.Definition.P30SupportId))
+            .Select(stone => new P30LinkedSupport(stone.Definition.P30SupportId,
+                stone.Level + (stone.Mutated ? 1 : 0), stone.Quality))
+            .GroupBy(item => item.StoneId, StringComparer.Ordinal)
+            .Select(group => group.First())
+            .ToArray();
+    }
+
     private static P17SkillRole ActiveRole(string stoneId)
     {
-        if (P24SkillCatalog.TryActiveForStone(stoneId, out P24ActiveSkillDefinition? p24)) return p24!.Combat.Role;
-        return P17SkillCatalog.ActiveForStone(stoneId).Role;
+        return P30SkillCatalog.ActiveForStone(stoneId).Combat.Role;
     }
 
     private static string ToCombatSkillId(string definitionId) => definitionId.StartsWith("core.skill_stone.", StringComparison.Ordinal)
         ? definitionId.Replace("core.skill_stone.", "core.skill.", StringComparison.Ordinal)
         : definitionId.StartsWith("p24.skill_stone.", StringComparison.Ordinal)
             ? definitionId.Replace("p24.skill_stone.", "p24.skill.", StringComparison.Ordinal)
-            : string.Empty;
+            : definitionId.StartsWith("p30.skill_stone.", StringComparison.Ordinal)
+                ? definitionId.Replace("p30.skill_stone.", "p30.skill.", StringComparison.Ordinal)
+                : string.Empty;
 
     private static IEnumerable<string> SupportDefinitionIds(SkillSupport supports)
     {

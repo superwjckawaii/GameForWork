@@ -40,13 +40,14 @@ public sealed class P17FeatureTests
         P17DamageBreakdown result = P17DamageRules.Resolve(1_600, P17DamageType.Physical, conversions,
             targetArmor: 0, fireResistance: 0, coldResistance: 0, lightningResistance: 0, voidResistance: 5_000);
 
-        Assert.Equal(800, result.Physical);
+        Assert.Equal(0, result.Physical);
         Assert.Equal(800, result.Lightning);
-        Assert.Equal(0, result.Cold);
-        Assert.Equal(0, result.Fire);
-        Assert.Equal(0, result.Void);
-        Assert.Equal(1_600, result.Total);
+        Assert.Equal(400, result.Cold);
+        Assert.Equal(200, result.Fire);
+        Assert.Equal(100, result.Void);
+        Assert.Equal(1_500, result.Total);
         Assert.Contains(result.Trace, line => line.Contains("convert:support.physical_to_lightning", StringComparison.Ordinal));
+        Assert.Contains(result.Trace, line => line.Contains("convert:support.physical_to_cold", StringComparison.Ordinal));
     }
 
     [Fact]

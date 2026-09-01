@@ -50,6 +50,8 @@
 - [P30 战斗公式与构筑平衡规格（核心实施中）](v0.4/P30_SPECIFICATION.md)
 - [P30 设计接续入口：当前进度、剩余内容与下一步](v0.4/P30_DESIGN_CHECKPOINT.md)
 - [P30 剩余任务与关闭顺序](v0.4/P30_REMAINING_TASKS.md)
+- [P30 技能基础数据表（86 个主动与 98 个辅助已进入运行时）](v0.4/P30_SKILL_BASE_DATA.md)
+- [P30 三十六套构筑验证（18 升华开荒/终局全通过）](v0.4/P30_BUILD_AUDIT.md)
 - [P30 主天赋簇逐类规格（第一组 12 类已确认）](v0.4/P30_PASSIVE_CLUSTERS.md)
 - [P30 伤害与异常天赋簇（19 类、45 簇已确认，含来源修订）](v0.4/P30_DAMAGE_AILMENT_CLUSTERS.md)
 - [P30 防御与资源天赋簇（14 类、44 簇全部确认）](v0.4/P30_DEFENSE_RESOURCE_CLUSTERS.md)

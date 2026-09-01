@@ -1,6 +1,7 @@
 using GameForWork.Core.P1.Combat;
 using GameForWork.Core.P14;
 using GameForWork.Core.P17;
+using GameForWork.Core.P30;
 
 namespace GameForWork.Core.P21;
 
@@ -95,6 +96,9 @@ public static class P21ArtContract
         try { return P25.P25SkillStoneArt.IconIndex(stableId); }
         catch (KeyNotFoundException) { }
         if (SkillStoneIndices.TryGetValue(stableId, out int index)) return index;
+        if (P30SkillCatalog.Active.Any(item => item.Combat.StoneId == stableId) ||
+            P30SkillCatalog.Supports.Any(item => item.StoneId == stableId))
+            return StableIndex(stableId, P25.P25SkillStoneArt.Columns * P25.P25SkillStoneArt.Rows);
         throw new KeyNotFoundException($"Unknown P21 skill stone: {stableId}");
     }
 

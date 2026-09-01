@@ -46,12 +46,16 @@ $auditRoot = Join-Path $repositoryRoot 'artifacts\release-gate'
 New-Item -ItemType Directory -Path $auditRoot -Force | Out-Null
 $economyAudit = Join-Path $auditRoot 'economy.md'
 $combatAudit = Join-Path $auditRoot 'combat.md'
+$buildAudit = Join-Path $auditRoot 'p30-builds.md'
 Invoke-NativeChecked -FilePath $dotnetBinary -Arguments @('run', '--project',
     (Join-Path $repositoryRoot 'tools\P20Audit\P20Audit.csproj'), '--configuration', $Configuration, '--no-build', '--',
     '100000', $economyAudit) -Label 'Regenerate P29 economy audit'
 Invoke-NativeChecked -FilePath $dotnetBinary -Arguments @('run', '--project',
     (Join-Path $repositoryRoot 'tools\P22Audit\P22Audit.csproj'), '--configuration', $Configuration, '--no-build', '--',
     '100', $combatAudit) -Label 'Regenerate P22 combat audit'
+Invoke-NativeChecked -FilePath $dotnetBinary -Arguments @('run', '--project',
+    (Join-Path $repositoryRoot 'tools\P30Audit\P30Audit.csproj'), '--configuration', $Configuration, '--no-build', '--',
+    $buildAudit) -Label 'Regenerate P30 build audit'
 function Read-NormalizedText([string]$Path) {
     return (Get-Content -LiteralPath $Path -Raw).Replace("`r`n", "`n")
 }
@@ -62,5 +66,9 @@ if ((Read-NormalizedText $economyAudit) -ne
 if ((Read-NormalizedText $combatAudit) -ne
     (Read-NormalizedText (Join-Path $repositoryRoot 'docs\v0.2\P22_COMBAT_AUDIT.md'))) {
     throw 'Generated P22 combat audit differs from the committed release audit.'
+}
+if ((Read-NormalizedText $buildAudit) -ne
+    (Read-NormalizedText (Join-Path $repositoryRoot 'docs\v0.4\P30_BUILD_AUDIT.md'))) {
+    throw 'Generated P30 build audit differs from the committed release audit.'
 }
 Write-Host '[verify] PASS: assets, restore, build, tests, audits, Godot import and startup all succeeded.'

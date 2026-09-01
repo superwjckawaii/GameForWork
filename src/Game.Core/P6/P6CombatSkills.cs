@@ -2,6 +2,7 @@ using GameForWork.Core.P1.Combat;
 using GameForWork.Core.P1.Progression;
 using GameForWork.Core.P17;
 using GameForWork.Core.P24;
+using GameForWork.Core.P30;
 
 namespace GameForWork.Core.P6;
 
@@ -30,17 +31,26 @@ public sealed record P6ResolvedSkill(
     int PierceCount,
     int ForkCount,
     bool Returns,
-    bool RequiresShield);
+    bool RequiresShield,
+    int ResourceMultiplierBasisPoints = 10_000,
+    bool SingleTargetOnly = false,
+    bool ExplodesOnKill = false,
+    bool OverloadRepeatsEveryThirdUse = false,
+    int TemperanceLevelPerLayer = 0,
+    int TemperanceQualityPerLayer = 0);
 
 public static class P6CombatSkillRules
 {
     public static P6ResolvedSkill Resolve(SkillConfiguration configuration, int maximumLife, P205PassiveModifiers? passive = null)
     {
         SkillDefinition definition = P1Skills.Get(configuration.SkillId);
-        P17ActiveSkillDefinition active = P24SkillCatalog.TryActiveForSkill(configuration.SkillId, out P24ActiveSkillDefinition? p24Active)
-            ? p24Active!.Combat
-            : P17SkillCatalog.ActiveForSkill(configuration.SkillId);
-        int mana = P18.P18AscendancyRules.AttackManaCost(definition.BaseManaCost, definition.Tags);
+        P30ActiveSkillDefinition p30Active = P30SkillCatalog.ActiveForSkill(configuration.SkillId);
+        P30SupportRuntimeProfile p30Supports = configuration.ExtendedP30SupportLinks.Count > 0
+            ? P30SkillCatalog.ResolveSupports(p30Active, configuration.ExtendedP30SupportLinks)
+            : P30SkillCatalog.ResolveSupports(p30Active, configuration.ExtendedP30Supports,
+                configuration.Level, configuration.Quality);
+        P17ActiveSkillDefinition active = p30Active.Combat;
+        int mana = P18.P18AscendancyRules.AttackManaCost(p30Active.ManaAt(configuration.Level), definition.Tags);
         int life = 0;
         int range = definition.RangeRaw;
         int cooldown = definition.CooldownTicks;
@@ -54,56 +64,61 @@ public static class P6CombatSkillRules
         int executeThreshold = 0;
         int execute = 10_000;
         int nonExecute = 10_000;
-        int baseDamage = active.DamageBasisPoints;
+        int baseDamage = p30Active.DamageAt(configuration.Level);
         int ailmentChance = active.AilmentChanceBasisPoints;
         int pierce = 0;
         int fork = 0;
         bool returns = active.Tags.HasFlag(SkillTag.Returning);
-        damage = checked(damage * (10_000 + (Math.Clamp(configuration.Level, 1, 21) - 1) * 250) / 10_000);
-
         if (configuration.Supports.HasFlag(SkillSupport.IncreasedArea))
         {
-            range = checked(range * 13_500 / 10_000);
+            range = checked(range * (10_000 + LegacyValue(configuration, SkillSupport.IncreasedArea) * 100) / 10_000);
             damage = checked(damage * 9_000 / 10_000);
         }
-        if (configuration.Supports.HasFlag(SkillSupport.Bleed)) bleed += 6_000;
+        if (configuration.Supports.HasFlag(SkillSupport.Bleed))
+            bleed += Math.Min(10_000, LegacyValue(configuration, SkillSupport.Bleed) * 100);
         if (configuration.Supports.HasFlag(SkillSupport.LifeCost))
         {
             life = Math.Max(1, (mana * 15 + 9) / 10);
             mana = 0;
-            damage = checked(damage * 12_000 / 10_000);
+            damage = More(damage, LegacyValue(configuration, SkillSupport.LifeCost));
         }
-        if (configuration.Supports.HasFlag(SkillSupport.Brutality)) damage = checked(damage * 13_500 / 10_000);
+        if (configuration.Supports.HasFlag(SkillSupport.Brutality))
+            damage = More(damage, LegacyValue(configuration, SkillSupport.Brutality));
         if (configuration.Supports.HasFlag(SkillSupport.MultipleProjectiles))
         {
             projectiles += 2;
-            damage = checked(damage * 8_000 / 10_000);
+            int less = P30SkillCatalog.Interpolate(25, 15, configuration.Level, false);
+            damage = checked(damage * (100 - less) / 100);
+            projectileSpeed = checked(projectileSpeed * (10_000 + LegacyValue(configuration, SkillSupport.MultipleProjectiles) * 100) / 10_000);
         }
         if (configuration.Supports.HasFlag(SkillSupport.FasterProjectiles))
         {
-            projectileSpeed = 15_000;
-            range = checked(range * 11_500 / 10_000);
+            int value = LegacyValue(configuration, SkillSupport.FasterProjectiles);
+            projectileSpeed = checked(projectileSpeed * (10_000 + value * 100) / 10_000);
+            int rangeIncrease = P30SkillCatalog.Interpolate(20, 35, configuration.Level, false);
+            range = checked(range * (10_000 + rangeIncrease * 100) / 10_000);
+            damage = More(damage, rangeIncrease);
         }
-        if (configuration.Supports.HasFlag(SkillSupport.UrgentWarCry)) cooldown = Math.Max(1, cooldown * 10_000 / 13_000);
+        if (configuration.Supports.HasFlag(SkillSupport.UrgentWarCry))
+            cooldown = Math.Max(1, cooldown * 10_000 / (10_000 + LegacyValue(configuration, SkillSupport.UrgentWarCry) * 100));
         if (configuration.Supports.HasFlag(SkillSupport.LifeLeech))
         {
-            leech = 200;
-            mana = checked((mana * 12_000 + 9_999) / 10_000);
-            life = checked((life * 12_000 + 9_999) / 10_000);
+            leech = LegacyValue(configuration, SkillSupport.LifeLeech);
         }
         if (configuration.Supports.HasFlag(SkillSupport.Execution))
         {
             executeThreshold = 2_000;
-            execute = 14_000;
+            execute = 10_000 + LegacyValue(configuration, SkillSupport.Execution) * 100;
             nonExecute = 9_000;
         }
         if (configuration.Supports.HasFlag(SkillSupport.SpellEcho) && definition.Tags.HasFlag(SkillTag.Spell))
         {
             projectiles += 1;
-            damage = checked(damage * 8_200 / 10_000);
+            int less = LegacyValue(configuration, SkillSupport.SpellEcho);
+            damage = checked(damage * (100 - less) / 100);
         }
         if (configuration.Supports.HasFlag(SkillSupport.ElementalFocus) && (definition.Tags & SkillTag.Elemental) != 0)
-            damage = checked(damage * 12_800 / 10_000);
+            damage = More(damage, LegacyValue(configuration, SkillSupport.ElementalFocus));
         if (configuration.Supports.HasFlag(SkillSupport.AddedFire)) damage = checked(damage * 11_800 / 10_000);
         if (configuration.Supports.HasFlag(SkillSupport.AddedCold)) damage = checked(damage * 11_500 / 10_000);
         if (configuration.Supports.HasFlag(SkillSupport.AddedLightning)) damage = checked(damage * 11_700 / 10_000);
@@ -111,14 +126,16 @@ public static class P6CombatSkillRules
         if (configuration.Supports.HasFlag(SkillSupport.ConcentratedEffect) && definition.Tags.HasFlag(SkillTag.Area))
         {
             range = checked(range * 7_500 / 10_000);
-            damage = checked(damage * 13_200 / 10_000);
+            damage = More(damage, LegacyValue(configuration, SkillSupport.ConcentratedEffect));
         }
         if (configuration.Supports.HasFlag(SkillSupport.AttackSpeed) && definition.Tags.HasFlag(SkillTag.Attack))
         {
-            cooldown = Math.Max(1, cooldown * 10_000 / 12_500);
+            cooldown = Math.Max(1, cooldown * 10_000 / (10_000 + LegacyValue(configuration, SkillSupport.AttackSpeed) * 100));
         }
-        if (configuration.Supports.HasFlag(SkillSupport.HeavyMomentum)) damage = checked(damage * 14_500 / 10_000);
-        if (configuration.Supports.HasFlag(SkillSupport.TripleImpact)) damage = checked(damage * 12_667 / 10_000);
+        if (configuration.Supports.HasFlag(SkillSupport.HeavyMomentum))
+            damage = More(damage, LegacyValue(configuration, SkillSupport.HeavyMomentum));
+        if (configuration.Supports.HasFlag(SkillSupport.TripleImpact))
+            damage = More(damage, LegacyValue(configuration, SkillSupport.TripleImpact) / 3);
         if (configuration.Supports.HasFlag(SkillSupport.TremorField))
         {
             range = checked(range * 13_000 / 10_000);
@@ -153,6 +170,9 @@ public static class P6CombatSkillRules
         projectiles += p24.ProjectileCount;
         pierce += p24.PierceCount;
         chains += p24.ChainCount;
+        damage = checked(damage * p30Supports.DamageMultiplierBasisPoints / 10_000);
+        mana = checked((mana * p30Supports.ResourceMultiplierBasisPoints + 9_999) / 10_000);
+        life = checked((life * p30Supports.ResourceMultiplierBasisPoints + 9_999) / 10_000);
         passive ??= P205PassiveModifiers.Empty;
         mana = Math.Max(0, checked(mana * Math.Max(0, 10_000 - passive.ReducedSkillCostBasisPoints) / 10_000));
         life = Math.Max(0, checked(life * Math.Max(0, 10_000 - passive.ReducedSkillCostBasisPoints) / 10_000));
@@ -162,7 +182,10 @@ public static class P6CombatSkillRules
         return new P6ResolvedSkill(configuration.SkillId, mana, life, range, castTime, cooldown,
             damage, bleed, projectiles, projectileSpeed, chains, leech, executeThreshold, execute, nonExecute,
             active.DamageType, active.Role, active.Shape, baseDamage, active.Ailment, ailmentChance,
-            pierce, fork, returns, active.Capabilities.HasFlag(P17SkillCapability.RequiresShield));
+            pierce, fork, returns, active.Capabilities.HasFlag(P17SkillCapability.RequiresShield),
+            p30Supports.ResourceMultiplierBasisPoints, p30Supports.SingleTargetOnly, p30Supports.ExplodesOnKill,
+            p30Supports.OverloadRepeatsEveryThirdUse, p30Supports.TemperanceLevelPerLayer,
+            p30Supports.TemperanceQualityPerLayer);
     }
 
     public static bool TryPay(ResourceState resources, P6ResolvedSkill skill) => skill.LifeCost > 0
@@ -177,4 +200,9 @@ public static class P6CombatSkillRules
             : skill.NonExecuteMultiplierBasisPoints;
         return checked(skill.DamageMultiplierBasisPoints * conditional / 10_000);
     }
+
+    private static int LegacyValue(SkillConfiguration configuration, SkillSupport support) =>
+        P30SkillCatalog.SupportFor(support).ValueAt(configuration.Level, configuration.Quality);
+
+    private static int More(int basisPoints, int percent) => checked(basisPoints * (10_000 + percent * 100) / 10_000);
 }

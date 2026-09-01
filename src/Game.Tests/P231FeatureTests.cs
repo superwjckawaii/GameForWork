@@ -40,8 +40,8 @@ public sealed class P231FeatureTests
             baseSkill, P1Skills.Get(P1SkillIds.SpiritBlade).Tags, 1_000, profile);
 
         Assert.Equal(5, result.ProjectileCount);
-        Assert.Equal(13_000, result.ProjectileSpeedRawPerSecond);
-        Assert.Equal(5_200, result.DamageMultiplierBasisPoints);
+        Assert.Equal(15_600, result.ProjectileSpeedRawPerSecond);
+        Assert.Equal(4_875, result.DamageMultiplierBasisPoints);
         Assert.True(P231AscendancyRules.Projectile(profile).CanRepeatHitSameTarget);
     }
 

@@ -1,5 +1,6 @@
 using GameForWork.Core.P17;
 using GameForWork.Core.P24;
+using GameForWork.Core.P30;
 
 namespace GameForWork.Core.P1.Combat;
 
@@ -154,9 +155,13 @@ public sealed record SkillConfiguration(
     SkillAiRule? AiRule = null,
     int Level = 1,
     string StoneInstanceId = "",
-    IReadOnlyList<P24SupportMechanic>? P24Supports = null, int Quality = 0)
+    IReadOnlyList<P24SupportMechanic>? P24Supports = null, int Quality = 0,
+    IReadOnlyList<string>? P30Supports = null,
+    IReadOnlyList<P30LinkedSupport>? P30SupportLinks = null)
 {
     public IReadOnlyList<P24SupportMechanic> ExtendedSupports => P24Supports ?? Array.Empty<P24SupportMechanic>();
+    public IReadOnlyList<string> ExtendedP30Supports => P30Supports ?? Array.Empty<string>();
+    public IReadOnlyList<P30LinkedSupport> ExtendedP30SupportLinks => P30SupportLinks ?? Array.Empty<P30LinkedSupport>();
 }
 
 public sealed record SkillDefinition(
@@ -169,10 +174,9 @@ public sealed record SkillDefinition(
 
 public static class P1Skills
 {
-    private static readonly IReadOnlyDictionary<string, SkillDefinition> Catalog = P17SkillCatalog.Active
-        .Concat(P24SkillCatalog.Active.Select(item => item.Combat))
-        .Select(item => new SkillDefinition(item.SkillId, item.Tags, item.ManaCost, item.RangeRaw,
-            item.CastTimeTicks, item.CooldownTicks))
+    private static readonly IReadOnlyDictionary<string, SkillDefinition> Catalog = P30SkillCatalog.Active
+        .Select(item => new SkillDefinition(item.Combat.SkillId, item.Combat.Tags, item.LevelOneMana,
+            item.Combat.RangeRaw, item.Combat.CastTimeTicks, item.Combat.CooldownTicks))
         .ToDictionary(item => item.StableId, StringComparer.Ordinal);
 
     public static SkillDefinition HeavyStrike => Get(P1SkillIds.HeavyStrike);

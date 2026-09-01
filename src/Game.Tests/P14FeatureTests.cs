@@ -14,9 +14,9 @@ public sealed class P14FeatureTests
     [Fact]
     public void DemoContentMeetsTheSealedCatalogCounts()
     {
-        Assert.Equal(80, P1Skills.All.Count);
+        Assert.Equal(86, P1Skills.All.Count);
         Assert.Equal(48, Enum.GetValues<SkillSupport>().Count(value => value != SkillSupport.None));
-        Assert.Equal(88, P2SkillStones.All.Count(item => item.Kind == SkillStoneKind.Support));
+        Assert.Equal(98, P2SkillStones.All.Count(item => item.Kind == SkillStoneKind.Support));
         Assert.Equal(148, P1ItemBases.All.Count);
         Assert.Equal(40, P14UniqueItems.All.Count(item => !item.Mythic));
         Assert.Single(P14UniqueItems.All, item => item.Mythic);

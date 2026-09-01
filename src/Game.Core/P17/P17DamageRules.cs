@@ -34,7 +34,9 @@ public static class P17DamageRules
         var conversions = new List<P30Conversion>();
         if (supports.HasFlag(SkillSupport.PhysicalToLightning))
             conversions.Add(new(P30DamageType.Physical, P30DamageType.Lightning, 5_000, "support.physical_to_lightning"));
-        // P30 禁止闪电转冰；旧辅助仍可被旧存档识别，但不再参与伤害转化。
+        // P30 将旧“闪电转冰”稳定 ID 迁移为合法的物理转冰，避免破坏旧存档引用。
+        if (supports.HasFlag(SkillSupport.LightningToCold))
+            conversions.Add(new(P30DamageType.Physical, P30DamageType.Cold, 5_000, "support.physical_to_cold"));
         if (supports.HasFlag(SkillSupport.ColdToFire))
             conversions.Add(new(P30DamageType.Cold, P30DamageType.Fire, 5_000, "support.cold_to_fire"));
         if (supports.HasFlag(SkillSupport.FireToVoid))

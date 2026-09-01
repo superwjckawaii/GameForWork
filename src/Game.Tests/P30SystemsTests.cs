@@ -11,6 +11,66 @@ namespace GameForWork.Tests;
 public sealed class P30SystemsTests
 {
     [Fact]
+    public void SkillCatalogSealsAllConfirmedP30Data()
+    {
+        Assert.Equal(86, P30SkillCatalog.Active.Count);
+        Assert.Equal(98, P30SkillCatalog.Supports.Count);
+        P30ActiveSkillDefinition heavy = P30SkillCatalog.Active.Single(item => item.Combat.DisplayName == "重击");
+        Assert.Equal(16_000, heavy.DamageAt(1));
+        Assert.Equal(42_500, heavy.DamageAt(21));
+        Assert.Equal(12, heavy.ManaAt(21));
+        Assert.Equal("p30.skill.shield_bash", P30SkillCatalog.Active.Single(item => item.Combat.DisplayName == "盾锋冲击").Combat.SkillId);
+        Assert.Equal(5, P30SkillCatalog.Active.Count(item => item.P30Added && item.Combat.Role == GameForWork.Core.P17.P17SkillRole.Reservation));
+
+        P30SupportSkillDefinition temperance = P30SkillCatalog.Supports.Single(item => item.DisplayName == "持律精算");
+        Assert.Equal(6, temperance.ValueAt(21));
+        Assert.Contains("有效等级 +1", temperance.Effect, StringComparison.Ordinal);
+        Assert.Equal(50, P30SkillCatalog.Supports.Single(item => item.DisplayName == "过载供能").ValueAt(21));
+    }
+
+    [Fact]
+    public void SupportCompatibilitySealsExclusiveModes()
+    {
+        P30SupportSkillDefinition chain = P30SkillCatalog.Supports.Single(item => item.DisplayName == "追加连锁");
+        P30SupportSkillDefinition seeking = P30SkillCatalog.Supports.Single(item => item.DisplayName == "追踪连锁");
+        P30SupportSkillDefinition pierce = P30SkillCatalog.Supports.Single(item => item.DisplayName == "贯穿");
+        P30SupportSkillDefinition precision = P30SkillCatalog.Supports.Single(item => item.DisplayName == "精准穿透");
+        Assert.False(P30SkillCatalog.AreCompatible(chain, seeking));
+        Assert.False(P30SkillCatalog.AreCompatible(pierce, precision));
+        Assert.True(P30SkillCatalog.AreCompatible(chain, pierce));
+        Assert.All(P30SkillCatalog.Supports, support =>
+            Assert.Contains(P30SkillCatalog.Active, active => P30SkillCatalog.SupportsActive(support, active)));
+    }
+
+    [Fact]
+    public void P30LinkedSupportsUseTheirOwnLevelsCostsAndRuntimeMechanics()
+    {
+        P30ActiveSkillDefinition heavy = P30SkillCatalog.Active.Single(item => item.Combat.DisplayName == "重击");
+        P30SupportSkillDefinition lone = P30SkillCatalog.Supports.Single(item => item.DisplayName == "孤锋专注");
+        P30SupportSkillDefinition overload = P30SkillCatalog.Supports.Single(item => item.DisplayName == "过载供能");
+        P30SupportRuntimeProfile profile = P30SkillCatalog.ResolveSupports(heavy,
+        [
+            new(lone.StoneId, 21, 20),
+            new(overload.StoneId, 1, 0),
+        ]);
+
+        Assert.Equal(21_000, profile.ResourceMultiplierBasisPoints);
+        Assert.Equal(21_332, profile.DamageMultiplierBasisPoints);
+        Assert.True(profile.SingleTargetOnly);
+        Assert.True(profile.OverloadRepeatsEveryThirdUse);
+    }
+
+    [Fact]
+    public void ThirtySixBuildAuditPassesFormalGates()
+    {
+        IReadOnlyList<P30BuildAuditResult> results = P30BuildAudit.Run();
+        Assert.Equal(36, results.Count);
+        Assert.Empty(P30BuildAudit.Validate(results));
+        Assert.Equal(18, results.Select(item => item.Build.Ascendancy).Distinct().Count());
+        Assert.All(results, item => Assert.True(item.Passed, item.Build.DisplayName));
+    }
+
+    [Fact]
     public void ConfirmedCombatMathUsesHistoryAndDirectedConversion()
     {
         P30DamagePacket packet = P30CombatRules.ConvertAndScale(100, P30DamageType.Physical,

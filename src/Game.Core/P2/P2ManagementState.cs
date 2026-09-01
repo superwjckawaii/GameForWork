@@ -7,6 +7,7 @@ using GameForWork.Core.P1.World;
 using GameForWork.Core.P17;
 using GameForWork.Core.P23;
 using GameForWork.Core.P24;
+using GameForWork.Core.P30;
 
 namespace GameForWork.Core.P2;
 
@@ -48,15 +49,14 @@ public sealed record SkillStoneDefinition(
     SkillSupport CombatSupport = SkillSupport.None,
     P24SupportMechanic P24Support = P24SupportMechanic.None,
     P17SupportConflict ProvidesConflict = P17SupportConflict.None,
-    P17SupportConflict ConflictsWith = P17SupportConflict.None);
+    P17SupportConflict ConflictsWith = P17SupportConflict.None,
+    string P30SupportId = "");
 
 public static class P2SkillStones
 {
     private static readonly IReadOnlyDictionary<string, SkillStoneDefinition> Catalog =
-        P17SkillCatalog.Active.Select(Active)
-            .Concat(P17SkillCatalog.Supports.Select(Support))
-            .Concat(P24SkillCatalog.Active.Select(item => Active(item.Combat)))
-            .Concat(P24SkillCatalog.Supports.Select(Support))
+        P30SkillCatalog.Active.Select(Active)
+            .Concat(P30SkillCatalog.Supports.Select(Support))
             .ToDictionary(item => item.StableId, StringComparer.Ordinal);
 
     public static IReadOnlyCollection<SkillStoneDefinition> All => Catalog.Values.ToArray();
@@ -67,24 +67,19 @@ public static class P2SkillStones
 
     public static IReadOnlyCollection<SkillStoneDefinition> DropPool => Catalog.Values.Where(item => !item.StarterGranted).ToArray();
 
-    private static SkillStoneDefinition Active(P17ActiveSkillDefinition definition) =>
-        new(definition.StoneId, definition.DisplayName, SkillStoneKind.Active, Tags: definition.Tags,
-            Description: definition.Description, StarterGranted: definition.StarterGranted,
-            Capabilities: definition.Capabilities);
+    private static SkillStoneDefinition Active(P30ActiveSkillDefinition definition) =>
+        new(definition.Combat.StoneId, definition.Combat.DisplayName, SkillStoneKind.Active,
+            Tags: definition.Combat.Tags,
+            Description: definition.Combat.Description, StarterGranted: definition.Combat.StarterGranted,
+            Capabilities: definition.Combat.Capabilities);
 
-    private static SkillStoneDefinition Support(P17SupportSkillDefinition definition) =>
+    private static SkillStoneDefinition Support(P30SupportSkillDefinition definition) =>
         new(definition.StoneId, definition.DisplayName, SkillStoneKind.Support, 1,
-            SupportedTags: definition.SupportedTags, Description: definition.Description,
-            StarterGranted: definition.StarterGranted, RequiredAllCapabilities: definition.RequiredAll,
-            RequiredAnyCapabilities: definition.RequiredAny, ExcludedCapabilities: definition.Excluded,
-            CombatSupport: definition.Support, ProvidesConflict: definition.ProvidesConflict,
-            ConflictsWith: definition.ConflictsWith);
-
-    private static SkillStoneDefinition Support(P24SupportSkillDefinition definition) =>
-        new(definition.StoneId, definition.DisplayName, SkillStoneKind.Support, 1,
-            Description: definition.Description, StarterGranted: false,
+            Description: definition.Effect, StarterGranted: definition.StarterGranted,
             RequiredAllCapabilities: definition.RequiredAll, RequiredAnyCapabilities: definition.RequiredAny,
-            ExcludedCapabilities: definition.Excluded, P24Support: definition.Mechanic);
+            ExcludedCapabilities: definition.Excluded, CombatSupport: definition.LegacySupport,
+            P24Support: definition.LegacyP24Support, ProvidesConflict: definition.ProvidesConflict,
+            ConflictsWith: definition.ConflictsWith, P30SupportId: definition.StoneId);
 }
 
 public sealed record SkillStoneInstance(

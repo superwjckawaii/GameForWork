@@ -93,7 +93,7 @@ public sealed class P6FeatureTests
         P6ResolvedSkill blade = P6CombatSkillRules.Resolve(new SkillConfiguration(
             P1SkillIds.SpiritBlade, SkillSupport.MultipleProjectiles | SkillSupport.FasterProjectiles), 500);
         Assert.Equal(3, blade.ProjectileCount);
-        Assert.Equal(15_000, blade.ProjectileSpeedRawPerSecond);
+        Assert.Equal(19_200, blade.ProjectileSpeedRawPerSecond);
         Assert.True(blade.RangeRaw > P1Skills.SpiritBlade.RangeRaw);
     }
 
