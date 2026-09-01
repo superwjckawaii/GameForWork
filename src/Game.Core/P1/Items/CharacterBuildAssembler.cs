@@ -13,6 +13,12 @@ public sealed record AssembledCharacterBuild(
     int IncreasedAttackDamageBasisPoints,
     int AddedPhysicalDamage,
     int IncreasedCriticalChanceBasisPoints,
+    int IncreasedCriticalMultiplierBasisPoints,
+    int MoreAttackDamageBasisPoints,
+    int MoreSpellDamageBasisPoints,
+    int MoreDamageOverTimeBasisPoints,
+    int IncreasedActionSpeedBasisPoints,
+    int InstantLifeLeechBasisPoints,
     int IncreasedBleedChanceBasisPoints,
     WarCryState WarCry,
     ChargedHeavyStrikeState? ChargedHeavyStrike,
@@ -104,8 +110,10 @@ public static class CharacterBuildAssembler
             equipment.SpiritBarrier,
             item.Value(ItemModifierKind.FlatSpiritBarrier),
             checked(item.Value(ItemModifierKind.IncreasedSpiritBarrierBasisPoints) + jewel.IncreasedSpiritBarrierBasisPoints),
-            MaximumElementalResistanceBasisPoints: checked(7_500 + item.MaximumAllResistanceBasisPoints),
-            MaximumVoidResistanceBasisPoints: checked(7_500 + item.MaximumAllResistanceBasisPoints));
+            MaximumElementalResistanceBasisPoints: checked(7_500 + item.MaximumAllResistanceBasisPoints +
+                jewel.MaximumElementalResistanceBasisPoints),
+            MaximumVoidResistanceBasisPoints: checked(7_500 + item.MaximumAllResistanceBasisPoints +
+                jewel.MaximumVoidResistanceBasisPoints));
         SkillUseProfile heavyStrike = SkillRules.BuildHeavyStrike(
             heavyStrikeConfiguration,
             weapon,
@@ -127,6 +135,13 @@ public static class CharacterBuildAssembler
             checked(item.AddedPhysicalDamage +
                 (item.Value(ItemModifierKind.AddedMinimumPhysicalDamage) + item.Value(ItemModifierKind.AddedMaximumPhysicalDamage)) / 2),
             checked(item.IncreasedCriticalChanceBasisPoints + advanced.IncreasedCriticalChanceBasisPoints + jewel.IncreasedCriticalChanceBasisPoints),
+            checked(item.Value(ItemModifierKind.IncreasedCriticalMultiplierBasisPoints) +
+                advanced.IncreasedCriticalMultiplierBasisPoints + jewel.IncreasedCriticalMultiplierBasisPoints),
+            jewel.MoreAttackDamageBasisPoints,
+            jewel.MoreSpellDamageBasisPoints,
+            jewel.MoreDamageOverTimeBasisPoints,
+            jewel.IncreasedActionSpeedBasisPoints,
+            jewel.InstantLifeLeechBasisPoints,
             checked(item.IncreasedBleedChanceBasisPoints + passive.IncreasedBleedChanceBasisPoints),
             warCry,
             passive.ChargedHeavyStrike ? new ChargedHeavyStrikeState() : null,

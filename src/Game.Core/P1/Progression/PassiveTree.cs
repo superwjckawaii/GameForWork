@@ -131,7 +131,8 @@ public sealed record PassiveNodeDefinition(
     int ThemeGroup = 0,
     PassiveStartKind Start = PassiveStartKind.None,
     string SpecialRule = "",
-    string MasteryGroup = "")
+    string MasteryGroup = "",
+    string ClusterTheme = "")
 {
     public IReadOnlyList<string> LinkedNodes => Connections ??
         (PrerequisiteId is null ? Array.Empty<string>() : [PrerequisiteId]);
@@ -244,6 +245,9 @@ public static class P1PassiveTree
 
     public static IReadOnlyList<PassiveEffect> MasteryOptions(PassiveNodeDefinition node) =>
         P30PassiveTreeCatalog.MasteryOptions(node);
+
+    public static IReadOnlyList<string> MasteryOptionDescriptions(PassiveNodeDefinition node) =>
+        P30PassiveTreeCatalog.MasteryOptionDescriptions(node);
 
     public static IReadOnlyList<string> FindShortestPath(string targetId, IReadOnlySet<string> allocated, PassiveStartKind start)
     {

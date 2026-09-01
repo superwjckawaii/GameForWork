@@ -1,3 +1,4 @@
+using GameForWork.Core.P1.Items;
 using GameForWork.Core.P2;
 using Godot;
 
@@ -9,37 +10,13 @@ public partial class P2ItemCell : Button
     public int CellIndex { get; set; }
     public bool HasItem { get; set; }
     public Color TooltipRarityColor { get; set; } = new("d6d1c5");
+    public ItemInstance? TooltipItem { get; set; }
+    public string ExtraTooltipText { get; set; } = string.Empty;
 
     public override Control _MakeCustomTooltip(string forText)
     {
-        string[] lines = forText.Split('\n');
-        string first = lines.Length == 0 ? string.Empty : EscapeBbCode(lines[0]);
-        string rest = string.Join('\n', lines.Skip(1).Select(FormatTooltipLine));
-        var panel = new PanelContainer();
-        panel.AddThemeStyleboxOverride("panel", new StyleBoxFlat
-        {
-            BgColor = new Color("10141bcc"),
-            BorderColor = TooltipRarityColor.Darkened(0.15f),
-            BorderWidthLeft = 2,
-            BorderWidthTop = 2,
-            BorderWidthRight = 2,
-            BorderWidthBottom = 2,
-            ContentMarginLeft = 9,
-            ContentMarginRight = 9,
-            ContentMarginTop = 6,
-            ContentMarginBottom = 6,
-        });
-        var text = new RichTextLabel
-        {
-            BbcodeEnabled = true,
-            FitContent = true,
-            ScrollActive = false,
-            CustomMinimumSize = new Vector2(285, Math.Max(34, lines.Length * 17)),
-            Text = $"[color=#{TooltipRarityColor.ToHtml(false)}][font_size=15]{first}[/font_size][/color]" +
-                   (rest.Length == 0 ? string.Empty : $"\n[font_size=12]{rest}[/font_size]"),
-        };
-        text.AddThemeConstantOverride("line_separation", -2);
-        panel.AddChild(text);
+        var panel = new P2ItemTooltipPanel();
+        panel.Initialize(forText, TooltipItem, ExtraTooltipText, TooltipRarityColor);
         return panel;
     }
 
@@ -160,9 +137,65 @@ public partial class P2ItemCell : Button
         return true;
     }
 
+}
+
+public partial class P2ItemTooltipPanel : PanelContainer
+{
+    private string _fallbackText = string.Empty;
+    private ItemInstance? _item;
+    private string _extraText = string.Empty;
+    private Color _rarityColor;
+    private RichTextLabel? _label;
+    private bool _showDetails;
+
+    public void Initialize(string fallbackText, ItemInstance? item, string extraText, Color rarityColor)
+    {
+        _fallbackText = fallbackText;
+        _item = item;
+        _extraText = extraText;
+        _rarityColor = rarityColor;
+    }
+
+    public override void _Ready()
+    {
+        AddThemeStyleboxOverride("panel", new StyleBoxFlat
+        {
+            BgColor = new Color("10141bcc"), BorderColor = _rarityColor.Darkened(0.15f),
+            BorderWidthLeft = 2, BorderWidthTop = 2, BorderWidthRight = 2, BorderWidthBottom = 2,
+            ContentMarginLeft = 9, ContentMarginRight = 9, ContentMarginTop = 6, ContentMarginBottom = 6,
+        });
+        _label = new RichTextLabel { BbcodeEnabled = true, FitContent = true, ScrollActive = false };
+        _label.AddThemeConstantOverride("line_separation", -2);
+        AddChild(_label);
+        _showDetails = Input.IsKeyPressed(Key.Alt);
+        RefreshText();
+        SetProcess(_item is not null);
+    }
+
+    public override void _Process(double delta)
+    {
+        bool showDetails = Input.IsKeyPressed(Key.Alt);
+        if (showDetails == _showDetails) return;
+        _showDetails = showDetails;
+        RefreshText();
+    }
+
+    private void RefreshText()
+    {
+        if (_label is null) return;
+        string raw = _item is null ? _fallbackText : P1UiText.ItemTooltip(_item, _showDetails);
+        if (_extraText.Length > 0) raw += $"\n\n{_extraText}";
+        string[] lines = raw.Split('\n');
+        string first = lines.Length == 0 ? string.Empty : EscapeBbCode(lines[0]);
+        string rest = string.Join('\n', lines.Skip(1).Select(FormatTooltipLine));
+        _label.CustomMinimumSize = new Vector2(285, Math.Max(34, lines.Length * 17));
+        _label.Text = $"[color=#{_rarityColor.ToHtml(false)}][font_size=15]{first}[/font_size][/color]" +
+                      (rest.Length == 0 ? string.Empty : $"\n[font_size=12]{rest}[/font_size]");
+    }
+
     private static string EscapeBbCode(string text) => text.Replace("[", "[​", StringComparison.Ordinal);
 
-    private string FormatTooltipLine(string line)
+    private static string FormatTooltipLine(string line)
     {
         const string marker = "[TIER:";
         if (!line.StartsWith(marker, StringComparison.Ordinal))
@@ -176,15 +209,7 @@ public partial class P2ItemCell : Button
             return EscapeBbCode(line);
         }
 
-        float lightening = tier switch
-        {
-            1 => 0.18f,
-            2 or 3 => 0.10f,
-            4 or 5 => 0.04f,
-            6 or 7 => 0.0f,
-            _ => -0.08f,
-        };
-        Color color = lightening >= 0 ? TooltipRarityColor.Lightened(lightening) : TooltipRarityColor.Darkened(-lightening);
+        Color color = P1UiText.AffixTierColor(tier);
         return $"[color=#{color.ToHtml(false)}]{EscapeBbCode(line[(end + 1)..])}[/color]";
     }
 }

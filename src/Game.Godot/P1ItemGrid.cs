@@ -110,8 +110,12 @@ public partial class P1ItemGrid : GridContainer
     }
 
     private static string ItemSignature(ItemInstance item) =>
-        $"{item.InstanceId}:{item.IsLocked}:{item.IsCraftingBase}:{item.Rarity}:{item.LinkedSocketCount}:" +
-        string.Join(',', item.Affixes.Select(affix => $"{affix.Definition.StableFamilyId}:{affix.EffectiveValue}:{affix.Crafted}"));
+        $"{item.InstanceId}:{item.ItemLevel}:{item.IsLocked}:{item.IsCraftingBase}:{item.Rarity}:{item.LinkedSocketCount}:" +
+        $"q{item.Quality}:i{item.ImplicitValue}:f{item.FracturedAffixFamilyId}:e{item.Enchantment?.StableId}:" +
+        $"c{item.IsCorrupted}:{item.CorruptionOutcome}:n{item.RolledName}:" +
+        string.Join(',', item.Affixes.Select(affix =>
+            $"{affix.Definition.StableFamilyId}:{affix.EffectiveValue}:{affix.Crafted}:" +
+            string.Join('/', affix.Effects.Select(effect => $"{effect.Kind}={effect.Value}"))));
 
     public int ToExternalIndex(int index) => index >= 0 && index < _externalIndices.Count
         ? _externalIndices[index]
@@ -144,11 +148,13 @@ public partial class P1ItemGrid : GridContainer
             bool occupied = index < _items.Count && _items[index] is not null;
             ItemInstance? item = occupied ? _items[index] : null;
             cell.HasItem = occupied;
+            cell.TooltipItem = item;
             cell.Icon = occupied ? IconFor(item!) : null;
             cell.ExpandIcon = occupied && cell.Icon is not null;
             cell.Text = occupied && cell.Icon is null ? P1UiText.ItemGlyph(item!.Base.Category) :
                 occupied ? string.Empty : EmptyLabel;
             string extra = occupied ? ExtraTooltip?.Invoke(item!) ?? string.Empty : string.Empty;
+            cell.ExtraTooltipText = extra;
             cell.TooltipText = occupied
                 ? P1UiText.ItemTooltip(item!) + (extra.Length == 0 ? string.Empty : $"\n\n{extra}")
                 : $"空格 {index + 1}";

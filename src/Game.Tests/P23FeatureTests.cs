@@ -94,7 +94,7 @@ public sealed class P23FeatureTests
     }
 
     [Fact]
-    public void SixFreeStartsAndSeventyTwoMasteryGroupsAreReachable()
+    public void SixFreeStartsAndSixtyTwoConfirmedMasteryGroupsAreReachable()
     {
         PassiveNodeDefinition[] starts = P1PassiveTree.Nodes.Where(node => node.Kind == PassiveNodeKind.Start).ToArray();
         PassiveNodeDefinition[] masteries = P1PassiveTree.Nodes.Where(node => node.Kind == PassiveNodeKind.Mastery).ToArray();
@@ -106,7 +106,7 @@ public sealed class P23FeatureTests
             Assert.Equal(3, P1PassiveTree.Neighbors(start.StableId).Count);
         });
         Assert.Equal(168, masteries.Length);
-        Assert.InRange(masteries.Select(node => node.MasteryGroup).Distinct(StringComparer.Ordinal).Count(), 70, 168);
+        Assert.Equal(62, masteries.Select(node => node.MasteryGroup).Distinct(StringComparer.Ordinal).Count());
     }
 
     [Fact]

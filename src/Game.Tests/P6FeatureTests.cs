@@ -271,7 +271,7 @@ public sealed class P6FeatureTests
         P1GameSession session = CreateSession();
         P6BuildSummary summary = session.GetBuildSummary();
 
-        Assert.Equal(LootDisposition.Keep, filter.Evaluate(sixLinkMagic));
+        Assert.Equal(LootDisposition.Sell, filter.Evaluate(sixLinkMagic));
         Assert.NotEqual("无", summary.MainSkill);
         Assert.InRange(summary.MainSkillLinks, 1, 6);
         Assert.Contains("估算假设", summary.Assumptions);

@@ -29,11 +29,19 @@ public static class P6BuildSummaryRules
             .FirstOrDefault(stone => stone.InstanceId == main.ActiveStoneInstanceId);
         int links = main?.SocketStoneInstanceIds?.Count(id => !string.IsNullOrEmpty(id)) ??
                     (main is null ? 0 : 1 + main.SupportStoneInstanceIds.Count);
-        int averageWeapon = (session.World.Hero.Build.Weapon.MinimumPhysicalDamage +
-                             session.World.Hero.Build.Weapon.MaximumPhysicalDamage) / 2;
-        int supportMore = Math.Max(10_000, 10_000 + (links - 1) * 1_200);
-        int single = checked(averageWeapon * supportMore / 10_000 *
-            session.World.Hero.Build.Weapon.AttacksPerSecondMilli / 1_000);
+        CombatPreview preview = session.GetCombatPreview();
+        int criticalMultiplier = checked(15_000 + session.HeroBuild.IncreasedCriticalMultiplierBasisPoints);
+        long expectedCriticalMultiplier = 10_000L +
+            (long)preview.CriticalChanceBasisPoints.Value * (criticalMultiplier - 10_000) / 10_000;
+        long expectedHit = (long)preview.AverageHitDamage.Value * preview.HitChanceBasisPoints.Value / 10_000 *
+                           expectedCriticalMultiplier / 10_000;
+        int single = checked((int)Math.Max(0, expectedHit * preview.AttacksPerSecondMilli.Value / 1_000));
+        if (active?.Definition.Tags.HasFlag(SkillTag.Attack) == true)
+            single = checked((int)((long)single * (10_000 + session.HeroBuild.MoreAttackDamageBasisPoints) / 10_000));
+        if (active?.Definition.Tags.HasFlag(SkillTag.Spell) == true)
+            single = checked((int)((long)single * (10_000 + session.HeroBuild.MoreSpellDamageBasisPoints) / 10_000));
+        int bossMore = session.HeroBuild.Equipment.Modifiers.MoreRareBossDamageBasisPoints;
+        single = checked((int)((long)single * (10_000 + bossMore) / 10_000));
         int clear = active?.Definition.Tags.HasFlag(SkillTag.Area) == true ? single * 2 :
             active?.Definition.Tags.HasFlag(SkillTag.Projectile) == true ? single * 3 / 2 : single;
         CharacterSheet sheet = session.World.Hero.Build.Sheet;
@@ -71,6 +79,6 @@ public static class P6BuildSummaryRules
             "生命药剂 + 命中汲取（若已连接）",
             session.World.Hero.Build.UseWarCry ? "战吼按技能 AI 循环" : "无战吼覆盖",
             issues,
-            "估算假设：同级普通敌人、持续命中、不计条件性处决/Boss阶段；不是木桩模拟。 ");
+            "估算假设：使用当前武器局部品质、全局提高、技能更多倍率、攻速、命中、暴击与暴击倍率；不计走位、资源中断和阶段性增益。 ");
     }
 }

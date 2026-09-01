@@ -21,7 +21,11 @@ public sealed record P30ClusterData(
     string Theme,
     string Size,
     string SourceFile,
-    IReadOnlyList<string> Descriptions);
+    IReadOnlyList<string> Descriptions,
+    string MasteryKey,
+    IReadOnlyList<string> MasteryOptions);
+
+public sealed record P30MasteryChoice(PassiveEffect Effect, string Description);
 
 public static partial class P30PassiveTreeCatalog
 {
@@ -30,7 +34,7 @@ public static partial class P30PassiveTreeCatalog
     public const int ExpectedMediumClusters = 131;
     public const int ExpectedLargeClusters = 37;
     public const float JewelRadius = 210f;
-    public const float LayoutExtent = 1_720f;
+    public const float LayoutExtent = 3_320f;
 
     private static readonly P30PassiveTreeData Data = Load();
     private static readonly PassiveStartKind[] Starts =
@@ -87,21 +91,23 @@ public static partial class P30PassiveTreeCatalog
         return index >= 0 ? $"p30.start.v{index}" : throw new ArgumentOutOfRangeException(nameof(start));
     }
 
-    public static IReadOnlyList<PassiveEffect> MasteryOptions(PassiveNodeDefinition node)
+    public static IReadOnlyList<PassiveEffect> MasteryOptions(PassiveNodeDefinition node) =>
+        MasteryChoices(node).Select(choice => choice.Effect).ToArray();
+
+    public static IReadOnlyList<string> MasteryOptionDescriptions(PassiveNodeDefinition node) =>
+        MasteryChoices(node).Select(choice => choice.Description).ToArray();
+
+    public static IReadOnlyList<P30MasteryChoice> MasteryChoices(PassiveNodeDefinition node)
     {
         if (node.Kind != PassiveNodeKind.Mastery) return [];
-        PassiveEffectKind primary = ThemeEffect(node.MasteryGroup, 0);
-        PassiveEffectKind secondary = ThemeEffect(node.MasteryGroup, 1);
-        return
-        [
-            new(primary, MasteryValue(primary, 0)),
-            new(secondary, MasteryValue(secondary, 1)),
-            new(PassiveEffectKind.MoreDamageBasisPoints, 2_000),
-            new(PassiveEffectKind.IncreasedCooldownRecoveryBasisPoints, 3_000),
-            new(PassiveEffectKind.IncreasedSkillRangeBasisPoints, 3_000),
-            new(PassiveEffectKind.IncreasedMaximumLifeBasisPoints, 1_200),
-            new(PassiveEffectKind.ReducedSkillCostBasisPoints, 1_000),
-        ];
+        P30ClusterData cluster = Data.Clusters.First(item =>
+            $"p30.mastery.{item.MasteryKey}" == node.MasteryGroup);
+        return cluster.MasteryOptions.Select((description, index) =>
+        {
+            PassiveEffectKind effect = ThemeEffect(description, index);
+            return new P30MasteryChoice(new PassiveEffect(effect,
+                ParseValue(description, effect, PassiveNodeKind.Mastery)), description);
+        }).ToArray();
     }
 
     private static void AddStarts(ICollection<PassiveNodeDefinition> nodes,
@@ -208,8 +214,15 @@ public static partial class P30PassiveTreeCatalog
         for (int index = 0; index < 3; index++)
         {
             string anchor = VertexId("middle", vertex);
-            float angle = VertexAngle(vertex) + (index - 1) * .09f;
-            (float x, float y) = Polar(Data.MiddleRadius + 74, angle);
+            (float anchorX, float anchorY) = positions[anchor];
+            float angle = VertexAngle(vertex) + MathF.PI + (index switch
+            {
+                0 => -.72f,
+                1 => .72f,
+                _ => .28f,
+            });
+            float distance = index < 2 ? 112 : 70;
+            (float x, float y) = Offset(anchorX, anchorY, angle, distance, 0);
             PassiveEffectKind effect = effects[vertex][index];
             string id = $"p30.attr.major.v{vertex}.{AttributeSlug(effect)}";
             nodes.Add(new(id, $"{AttributeName(effect)} +30", Branches[vertex], PassiveNodeKind.Notable,
@@ -222,7 +235,6 @@ public static partial class P30PassiveTreeCatalog
         IDictionary<string, (float X, float Y)> positions)
     {
         string[] suffixes = ["ji", "jm0", "jm1", "jo"];
-        int[] radii = [500, 650, 820, 1_155];
         for (int vertex = 0; vertex < 6; vertex++)
         for (int index = 0; index < suffixes.Length; index++)
         {
@@ -233,8 +245,16 @@ public static partial class P30PassiveTreeCatalog
                 2 => RingId("middle", (vertex + 5) % 6, 7),
                 _ => RadialId(vertex, "m2o", 4),
             };
-            float angle = VertexAngle(vertex) + (index is 1 ? .13f : index is 2 ? -.13f : .04f);
-            (float x, float y) = Polar(radii[index], angle);
+            (float anchorX, float anchorY) = positions[anchor];
+            float angle = MathF.Atan2(anchorY, anchorX);
+            (float forward, float sideways) = index switch
+            {
+                0 => (0, 82),
+                1 => (76, 0),
+                2 => (76, 0),
+                _ => (0, -82),
+            };
+            (float x, float y) = Offset(anchorX, anchorY, angle, forward, sideways);
             string id = $"p30.jewel.v{vertex}.{suffixes[index]}";
             nodes.Add(new(id, "记忆棱孔", Branches[vertex], PassiveNodeKind.JewelSocket, anchor, [], [anchor],
                 x, y, vertex, SpecialRule: "可镶嵌一枚棱晶或传奇珠宝；半径、塑形与腐化读取 P30 珠宝规则"));
@@ -249,45 +269,55 @@ public static partial class P30PassiveTreeCatalog
         {
             bool large = cluster.Size == "large";
             int sector = int.Parse(cluster.Slot.AsSpan(1, 1));
-            string anchor = large ? LargeAnchor(cluster.Slot) : MediumAnchor(cluster.Slot);
-            (float anchorX, float anchorY) = positions[anchor];
-            float baseAngle = large ? EdgeNormalAngle(sector) : VertexAngle(sector);
-            float radial = large ? 76f : cluster.Slot[3] switch { 'I' => -1f, 'R' => 1f, _ => 1f };
-            float tangentOffset = SlotOrdinal(cluster.Slot) % 2 == 0 ? 1f : -1f;
             if (large)
-                AddLargeCluster(nodes, cluster, sector, anchor, anchorX, anchorY, baseAngle, tangentOffset,
+            {
+                string anchor = LargeAnchor(cluster.Slot);
+                (float anchorX, float anchorY) = positions[anchor];
+                AddLargeCluster(nodes, cluster, sector, anchor, anchorX, anchorY,
+                    MathF.Atan2(anchorY, anchorX), SlotOrdinal(cluster.Slot) % 2 == 0 ? 1f : -1f,
                     SlotOrdinal(cluster.Slot) % 3 * 14f);
+            }
             else
-                AddMediumCluster(nodes, cluster, sector, anchor, anchorX, anchorY, baseAngle, radial, tangentOffset);
+            {
+                int ordinal = SlotOrdinal(cluster.Slot);
+                string anchor = MediumAnchor(cluster.Slot);
+                (float originX, float originY) = positions[anchor];
+                float radialAngle = MathF.Atan2(originY, originX);
+                float angle = anchor.Contains(".radial.", StringComparison.Ordinal)
+                    ? radialAngle + (ordinal == 8 ? -MathF.PI / 2 : ordinal % 2 == 0 ? MathF.PI / 2 : -MathF.PI / 2)
+                    : radialAngle + MathF.PI + (ordinal == 1 ? -.38f : ordinal == 4 ? .38f : 0f);
+                AddMediumCluster(nodes, cluster, sector, anchor, originX, originY, angle,
+                    ordinal % 2 == 0 ? 1f : -1f);
+            }
         }
     }
 
     private static void AddMediumCluster(ICollection<PassiveNodeDefinition> nodes, P30ClusterData cluster,
-        int sector, string anchor, float anchorX, float anchorY, float angle, float radial, float tangent)
+        int sector, string anchor, float anchorX, float anchorY, float angle, float tangent)
     {
         string notable = ClusterId(cluster, "notable01");
         string mastery = ClusterId(cluster, "mastery");
         string[] smalls = Enumerable.Range(1, 4).Select(index => ClusterId(cluster, $"small{index:00}")).ToArray();
-        string[] descriptions = Descriptions(cluster, 6);
+        (string[] smallDescriptions, string[] notableDescriptions) = ClusterDescriptions(cluster, 4, 1);
         AddClusterNode(nodes, cluster, sector, smalls[0], PassiveNodeKind.Small, anchor,
-            [anchor, smalls[1]], anchorX, anchorY, angle, 42, -26 * tangent, descriptions[0], 0);
+            [anchor, smalls[1]], anchorX, anchorY, angle, 42, -26 * tangent, smallDescriptions[0], 0);
         AddClusterNode(nodes, cluster, sector, smalls[1], PassiveNodeKind.Small, smalls[0],
-            [smalls[0], notable], anchorX, anchorY, angle, 84, -42 * tangent, descriptions[1], 1);
+            [smalls[0], notable], anchorX, anchorY, angle, 84, -42 * tangent, smallDescriptions[1], 1);
         AddClusterNode(nodes, cluster, sector, smalls[2], PassiveNodeKind.Small, anchor,
-            [anchor, smalls[3]], anchorX, anchorY, angle, 42, 26 * tangent, descriptions[2], 2);
+            [anchor, smalls[3]], anchorX, anchorY, angle, 42, 26 * tangent, smallDescriptions[2], 2);
         AddClusterNode(nodes, cluster, sector, smalls[3], PassiveNodeKind.Small, smalls[2],
-            [smalls[2], notable], anchorX, anchorY, angle, 84, 42 * tangent, descriptions[3], 3);
+            [smalls[2], notable], anchorX, anchorY, angle, 84, 42 * tangent, smallDescriptions[3], 3);
         AddClusterNode(nodes, cluster, sector, notable, PassiveNodeKind.Notable, smalls[1],
-            [smalls[1], smalls[3], mastery], anchorX, anchorY, angle, 126, 0, descriptions[4], 4);
+            [smalls[1], smalls[3], mastery], anchorX, anchorY, angle, 126, 0, notableDescriptions[0], 4);
         AddClusterNode(nodes, cluster, sector, mastery, PassiveNodeKind.Mastery, notable,
-            [notable], anchorX, anchorY, angle, 172, 0, descriptions[5], 5);
+            [notable], anchorX, anchorY, angle, 172, 0, $"从“{cluster.MasteryKey}”共享专精池选择 1 项", 5);
     }
 
     private static void AddLargeCluster(ICollection<PassiveNodeDefinition> nodes, P30ClusterData cluster,
         int sector, string anchor, float anchorX, float anchorY, float angle, float tangent, float forwardShift)
     {
         string mastery = ClusterId(cluster, "mastery");
-        string[] descriptions = Descriptions(cluster, 11);
+        (string[] smallDescriptions, string[] notableDescriptions) = ClusterDescriptions(cluster, 8, 2);
         for (int branch = 0; branch < 2; branch++)
         {
             string previous = anchor;
@@ -299,16 +329,17 @@ public static partial class P30PassiveTreeCatalog
                 float side = (branch == 0 ? -1 : 1) * tangent;
                 AddClusterNode(nodes, cluster, sector, id, PassiveNodeKind.Small, previous, [previous, next],
                     anchorX, anchorY, angle, 58 + index * 44 + forwardShift, side * (34 + index * 8),
-                    descriptions[branch * 5 + index], branch * 5 + index);
+                    smallDescriptions[branch * 4 + index], branch * 5 + index);
                 previous = id;
             }
             AddClusterNode(nodes, cluster, sector, notable, PassiveNodeKind.Notable, previous,
                 [previous, mastery], anchorX, anchorY, angle, 244 + forwardShift, (branch == 0 ? -1 : 1) * tangent * 66,
-                descriptions[branch * 5 + 4], branch * 5 + 4);
+                notableDescriptions[branch], branch * 5 + 4);
         }
         AddClusterNode(nodes, cluster, sector, mastery, PassiveNodeKind.Mastery,
             ClusterId(cluster, "notable01"), [ClusterId(cluster, "notable01"), ClusterId(cluster, "notable02")],
-            anchorX, anchorY, angle, 292 + forwardShift, 0, descriptions[10], 10);
+            anchorX, anchorY, angle, 292 + forwardShift, 0,
+            $"从“{cluster.MasteryKey}”共享专精池选择 1 项", 10);
     }
 
     private static void AddClusterNode(ICollection<PassiveNodeDefinition> nodes, P30ClusterData cluster,
@@ -321,22 +352,57 @@ public static partial class P30PassiveTreeCatalog
         float y = Snap(anchorY + sin * forward + cos * sideways);
         PassiveEffectKind effect = ThemeEffect(cluster.Theme + " " + description, ordinal);
         int value = ParseValue(description, effect, kind);
-        nodes.Add(new(id, NodeName(cluster, kind, ordinal), Branches[sector], kind, prerequisite,
-            [new(effect, value)], links, x, y, sector, SpecialRule: description,
-            MasteryGroup: $"p30.{cluster.SourceFile}.{cluster.Theme}"));
+        nodes.Add(new(id, NodeName(cluster, kind, description, ordinal), Branches[sector], kind, prerequisite,
+            [new(effect, value)], links, x, y, sector, SpecialRule: DescriptionEffect(description),
+            MasteryGroup: $"p30.mastery.{cluster.MasteryKey}", ClusterTheme: cluster.Theme));
     }
 
-    private static string[] Descriptions(P30ClusterData cluster, int count)
+    private static (string[] Smalls, string[] Notables) ClusterDescriptions(P30ClusterData cluster,
+        int smallCount, int notableCount)
     {
-        string[] source = cluster.Descriptions.Where(text => !string.IsNullOrWhiteSpace(text)).ToArray();
-        if (source.Length == 0) source = [$"{cluster.Theme}提高"];
-        var result = new string[count];
-        for (int index = 0; index < count; index++)
+        string[] source = cluster.Descriptions.Where(text => !string.IsNullOrWhiteSpace(text))
+            .Select(NormalizeDescription).ToArray();
+        string[] notables = source.Where(text => text.Contains("显著", StringComparison.Ordinal)).
+            SelectMany(SplitCombinedNotables).ToArray();
+        string[] smalls = source.Where(text => !text.Contains("显著", StringComparison.Ordinal) &&
+                                               !text.Contains("专精", StringComparison.Ordinal)).ToArray();
+        if (smalls.Length == 0) smalls = [$"{cluster.Name}：{cluster.Theme}提高"];
+        if (notables.Length == 0) notables = [$"{cluster.Name}·显著：{cluster.Theme}获得强化规则"];
+        return (Enumerable.Range(0, smallCount).Select(index => smalls[index % smalls.Length]).ToArray(),
+            Enumerable.Range(0, notableCount).Select(index => notables[index % notables.Length]).ToArray());
+    }
+
+    private static string NormalizeDescription(string description)
+    {
+        int pipe = description.IndexOf('|');
+        if (pipe < 0) return description.Trim().TrimEnd('。');
+        string routeAndName = description[..pipe].Trim();
+        string effect = description[(pipe + 1)..].Trim().TrimEnd('。');
+        int colon = routeAndName.IndexOf('：');
+        string name = colon >= 0 ? routeAndName[(colon + 1)..].Trim() : routeAndName;
+        return $"{name}：{effect}";
+    }
+
+    private static IEnumerable<string> SplitCombinedNotables(string description)
+    {
+        string text = description.StartsWith("显著：", StringComparison.Ordinal) ? description[3..] : description;
+        MatchCollection headings = CombinedNotableRegex().Matches(text);
+        if (headings.Count < 2) return [description];
+        var result = new List<string>(headings.Count);
+        for (int index = 0; index < headings.Count; index++)
         {
-            bool mastery = index == count - 1;
-            result[index] = mastery ? $"{cluster.Name}专精：从共享专精池选择 1 项" : source[index % source.Length];
+            int start = headings[index].Index;
+            int end = index + 1 < headings.Count ? headings[index + 1].Index : text.Length;
+            result.Add(text[start..end].Trim().TrimStart('；').TrimEnd('；'));
         }
         return result;
+    }
+
+    private static string DescriptionEffect(string description)
+    {
+        string normalized = NormalizeDescription(description);
+        int colon = normalized.IndexOf('：');
+        return (colon >= 0 ? normalized[(colon + 1)..] : normalized).Trim();
     }
 
     private static PassiveEffectKind ThemeEffect(string text, int ordinal)
@@ -403,15 +469,6 @@ public static partial class P30PassiveTreeCatalog
         return kind switch { PassiveNodeKind.Small => 1_800, PassiveNodeKind.Notable => 4_000, _ => 2_500 };
     }
 
-    private static int MasteryValue(PassiveEffectKind kind, int ordinal) => kind switch
-    {
-        PassiveEffectKind.FlatAccuracy => 240,
-        PassiveEffectKind.FlatPhysique or PassiveEffectKind.FlatDexterity or PassiveEffectKind.FlatSpirit or
-            PassiveEffectKind.FlatEnergy => 40,
-        PassiveEffectKind.BlockChanceBasisPoints or PassiveEffectKind.SpellSuppressionBasisPoints => 800,
-        _ => 2_500 + ordinal * 500,
-    };
-
     private static string MediumAnchor(string slot)
     {
         int vertex = int.Parse(slot.AsSpan(1, 1));
@@ -427,6 +484,7 @@ public static partial class P30PassiveTreeCatalog
         };
     }
 
+
     private static string LargeAnchor(string slot)
     {
         int edge = int.Parse(slot.AsSpan(1, 1));
@@ -440,9 +498,12 @@ public static partial class P30PassiveTreeCatalog
     private static string RadialId(int vertex, string segment, int point) => $"p30.path.radial.v{vertex}.{segment}.p{point:00}";
     private static string VertexId(string ring, int vertex) => $"p30.vertex.{ring}.v{vertex}";
     private static float VertexAngle(int vertex) => -MathF.PI / 2 + vertex * MathF.Tau / 6;
-    private static float EdgeNormalAngle(int edge) => VertexAngle(edge) + MathF.Tau / 12;
     private static (float X, float Y) Polar(float radius, float angle) =>
         (Snap(MathF.Cos(angle) * radius), Snap(MathF.Sin(angle) * radius));
+    private static (float X, float Y) Offset(float originX, float originY, float angle,
+        float forward, float sideways) =>
+        (Snap(originX + MathF.Cos(angle) * forward - MathF.Sin(angle) * sideways),
+            Snap(originY + MathF.Sin(angle) * forward + MathF.Cos(angle) * sideways));
     private static float Snap(float value) => MathF.Round(value / 2f) * 2f;
     private static string RingName(string ring) => ring switch { "inner" => "内环", "middle" => "中环", _ => "外环" };
     private static string StartName(PassiveStartKind start) => start switch
@@ -468,12 +529,22 @@ public static partial class P30PassiveTreeCatalog
         PassiveEffectKind.FlatSpirit => "spirit",
         _ => "energy",
     };
-    private static string NodeName(P30ClusterData cluster, PassiveNodeKind kind, int ordinal) => kind switch
+    private static string NodeName(P30ClusterData cluster, PassiveNodeKind kind, string description, int ordinal) => kind switch
     {
-        PassiveNodeKind.Mastery => $"{cluster.Name}专精",
-        PassiveNodeKind.Notable => $"{cluster.Name}·显著{ordinal + 1}",
-        _ => $"{cluster.Name}·{ordinal + 1:00}",
+        PassiveNodeKind.Mastery => cluster.MasteryKey,
+        _ => DescriptionTitle(description, cluster.Name, kind, ordinal),
     };
+
+    private static string DescriptionTitle(string description, string clusterName, PassiveNodeKind kind, int ordinal)
+    {
+        string normalized = NormalizeDescription(description);
+        int colon = normalized.IndexOf('：');
+        string title = (colon >= 0 ? normalized[..colon] : normalized).Trim();
+        title = Regex.Replace(title, "·?(?:小点(?:\\s*×\\d+)?|显著)$", string.Empty).Trim();
+        if (title is "小点" or "显著" or "中央" || title.Length == 0)
+            return kind == PassiveNodeKind.Notable ? clusterName : $"{clusterName}·小点{ordinal + 1}";
+        return title;
+    }
     private static void ValidateData()
     {
         if (Data.Version != Version || Data.Clusters.Count != ExpectedMediumClusters + ExpectedLargeClusters ||
@@ -499,4 +570,6 @@ public static partial class P30PassiveTreeCatalog
     private static partial Regex PercentageRegex();
     [GeneratedRegex(@"\+?\s*(\d+)")]
     private static partial Regex IntegerRegex();
+    [GeneratedRegex(@"(?:^|；)([^；：]{2,12}·?显著?[^；：]{0,4})：")]
+    private static partial Regex CombinedNotableRegex();
 }

@@ -476,7 +476,7 @@ public sealed class P4SpatialCombatRunner
                     ascendancyRuntime.WarCry();
                     events.Add(Event(tick, P4SpatialEventKind.WarCry, "hero", target.EntityId, 0,
                         heroPosition, target.Position, "area:6000"));
-                    heroNextActionTick = tick + P1Skills.WarCry.CastTimeTicks;
+                    heroNextActionTick = tick + ActionDelay(request.Build, P1Skills.WarCry.CastTimeTicks);
                     if (ascendancy.Has(P18NodeIds.BreakerWarCryCore)) heroNextActionTick = tick;
                 }
                 else
@@ -495,7 +495,7 @@ public sealed class P4SpatialCombatRunner
                         if (p17Skill.Role == P17SkillRole.Guard && ascendancy.Has(P18NodeIds.BastionGuardSmall))
                             guardUntilTick += Math.Max(1, (guardUntilTick - tick) / 5);
                         p17ReadyTicks[chosen] = tick + Math.Max(1, p17Skill.CooldownTicks);
-                        heroNextActionTick = tick + Math.Max(1, p17Skill.CastTimeTicks);
+                        heroNextActionTick = tick + ActionDelay(request.Build, p17Skill.CastTimeTicks);
                     }
                     else if (chosen == P1SkillIds.SeismicCharge && P6CombatSkillRules.TryPay(hero, charge!))
                     {
@@ -512,7 +512,7 @@ public sealed class P4SpatialCombatRunner
                         events.Add(Event(tick, P4SpatialEventKind.SeismicCharge, "hero", target.EntityId, 0,
                             heroPosition, target.Position, "movement"));
                         chargeReadyTick = tick + chargeSkill.CooldownTicks;
-                        heroNextActionTick = tick + chargeSkill.CastTimeTicks;
+                        heroNextActionTick = tick + ActionDelay(request.Build, chargeSkill.CastTimeTicks);
                     }
                     else if (chosen == P1SkillIds.BloodTideSpin && P6CombatSkillRules.TryPay(hero, spin!))
                     {
@@ -524,7 +524,7 @@ public sealed class P4SpatialCombatRunner
                                 checked(3_500 + spinSkill.BleedChanceBasisPoints), hero, spinSkill.LifeLeechBasisPoints);
                         }
                         spinReadyTick = tick + spinSkill.CooldownTicks;
-                        heroNextActionTick = tick + spinSkill.CastTimeTicks;
+                        heroNextActionTick = tick + ActionDelay(request.Build, spinSkill.CastTimeTicks);
                     }
                     else if (chosen == P1SkillIds.EarthCleave && P6CombatSkillRules.TryPay(hero, cleave!))
                     {
@@ -541,7 +541,7 @@ public sealed class P4SpatialCombatRunner
                         }
 
                         cleaveReadyTick = tick + cleaveSkill.CooldownTicks;
-                        heroNextActionTick = tick + cleaveSkill.CastTimeTicks;
+                        heroNextActionTick = tick + ActionDelay(request.Build, cleaveSkill.CastTimeTicks);
                     }
                     else if (chosen == P1SkillIds.SpiritBlade && P6CombatSkillRules.TryPay(hero, blade!))
                     {
@@ -561,7 +561,7 @@ public sealed class P4SpatialCombatRunner
                         events.Add(Event(tick, P4SpatialEventKind.SpiritBladeLaunched, "hero", target.EntityId, 0,
                             heroPosition, target.Position, $"projectile:{bladeSkill.ProjectileCount}"));
                         bladeReadyTick = tick + bladeSkill.CooldownTicks;
-                        heroNextActionTick = tick + bladeSkill.CastTimeTicks;
+                        heroNextActionTick = tick + ActionDelay(request.Build, bladeSkill.CastTimeTicks);
                     }
                     else if (chosen == P1SkillIds.AshJavelin && P6CombatSkillRules.TryPay(hero, ashJavelin!))
                     {
@@ -570,7 +570,7 @@ public sealed class P4SpatialCombatRunner
                             P4SpatialEventKind.AshJavelin, heroPosition, events, skill.BleedChanceBasisPoints, hero,
                             skill.LifeLeechBasisPoints);
                         ashJavelinReadyTick = tick + skill.CooldownTicks;
-                        heroNextActionTick = tick + skill.CastTimeTicks;
+                        heroNextActionTick = tick + ActionDelay(request.Build, skill.CastTimeTicks);
                     }
                     else if (chosen == P1SkillIds.EmberNova && P6CombatSkillRules.TryPay(hero, emberNova!))
                     {
@@ -579,7 +579,7 @@ public sealed class P4SpatialCombatRunner
                             ApplyHeroHit(request, enemy, random, tick, SkillMultiplier(skill, enemy, bannerMultiplier),
                                 P4SpatialEventKind.EmberNova, heroPosition, events, 0, hero, skill.LifeLeechBasisPoints);
                         emberNovaReadyTick = tick + skill.CooldownTicks;
-                        heroNextActionTick = tick + skill.CastTimeTicks;
+                        heroNextActionTick = tick + ActionDelay(request.Build, skill.CastTimeTicks);
                     }
                     else if (chosen == P1SkillIds.StormBrand && P6CombatSkillRules.TryPay(hero, stormBrand!))
                     {
@@ -591,7 +591,7 @@ public sealed class P4SpatialCombatRunner
                             ApplyHeroHit(request, enemy, random, tick, SkillMultiplier(skill, enemy, bannerMultiplier) * 8_500 / 10_000,
                                 P4SpatialEventKind.StormBrand, heroPosition, events, 0, hero, skill.LifeLeechBasisPoints);
                         stormBrandReadyTick = tick + skill.CooldownTicks;
-                        heroNextActionTick = tick + skill.CastTimeTicks;
+                        heroNextActionTick = tick + ActionDelay(request.Build, skill.CastTimeTicks);
                     }
                     else if (chosen == P1SkillIds.HeavyStrike &&
                              SkillRules.TryPaySkillCost(hero, heavyStrike))
@@ -602,6 +602,7 @@ public sealed class P4SpatialCombatRunner
                             checked(request.Build.IncreasedBleedChanceBasisPoints + heavyStrike.BleedChanceBasisPoints), hero,
                             ascendancy.Has(P18NodeIds.BloodTideSmall) ? 100 : 0);
                         int speedBasisPoints = Math.Max(1_000, 10_000 + ascendancyRuntime.AttackSpeedBasisPoints +
+                            request.Build.IncreasedActionSpeedBasisPoints +
                             virtueVice.Bonuses().IncreasedActionSpeedBasisPoints);
                         int attackInterval = checked((heavyStrike.AttackIntervalTicks * 10_000 + speedBasisPoints - 1) / speedBasisPoints);
                         heroNextActionTick = tick + attackInterval;
@@ -918,6 +919,8 @@ public sealed class P4SpatialCombatRunner
         P205PassiveModifiers profile = request.Build.PassiveProfile ?? P205PassiveModifiers.Empty;
         raw = checked(raw * (10_000 + request.Build.IncreasedDamageBasisPoints + profile.DamageFor(tags) + configuration.Quality * 100) / 10_000);
         raw = checked(raw * (10_000 + profile.MoreDamageBasisPoints) / 10_000);
+        raw = checked(raw * (10_000 + JewelMoreDamage(request.Build, tags,
+            skill.Role == P17SkillRole.DamageOverTime)) / 10_000);
         raw = checked(raw * skill.BaseDamageBasisPoints / 10_000);
         raw = checked(raw * P6CombatSkillRules.DamageMultiplier(skill, enemy.Life, enemy.MaximumLife) / 10_000);
         raw = checked(raw * multiplier / 10_000);
@@ -943,7 +946,7 @@ public sealed class P4SpatialCombatRunner
             (runtime.Has(P18NodeIds.BloodTideSmall) && tags.HasFlag(SkillTag.Attack) &&
              skill.DamageType == P17DamageType.Physical ? 100 : 0);
         if (value > 0 && leech > 0)
-            hero.AddLifeLeech(Math.Max(1, value * leech / 10_000));
+            ApplyLifeLeech(hero, Math.Max(1, value * leech / 10_000), request.Build.InstantLifeLeechBasisPoints);
 
         bool ailmentAllowed = !configuration.Supports.HasFlag(SkillSupport.ElementalFocus) &&
                               random.NextUInt() % 10_000 < Math.Clamp(skill.AilmentChanceBasisPoints, 0, 10_000);
@@ -1292,7 +1295,8 @@ public sealed class P4SpatialCombatRunner
             request.Build.AddedPhysicalDamage,
             checked(request.Build.IncreasedDamageBasisPoints + (request.Build.PassiveProfile ?? P205PassiveModifiers.Empty).DamageFor(tags) +
                 ((request.Build.ActiveSkills ?? []).FirstOrDefault(s => s.SkillId == skillId)?.Quality ?? 0) * 100),
-            [skillMultiplier, ascendancyMultiplier, 10_000 + (request.Build.PassiveProfile?.MoreDamageBasisPoints ?? 0)],
+            [skillMultiplier, ascendancyMultiplier, 10_000 + (request.Build.PassiveProfile?.MoreDamageBasisPoints ?? 0),
+                10_000 + JewelMoreDamage(request.Build, tags, false)],
             request.Build.CannotCrit ? 0 : P30CombatRules.CriticalChance(
                 request.Build.Weapon.CriticalChanceBasisPoints, request.Build.IncreasedCriticalChanceBasisPoints),
             request.Build.CriticalMultiplierBasisPoints,
@@ -1318,7 +1322,8 @@ public sealed class P4SpatialCombatRunner
         enemy.Life = Math.Max(0, enemy.Life - value);
         if (hero is not null && value > 0 && lifeLeechBasisPoints > 0)
         {
-            hero.AddLifeLeech(Math.Max(1, checked(value * lifeLeechBasisPoints / 10_000)));
+            ApplyLifeLeech(hero, Math.Max(1, checked(value * lifeLeechBasisPoints / 10_000)),
+                request.Build.InstantLifeLeechBasisPoints);
         }
         if (damage.AppliedBleed && enemy.Life > 0)
         {
@@ -1352,6 +1357,26 @@ public sealed class P4SpatialCombatRunner
             _ => string.Empty,
         };
         return (build.ActiveSkills ?? [build.HeavyStrike]).FirstOrDefault(skill => skill.SkillId == skillId)?.Supports ?? SkillSupport.None;
+    }
+
+    private static int JewelMoreDamage(P1TeamBuild build, SkillTag tags, bool damageOverTime)
+    {
+        int result = damageOverTime ? build.MoreDamageOverTimeBasisPoints : 0;
+        if (tags.HasFlag(SkillTag.Attack)) result += build.MoreAttackDamageBasisPoints;
+        if (tags.HasFlag(SkillTag.Spell)) result += build.MoreSpellDamageBasisPoints;
+        return result;
+    }
+
+    private static int ActionDelay(P1TeamBuild build, int baseTicks) => Math.Max(1,
+        checked((int)((long)Math.Max(1, baseTicks) * 10_000 /
+            Math.Max(1_000, 10_000 + build.IncreasedActionSpeedBasisPoints))));
+
+    private static void ApplyLifeLeech(ResourceState hero, int amount, int instantBasisPoints)
+    {
+        int instant = checked(amount * Math.Clamp(instantBasisPoints, 0, 10_000) / 10_000);
+        if (instant > 0) hero.HealLife(instant);
+        int remaining = amount - instant;
+        if (remaining > 0) hero.AddLifeLeech(remaining);
     }
 
     private static P6ResolvedSkill ApplyAscendancyCost(P6ResolvedSkill skill, SkillConfiguration configuration,

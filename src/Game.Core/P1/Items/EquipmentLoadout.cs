@@ -201,8 +201,6 @@ public sealed class EquipmentLoadout
             spiritBarrier);
     }
 
-    private static int QualityScale(int value, int quality) => checked(value * (100 + Math.Clamp(quality, 0, 40)) / 100);
-
     public static WeaponProfile CalculateWeapon(ItemInstance item)
     {
         WeaponProfile weapon = item.Base.ToWeaponProfile();

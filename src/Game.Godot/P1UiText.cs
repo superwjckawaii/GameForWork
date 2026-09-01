@@ -11,16 +11,23 @@ namespace GameForWork.GodotClient;
 
 internal static class P1UiText
 {
-    public static string ItemTooltip(ItemInstance item)
+    public static string ItemTooltip(ItemInstance item, bool includeAffixDetails = false)
     {
         var text = new StringBuilder();
         text.AppendLine($"{RarityName(item.Rarity)}·{item.DisplayName}{(item.Quality > 0 ? $"+{item.Quality}" : string.Empty)}");
         text.AppendLine($"底材：{item.Base.DisplayName}");
         text.AppendLine($"物品等级 {item.ItemLevel} · {item.Base.DetailedTypeName}");
         text.AppendLine($"底材阶级：{P29DropCatalog.BaseTierName(P29DropCatalog.BaseTier(item.Base))}");
-        if (!string.IsNullOrWhiteSpace(item.DropSource)) text.AppendLine($"掉落来源：{P29DropCatalog.SourceDisplay(item.DropSource)}");
-        text.AppendLine($"需求：等级 {item.Base.RequiredLevel} · 体魄 {item.Base.RequiredPhysique} · " +
-            $"灵巧 {item.Base.RequiredDexterity} · 精神 {item.Base.RequiredSpirit} · 能量 {item.Base.RequiredEnergy}");
+        string[] requirements =
+        [
+            item.Base.RequiredLevel > 0 ? $"等级 {item.Base.RequiredLevel}" : string.Empty,
+            item.Base.RequiredPhysique > 0 ? $"体魄 {item.Base.RequiredPhysique}" : string.Empty,
+            item.Base.RequiredDexterity > 0 ? $"灵巧 {item.Base.RequiredDexterity}" : string.Empty,
+            item.Base.RequiredSpirit > 0 ? $"精神 {item.Base.RequiredSpirit}" : string.Empty,
+            item.Base.RequiredEnergy > 0 ? $"能量 {item.Base.RequiredEnergy}" : string.Empty,
+        ];
+        string requirementText = string.Join(" · ", requirements.Where(value => value.Length > 0));
+        if (requirementText.Length > 0) text.AppendLine($"需求：{requirementText}");
         if (item.Base.Category is ItemCategory.TwoHandWeapon or ItemCategory.OneHandWeapon)
         {
             WeaponProfile weapon = EquipmentLoadout.CalculateWeapon(item);
@@ -31,8 +38,14 @@ internal static class P1UiText
         var localDefense = EquipmentLoadout.CalculateLocalDefense(item);
         if (localDefense.Armor + localDefense.Evasion + localDefense.Shield + localDefense.SpiritBarrier > 0)
         {
-            text.AppendLine($"护甲 {localDefense.Armor} · 闪避 {localDefense.Evasion} · " +
-                $"护盾 {localDefense.Shield} · 灵障 {localDefense.SpiritBarrier}");
+            string[] defenses =
+            [
+                localDefense.Armor > 0 ? $"护甲 {localDefense.Armor}" : string.Empty,
+                localDefense.Evasion > 0 ? $"闪避 {localDefense.Evasion}" : string.Empty,
+                localDefense.Shield > 0 ? $"护盾 {localDefense.Shield}" : string.Empty,
+                localDefense.SpiritBarrier > 0 ? $"灵障 {localDefense.SpiritBarrier}" : string.Empty,
+            ];
+            text.AppendLine(string.Join(" · ", defenses.Where(value => value.Length > 0)));
         }
         if (localDefense.BlockChanceBasisPoints > 0)
         {
@@ -68,11 +81,11 @@ internal static class P1UiText
         {
             int tier = P1Affixes.TierFor(item.Base, affix.Definition);
             string markers = (affix.Crafted ? "（工匠）" : string.Empty) + (item.IsFractured(affix) ? "（破溃）" : string.Empty);
-            string source = affix.Crafted ? "工匠" : affix.Definition.Source == "Natural" ? "自然" : affix.Definition.Source;
-            text.AppendLine(tier <= 0
-                ? $"{PositionName(affix.Definition.Position)} 固定 {affix.Definition.DisplayName}{markers}：{AffixEffects(affix)} · {source}"
-                : $"[TIER:{tier}]{PositionName(affix.Definition.Position)} T{tier} " +
-                  $"{affix.Definition.DisplayName}{markers}：{AffixEffects(affix)} · {source}");
+            string details = includeAffixDetails && tier > 0
+                ? $" {AffixRanges(affix)}（T{tier}）"
+                : string.Empty;
+            string line = $"{PositionName(affix.Definition.Position)}{markers} - {AffixEffects(affix)}{details}";
+            text.AppendLine(tier <= 0 ? line : $"[TIER:{tier}]{line}");
         }
 
         if (P1FlaskRules.KindForBase(item.Base.StableId) is { } flaskKind)
@@ -108,6 +121,23 @@ internal static class P1UiText
         bool allocated,
         bool available)
     {
+        if (node.StableId.StartsWith("p30.", StringComparison.Ordinal))
+        {
+            string header = $"{node.DisplayName}·{NodeKind(node.Kind)}";
+            string branch = string.IsNullOrWhiteSpace(node.ClusterTheme)
+                ? BranchName(node.Branch)
+                : $"{node.ClusterTheme}分支";
+            string effects = node.Kind == PassiveNodeKind.Mastery
+                ? "从以下专精中选择一项：\n" + string.Join('\n',
+                    P1PassiveTree.MasteryOptionDescriptions(node).Select((text, index) => $"{index + 1}. {text}"))
+                : !string.IsNullOrWhiteSpace(node.SpecialRule)
+                    ? node.SpecialRule
+                    : string.Join('\n', node.Effects.Select(PassiveEffect));
+            string p30Jewel = node.Kind == PassiveNodeKind.JewelSocket
+                ? "\n可拖入一枚珠宝；半径 210，读取范围内已分配节点。"
+                : string.Empty;
+            return $"{header}\n{branch}\n{effects}{p30Jewel}";
+        }
         string state = allocated ? "已分配" : available ? "可分配" : "尚未连通或点数不足";
         string prerequisite = node.Kind == PassiveNodeKind.Start
             ? "免费职业锚点，不消耗天赋点"
@@ -159,6 +189,17 @@ internal static class P1UiText
         _ => Colors.White,
     };
 
+    public static Color AffixTierColor(int tier)
+    {
+        if (tier <= 0) return new Color("dedede");
+        float strength = (13 - Math.Clamp(tier, 1, 13)) / 12f;
+        strength = MathF.Pow(strength, .72f);
+        return new Color(
+            0.87f + 0.08f * strength,
+            0.87f - 0.11f * strength,
+            0.87f - 0.56f * strength);
+    }
+
     public static string ItemGlyph(ItemCategory category) => category switch
     {
         ItemCategory.TwoHandWeapon => "刃",
@@ -204,6 +245,32 @@ internal static class P1UiText
             if (damage.Length > 0 && effects.Count == 2) return damage;
         }
         return string.Join("；", effects.Select(effect => Modifier(effect.Kind, effect.Value)));
+    }
+
+    private static string AffixRanges(AffixRoll affix)
+    {
+        IReadOnlyList<AffixModifierComponent> definitions = affix.Definition.EffectComponents;
+        IReadOnlyList<RolledAffixComponent> rolled = affix.Effects;
+        var ranges = new List<string>(rolled.Count);
+        for (int index = 0; index < rolled.Count; index++)
+        {
+            RolledAffixComponent effect = rolled[index];
+            AffixModifierComponent? definition = definitions.FirstOrDefault(candidate => candidate.Kind == effect.Kind)
+                ?? definitions.ElementAtOrDefault(index);
+            if (definition is null) continue;
+            int minimum = rolled.Count == 1 ? affix.EffectiveMinimumValue : definition.MinimumValue;
+            int maximum = rolled.Count == 1 ? affix.EffectiveMaximumValue : definition.MaximumValue;
+            ranges.Add($"[{RangeValue(effect.Kind, minimum)}, {RangeValue(effect.Kind, maximum)}]");
+        }
+        return ranges.Count == 0 ? string.Empty : string.Join(' ', ranges);
+    }
+
+    private static string RangeValue(ItemModifierKind kind, int value)
+    {
+        string sign = value >= 0 ? "+" : string.Empty;
+        return kind.ToString().Contains("BasisPoints", StringComparison.Ordinal)
+            ? $"{sign}{value / 100.0:0.#}%"
+            : $"{sign}{value}";
     }
 
     private static string ModifierName(ItemModifierKind kind) => kind switch
@@ -454,7 +521,7 @@ internal static class P1UiText
         PassiveNodeKind.Start => "职业起点",
         PassiveNodeKind.Small => "小型天赋",
         PassiveNodeKind.Notable => "显著天赋",
-        PassiveNodeKind.Mastery => "集群专精",
+        PassiveNodeKind.Mastery => "专精天赋",
         PassiveNodeKind.Rule => "规则天赋",
         PassiveNodeKind.JewelSocket => "记忆棱孔",
         _ => kind.ToString(),

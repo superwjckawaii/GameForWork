@@ -1320,6 +1320,49 @@ public sealed class P1GameSession
         return changed;
     }
 
+    public bool TryCraftP30Jewel(string instanceId, P30JewelCraftOperation operation, out string message)
+    {
+        P30JewelInstance? jewel = Jewels.Items.FirstOrDefault(item => item.InstanceId == instanceId);
+        if (jewel is null)
+        {
+            message = "珠宝不存在。";
+            return false;
+        }
+        MetalCurrencyKind currency = P30Jewels.CraftCurrency(operation);
+        if (World.Economy.MetalAmount(currency) <= 0)
+        {
+            message = $"{P4MetalCurrencies.Get(currency).DisplayName}不足。";
+            return false;
+        }
+        ulong operationSeed = Seed ^ (ulong)Endgame.GameplayOperationSequence * 0x9e3779b97f4a7c15UL ^ StableHash(instanceId);
+        (bool succeeded, string result, P30JewelInstance? crafted, bool destroyed) =
+            P30Jewels.Craft(jewel, operation, operationSeed);
+        if (!succeeded)
+        {
+            message = result;
+            return false;
+        }
+        if (!World.Economy.TrySpendMetal(currency, 1))
+        {
+            message = $"{P4MetalCurrencies.Get(currency).DisplayName}不足。";
+            return false;
+        }
+        bool changed = destroyed ? Jewels.TryRemove(instanceId) : crafted is not null && Jewels.TryReplace(crafted);
+        if (!changed) throw new InvalidOperationException("Jewel crafting result could not be persisted.");
+        Endgame.CompleteGameplayOperation();
+        RefreshHeroBuild();
+        Management.AddHistory($"珠宝加工：{result}");
+        message = result;
+        return true;
+    }
+
+    private static ulong StableHash(string value)
+    {
+        ulong hash = 14695981039346656037UL;
+        foreach (char character in value) hash = unchecked((hash ^ character) * 1099511628211UL);
+        return hash;
+    }
+
     public bool TryUnsocketJewel(string stableId)
     {
         bool changed = Passives.TryUnsocketJewel(stableId);
@@ -1434,12 +1477,17 @@ public sealed class P1GameSession
         Ascendancy: ascendancy,
         HasUsableWeapon: build.HasUsableWeapon,
         PassiveProfile: build.Passives.Advanced,
-        CriticalMultiplierBasisPoints: checked(15_000 + (build.Passives.Advanced?.IncreasedCriticalMultiplierBasisPoints ?? 0)),
+        CriticalMultiplierBasisPoints: checked(15_000 + build.IncreasedCriticalMultiplierBasisPoints),
         AlwaysHit: build.Passives.Advanced?.ResoluteTechnique == true,
         CannotCrit: build.Passives.Advanced?.ResoluteTechnique == true,
         IncreasedWarCryCooldownRecoveryBasisPoints: build.Passives.IncreasedWarCryCooldownRecoveryBasisPoints,
         IncreasedWarCryRangeBasisPoints: build.Passives.IncreasedWarCryRangeBasisPoints,
-        VirtueViceLoadout: build.VirtueViceLoadout) with
+        VirtueViceLoadout: build.VirtueViceLoadout,
+        MoreAttackDamageBasisPoints: build.MoreAttackDamageBasisPoints,
+        MoreSpellDamageBasisPoints: build.MoreSpellDamageBasisPoints,
+        MoreDamageOverTimeBasisPoints: build.MoreDamageOverTimeBasisPoints,
+        IncreasedActionSpeedBasisPoints: build.IncreasedActionSpeedBasisPoints,
+        InstantLifeLeechBasisPoints: build.InstantLifeLeechBasisPoints) with
         {
             AiSummary = $"{ai.Preset} · {(ai.MatchMode == AiRuleMatchMode.All ? "全部满足" : "任一满足")}：" +
                 $"敌人≥{ai.MinimumEnemyCount}、稀有度 {ai.EnemyRarity}、距离≤{ai.MaximumEnemyDistance}、" +

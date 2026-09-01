@@ -126,7 +126,7 @@ public sealed class LootFilter
     public LootDisposition Evaluate(ItemInstance item)
     {
         ArgumentNullException.ThrowIfNull(item);
-        if (item.IsLocked || item.IsKeyItem || item.LinkedSocketCount >= 5)
+        if (item.IsLocked || item.IsKeyItem)
             return LootDisposition.Keep;
         LootFilterRule? match = _rules.FirstOrDefault(rule => rule.Matches(item));
         return match?.Disposition ?? LootDisposition.Keep;

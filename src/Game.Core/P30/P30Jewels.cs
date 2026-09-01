@@ -5,9 +5,10 @@ public enum P30JewelRarity { Normal, Magic, Rare, Legendary }
 public enum P30JewelRadius { None, Small, Medium, Large }
 public enum P30JewelAffixPosition { Prefix, Suffix, CorruptedImplicit }
 public enum P30JewelCorruptionResult { PowerfulImplicit, Locked, Damaged, Destroyed }
+public enum P30JewelCraftOperation { RerollRare, DissolveAffix, Corrupt }
 
 public sealed record P30JewelAffix(string StableId, string DisplayName, P30JewelAffixPosition Position,
-    int Tier, int Value, string Effect, IReadOnlySet<string> Tags);
+    int Tier, int Value, string Effect, IReadOnlyList<string> Tags);
 
 public sealed record P30LegendaryJewelDefinition(string StableId, string DisplayName, P30JewelRadius Radius,
     string Effect, string Source, P30VirtueViceKind? Oath = null);
@@ -33,7 +34,11 @@ public sealed record P30JewelModifiers(int Physique = 0, int Dexterity = 0, int 
     int InstantLifeLeechBasisPoints = 0, int InstantManaLeechBasisPoints = 0,
     int InstantShieldLeechBasisPoints = 0, IReadOnlyList<P30Conversion>? Conversions = null,
     IReadOnlyDictionary<P30VirtueViceKind, int>? AdditionalVirtueViceMaximum = null,
-    IReadOnlyList<P30VirtueViceKind>? Oaths = null);
+    IReadOnlyList<P30VirtueViceKind>? Oaths = null,
+    int MoreAttackDamageBasisPoints = 0, int MoreSpellDamageBasisPoints = 0,
+    int MoreDamageOverTimeBasisPoints = 0, int MaximumElementalResistanceBasisPoints = 0,
+    int MaximumVoidResistanceBasisPoints = 0, int IncreasedActionSpeedBasisPoints = 0,
+    int ReservationEfficiencyBasisPoints = 0);
 
 public sealed class P30JewelState
 {
@@ -63,12 +68,30 @@ public sealed class P30JewelState
         if (jewel.Legendary is { } unique && _socketed.Any(pair => pair.Key != socketId &&
                 _items.GetValueOrDefault(pair.Value)?.Legendary?.StableId == unique.StableId))
         { reason = "同名传奇珠宝全局只能镶嵌一枚。"; return false; }
-        if (_socketed.TryGetValue(socketId, out string? replaced)) _items[replaced] = _items[replaced];
+        foreach (string previousSocket in _socketed.Where(pair => pair.Value == instanceId && pair.Key != socketId)
+                     .Select(pair => pair.Key).ToArray())
+            _socketed.Remove(previousSocket);
         _socketed[socketId] = instanceId;
         return true;
     }
 
     public bool TryUnsocket(string socketId) => _socketed.Remove(socketId);
+
+    public bool TryReplace(P30JewelInstance jewel)
+    {
+        ArgumentNullException.ThrowIfNull(jewel);
+        if (!_items.ContainsKey(jewel.InstanceId)) return false;
+        _items[jewel.InstanceId] = jewel;
+        return true;
+    }
+
+    public bool TryRemove(string instanceId)
+    {
+        if (!_items.Remove(instanceId)) return false;
+        foreach (string socket in _socketed.Where(pair => pair.Value == instanceId).Select(pair => pair.Key).ToArray())
+            _socketed.Remove(socket);
+        return true;
+    }
     public void UnsocketAll() => _socketed.Clear();
     public P30JewelInstance? At(string socketId) => _socketed.TryGetValue(socketId, out string? id)
         ? _items.GetValueOrDefault(id) : null;
@@ -125,6 +148,53 @@ public static class P30Jewels
     public static string BaseName(P30JewelBase value) => value switch
     { P30JewelBase.Crimson => "赤铁棱晶", P30JewelBase.Verdant => "翠影棱晶", P30JewelBase.Golden => "金魂棱晶", P30JewelBase.Azure => "苍晶棱晶", _ => "四相棱晶" };
 
+    public static string RarityName(P30JewelRarity value) => value switch
+    { P30JewelRarity.Normal => "普通", P30JewelRarity.Magic => "魔法", P30JewelRarity.Rare => "稀有", _ => "传奇" };
+
+    public static string PositionName(P30JewelAffixPosition value) => value switch
+    { P30JewelAffixPosition.Prefix => "前缀", P30JewelAffixPosition.Suffix => "后缀", _ => "腐化词缀" };
+
+    public static string AffixText(P30JewelAffix affix)
+    {
+        string family = affix.StableId.Split('.').Last();
+        string signed = affix.Value >= 0 ? "+" : string.Empty;
+        return family switch
+        {
+            "life" => $"最大生命提高 {affix.Value / 100.0:0.#}%",
+            "mana" => $"最大法力提高 {affix.Value / 100.0:0.#}%",
+            "shield" => $"最大护盾提高 {affix.Value / 100.0:0.#}%",
+            "barrier" => $"灵障提高 {affix.Value / 100.0:0.#}%",
+            "armor" => $"护甲提高 {affix.Value / 100.0:0.#}%",
+            "evasion" => $"闪避提高 {affix.Value / 100.0:0.#}%",
+            "attack" => $"攻击伤害提高 {affix.Value / 100.0:0.#}%",
+            "spell" => $"法术伤害提高 {affix.Value / 100.0:0.#}%",
+            "physical" => $"物理伤害提高 {affix.Value / 100.0:0.#}%",
+            "elemental" => $"元素伤害提高 {affix.Value / 100.0:0.#}%",
+            "speed" => $"攻击速度提高 {affix.Value / 100.0:0.#}%",
+            "accuracy" => $"命中值 {signed}{affix.Value}",
+            "critical" => $"暴击率提高 {affix.Value / 100.0:0.#}%",
+            "critical_multi" => $"暴击伤害倍率 {signed}{affix.Value / 100.0:0.#}%",
+            "physique" => $"体魄 {signed}{affix.Value}",
+            "dexterity" => $"灵巧 {signed}{affix.Value}",
+            "spirit" => $"精神 {signed}{affix.Value}",
+            "energy" => $"能量 {signed}{affix.Value}",
+            "instant_life" => $"生命偷取的 {affix.Value / 100.0:0.#}% 立即恢复",
+            "instant_mana" => $"法力偷取的 {affix.Value / 100.0:0.#}% 立即恢复",
+            "instant_shield" => $"护盾偷取的 {affix.Value / 100.0:0.#}% 立即恢复",
+            "attack_more" => "攻击伤害造成 6% 更多伤害",
+            "spell_more" => "法术伤害造成 6% 更多伤害",
+            "dot_more" => "持续伤害造成 8% 更多伤害",
+            "elemental_max" => "最大火焰、冰霜、闪电抗性各 +1%",
+            "void_max" => "最大虚空抗性 +2%",
+            "action_speed" => "行动速度提高 3%",
+            "instant_leech" => "生命、法力和护盾偷取中立即恢复的比例各 +15%",
+            "reservation" => "所有技能保留效率提高 8%",
+            _ when family.StartsWith("virtue_vice_max_", StringComparison.Ordinal) =>
+                $"{VirtueViceName(family["virtue_vice_max_".Length..])}上限 +1",
+            _ => string.IsNullOrWhiteSpace(affix.Effect) ? affix.DisplayName : affix.Effect,
+        };
+    }
+
     public static P30JewelInstance RollPrismatic(int itemLevel, ulong seed, string instanceId,
         P30JewelRarity rarity = P30JewelRarity.Rare)
     {
@@ -146,7 +216,7 @@ public static class P30Jewels
                 "speed" => 600, "accuracy" => 450, "critical" => 3_500, "critical_multi" => 2_000, _ => 24 };
             int value = t1 * TierScale[tier - 1] / 10_000;
             affixes.Add(new($"p30.jewel.affix.{family}", family, prefix ? P30JewelAffixPosition.Prefix : P30JewelAffixPosition.Suffix,
-                tier, value, $"{family} +{value}", new HashSet<string>(StringComparer.Ordinal) { family }));
+                tier, value, $"{family} +{value}", [family]));
         }
         return new(instanceId, jewelBase, itemLevel, rarity, (int)((seed >> 48) % 41), affixes);
     }
@@ -168,11 +238,72 @@ public static class P30Jewels
         if (roll >= 40) return (P30JewelCorruptionResult.Locked, jewel with { Corrupted = true, Locked = true });
         string[] implicits = ["attack_more", "spell_more", "dot_more", "elemental_max", "void_max", "action_speed", "instant_leech", "reservation", "virtue_vice_max"];
         string implicitId = implicits[(int)((seed >> 8) % (ulong)implicits.Length)];
+        if (implicitId == "virtue_vice_max")
+            implicitId += "_" + ((P30VirtueViceKind)((seed >> 16) % 6)).ToString().ToLowerInvariant();
+        int value = implicitId switch
+        {
+            "attack_more" or "spell_more" => 600,
+            "dot_more" or "reservation" => 800,
+            "elemental_max" => 100,
+            "void_max" => 200,
+            "action_speed" => 300,
+            "instant_leech" => 1_500,
+            _ => 1,
+        };
         var affix = new P30JewelAffix($"p30.jewel.corruption.{implicitId}", implicitId,
-            P30JewelAffixPosition.CorruptedImplicit, 1, 1, implicitId,
-            new HashSet<string>(StringComparer.Ordinal) { "corrupted" });
+            P30JewelAffixPosition.CorruptedImplicit, 1, value, implicitId,
+            ["corrupted"]);
         return (P30JewelCorruptionResult.PowerfulImplicit, jewel with { Affixes = [.. jewel.Affixes, affix], Corrupted = true, Locked = true });
     }
+
+    public static (bool Succeeded, string Message, P30JewelInstance? Jewel, bool Destroyed) Craft(
+        P30JewelInstance jewel, P30JewelCraftOperation operation, ulong seed)
+    {
+        ArgumentNullException.ThrowIfNull(jewel);
+        if (jewel.Legendary is not null) return (false, "传奇珠宝不能进行该项加工。", jewel, false);
+        if (jewel.Corrupted || jewel.Locked) return (false, "已腐化或锁定的珠宝不能继续加工。", jewel, false);
+        switch (operation)
+        {
+            case P30JewelCraftOperation.RerollRare:
+                if (jewel.Rarity != P30JewelRarity.Rare)
+                    return (false, "混沌金只能重铸稀有珠宝。", jewel, false);
+                P30JewelInstance rerolled = RollPrismatic(jewel.ItemLevel, seed, jewel.InstanceId, jewel.Rarity) with
+                {
+                    Base = jewel.Base,
+                    Resonance = jewel.Resonance,
+                };
+                return (true, "已重铸珠宝的四条显式词缀。", rerolled, false);
+            case P30JewelCraftOperation.DissolveAffix:
+                P30JewelAffix[] removable = jewel.Affixes
+                    .Where(affix => affix.Position is P30JewelAffixPosition.Prefix or P30JewelAffixPosition.Suffix)
+                    .ToArray();
+                if (removable.Length == 0) return (false, "该珠宝没有可剥离的显式词缀。", jewel, false);
+                P30JewelAffix removed = removable[(int)(seed % (ulong)removable.Length)];
+                return (true, $"已剥离：{AffixText(removed)}。",
+                    jewel with { Affixes = jewel.Affixes.Where(affix => !ReferenceEquals(affix, removed)).ToArray() }, false);
+            case P30JewelCraftOperation.Corrupt:
+                if (jewel.Rarity != P30JewelRarity.Rare)
+                    return (false, "赤蚀铁只能腐化未腐化的稀有珠宝。", jewel, false);
+                (P30JewelCorruptionResult result, P30JewelInstance? corrupted) = Corrupt(jewel, seed);
+                return result switch
+                {
+                    P30JewelCorruptionResult.PowerfulImplicit => (true, "强力腐化：获得一条腐化隐式。", corrupted, false),
+                    P30JewelCorruptionResult.Locked => (true, "腐化锁定：数值不变，无法继续加工。", corrupted, false),
+                    P30JewelCorruptionResult.Damaged => (true, "负面腐化：共鸣度归零并失去一条词缀。", corrupted, false),
+                    _ => (true, "腐化失控：珠宝已被摧毁。", null, true),
+                };
+            default:
+                throw new ArgumentOutOfRangeException(nameof(operation));
+        }
+    }
+
+    public static P4.MetalCurrencyKind CraftCurrency(P30JewelCraftOperation operation) => operation switch
+    {
+        P30JewelCraftOperation.RerollRare => P4.MetalCurrencyKind.ChaosGold,
+        P30JewelCraftOperation.DissolveAffix => P4.MetalCurrencyKind.DissolutionSilver,
+        P30JewelCraftOperation.Corrupt => P4.MetalCurrencyKind.CorruptionIron,
+        _ => throw new ArgumentOutOfRangeException(nameof(operation)),
+    };
 
     public static int MapCompletionDropChanceBasisPoints(int tier) => Math.Clamp(tier, 1, 20) switch
     { <= 5 => 180, <= 10 => 220, <= 15 => 270, _ => 330 };
@@ -182,7 +313,9 @@ public static class P30Jewels
     {
         int physique = 0, dexterity = 0, spirit = 0, energy = 0, attack = 0, spell = 0, life = 0,
             mana = 0, shield = 0, armor = 0, evasion = 0, speed = 0, accuracy = 0, critical = 0,
-            criticalMulti = 0, barrier = 0, instantLife = 0, instantMana = 0, instantShield = 0;
+            criticalMulti = 0, barrier = 0, instantLife = 0, instantMana = 0, instantShield = 0,
+            moreAttack = 0, moreSpell = 0, moreDot = 0, maximumElemental = 0, maximumVoid = 0,
+            actionSpeed = 0, reservation = 0;
         var conversions = new List<P30Conversion>();
         var maxima = new Dictionary<P30VirtueViceKind, int>();
         var oaths = new HashSet<P30VirtueViceKind>();
@@ -212,7 +345,16 @@ public static class P30Jewels
                     case "critical": critical += affix.Value; break; case "critical_multi": criticalMulti += affix.Value; break;
                     case "instant_life": instantLife += affix.Value; break; case "instant_mana": instantMana += affix.Value; break;
                     case "instant_shield": instantShield += affix.Value; break;
+                    case "attack_more": moreAttack += affix.Value; break; case "spell_more": moreSpell += affix.Value; break;
+                    case "dot_more": moreDot += affix.Value; break; case "elemental_max": maximumElemental += affix.Value; break;
+                    case "void_max": maximumVoid += affix.Value; break; case "action_speed": actionSpeed += affix.Value; break;
+                    case "instant_leech": instantLife += affix.Value; instantMana += affix.Value; instantShield += affix.Value; break;
+                    case "reservation": reservation += affix.Value; break;
                 }
+                const string maximumPrefix = "p30.jewel.corruption.virtue_vice_max_";
+                if (affix.StableId.StartsWith(maximumPrefix, StringComparison.Ordinal) &&
+                    Enum.TryParse(affix.StableId[maximumPrefix.Length..], true, out P30VirtueViceKind maximumKind))
+                    maxima[maximumKind] = maxima.GetValueOrDefault(maximumKind) + affix.Value;
             }
             if (jewel.Legendary is { Oath: { } oath })
             { maxima[oath] = maxima.GetValueOrDefault(oath) + 1; oaths.Add(oath); }
@@ -233,7 +375,8 @@ public static class P30Jewels
         }
         return new(physique, dexterity, spirit, energy, attack, spell, life, mana, shield, armor, evasion,
             speed, accuracy, critical, criticalMulti, barrier, instantLife, instantMana, instantShield,
-            conversions, maxima, oaths.Order().ToArray());
+            conversions, maxima, oaths.Order().ToArray(), moreAttack, moreSpell, moreDot, maximumElemental,
+            maximumVoid, actionSpeed, reservation);
     }
 
     private static int Tier(int level, ulong seed)
@@ -243,6 +386,11 @@ public static class P30Jewels
         return Math.Clamp(best + (int)(seed % (ulong)(worst - best + 1)), best, worst);
     }
     private static int Weighted(ulong roll) => roll < 100 ? 0 : roll < 200 ? 1 : roll < 300 ? 2 : roll < 400 ? 3 : 4;
+    private static string VirtueViceName(string value) => value switch
+    {
+        "mercy" => "慈悲", "temperance" => "节制", "humility" => "谦逊",
+        "rage" => "暴怒", "sloth" => "懒惰", "arrogance" => "傲慢", _ => value,
+    };
     private static P30LegendaryJewelDefinition L(string id, string name, P30JewelRadius radius, string effect, string source) =>
         new($"p30.jewel.{id}", name, radius, effect, source);
     private static P30LegendaryJewelDefinition O(string id, string name, P30VirtueViceKind kind, string source) =>

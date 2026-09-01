@@ -92,6 +92,29 @@ public sealed class P29FeatureTests
     }
 
     [Fact]
+    public void SaveOneFilterSellsLowRarityAndNonPinnacleDropsEvenWhenTheyHaveManyLinks()
+    {
+        var filter = new LootFilter([
+            new LootFilterRule("save1.keep.pinnacle.rare", LootDisposition.Keep,
+                Rarity: ItemRarity.Rare, BaseTier: P29BaseTier.Pinnacle),
+            new LootFilterRule("save1.sell.basic-through-rare", LootDisposition.Sell,
+                MinimumRarity: ItemRarity.Basic, MaximumRarity: ItemRarity.Rare),
+        ]);
+        ItemInstance sixLinkMagic = ItemGenerator.Generate(
+            "core.base.rusted_greatsword", 100, ItemRarity.Magic, 0x2911, "save1-six-link") with
+        { LinkedSocketCount = 6 };
+        ItemInstance ordinaryRare = ItemGenerator.Generate(
+            "core.base.iron_ring", 100, ItemRarity.Rare, 0x2912, "save1-rare");
+        ItemInstance pinnacleRare = new("save1-pinnacle", P29WarfrontBases.ForTier(3).First(), 100,
+            ItemRarity.Rare, [], LinkedSocketCount: 0);
+
+        Assert.Equal(LootDisposition.Sell, filter.Evaluate(sixLinkMagic));
+        Assert.Equal(LootDisposition.Sell, filter.Evaluate(ordinaryRare));
+        Assert.Equal(LootDisposition.Keep, filter.Evaluate(pinnacleRare));
+        Assert.Equal(LootDisposition.Keep, filter.Evaluate(sixLinkMagic with { IsLocked = true }));
+    }
+
+    [Fact]
     public void P29AuditCoversEveryBracketAndSustainTargets()
     {
         IReadOnlyList<P20AuditResult> results = P20EconomyAudit.Run(10_000, 0x29ec0a11UL);

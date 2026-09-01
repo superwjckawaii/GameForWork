@@ -90,15 +90,21 @@ public partial class P1PassiveTreeView : Control
             bool available = IsAvailable(node);
             bool selected = SelectedStableId == node.StableId;
             bool search = SearchMatch(node);
+            bool socketed = _socketedJewels.ContainsKey(node.StableId);
             Color fill = allocated ? AllocatedColor : available ? AvailableColor : LockedColor;
-            if (_socketedJewels.ContainsKey(node.StableId)) fill = new Color("9266bd").Darkened(.2f);
+            if (socketed)
+            {
+                fill = new Color("9f66d2");
+                DrawCircle(center, radius + 7, new Color("9d6bd64a"));
+                DrawCircle(center, radius + 4, new Color("d1a5f0"), false, 2.2f);
+            }
             Color border = selected || search ? SelectedColor : _planned.Contains(node.StableId) ? PlannedColor : fill.Lightened(0.3f);
             DrawCircle(center, radius, fill);
             DrawCircle(center, radius, border, false, selected || search ? 3 : 1.5f);
             if ((node.Kind != PassiveNodeKind.Small || node.Start != PassiveStartKind.None) && radius >= 5)
             {
                 string glyph = node.Kind switch
-                { PassiveNodeKind.Notable => "◆", PassiveNodeKind.Mastery => "专", PassiveNodeKind.Rule => "律", PassiveNodeKind.JewelSocket => "◇", _ => "始" };
+                { PassiveNodeKind.Notable => "◆", PassiveNodeKind.Mastery => "专", PassiveNodeKind.Rule => "律", PassiveNodeKind.JewelSocket => socketed ? "◆" : "◇", _ => "始" };
                 DrawString(ThemeDB.FallbackFont, center + new Vector2(-radius * .55f, radius * .4f), glyph,
                     HorizontalAlignment.Center, radius * 1.1f, Math.Max(8, (int)(radius * .9f)), new Color("f2e3bd"));
             }
@@ -157,7 +163,14 @@ public partial class P1PassiveTreeView : Control
         QueueRedraw();
     }
 
-    public void FitAll() { _zoom = .27f; _pan = Vector2.Zero; ClampView(); QueueRedraw(); }
+    public void FitAll()
+    {
+        float available = Math.Max(180f, Math.Min(Size.X, Size.Y) - 24f);
+        _zoom = Math.Clamp(available / (P1PassiveTree.LayoutExtent * 2f), .11f, .6f);
+        _pan = Vector2.Zero;
+        ClampView();
+        QueueRedraw();
+    }
 
     public void ClearPlan() { _planned.Clear(); QueueRedraw(); }
 
@@ -243,7 +256,7 @@ public partial class P1PassiveTreeView : Control
     }
 
     private void ZoomAt(Vector2 position, float factor)
-    { Vector2 before = ToWorld(position); _zoom = Math.Clamp(_zoom * factor, .18f, 1.5f); _pan = position - Size / 2 - before * _zoom; ClampView(); QueueRedraw(); }
+    { Vector2 before = ToWorld(position); _zoom = Math.Clamp(_zoom * factor, .11f, 1.5f); _pan = position - Size / 2 - before * _zoom; ClampView(); QueueRedraw(); }
 
     private void ClampView()
     {

@@ -491,7 +491,12 @@ public partial class P2Dashboard : VBoxContainer
                 Refresh();
             }
             if (_passiveMode is not null && _characterModes.GetTabControl((int)index) == _passiveMode && _characterSidebar is not null)
+            {
                 _characterSidebar.CurrentTab = 2;
+                _characterSidebar.CustomMinimumSize = new Vector2(440, 0);
+            }
+            else if (_characterSidebar is not null)
+                _characterSidebar.CustomMinimumSize = new Vector2(280, 0);
         };
         var sidebar = new TabContainer { CustomMinimumSize = new Vector2(280, 0), SizeFlagsVertical = SizeFlags.ExpandFill };
         _characterSidebar = sidebar;
@@ -504,7 +509,7 @@ public partial class P2Dashboard : VBoxContainer
         _metalMode.Name = "打造";
         sidebar.AddChild(_metalMode);
         _jewelStashPanel = new P205JewelStashPanel { Name = "珠宝", SizeFlagsVertical = SizeFlags.ExpandFill };
-        _jewelStashPanel.Initialize(RequireSession);
+        _jewelStashPanel.Initialize(RequireSession, Changed);
         sidebar.AddChild(_jewelStashPanel);
         collapseSidebar.Pressed += () =>
         {
@@ -521,7 +526,6 @@ public partial class P2Dashboard : VBoxContainer
                 .QuickTransfer(ItemContainerKind.Equipped, index));
         _equipmentGrid.ItemDropped += (source, sourceIndex, targetIndex) =>
             HandleDrop(source, sourceIndex, ItemContainerKind.Equipped, targetIndex);
-        _equipmentGrid.ExtraTooltip = EquipmentComparisonText;
         _equipmentGrid.DropValidator = CanDropOnEquipment;
         equipment.AddChild(_equipmentGrid);
         var details = new Button { Text = "详细属性", ToggleMode = true };
@@ -566,7 +570,6 @@ public partial class P2Dashboard : VBoxContainer
         };
         containers.AddChild(storageSearch);
         _storageGrid = BuildGrid(ItemContainerKind.Storage, 10, EquipmentStorage.InitialCapacity, 32);
-        _storageGrid.ExtraTooltip = EquipmentComparisonText;
         containers.AddChild(_storageGrid);
         var batch = new HFlowContainer();
         containers.AddChild(batch);
@@ -637,10 +640,14 @@ public partial class P2Dashboard : VBoxContainer
         _passiveTree.NodeSelected += stableId =>
         {
             PassiveNodeDefinition node = P1PassiveTree.Get(stableId);
-            _selectedPassive!.Text = $"已选择：{node.DisplayName} · {string.Join("；", node.Effects.Select(P1UiText.PassiveEffect))}";
+            string selectedEffect = !string.IsNullOrWhiteSpace(node.SpecialRule)
+                ? node.SpecialRule
+                : string.Join("；", node.Effects.Select(P1UiText.PassiveEffect));
+            _selectedPassive!.Text = $"已选择：{node.DisplayName} · {selectedEffect}";
             mastery!.Clear();
             IReadOnlyList<PassiveEffect> options = P1PassiveTree.MasteryOptions(node);
-            for (int index = 0; index < options.Count; index++) mastery.AddItem(P1UiText.PassiveEffect(options[index]), index);
+            IReadOnlyList<string> optionDescriptions = P1PassiveTree.MasteryOptionDescriptions(node);
+            for (int index = 0; index < options.Count; index++) mastery.AddItem(optionDescriptions[index], index);
             mastery.Disabled = options.Count == 0;
         };
         _passiveTree.NodeAllocateRequested += stableId =>
@@ -685,7 +692,7 @@ public partial class P2Dashboard : VBoxContainer
         };
         search.TextChanged += query => _passiveTree?.SetSearch(query);
         header.AddChild(search);
-        header.AddChild(new Label { Text = "铁誓星盘 · 1,200 节点 · 左键拖曳 / 滚轮缩放 · 双击分配 · 右键双击洗点" });
+        header.AddChild(new Label { Text = "铁誓星盘 · 1,475 节点 · 左键拖曳 / 滚轮缩放 · 双击分配 · 右键双击洗点" });
         overlay.AddChild(TreeHud(header));
         overlay.AddChild(new Control { SizeFlagsVertical = SizeFlags.ExpandFill, MouseFilter = MouseFilterEnum.Ignore });
 
@@ -725,7 +732,7 @@ public partial class P2Dashboard : VBoxContainer
         _heroOnlyControls.AddRange([allocate, allocatePath, refund, reset]);
         var specialization = new HFlowContainer();
         footer.AddChild(specialization);
-        mastery = new OptionButton { TooltipText = "分配专精节点后，从该类别六个效果中选择一个；同类专精效果全局唯一。", Disabled = true };
+        mastery = new OptionButton { TooltipText = "分配专精节点后，从该类别七个已确认效果中选择一个；同类专精效果全局唯一。", Disabled = true };
         specialization.AddChild(mastery);
         Button chooseMastery = AddButton(specialization, "选择专精效果", () =>
         {
@@ -1723,35 +1730,6 @@ public partial class P2Dashboard : VBoxContainer
         ItemCategory.LifeFlask => EquipmentSlot.Flask1,
         _ => item.Base.PrimarySlot,
     };
-
-    private string EquipmentComparisonText(ItemInstance item)
-    {
-        if (_session is null || _selectedCharacter != P2CharacterKind.Hero)
-        {
-            return _selectedCharacter == P2CharacterKind.Mercenary
-                ? "佣兵换装：最终面板会在装备后重新计算。"
-                : string.Empty;
-        }
-
-        try
-        {
-            EquipmentSlot slot = PreferredSlot(item);
-            P2EquipmentComparison compare = _session.CompareHeroEquipment(item, slot);
-            static string Delta(int value) => value >= 0 ? $"+{value}" : value.ToString();
-            return $"假设装备到 {slot}\n" +
-                $"平均命中 {Delta(compare.AverageHitDelta)} · 有效生命 {Delta(compare.EffectiveLifeDelta)}\n" +
-                $"生命 {Delta(compare.MaximumLifeDelta)} · 法力 {Delta(compare.MaximumManaDelta)} · " +
-                $"护甲 {Delta(compare.ArmorDelta)} · 闪避 {Delta(compare.EvasionDelta)} · 护盾 {Delta(compare.ShieldDelta)}\n" +
-                $"连接数 {Delta(compare.LinkedSocketDelta)}" +
-                ((compare.RetainedSkillStones?.Count ?? 0) == 0 ? string.Empty : $" · 保留 {string.Join("、", compare.RetainedSkillStones!)}") +
-                ((compare.EjectedSkillStones?.Count ?? 0) == 0 ? string.Empty : $"\n⚠ 弹回技能石背包：{string.Join("、", compare.EjectedSkillStones!)}") +
-                (compare.DisabledSkillLinks == 0 ? string.Empty : $" · ⚠ 将禁用 {compare.DisabledSkillLinks} 个辅助连接");
-        }
-        catch
-        {
-            return "该物品无法生成当前构筑的换装对比。";
-        }
-    }
 
     private static string BuildSummaryText(P6BuildSummary summary) =>
         $"主技能 {summary.MainSkill} · {summary.MainSkillLinks} 连 · 单体估算 {summary.EstimatedSingleTargetDamage}/s · 清图估算 {summary.EstimatedClearDamage}/s\n" +
