@@ -105,7 +105,7 @@ public static class P6CraftingRules
         var random = new Pcg32(seed);
         AffixRoll[] affixes = item.Affixes.Select(affix => affix.Crafted || item.IsFractured(affix)
             ? affix
-            : affix with { Value = RollInclusive(random, affix.Definition.MinimumValue, affix.Definition.MaximumValue) }).ToArray();
+            : Reroll(affix.Definition, random)).ToArray();
         return Ok(item, item with { Affixes = affixes }, P6CraftOperation.DivineReroll,
             MetalCurrencyKind.DivineSilver, 1, "已重掷所有非固定自然词缀数值");
     }
@@ -136,10 +136,18 @@ public static class P6CraftingRules
     private static int RollInclusive(Pcg32 random, int minimum, int maximum) => minimum == maximum
         ? minimum : minimum + (int)(random.NextUInt() % (uint)(maximum - minimum + 1));
 
+    private static AffixRoll Reroll(AffixDefinition definition, Pcg32 random)
+    {
+        RolledAffixComponent[] components = definition.EffectComponents.Select(component =>
+            new RolledAffixComponent(component.Kind, RollInclusive(random, component.MinimumValue, component.MaximumValue),
+                component.Scope, component.DisplayText)).ToArray();
+        return new AffixRoll(definition, components[0].Value, Components: components);
+    }
+
     private static ulong StableSeed(ItemInstance item, P6CraftOperation operation, string family)
     {
         string source = $"{item.InstanceId}|{item.LinkedSocketCount}|{operation}|{family}|" +
-                        string.Join(';', item.Affixes.Select(affix => $"{affix.Definition.StableFamilyId}:{affix.Value}"));
+                        string.Join(';', item.Affixes.Select(affix => $"{affix.Definition.StableFamilyId}:{string.Join(',', affix.Effects.Select(effect => effect.Value))}"));
         return BitConverter.ToUInt64(SHA256.HashData(Encoding.UTF8.GetBytes(source)), 0);
     }
 }

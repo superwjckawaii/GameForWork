@@ -59,10 +59,12 @@ public sealed class P10FeatureTests
     public void MasteryChoiceAndRadiusJewelAffectModifiersAndRestore()
     {
         var allocation = new PassiveTreeAllocation();
-        Assert.True(allocation.TryAllocatePath("core.passive.v3.cluster.00.00.mastery", 120));
-        Assert.True(allocation.TrySelectMastery("core.passive.v3.cluster.00.00.mastery", 0));
-        Assert.True(allocation.TryAllocatePath("core.passive.v3.jewel.00.00", 120));
-        Assert.True(allocation.TrySocketJewel("core.passive.v3.jewel.00.00", PassiveJewelKind.CrimsonMemory));
+        string mastery = P1PassiveTree.Nodes.First(node => node.Kind == PassiveNodeKind.Mastery).StableId;
+        string socket = P1PassiveTree.Nodes.First(node => node.Kind == PassiveNodeKind.JewelSocket).StableId;
+        Assert.True(allocation.TryAllocatePath(mastery, 149));
+        Assert.True(allocation.TrySelectMastery(mastery, 0));
+        Assert.True(allocation.TryAllocatePath(socket, 149));
+        Assert.True(allocation.TrySocketJewel(socket, PassiveJewelKind.CrimsonMemory));
 
         PassiveTreeAllocation restored = PassiveTreeAllocation.Restore(allocation.Allocated, 5, allocation.MasterySelections, allocation.SocketedJewels);
         PassiveBuildModifiers expected = allocation.CalculateModifiers();
@@ -75,12 +77,10 @@ public sealed class P10FeatureTests
     [Fact]
     public void PassiveRestoreAcceptsAConnectedRingPathInSnapshotOrder()
     {
-        string[] capturedOrder =
-        [
-            "core.passive.v3.travel.00.13",
-            "core.passive.v3.travel.00.15",
-            "core.passive.v3.travel.00.14",
-        ];
+        var allocation = new PassiveTreeAllocation();
+        string target = P1PassiveTree.Nodes.First(node => node.Kind == PassiveNodeKind.Notable).StableId;
+        Assert.True(allocation.TryAllocatePath(target, 149));
+        string[] capturedOrder = allocation.Allocated.Reverse().ToArray();
 
         PassiveTreeAllocation restored = PassiveTreeAllocation.Restore(capturedOrder, 0);
 
@@ -91,18 +91,22 @@ public sealed class P10FeatureTests
     public void ShortestPathIsAtomicAndMasteryAndJewelChoicesAreUnique()
     {
         var allocation = new PassiveTreeAllocation();
-        string farMastery = "core.passive.v3.cluster.00.00.mastery";
+        string[] masteries = P1PassiveTree.Nodes.Where(node => node.Kind == PassiveNodeKind.Mastery)
+            .Select(node => node.StableId).Take(2).ToArray();
+        string farMastery = masteries[0];
         Assert.False(allocation.TryAllocatePath(farMastery, 2));
         Assert.Empty(allocation.Allocated);
-        Assert.True(allocation.TryAllocatePath(farMastery, 120));
-        Assert.True(allocation.TryAllocatePath("core.passive.v3.cluster.00.01.mastery", 120));
+        Assert.True(allocation.TryAllocatePath(farMastery, 149));
+        Assert.True(allocation.TryAllocatePath(masteries[1], 149));
         Assert.True(allocation.TrySelectMastery(farMastery, 0));
-        Assert.True(allocation.TrySelectMastery("core.passive.v3.cluster.00.01.mastery", 0));
+        Assert.True(allocation.TrySelectMastery(masteries[1], 0));
 
-        Assert.True(allocation.TryAllocatePath("core.passive.v3.jewel.00.00", 120));
-        Assert.True(allocation.TryAllocatePath("core.passive.v3.jewel.00.01", 120));
-        Assert.True(allocation.TrySocketJewel("core.passive.v3.jewel.00.00", PassiveJewelKind.CrimsonMemory));
-        Assert.False(allocation.TrySocketJewel("core.passive.v3.jewel.00.01", PassiveJewelKind.CrimsonMemory));
+        string[] sockets = P1PassiveTree.Nodes.Where(node => node.Kind == PassiveNodeKind.JewelSocket)
+            .Select(node => node.StableId).Take(2).ToArray();
+        Assert.True(allocation.TryAllocatePath(sockets[0], 149));
+        Assert.True(allocation.TryAllocatePath(sockets[1], 149));
+        Assert.True(allocation.TrySocketJewel(sockets[0], PassiveJewelKind.CrimsonMemory));
+        Assert.False(allocation.TrySocketJewel(sockets[1], PassiveJewelKind.CrimsonMemory));
     }
 
     [Fact]

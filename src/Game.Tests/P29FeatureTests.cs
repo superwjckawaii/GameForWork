@@ -37,16 +37,16 @@ public sealed class P29FeatureTests
     }
 
     [Fact]
-    public void LegendaryAndMechanicPoolsMatchTheSealedThirtySixItemLayout()
+    public void LegendaryAndMechanicPoolsIncludeP30VirtueViceItems()
     {
-        Assert.Equal(36, P14UniqueItems.All.Count(item => !item.Mythic));
+        Assert.Equal(40, P14UniqueItems.All.Count(item => !item.Mythic));
         foreach (string pool in new[] { "warden", "citadel", "abyss", "garden", "red", "blue", "warfront" })
         {
             IReadOnlyList<P14UniqueDefinition> items = P20LegendaryDrops.Pool(pool);
             Assert.Equal(4, items.Count);
             Assert.All(items, item => Assert.True(GameForWork.Core.P25.P25LegendaryRules.HasImplementation(item.StableId)));
         }
-        Assert.Equal(8, P20LegendaryDrops.Pool("common").Count);
+        Assert.Equal(12, P20LegendaryDrops.Pool("common").Count);
     }
 
     [Fact]

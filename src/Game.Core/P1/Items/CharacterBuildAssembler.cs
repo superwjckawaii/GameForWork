@@ -1,5 +1,6 @@
 using GameForWork.Core.P1.Combat;
 using GameForWork.Core.P1.Progression;
+using GameForWork.Core.P30;
 
 namespace GameForWork.Core.P1.Items;
 
@@ -16,7 +17,8 @@ public sealed record AssembledCharacterBuild(
     WarCryState WarCry,
     ChargedHeavyStrikeState? ChargedHeavyStrike,
     IReadOnlyList<P1FlaskKind> Flasks,
-    WeaponProfile EffectiveWeapon)
+    WeaponProfile EffectiveWeapon,
+    P30VirtueViceLoadout? VirtueViceLoadout = null)
 {
     public bool HasUsableWeapon => Equipment.Weapon is not null;
 
@@ -46,7 +48,8 @@ public static class CharacterBuildAssembler
         CharacterAttributes baseAttributes,
         EquipmentLoadout loadout,
         PassiveTreeAllocation passiveTree,
-        SkillConfiguration heavyStrikeConfiguration)
+        SkillConfiguration heavyStrikeConfiguration,
+        P30JewelState? jewelState = null)
     {
         ArgumentNullException.ThrowIfNull(baseAttributes);
         ArgumentNullException.ThrowIfNull(loadout);
@@ -58,12 +61,17 @@ public static class CharacterBuildAssembler
         EquipmentModifiers item = equipment.Modifiers;
         PassiveBuildModifiers passive = passiveTree.CalculateModifiers();
         P205PassiveModifiers advanced = passive.Advanced ?? P205PassiveModifiers.Empty;
+        P30JewelModifiers jewel = jewelState is null ? new() : P30Jewels.CalculateModifiers(jewelState);
         int specializedWeaponDamage = WeaponPassiveIncrease(loadout, passive, advanced);
         var attributes = new CharacterAttributes(
-            checked(baseAttributes.Physique + item.Physique + advanced.Physique),
-            checked(baseAttributes.Dexterity + item.Dexterity + advanced.Dexterity),
-            checked(baseAttributes.Spirit + item.Spirit + advanced.Spirit),
-            checked(baseAttributes.Energy + item.Energy + advanced.Energy));
+            ScaleAttribute(baseAttributes.Physique + item.Physique + advanced.Physique + jewel.Physique,
+                item.Value(ItemModifierKind.IncreasedPhysiqueBasisPoints) + item.Value(ItemModifierKind.IncreasedAllAttributesBasisPoints)),
+            ScaleAttribute(baseAttributes.Dexterity + item.Dexterity + advanced.Dexterity + jewel.Dexterity,
+                item.Value(ItemModifierKind.IncreasedDexterityBasisPoints) + item.Value(ItemModifierKind.IncreasedAllAttributesBasisPoints)),
+            ScaleAttribute(baseAttributes.Spirit + item.Spirit + advanced.Spirit + jewel.Spirit,
+                item.Value(ItemModifierKind.IncreasedSpiritBasisPoints) + item.Value(ItemModifierKind.IncreasedAllAttributesBasisPoints)),
+            ScaleAttribute(baseAttributes.Energy + item.Energy + advanced.Energy + jewel.Energy,
+                item.Value(ItemModifierKind.IncreasedEnergyBasisPoints) + item.Value(ItemModifierKind.IncreasedAllAttributesBasisPoints)));
         DefensiveEquipment defense = equipment.Defense;
         int evasionIncrease = checked(item.IncreasedEvasionBasisPoints + advanced.IncreasedEvasionBasisPoints);
         if (advanced.IronReflexes)
@@ -77,11 +85,11 @@ public static class CharacterBuildAssembler
             attributes,
             defense,
             checked(item.FlatMaximumLife + passive.FlatMaximumLife),
-            checked(passive.IncreasedMaximumLifeBasisPoints + item.IncreasedMaximumLifeBasisPoints),
+            checked(passive.IncreasedMaximumLifeBasisPoints + item.IncreasedMaximumLifeBasisPoints + jewel.IncreasedMaximumLifeBasisPoints),
             checked(item.FlatMaximumMana + passive.FlatMaximumMana),
-            checked(item.IncreasedArmorBasisPoints + passive.IncreasedArmorBasisPoints),
-            evasionIncrease,
-            checked(item.IncreasedShieldBasisPoints + item.IncreasedMaximumShieldBasisPoints + advanced.IncreasedShieldBasisPoints),
+            checked(item.IncreasedArmorBasisPoints + passive.IncreasedArmorBasisPoints + jewel.IncreasedArmorBasisPoints),
+            checked(evasionIncrease + jewel.IncreasedEvasionBasisPoints),
+            checked(item.IncreasedShieldBasisPoints + item.IncreasedMaximumShieldBasisPoints + advanced.IncreasedShieldBasisPoints + jewel.IncreasedMaximumShieldBasisPoints),
             checked(item.IncreasedManaRegenerationBasisPoints + passive.IncreasedManaRegenerationBasisPoints),
             checked(item.FireResistanceBasisPoints + advanced.FireResistanceBasisPoints),
             checked(item.ColdResistanceBasisPoints + advanced.ColdResistanceBasisPoints),
@@ -90,7 +98,14 @@ public static class CharacterBuildAssembler
             checked(item.BlockChanceBasisPoints + advanced.BlockChanceBasisPoints),
             checked(item.SpellSuppressionBasisPoints + advanced.SpellSuppressionBasisPoints),
             checked(item.FlatLifeRegeneration + advanced.FlatLifeRegeneration),
-            item.IncreasedMovementSpeedBasisPoints);
+            item.IncreasedMovementSpeedBasisPoints,
+            checked(item.IncreasedMaximumManaBasisPoints + jewel.IncreasedMaximumManaBasisPoints),
+            item.Value(ItemModifierKind.FlatShield),
+            equipment.SpiritBarrier,
+            item.Value(ItemModifierKind.FlatSpiritBarrier),
+            checked(item.Value(ItemModifierKind.IncreasedSpiritBarrierBasisPoints) + jewel.IncreasedSpiritBarrierBasisPoints),
+            MaximumElementalResistanceBasisPoints: checked(7_500 + item.MaximumAllResistanceBasisPoints),
+            MaximumVoidResistanceBasisPoints: checked(7_500 + item.MaximumAllResistanceBasisPoints));
         SkillUseProfile heavyStrike = SkillRules.BuildHeavyStrike(
             heavyStrikeConfiguration,
             weapon,
@@ -103,20 +118,42 @@ public static class CharacterBuildAssembler
             equipment,
             passive,
             heavyStrike,
-            checked(item.FlatAccuracy + passive.FlatAccuracy),
+            checked(item.FlatAccuracy + passive.FlatAccuracy + jewel.FlatAccuracy),
             checked(
                 item.IncreasedPhysicalDamageBasisPoints +
+                item.Value(ItemModifierKind.IncreasedAttackDamageBasisPoints) +
                 passive.IncreasedAttackDamageBasisPoints +
-                specializedWeaponDamage),
-            item.AddedPhysicalDamage,
-            checked(item.IncreasedCriticalChanceBasisPoints + advanced.IncreasedCriticalChanceBasisPoints),
+                specializedWeaponDamage + jewel.IncreasedAttackDamageBasisPoints),
+            checked(item.AddedPhysicalDamage +
+                (item.Value(ItemModifierKind.AddedMinimumPhysicalDamage) + item.Value(ItemModifierKind.AddedMaximumPhysicalDamage)) / 2),
+            checked(item.IncreasedCriticalChanceBasisPoints + advanced.IncreasedCriticalChanceBasisPoints + jewel.IncreasedCriticalChanceBasisPoints),
             checked(item.IncreasedBleedChanceBasisPoints + passive.IncreasedBleedChanceBasisPoints),
             warCry,
             passive.ChargedHeavyStrike ? new ChargedHeavyStrikeState() : null,
             (advanced.Flaskless ? [] : loadout.Items.Where(pair => pair.Key is >= EquipmentSlot.Flask1 and <= EquipmentSlot.Flask5)
                 .Select(pair => P1FlaskRules.KindForBase(pair.Value.Base.StableId)).Where(kind => kind.HasValue)
                 .Select(kind => kind!.Value).Distinct().ToArray()),
-            weapon);
+            weapon,
+            VirtueVice(item, jewel));
+    }
+
+    private static P30VirtueViceLoadout VirtueVice(EquipmentModifiers item, P30JewelModifiers jewel)
+    {
+        var maximum = new Dictionary<P30VirtueViceKind, int>(jewel.AdditionalVirtueViceMaximum ??
+            new Dictionary<P30VirtueViceKind, int>());
+        var held = new HashSet<P30VirtueViceKind>();
+        Add(P30VirtueViceKind.Mercy, ItemModifierKind.MercyMaximum, ItemModifierKind.HoldMercyAtMaximum);
+        Add(P30VirtueViceKind.Temperance, ItemModifierKind.TemperanceMaximum, ItemModifierKind.HoldTemperanceAtMaximum);
+        Add(P30VirtueViceKind.Humility, ItemModifierKind.HumilityMaximum, ItemModifierKind.HoldHumilityAtMaximum);
+        Add(P30VirtueViceKind.Rage, ItemModifierKind.RageMaximum, ItemModifierKind.HoldRageAtMaximum);
+        Add(P30VirtueViceKind.Sloth, ItemModifierKind.SlothMaximum, ItemModifierKind.HoldSlothAtMaximum);
+        Add(P30VirtueViceKind.Arrogance, ItemModifierKind.ArroganceMaximum, ItemModifierKind.HoldArroganceAtMaximum);
+        return new(maximum, held.Order().ToArray(), jewel.Oaths ?? []);
+        void Add(P30VirtueViceKind kind, ItemModifierKind maximumKind, ItemModifierKind heldKind)
+        {
+            maximum[kind] = maximum.GetValueOrDefault(kind) + item.Value(maximumKind);
+            if (item.Value(heldKind) > 0) held.Add(kind);
+        }
     }
 
     private static int WeaponPassiveIncrease(EquipmentLoadout loadout, PassiveBuildModifiers legacy, P205PassiveModifiers passive)
@@ -143,4 +180,7 @@ public static class CharacterBuildAssembler
             result += passive.SpecializedValue(PassiveEffectKind.IncreasedShieldAttackDamageBasisPoints);
         return result;
     }
+
+    private static int ScaleAttribute(int value, int increasedBasisPoints) =>
+        checked(value * (10_000 + increasedBasisPoints) / 10_000);
 }

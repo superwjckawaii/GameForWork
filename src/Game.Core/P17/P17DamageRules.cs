@@ -1,4 +1,5 @@
 using GameForWork.Core.P1.Combat;
+using GameForWork.Core.P30;
 
 namespace GameForWork.Core.P17;
 
@@ -19,50 +20,43 @@ public static class P17DamageRules
         int fireResistance,
         int coldResistance,
         int lightningResistance,
-        int voidResistance)
+        int voidResistance,
+        int physicalResistance = 0)
     {
-        int physical = baseType == P17DamageType.Physical ? rawDamage : 0;
-        int fire = baseType == P17DamageType.Fire ? rawDamage : 0;
-        int cold = baseType == P17DamageType.Cold ? rawDamage : 0;
-        int lightning = baseType == P17DamageType.Lightning ? rawDamage : 0;
-        int voidDamage = baseType == P17DamageType.Void ? rawDamage : 0;
-        int originalPhysical = physical;
-        var trace = new List<string> { $"base:{baseType.ToString().ToLowerInvariant()}={rawDamage}" };
-
-        Convert(ref physical, ref lightning, supports.HasFlag(SkillSupport.PhysicalToLightning), "physical->lightning", trace);
-        Convert(ref lightning, ref cold, supports.HasFlag(SkillSupport.LightningToCold), "lightning->cold", trace);
-        Convert(ref cold, ref fire, supports.HasFlag(SkillSupport.ColdToFire), "cold->fire", trace);
-        Convert(ref fire, ref voidDamage, supports.HasFlag(SkillSupport.FireToVoid), "fire->void", trace);
-        if (supports.HasFlag(SkillSupport.AddedFire) && originalPhysical > 0)
+        P30DamageType type = baseType switch
         {
-            int added = originalPhysical * 1_800 / 10_000;
-            fire += added;
-            trace.Add($"extra-fire:{added}");
-        }
-        if (supports.HasFlag(SkillSupport.AddedCold)) cold += Math.Max(1, rawDamage * 1_500 / 10_000);
-        if (supports.HasFlag(SkillSupport.AddedLightning)) lightning += Math.Max(1, rawDamage * 1_700 / 10_000);
-        if (supports.HasFlag(SkillSupport.Brutality)) fire = cold = lightning = voidDamage = 0;
+            P17DamageType.Fire => P30DamageType.Fire,
+            P17DamageType.Cold => P30DamageType.Cold,
+            P17DamageType.Lightning => P30DamageType.Lightning,
+            P17DamageType.Void => P30DamageType.Void,
+            _ => P30DamageType.Physical,
+        };
+        var conversions = new List<P30Conversion>();
+        if (supports.HasFlag(SkillSupport.PhysicalToLightning))
+            conversions.Add(new(P30DamageType.Physical, P30DamageType.Lightning, 5_000, "support.physical_to_lightning"));
+        // P30 禁止闪电转冰；旧辅助仍可被旧存档识别，但不再参与伤害转化。
+        if (supports.HasFlag(SkillSupport.ColdToFire))
+            conversions.Add(new(P30DamageType.Cold, P30DamageType.Fire, 5_000, "support.cold_to_fire"));
+        if (supports.HasFlag(SkillSupport.FireToVoid))
+            conversions.Add(new(P30DamageType.Fire, P30DamageType.Void, 5_000, "support.fire_to_void"));
+        var extras = new List<P30ExtraDamage>();
+        if (supports.HasFlag(SkillSupport.AddedFire))
+            extras.Add(new(P30DamageType.Physical, P30DamageType.Fire, 1_800, "support.added_fire"));
+        if (supports.HasFlag(SkillSupport.AddedCold))
+            extras.Add(new(type, P30DamageType.Cold, 1_500, "support.added_cold"));
+        if (supports.HasFlag(SkillSupport.AddedLightning))
+            extras.Add(new(type, P30DamageType.Lightning, 1_700, "support.added_lightning"));
 
-        int armorReduction = DamageRules.ArmorReduction(Math.Max(0, targetArmor), Math.Max(0, physical)).Value;
-        physical = Mitigate(physical, armorReduction);
-        fire = Mitigate(fire, fireResistance);
-        cold = Mitigate(cold, coldResistance);
-        lightning = Mitigate(lightning, lightningResistance);
-        voidDamage = Mitigate(voidDamage, voidResistance);
-        int total = checked(physical + fire + cold + lightning + voidDamage);
-        trace.Add($"mitigated:armor={armorReduction},fire-res={fireResistance},cold-res={coldResistance},lightning-res={lightningResistance},void-res={voidResistance}");
-        return new(physical, fire, cold, lightning, voidDamage, total, trace);
+        P30DamagePacket packet = P30CombatRules.ConvertAndScale(rawDamage, type, conversions, extras);
+        if (supports.HasFlag(SkillSupport.Brutality))
+            packet = packet with
+            {
+                Fire = 0, Cold = 0, Lightning = 0, Void = 0,
+                Branches = packet.Branches.Where(branch => branch.CurrentType == P30DamageType.Physical).ToArray(),
+            };
+        packet = P30CombatRules.Mitigate(packet, Math.Max(0, targetArmor),
+            new P30ResistanceProfile(physicalResistance, fireResistance, coldResistance, lightningResistance, voidResistance));
+        int total = packet.Total;
+        return new(packet.Physical, packet.Fire, packet.Cold, packet.Lightning, packet.Void, total, packet.Trace);
     }
-
-    private static void Convert(ref int source, ref int target, bool enabled, string label, ICollection<string> trace)
-    {
-        if (!enabled || source <= 0) return;
-        int converted = source / 2;
-        source -= converted;
-        target += converted;
-        trace.Add($"{label}:{converted}");
-    }
-
-    private static int Mitigate(int damage, int resistanceBasisPoints) => damage <= 0 ? 0 :
-        Math.Max(1, checked(damage * (10_000 - Math.Clamp(resistanceBasisPoints, -10_000, 9_000)) / 10_000));
 }

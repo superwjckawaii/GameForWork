@@ -156,14 +156,15 @@ public sealed class P1WorldTests
     [Fact]
     public void CustomFilterCanMatchAffixValue()
     {
-        AffixDefinition affix = P1Affixes.All.First(definition =>
-            definition.StableFamilyId == "core.affix.ring.life" && definition.Tier == 2);
+        ItemBaseDefinition itemBase = P1ItemBases.Get("core.base.life_ring");
+        AffixDefinition affix = P1Affixes.For(itemBase, 120).First(definition =>
+            definition.StableFamilyId == "p30.affix.maximum.life" && definition.Tier == 1);
         var ring = new ItemInstance(
             "filtered-ring",
-            P1ItemBases.Get("core.base.life_ring"),
-            1,
+            itemBase,
+            120,
             ItemRarity.Magic,
-            [new AffixRoll(affix, 8)],
+            [new AffixRoll(affix, affix.MaximumValue)],
             ImplicitValue: 8);
         var filter = new LootFilter(
         [
@@ -171,8 +172,8 @@ public sealed class P1WorldTests
                 "custom.high_life",
                 LootDisposition.Keep,
                 ItemRarity.Magic,
-                AffixFamilyId: "core.affix.ring.life",
-                MinimumAffixValue: 8),
+                AffixFamilyId: affix.StableFamilyId,
+                MinimumAffixValue: affix.MaximumValue),
             new LootFilterRule("custom.magic", LootDisposition.Sell, ItemRarity.Magic),
         ]);
 

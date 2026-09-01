@@ -1,5 +1,6 @@
 using GameForWork.Core.P1.Combat;
 using GameForWork.Core.P23;
+using GameForWork.Core.P30;
 
 namespace GameForWork.Core.P18;
 
@@ -89,8 +90,8 @@ public static class P18NodeIds
 
 public static class P18AscendancyCatalog
 {
-    private static readonly IReadOnlyDictionary<string, P18AscendancyNode> NodeMap = Build()
-        .Concat(P231AscendancyCatalog.Nodes)
+    private static readonly IReadOnlyDictionary<string, P18AscendancyNode> NodeMap = P30Ascendancies.Apply(Build()
+        .Concat(P231AscendancyCatalog.Nodes).ToArray())
         .ToDictionary(node => node.StableId, StringComparer.Ordinal);
 
     public static IReadOnlyCollection<P18AscendancyNode> Nodes => NodeMap.Values.ToArray();

@@ -94,7 +94,9 @@ public sealed record ItemBaseDefinition(
     int MovementPenaltyBasisPoints = 0,
     int SocketLimit = 0,
     string ImplicitText = "",
-    IReadOnlyList<ItemBaseImplicit>? AdditionalImplicits = null)
+    IReadOnlyList<ItemBaseImplicit>? AdditionalImplicits = null,
+    int SpiritBarrier = 0,
+    ItemModifierScope ImplicitScope = ItemModifierScope.Global)
 {
     public IReadOnlyList<string> ItemTags => Tags ?? Array.Empty<string>();
     public IReadOnlyList<ItemBaseImplicit> ExtraImplicits => AdditionalImplicits ?? Array.Empty<ItemBaseImplicit>();
@@ -159,7 +161,21 @@ public static class P1ItemBases
         .Select(P25ItemBaseIdentity.Normalize).Select(P25ItemImplicitCatalog.Ensure).ToArray();
 }
 
-public sealed record ItemBaseImplicit(ItemModifierKind ModifierKind, int Value, string DisplayText);
+public enum ItemModifierScope
+{
+    Global,
+    LocalWeapon,
+    LocalDefense,
+    LocalBlock,
+    Flask,
+    Rule,
+}
+
+public sealed record ItemBaseImplicit(
+    ItemModifierKind ModifierKind,
+    int Value,
+    string DisplayText,
+    ItemModifierScope Scope = ItemModifierScope.Global);
 
 public enum ItemModifierKind
 {
@@ -200,7 +216,167 @@ public enum ItemModifierKind
     MoreRareBossDamageBasisPoints,
     ActiveSkillGemLevels,
     SupportSkillGemLevels,
+    AddedMinimumPhysicalDamage,
+    AddedMaximumPhysicalDamage,
+    AddedMinimumFireDamage,
+    AddedMaximumFireDamage,
+    AddedMinimumColdDamage,
+    AddedMaximumColdDamage,
+    AddedMinimumLightningDamage,
+    AddedMaximumLightningDamage,
+    AddedMinimumVoidDamage,
+    AddedMaximumVoidDamage,
+    FlatArmor,
+    FlatEvasion,
+    FlatShield,
+    FlatSpiritBarrier,
+    IncreasedSpiritBarrierBasisPoints,
+    IncreasedLocalBlockBasisPoints,
+    IncreasedAttackDamageBasisPoints,
+    IncreasedSpellDamageBasisPoints,
+    IncreasedElementalDamageBasisPoints,
+    IncreasedFireDamageBasisPoints,
+    IncreasedColdDamageBasisPoints,
+    IncreasedLightningDamageBasisPoints,
+    IncreasedVoidDamageBasisPoints,
+    IncreasedMeleeDamageBasisPoints,
+    IncreasedProjectileDamageBasisPoints,
+    IncreasedAreaDamageBasisPoints,
+    IncreasedDamageOverTimeBasisPoints,
+    DamageOverTimeMultiplierBasisPoints,
+    IncreasedBleedDamageBasisPoints,
+    IncreasedPoisonDamageBasisPoints,
+    IncreasedIgniteDamageBasisPoints,
+    FasterBleedBasisPoints,
+    FasterPoisonBasisPoints,
+    FasterIgniteBasisPoints,
+    IncreasedCriticalMultiplierBasisPoints,
+    IncreasedCastSpeedBasisPoints,
+    FirePenetrationBasisPoints,
+    ColdPenetrationBasisPoints,
+    LightningPenetrationBasisPoints,
+    VoidPenetrationBasisPoints,
+    BleedChanceBasisPoints,
+    PoisonChanceBasisPoints,
+    IgniteChanceBasisPoints,
+    ShockChanceBasisPoints,
+    ChillEffectBasisPoints,
+    FreezeEffectBasisPoints,
+    ShockEffectBasisPoints,
+    ProjectileSpeedBasisPoints,
+    SkillAreaBasisPoints,
+    SkillRangeBasisPoints,
+    AdditionalProjectile,
+    AdditionalChain,
+    AdditionalStrikeTarget,
+    AdditionalPierce,
+    MaximumLifeRegenerationBasisPoints,
+    MaximumShieldRegenerationBasisPoints,
+    IncreasedResourceRecoveryRateBasisPoints,
+    ReducedShieldRechargeDelayBasisPoints,
+    PhysicalResistanceBasisPoints,
+    SpellSuppressionEffectBasisPoints,
+    AilmentAvoidanceBasisPoints,
+    ReducedCurseEffectBasisPoints,
+    ReducedDebuffDurationBasisPoints,
+    MaximumFireResistanceBasisPoints,
+    MaximumColdResistanceBasisPoints,
+    MaximumLightningResistanceBasisPoints,
+    MaximumVoidResistanceBasisPoints,
+    LifeLeechBasisPoints,
+    ManaLeechBasisPoints,
+    ShieldLeechBasisPoints,
+    IncreasedLeechRecoveryRateBasisPoints,
+    IncreasedMaximumLeechRateBasisPoints,
+    LifeOnHit,
+    ManaOnHit,
+    ShieldOnHit,
+    PhysicalToFireConversionBasisPoints,
+    PhysicalToColdConversionBasisPoints,
+    PhysicalToLightningConversionBasisPoints,
+    PhysicalToVoidConversionBasisPoints,
+    ColdToFireConversionBasisPoints,
+    LightningToFireConversionBasisPoints,
+    FireToVoidConversionBasisPoints,
+    ColdToVoidConversionBasisPoints,
+    LightningToVoidConversionBasisPoints,
+    PhysicalAsExtraFireBasisPoints,
+    PhysicalAsExtraColdBasisPoints,
+    PhysicalAsExtraLightningBasisPoints,
+    ElementalAsExtraVoidBasisPoints,
+    ReservationEfficiencyBasisPoints,
+    IncreasedAuraEffectBasisPoints,
+    IncreasedCurseEffectBasisPoints,
+    IncreasedCurseDurationBasisPoints,
+    IncreasedCurseRangeBasisPoints,
+    IncreasedWarcryEffectBasisPoints,
+    IncreasedWarcryRangeBasisPoints,
+    IncreasedTemporaryBuffEffectBasisPoints,
+    IncreasedTemporaryBuffDurationBasisPoints,
+    AllActiveSkillGemLevels,
+    AllSupportSkillGemLevels,
+    AdditionalUnitMaximum,
+    IncreasedMinionDamageBasisPoints,
+    IncreasedMinionLifeBasisPoints,
+    IncreasedMinionSpeedBasisPoints,
+    IncreasedConstructDamageBasisPoints,
+    IncreasedConstructLifeBasisPoints,
+    IncreasedConstructRebuildRateBasisPoints,
+    IncreasedCompanionDamageBasisPoints,
+    IncreasedCompanionLifeBasisPoints,
+    IncreasedCompanionReviveRateBasisPoints,
+    IncreasedTrapDamageBasisPoints,
+    IncreasedTrapDeploymentSpeedBasisPoints,
+    IncreasedTrapRangeBasisPoints,
+    PhantomDamageRatioBasisPoints,
+    IncreasedPhantomDurationBasisPoints,
+    AdditionalMinionMaximum,
+    AdditionalConstructMaximum,
+    AdditionalTrapMaximum,
+    AdditionalPhantomMaximum,
+    HumilityMaximum,
+    ArroganceMaximum,
+    RageMaximum,
+    TemperanceMaximum,
+    MercyMaximum,
+    SlothMaximum,
+    HoldHumilityAtMaximum,
+    HoldArroganceAtMaximum,
+    HoldRageAtMaximum,
+    HoldTemperanceAtMaximum,
+    HoldMercyAtMaximum,
+    HoldSlothAtMaximum,
+    IncreasedPhysiqueBasisPoints,
+    IncreasedDexterityBasisPoints,
+    IncreasedSpiritBasisPoints,
+    IncreasedEnergyBasisPoints,
+    IncreasedAllAttributesBasisPoints,
+    AdditionalCoreSkillCapacity,
+    IncreasedFlaskRecoveryAmountBasisPoints,
+    IncreasedFlaskRecoveryRateBasisPoints,
+    IncreasedFlaskChargesPerUseBasisPoints,
+    InstantFlaskRecoveryPortionBasisPoints,
+    FlaskRecoveryAtEnd,
+    FlaskLifeRemovedFromManaBasisPoints,
+    FlaskManaRemovedFromLifeBasisPoints,
+    FlaskBuffArmorBasisPoints,
+    FlaskBuffEvasionBasisPoints,
+    FlaskBuffCriticalChanceBasisPoints,
+    FlaskBuffMovementSpeedBasisPoints,
 }
+
+public sealed record AffixModifierComponent(
+    ItemModifierKind Kind,
+    int MinimumValue,
+    int MaximumValue,
+    ItemModifierScope Scope = ItemModifierScope.Global,
+    string DisplayText = "");
+
+public sealed record RolledAffixComponent(
+    ItemModifierKind Kind,
+    int Value,
+    ItemModifierScope Scope = ItemModifierScope.Global,
+    string DisplayText = "");
 
 public enum AffixPosition
 {
@@ -226,12 +402,22 @@ public sealed record AffixDefinition(
     string RawText = "",
     IReadOnlyList<string>? ModTags = null,
     bool Local = false,
-    string Source = "Natural")
+    string Source = "Natural",
+    IReadOnlyList<AffixModifierComponent>? Components = null,
+    IReadOnlyList<string>? RequiredBaseTags = null)
 {
     public string MutualExclusionGroup => string.IsNullOrWhiteSpace(GroupId) ? StableFamilyId : GroupId;
 
     public bool Supports(ItemBaseDefinition itemBase) =>
-        (ApplicableCategories?.Contains(itemBase.Category) ?? Category == itemBase.Category) && WeightFor(itemBase) > 0;
+        (ApplicableCategories?.Contains(itemBase.Category) ?? Category == itemBase.Category) &&
+        (!string.Equals(Source, "P24Special", StringComparison.Ordinal) || string.Equals(itemBase.SourceId, "P24", StringComparison.Ordinal)) &&
+        (RequiredBaseTags is null || RequiredBaseTags.Count == 0 || RequiredBaseTags.Any(tag => itemBase.ItemTags.Contains(tag, StringComparer.Ordinal))) &&
+        WeightFor(itemBase) > 0;
+
+    public IReadOnlyList<AffixModifierComponent> EffectComponents => Components is { Count: > 0 }
+        ? Components
+        : [new AffixModifierComponent(ModifierKind, MinimumValue, MaximumValue,
+            Local ? ItemModifierScope.LocalDefense : ItemModifierScope.Global, RawText)];
 
     public int WeightFor(ItemBaseDefinition itemBase)
     {
@@ -245,7 +431,11 @@ public sealed record AffixDefinition(
     }
 }
 
-public sealed record AffixRoll(AffixDefinition Definition, int Value, bool Crafted = false)
+public sealed record AffixRoll(
+    AffixDefinition Definition,
+    int Value,
+    bool Crafted = false,
+    IReadOnlyList<RolledAffixComponent>? Components = null)
 {
     private bool IsLegacyUnderscaledAttribute =>
         Definition.StableFamilyId.StartsWith("core.affix.", StringComparison.Ordinal) &&
@@ -260,6 +450,14 @@ public sealed record AffixRoll(AffixDefinition Definition, int Value, bool Craft
     public int EffectiveMinimumValue => IsLegacyUnderscaledAttribute ? Definition.Tier == 1 ? 51 : 8 : Definition.MinimumValue;
 
     public int EffectiveMaximumValue => IsLegacyUnderscaledAttribute ? Definition.Tier == 1 ? 55 : 12 : Definition.MaximumValue;
+
+    public IReadOnlyList<RolledAffixComponent> Effects => Components is { Count: > 0 }
+        ? Components
+        : [new RolledAffixComponent(
+            Definition.ModifierKind,
+            EffectiveValue,
+            Definition.EffectComponents[0].Scope,
+            Definition.EffectComponents[0].DisplayText)];
 }
 
 public sealed record ItemEnchantment(
@@ -268,7 +466,20 @@ public sealed record ItemEnchantment(
     ItemModifierKind ModifierKind,
     int Value,
     int WorkshopLevel,
-    int GoldCost);
+    int GoldCost,
+    ItemModifierScope Scope = ItemModifierScope.Global,
+    IReadOnlyList<AffixModifierComponent>? Components = null,
+    IReadOnlyList<ItemCategory>? ApplicableCategories = null,
+    IReadOnlyList<string>? RequiredTags = null)
+{
+    public IReadOnlyList<AffixModifierComponent> EffectComponents => Components is { Count: > 0 }
+        ? Components
+        : [new AffixModifierComponent(ModifierKind, Value, Value, Scope, DisplayName)];
+
+    public bool Supports(ItemBaseDefinition itemBase) =>
+        (ApplicableCategories is null || ApplicableCategories.Contains(itemBase.Category)) &&
+        (RequiredTags is null || RequiredTags.Count == 0 || RequiredTags.Any(tag => itemBase.ItemTags.Contains(tag, StringComparer.Ordinal)));
+}
 
 public sealed record LegendaryRule(
     string StableId,
@@ -301,8 +512,9 @@ public sealed record ItemInstance(
     public int PrefixCount => Affixes.Count(affix => affix.Definition.Position == AffixPosition.Prefix);
     public int SuffixCount => Affixes.Count(affix => affix.Definition.Position == AffixPosition.Suffix);
     public int ExtraSupportLinkCapacity => Affixes
-        .Where(affix => affix.Definition.ModifierKind == ItemModifierKind.ExtraSupportLinkCapacity)
-        .Select(affix => affix.EffectiveValue)
+        .SelectMany(affix => affix.Effects)
+        .Where(effect => effect.Kind == ItemModifierKind.ExtraSupportLinkCapacity)
+        .Select(effect => effect.Value)
         .DefaultIfEmpty()
         .Max();
     public int EffectiveImplicitValue => Base.ImplicitModifier == ItemModifierKind.None

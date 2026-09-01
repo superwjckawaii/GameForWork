@@ -70,7 +70,7 @@ public sealed class P25FeatureTests
         Assert.Equal(2, P25LegendaryArt.IconIndex("core.unique.ravens_answer"));
         Assert.Equal(36, P25LegendaryArt.IconIndex("core.mythic.heart_of_ash"));
         Assert.Equal(ItemCategory.Helmet, P1ItemBases.Get(P14UniqueItems.All[2].BaseStableId).Category);
-        Assert.Equal(ItemCategory.BodyArmor, P1ItemBases.Get(P14UniqueItems.All[36].BaseStableId).Category);
+        Assert.Equal(ItemCategory.BodyArmor, P1ItemBases.Get(P14UniqueItems.All[^1].BaseStableId).Category);
     }
 
     [Fact]
@@ -105,7 +105,7 @@ public sealed class P25FeatureTests
     [Fact]
     public void EveryLegendaryHasConcreteRuleAffixesAndRuntimeHandler()
     {
-        Assert.Equal(37, P14UniqueItems.All.Count);
+        Assert.Equal(41, P14UniqueItems.All.Count);
         Assert.All(P14UniqueItems.All, definition =>
         {
             Assert.Contains(definition.RuleText, character => char.IsDigit(character));
@@ -120,16 +120,13 @@ public sealed class P25FeatureTests
     }
 
     [Fact]
-    public void SixStartGardensPreserveTreeSizeAndProvideEquipmentAndAttributeChoices()
+    public void P30SixStartsAndAttributeMajorsUseFinalTopology()
     {
-        Assert.Equal(1_200, P1PassiveTree.Nodes.Count);
+        Assert.Equal(1_475, P1PassiveTree.Nodes.Count);
+        Assert.Equal(18, P1PassiveTree.Nodes.Count(node => node.StableId.StartsWith("p30.attr.major.", StringComparison.Ordinal)));
         foreach (PassiveNodeDefinition start in P1PassiveTree.Nodes.Where(node => node.Kind == PassiveNodeKind.Start))
         {
-            PassiveNodeDefinition[] garden = P1PassiveTree.Nodes.Where(node =>
-                node.StableId.StartsWith($"core.passive.v3.start_garden.{start.Start.ToString().ToLowerInvariant()}.", StringComparison.Ordinal)).ToArray();
-            Assert.Equal(24, garden.Length);
-            Assert.Equal(3, garden.Count(node => node.StableId.Contains(".cluster.") && node.Kind == PassiveNodeKind.Notable));
-            Assert.Equal(3, garden.Count(node => node.StableId.Contains(".attribute.") && node.Kind == PassiveNodeKind.Notable));
+            Assert.Equal(3, P1PassiveTree.Neighbors(start.StableId).Count);
         }
     }
 

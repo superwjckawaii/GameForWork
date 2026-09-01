@@ -132,7 +132,6 @@ public sealed class P1TeamExpeditionState
             {
                 MapsCompleted++;
                 Progression.AddExperience(P1MapRewardGenerator.ExperiencePerMap);
-                Progression.ClaimFirstBossPassivePoint();
             }
             ConsecutiveFailures = 0;
             CommitPendingPolicy();

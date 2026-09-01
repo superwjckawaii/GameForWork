@@ -41,13 +41,12 @@ public sealed class P17FeatureTests
             targetArmor: 0, fireResistance: 0, coldResistance: 0, lightningResistance: 0, voidResistance: 5_000);
 
         Assert.Equal(800, result.Physical);
-        Assert.Equal(400, result.Lightning);
-        Assert.Equal(200, result.Cold);
-        Assert.Equal(100, result.Fire);
-        Assert.Equal(50, result.Void);
-        Assert.Equal(1_550, result.Total);
-        Assert.Equal(["physical->lightning:800", "lightning->cold:400", "cold->fire:200", "fire->void:100"],
-            result.Trace.Skip(1).Take(4));
+        Assert.Equal(800, result.Lightning);
+        Assert.Equal(0, result.Cold);
+        Assert.Equal(0, result.Fire);
+        Assert.Equal(0, result.Void);
+        Assert.Equal(1_600, result.Total);
+        Assert.Contains(result.Trace, line => line.Contains("convert:support.physical_to_lightning", StringComparison.Ordinal));
     }
 
     [Fact]

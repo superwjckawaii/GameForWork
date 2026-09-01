@@ -69,6 +69,10 @@ public static class P25ItemImplicitCatalog
             ImplicitText = item.SourceId == "P24" && !string.IsNullOrWhiteSpace(item.ImplicitText)
                 ? $"{item.ImplicitText}；{text}"
                 : text,
+            ImplicitScope = kind is ItemModifierKind.IncreasedPhysicalDamageBasisPoints or ItemModifierKind.IncreasedAttackSpeedBasisPoints or ItemModifierKind.IncreasedCriticalChanceBasisPoints
+                && item.Category is ItemCategory.OneHandWeapon or ItemCategory.TwoHandWeapon
+                    ? ItemModifierScope.LocalWeapon
+                    : ItemModifierScope.Global,
         };
     }
 
@@ -150,26 +154,100 @@ public static class P25ItemImplicitCatalog
 
 public static class P25LegendaryCatalog
 {
-    public static IReadOnlyList<AffixRoll> CreateAffixes(ItemBaseDefinition itemBase)
+    private sealed record FixedStat(ItemModifierKind Kind, int Value, string Text, AffixPosition Position);
+
+    private static readonly IReadOnlyDictionary<string, FixedStat> RuleStats = new Dictionary<string, FixedStat>(StringComparer.Ordinal)
     {
-        var result = new List<AffixRoll>(6);
-        var groups = new HashSet<string>(StringComparer.Ordinal);
-        foreach (AffixPosition position in Enum.GetValues<AffixPosition>())
+        ["core.unique.echoing_oathbreaker"] = S(ItemModifierKind.IncreasedBleedDamageBasisPoints, 6_000, "余震与流血伤害提高", AffixPosition.Prefix),
+        ["core.unique.march_without_end"] = S(ItemModifierKind.IncreasedMovementSpeedBasisPoints, 3_000, "移动速度提高", AffixPosition.Suffix),
+        ["core.unique.ravens_answer"] = S(ItemModifierKind.AdditionalChain, 2, "额外连锁", AffixPosition.Prefix),
+        ["core.unique.red_vow"] = S(ItemModifierKind.IncreasedBleedDamageBasisPoints, 6_000, "流血伤害提高", AffixPosition.Prefix),
+        ["core.unique.blue_vow"] = S(ItemModifierKind.MoreRareBossDamageBasisPoints, 2_500, "苍誓首领伤害总增", AffixPosition.Prefix),
+        ["core.unique.gardeners_sinew"] = S(ItemModifierKind.IncreasedResourceRecoveryRateBasisPoints, 3_000, "命能加工效率提高", AffixPosition.Suffix),
+        ["core.unique.warden_shell"] = S(ItemModifierKind.BlockChanceBasisPoints, 1_000, "攻击格挡率", AffixPosition.Suffix),
+        ["core.unique.glass_horizon"] = S(ItemModifierKind.IncreasedCriticalChanceBasisPoints, 10_000, "远距暴击率提高", AffixPosition.Suffix),
+        ["core.unique.funeral_bell"] = S(ItemModifierKind.IncreasedWarcryEffectBasisPoints, 4_000, "战吼效果提高", AffixPosition.Suffix),
+        ["core.unique.black_tide"] = S(ItemModifierKind.IncreasedMovementSpeedBasisPoints, 2_000, "黑潮移动速度", AffixPosition.Suffix),
+        ["core.unique.starless_prayer"] = S(ItemModifierKind.SpellSuppressionEffectBasisPoints, 500, "法术压制效果", AffixPosition.Suffix),
+        ["core.unique.last_banner"] = S(ItemModifierKind.ReservationEfficiencyBasisPoints, 10_000, "旗帜不保留资源", AffixPosition.Suffix),
+        ["core.unique.iron_moon"] = S(ItemModifierKind.IncreasedMeleeDamageBasisPoints, 7_000, "满生命猛击强化", AffixPosition.Prefix),
+        ["core.unique.hollow_guard"] = S(ItemModifierKind.SpellSuppressionBasisPoints, 2_000, "格挡后压制强化", AffixPosition.Suffix),
+        ["core.unique.thorn_procession"] = S(ItemModifierKind.FasterBleedBasisPoints, 2_000, "流血扩散速度", AffixPosition.Prefix),
+        ["core.unique.pilgrims_debt"] = S(ItemModifierKind.IncreasedFlaskChargeGainBasisPoints, 4_500, "未使用药剂转为移速", AffixPosition.Suffix),
+        ["core.unique.cinder_chain"] = S(ItemModifierKind.IncreasedFlaskChargeGainBasisPoints, 10_000, "药剂充能获取提高", AffixPosition.Suffix),
+        ["core.unique.fourth_testament"] = S(ItemModifierKind.IncreasedMaximumShieldBasisPoints, 4_000, "精神与能量转护盾", AffixPosition.Prefix),
+        ["core.unique.silent_anvil"] = S(ItemModifierKind.IncreasedAttackDamageBasisPoints, 8_000, "低频重击伤害提高", AffixPosition.Prefix),
+        ["core.unique.hunters_eclipse"] = S(ItemModifierKind.IncreasedCriticalMultiplierBasisPoints, 5_000, "闪避后必定暴击", AffixPosition.Suffix),
+        ["core.unique.ashes_memory"] = S(ItemModifierKind.IncreasedResourceRecoveryRateBasisPoints, 6_000, "护盾充能与法力恢复", AffixPosition.Suffix),
+        ["core.unique.grave_plate"] = S(ItemModifierKind.PhysicalResistanceBasisPoints, 800, "护甲作用于法术击中", AffixPosition.Suffix),
+        ["core.unique.famine_ring"] = S(ItemModifierKind.IncreasedLifeFlaskEffectBasisPoints, 5_000, "药剂效果提高", AffixPosition.Suffix),
+        ["core.unique.last_watch"] = S(ItemModifierKind.IncreasedArmorBasisPoints, 6_000, "壁垒护甲提高", AffixPosition.Prefix),
+        ["p29.unique.rift_fang"] = S(ItemModifierKind.MoreRareBossDamageBasisPoints, 5_500, "对稀有与首领更多伤害", AffixPosition.Prefix),
+        ["p29.unique.deep_echo"] = S(ItemModifierKind.AdditionalChain, 1, "额外连锁", AffixPosition.Prefix),
+        ["p29.unique.seed_of_rebirth"] = S(ItemModifierKind.MaximumLifeRegenerationBasisPoints, 400, "低生命时最大生命恢复", AffixPosition.Suffix),
+        ["p29.unique.thorned_bark"] = S(ItemModifierKind.PhysicalResistanceBasisPoints, 800, "未格挡击中后减伤", AffixPosition.Suffix),
+        ["p29.unique.executioners_due"] = S(ItemModifierKind.IncreasedBleedDamageBasisPoints, 10_000, "处刑流血强化", AffixPosition.Prefix),
+        ["p29.unique.blood_tithe"] = S(ItemModifierKind.IncreasedAttackDamageBasisPoints, 6_000, "生命消耗技能伤害提高", AffixPosition.Prefix),
+        ["p29.unique.frozen_moment"] = S(ItemModifierKind.IncreasedColdDamageBasisPoints, 4_000, "首次命中冻结首领", AffixPosition.Prefix),
+        ["p29.unique.starfall_lens"] = S(ItemModifierKind.AdditionalChain, 3, "法术暴击后额外连锁", AffixPosition.Prefix),
+        ["p29.unique.commanders_burden"] = S(ItemModifierKind.IncreasedArmorBasisPoints, 7_500, "附近敌人提高护甲", AffixPosition.Prefix),
+        ["p29.unique.broken_standard"] = S(ItemModifierKind.IncreasedAttackSpeedBasisPoints, 3_500, "击败稀有敌人后行动加速", AffixPosition.Suffix),
+        ["p29.unique.wayfarers_compass"] = S(ItemModifierKind.IncreasedMovementSpeedBasisPoints, 3_000, "移动速度提高", AffixPosition.Suffix),
+        ["p29.unique.void_balance"] = S(ItemModifierKind.IncreasedVoidDamageBasisPoints, 3_500, "四抗平衡时伤害提高", AffixPosition.Prefix),
+        ["p30.unique.humility_crown"] = S(ItemModifierKind.HoldHumilityAtMaximum, 1, "谦逊常驻最大层数", AffixPosition.Suffix),
+        ["p30.unique.arrogance_grasp"] = S(ItemModifierKind.HoldArroganceAtMaximum, 1, "傲慢常驻最大层数", AffixPosition.Suffix),
+        ["p30.unique.rage_temperance_carapace"] = S(ItemModifierKind.HoldRageAtMaximum, 1, "暴怒常驻最大层数", AffixPosition.Suffix),
+        ["p30.unique.paired_virtue_girdle"] = S(ItemModifierKind.HoldMercyAtMaximum, 1, "美德常驻最大层数", AffixPosition.Suffix),
+        ["core.mythic.heart_of_ash"] = S(ItemModifierKind.MaximumLifeRegenerationBasisPoints, 5_000, "灰烬重燃", AffixPosition.Suffix),
+    };
+
+    public static IReadOnlyList<AffixRoll> CreateAffixes(string stableId, ItemBaseDefinition itemBase)
+    {
+        if (!RuleStats.TryGetValue(stableId, out FixedStat? rule))
+            throw new KeyNotFoundException($"Missing fixed legendary stats: {stableId}");
+        FixedStat[] stats = stableId switch
         {
-            foreach (AffixDefinition source in P1Affixes.For(itemBase, 120)
-                         .Where(affix => affix.Position == position)
-                         .OrderBy(affix => P1Affixes.TierFor(itemBase, affix))
-                         .ThenByDescending(affix => affix.MaximumValue)
-                         .ThenBy(affix => affix.StableFamilyId, StringComparer.Ordinal))
-            {
-                if (result.Count(affix => affix.Definition.Position == position) >= 3) break;
-                if (!groups.Add(source.MutualExclusionGroup)) continue;
-                AffixDefinition legendary = source with { Source = "传奇", Weight = 0 };
-                result.Add(new AffixRoll(legendary, source.MaximumValue));
-            }
-        }
-        return result;
+            "p30.unique.rage_temperance_carapace" => [.. Foundations(itemBase), rule,
+                S(ItemModifierKind.HoldTemperanceAtMaximum, 1, "节制常驻最大层数", AffixPosition.Suffix)],
+            "p30.unique.paired_virtue_girdle" => [.. Foundations(itemBase), rule,
+                S(ItemModifierKind.HoldSlothAtMaximum, 1, "恶德常驻最大层数", AffixPosition.Suffix)],
+            _ => [.. Foundations(itemBase), rule],
+        };
+        return stats.Select((stat, index) => Roll(stableId, itemBase, stat, index)).ToArray();
     }
+
+    public static IReadOnlyList<AffixRoll> CreateAffixes(ItemBaseDefinition itemBase) =>
+        CreateAffixes("core.unique.echoing_oathbreaker", itemBase);
+
+    private static IEnumerable<FixedStat> Foundations(ItemBaseDefinition itemBase)
+    {
+        bool weapon = itemBase.Category is ItemCategory.OneHandWeapon or ItemCategory.TwoHandWeapon;
+        yield return weapon
+            ? S(ItemModifierKind.IncreasedPhysicalDamageBasisPoints, 12_000, "传奇武器局部物理伤害提高", AffixPosition.Prefix)
+            : S(ItemModifierKind.FlatMaximumLife, itemBase.Category == ItemCategory.BodyArmor ? 189 : 110, "传奇最大生命", AffixPosition.Prefix);
+        yield return weapon
+            ? S(ItemModifierKind.IncreasedAttackSpeedBasisPoints, 1_800, "传奇武器攻击速度提高", AffixPosition.Suffix)
+            : S(ItemModifierKind.IncreasedArmorBasisPoints, 5_000, "传奇局部防御提高", AffixPosition.Prefix);
+        yield return S(ItemModifierKind.VoidResistanceBasisPoints, 3_500, "虚空抗性", AffixPosition.Suffix);
+    }
+
+    private static AffixRoll Roll(string stableId, ItemBaseDefinition itemBase, FixedStat stat, int index)
+    {
+        ItemModifierScope scope = stat.Kind is ItemModifierKind.IncreasedPhysicalDamageBasisPoints or ItemModifierKind.IncreasedAttackSpeedBasisPoints &&
+            itemBase.Category is ItemCategory.OneHandWeapon or ItemCategory.TwoHandWeapon
+                ? ItemModifierScope.LocalWeapon
+                : stat.Kind == ItemModifierKind.IncreasedArmorBasisPoints && itemBase.Category is ItemCategory.BodyArmor or ItemCategory.Helmet or ItemCategory.Gloves or ItemCategory.Boots or ItemCategory.Shield
+                    ? ItemModifierScope.LocalDefense
+                    : ItemModifierScope.Global;
+        var component = new AffixModifierComponent(stat.Kind, stat.Value, stat.Value, scope, stat.Text);
+        var definition = new AffixDefinition($"legendary.affix.{stableId}.{index}", stat.Text, itemBase.Category,
+            stat.Position, 0, 1, stat.Value, stat.Value, 0, stat.Kind,
+            SourceId: stableId, RawText: stat.Text, Source: "传奇固定", Components: [component]);
+        return new AffixRoll(definition, stat.Value, Components: [new(stat.Kind, stat.Value, scope, stat.Text)]);
+    }
+
+    private static FixedStat S(ItemModifierKind kind, int value, string text, AffixPosition position) =>
+        new(kind, value, text, position);
 }
 
 public static class P25EquipmentArt
@@ -207,6 +285,7 @@ public static class P25LegendaryArt
         "p29.unique.rift_fang", "p29.unique.deep_echo", "p29.unique.seed_of_rebirth", "p29.unique.thorned_bark",
         "p29.unique.executioners_due", "p29.unique.blood_tithe", "p29.unique.frozen_moment", "p29.unique.starfall_lens",
         "p29.unique.commanders_burden", "p29.unique.broken_standard", "p29.unique.wayfarers_compass", "p29.unique.void_balance",
+        "p30.unique.humility_crown", "p30.unique.arrogance_grasp", "p30.unique.rage_temperance_carapace", "p30.unique.paired_virtue_girdle",
         "core.mythic.heart_of_ash",
     ];
     private static readonly IReadOnlyDictionary<string, int> Indices = StableIds
@@ -215,6 +294,11 @@ public static class P25LegendaryArt
 
     public static int IconIndex(string stableId)
     {
+        if (stableId == "p30.unique.humility_crown") return 2;
+        if (stableId == "p30.unique.arrogance_grasp") return 14;
+        if (stableId == "p30.unique.rage_temperance_carapace") return 9;
+        if (stableId == "p30.unique.paired_virtue_girdle") return 16;
+        if (stableId == "core.mythic.heart_of_ash") return 36;
         return Indices.TryGetValue(stableId, out int index)
             ? index : throw new KeyNotFoundException($"P25 legendary art mapping missing for {stableId}.");
     }
@@ -315,6 +399,8 @@ public static class P25LegendaryRules
         "p29.unique.broken_standard" => new(IncreasedMovementSpeedBasisPoints: 3_500),
         "p29.unique.wayfarers_compass" => new(IncomingDamageMultiplierBasisPoints: context.Moving ? 8_500 : 10_000, IncreasedMovementSpeedBasisPoints: 3_000),
         "p29.unique.void_balance" => new(13_500, IncomingDamageMultiplierBasisPoints: 8_800),
+        "p30.unique.humility_crown" or "p30.unique.arrogance_grasp" or
+        "p30.unique.rage_temperance_carapace" or "p30.unique.paired_virtue_girdle" => new(),
         "core.mythic.heart_of_ash" => new(13_000, ReviveOnce: true),
         _ => throw new KeyNotFoundException($"Unknown P25 legendary effect: {stableId}"),
     };

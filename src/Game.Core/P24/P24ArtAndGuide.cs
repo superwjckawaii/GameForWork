@@ -76,7 +76,7 @@ public static class P24GuideCatalog
             ["佣兵不占召唤或伙伴上限。", "只有主角与附属佣兵均倒下才判定失败。", "光环只作用于实际参战单位。"]),
         new("p24.guide.modifiers", "提高、更多与总降", "提高位于同一加法乘区；每个更多独立相乘；总降按乘法降低。",
             ["多个提高先相加。", "多个更多依次相乘。", "总降不会与提高相减。"]),
-        new("p24.guide.item_families", "P24 装备与词缀库", "新增50个底材和45个三阶词缀族。",
+        new("p24.guide.item_families", "P24 装备与词缀库", "新增50个底材、44个保留机制族及5个P30补充机制族；法武共鸣已删除。",
             P24ItemCatalog.Families.Select(family => $"{family.DisplayName}：{family.RuleText}").ToArray()),
     ];
 }

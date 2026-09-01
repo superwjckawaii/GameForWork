@@ -76,7 +76,7 @@ public partial class P19AffixPanel : VBoxContainer
             string side = affix.Position == AffixPosition.Prefix ? "前" : "后";
             string tags = string.Join(",", affix.ModTags ?? []);
             lines.Add($"[color=#bfcbd7]{Escape(affix.DisplayName)} T{affix.Tier}[/color] · {side}缀 · " +
-                $"{affix.MinimumValue}–{affix.MaximumValue} · ilvl {affix.MinimumItemLevel} · 权重 {affix.Weight} · " +
+                $"{Escape(ComponentRanges(affix))} · ilvl {affix.MinimumItemLevel} · 权重 {affix.Weight} · " +
                 $"组 {Escape(affix.GroupId)} · 标签 {Escape(tags)} · {Escape(affix.SourceId)}");
         }
         _results.Text = string.Join('\n', lines);
@@ -92,4 +92,7 @@ public partial class P19AffixPanel : VBoxContainer
     }
 
     private static string Escape(string text) => text.Replace("[", "[​", StringComparison.Ordinal);
+
+    private static string ComponentRanges(AffixDefinition affix) => string.Join("；", affix.EffectComponents.Select(component =>
+        $"{component.Kind} {component.MinimumValue}–{component.MaximumValue} [{component.Scope}]"));
 }

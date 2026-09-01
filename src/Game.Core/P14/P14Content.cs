@@ -73,6 +73,10 @@ public static class P14UniqueItems
         new("p29.unique.broken_standard", "折断军旗", "core.base.ritual_gloves", "击败稀有敌人后8秒内攻击和施法速度提高35%"),
         new("p29.unique.wayfarers_compass", "界行罗盘", "core.base.march_boots", "移动速度提高30%；移动后3秒内受到的击中伤害降低15%"),
         new("p29.unique.void_balance", "虚空天平", "core.base.iron_ring", "四元素抗性相同时造成35%更多伤害，否则受到的元素伤害降低12%"),
+        new("p30.unique.humility_crown", "无名谦冠", "core.base.raven_mask", "常驻1种谦逊至最大层数；普通随机词缀不能生成美德或恶德"),
+        new("p30.unique.arrogance_grasp", "傲慢之握", "core.base.ritual_gloves", "常驻1种傲慢至最大层数；普通随机词缀不能生成美德或恶德"),
+        new("p30.unique.rage_temperance_carapace", "怒节同契", "core.base.gloom_raiment", "常驻最大层数的暴怒与节制；技能资源消耗总增20%"),
+        new("p30.unique.paired_virtue_girdle", "两极德印", "core.base.ration_belt", "掉落时等权选择1种美德与1种恶德，并令二者常驻最大层数"),
         new("core.mythic.heart_of_ash", "灰烬之心", "core.base.triune_carapace", "三阶段继承药剂与战吼状态；每场战斗首次濒死以50%生命和护盾重燃，随后8秒造成30%更多伤害", true),
     ];
 
@@ -85,7 +89,7 @@ public static class P14UniqueItems
             definition.StableId == "core.unique.echoing_oathbreaker" ? 7_000 : definition.Mythic ? 15_000 : 10_000,
             definition.RuleText);
         return new ItemInstance(instanceId, itemBase, Math.Clamp(itemLevel, 1, 120),
-            ItemRarity.Legendary, GameForWork.Core.P25.P25LegendaryCatalog.CreateAffixes(itemBase), rule,
+            ItemRarity.Legendary, GameForWork.Core.P25.P25LegendaryCatalog.CreateAffixes(definition.StableId, itemBase), rule,
             ImplicitValue: itemBase.ImplicitMaximumValue, LinkedSocketCount: definition.Mythic ? 6 : 5,
             Quality: definition.Mythic ? 20 : 10,
             RolledName: definition.DisplayName);
@@ -255,9 +259,17 @@ public static class P14GardenCrafting
     {
         P14GardenCraft.KeepPrefixes => item.Affixes.Where(affix => affix.Definition.Position == AffixPosition.Prefix).ToArray(),
         P14GardenCraft.KeepSuffixes => item.Affixes.Where(affix => affix.Definition.Position == AffixPosition.Suffix).ToArray(),
-        P14GardenCraft.BiasLife => item.Affixes.Where(affix => affix.Definition.ModifierKind is ItemModifierKind.FlatMaximumLife or ItemModifierKind.IncreasedLifeFlaskEffectBasisPoints).ToArray(),
-        P14GardenCraft.BiasDefense => item.Affixes.Where(affix => affix.Definition.ModifierKind is ItemModifierKind.IncreasedArmorBasisPoints or ItemModifierKind.IncreasedEvasionBasisPoints or ItemModifierKind.IncreasedShieldBasisPoints).ToArray(),
-        _ => item.Affixes.Where(affix => affix.Definition.ModifierKind is ItemModifierKind.AddedPhysicalDamage or ItemModifierKind.IncreasedPhysicalDamageBasisPoints or ItemModifierKind.IncreasedAttackSpeedBasisPoints).ToArray(),
+        P14GardenCraft.BiasLife => item.Affixes.Where(affix => HasAny(affix.Definition,
+            ItemModifierKind.FlatMaximumLife, ItemModifierKind.IncreasedMaximumLifeBasisPoints,
+            ItemModifierKind.MaximumLifeRegenerationBasisPoints, ItemModifierKind.IncreasedLifeFlaskEffectBasisPoints)).ToArray(),
+        P14GardenCraft.BiasDefense => item.Affixes.Where(affix => HasAny(affix.Definition,
+            ItemModifierKind.FlatArmor, ItemModifierKind.FlatEvasion, ItemModifierKind.FlatShield, ItemModifierKind.FlatSpiritBarrier,
+            ItemModifierKind.IncreasedArmorBasisPoints, ItemModifierKind.IncreasedEvasionBasisPoints,
+            ItemModifierKind.IncreasedShieldBasisPoints, ItemModifierKind.IncreasedSpiritBarrierBasisPoints)).ToArray(),
+        _ => item.Affixes.Where(affix => HasAny(affix.Definition,
+            ItemModifierKind.AddedPhysicalDamage, ItemModifierKind.AddedMinimumPhysicalDamage,
+            ItemModifierKind.IncreasedPhysicalDamageBasisPoints, ItemModifierKind.IncreasedAttackDamageBasisPoints,
+            ItemModifierKind.IncreasedAttackSpeedBasisPoints)).ToArray(),
     };
 
     public static ItemInstance Apply(ItemInstance item, P14GardenCraft craft, ulong seed)
@@ -280,7 +292,7 @@ public static class P14GardenCrafting
             int roll = (int)(random.NextUInt() % (uint)total);
             AffixDefinition selected = pool[^1];
             foreach (AffixDefinition candidate in pool) { roll -= candidate.WeightFor(item.Base); if (roll < 0) { selected = candidate; break; } }
-            affixes.Add(new(selected, selected.MinimumValue + (int)(random.NextUInt() % (uint)(selected.MaximumValue - selected.MinimumValue + 1))));
+            affixes.Add(Roll(selected, random));
         }
         return item with { Affixes = affixes };
     }
@@ -289,21 +301,26 @@ public static class P14GardenCrafting
         (craft is P14GardenCraft.KeepPrefixes or P14GardenCraft.KeepSuffixes || Legal(item).Any(d => Tagged(d, BiasOf(craft)))) &&
         (!IsReplacement(craft) || CanReplace(item, craft));
     private static IEnumerable<AffixDefinition> Legal(ItemInstance item) => P1Affixes.For(item.Base, item.ItemLevel)
-        .Where(d => d.WeightFor(item.Base) > 0 && d.ModifierKind switch
-        {
-            ItemModifierKind.IncreasedArmorBasisPoints => item.Base.Armor > 0,
-            ItemModifierKind.IncreasedEvasionBasisPoints => item.Base.Evasion > 0,
-            ItemModifierKind.IncreasedShieldBasisPoints => item.Base.Shield > 0,
-            _ => true
-        });
+        .Where(d => d.WeightFor(item.Base) > 0);
     public static bool Tagged(AffixDefinition d, P14GardenCraft craft) => BiasOf(craft) switch
     {
-        P14GardenCraft.BiasLife => d.ModTags?.Contains("life") == true || d.ModifierKind is ItemModifierKind.FlatMaximumLife or ItemModifierKind.FlatLifeRegeneration,
-        P14GardenCraft.BiasDefense => d.ModTags?.Contains("defences") == true || d.ModifierKind is ItemModifierKind.IncreasedArmorBasisPoints or ItemModifierKind.IncreasedEvasionBasisPoints or ItemModifierKind.IncreasedShieldBasisPoints,
-        P14GardenCraft.BiasSpell => d.ModTags?.Contains("caster") == true || d.ModTags?.Contains("spell") == true,
-        P14GardenCraft.BiasSpeed => d.ModTags?.Contains("speed") == true || d.ModifierKind is ItemModifierKind.IncreasedAttackSpeedBasisPoints or ItemModifierKind.IncreasedMovementSpeedBasisPoints or ItemModifierKind.IncreasedCooldownRecoveryBasisPoints,
-        P14GardenCraft.BiasCritical => d.ModTags?.Contains("critical") == true || d.ModifierKind == ItemModifierKind.IncreasedCriticalChanceBasisPoints,
-        _ => d.ModTags?.Contains("attack") == true || d.ModifierKind is ItemModifierKind.AddedPhysicalDamage or ItemModifierKind.IncreasedPhysicalDamageBasisPoints or ItemModifierKind.IncreasedAttackSpeedBasisPoints,
+        P14GardenCraft.BiasLife => d.ModTags?.Contains("life") == true || HasAny(d, ItemModifierKind.FlatMaximumLife,
+            ItemModifierKind.IncreasedMaximumLifeBasisPoints, ItemModifierKind.MaximumLifeRegenerationBasisPoints),
+        P14GardenCraft.BiasDefense => d.ModTags?.Contains("defences") == true || HasAny(d, ItemModifierKind.FlatArmor,
+            ItemModifierKind.FlatEvasion, ItemModifierKind.FlatShield, ItemModifierKind.FlatSpiritBarrier,
+            ItemModifierKind.IncreasedArmorBasisPoints, ItemModifierKind.IncreasedEvasionBasisPoints,
+            ItemModifierKind.IncreasedShieldBasisPoints, ItemModifierKind.IncreasedSpiritBarrierBasisPoints),
+        P14GardenCraft.BiasSpell => d.ModTags?.Contains("caster") == true || d.ModTags?.Contains("spell") == true ||
+            HasAny(d, ItemModifierKind.IncreasedSpellDamageBasisPoints, ItemModifierKind.IncreasedCastSpeedBasisPoints),
+        P14GardenCraft.BiasSpeed => d.ModTags?.Contains("speed") == true || HasAny(d,
+            ItemModifierKind.IncreasedAttackSpeedBasisPoints, ItemModifierKind.IncreasedCastSpeedBasisPoints,
+            ItemModifierKind.IncreasedMovementSpeedBasisPoints, ItemModifierKind.IncreasedCooldownRecoveryBasisPoints,
+            ItemModifierKind.ProjectileSpeedBasisPoints),
+        P14GardenCraft.BiasCritical => d.ModTags?.Contains("critical") == true || HasAny(d,
+            ItemModifierKind.IncreasedCriticalChanceBasisPoints, ItemModifierKind.IncreasedCriticalMultiplierBasisPoints),
+        _ => d.ModTags?.Contains("attack") == true || HasAny(d, ItemModifierKind.AddedPhysicalDamage,
+            ItemModifierKind.AddedMinimumPhysicalDamage, ItemModifierKind.IncreasedPhysicalDamageBasisPoints,
+            ItemModifierKind.IncreasedAttackDamageBasisPoints, ItemModifierKind.IncreasedAttackSpeedBasisPoints),
     };
 
     public static bool IsReplacement(P14GardenCraft craft) => craft is >= P14GardenCraft.ReplaceLife and <= P14GardenCraft.ReplaceCritical;
@@ -349,10 +366,22 @@ public static class P14GardenCrafting
             roll -= definition.WeightFor(item.Base);
             if (roll < 0) { selected = definition; break; }
         }
-        int value = selected.MinimumValue + (int)(random.NextUInt() % (uint)(selected.MaximumValue - selected.MinimumValue + 1));
-        affixes.Add(new(selected, value));
+        affixes.Add(Roll(selected, random));
         return item with { Affixes = affixes };
     }
+
+    private static AffixRoll Roll(AffixDefinition definition, Pcg32 random)
+    {
+        RolledAffixComponent[] components = definition.EffectComponents.Select(component =>
+            new RolledAffixComponent(component.Kind,
+                component.MinimumValue == component.MaximumValue ? component.MinimumValue :
+                    component.MinimumValue + (int)(random.NextUInt() % (uint)(component.MaximumValue - component.MinimumValue + 1)),
+                component.Scope, component.DisplayText)).ToArray();
+        return new AffixRoll(definition, components[0].Value, Components: components);
+    }
+
+    private static bool HasAny(AffixDefinition definition, params ItemModifierKind[] kinds) =>
+        definition.EffectComponents.Any(component => kinds.Contains(component.Kind));
 }
 
 public sealed record P14GardenCraftResult(bool Succeeded, string Summary, ItemInstance? Result, int Cost);

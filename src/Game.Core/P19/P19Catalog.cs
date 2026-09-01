@@ -1,6 +1,7 @@
 using System.Reflection;
 using System.Text.Json;
 using GameForWork.Core.P1.Items;
+using GameForWork.Core.P30;
 
 namespace GameForWork.Core.P19;
 
@@ -20,7 +21,11 @@ public static class P19Catalog
 
     public static IReadOnlyList<ItemBaseDefinition> Bases { get; } = Data.Bases.Select(ToBase).ToArray();
 
-    public static IReadOnlyList<AffixDefinition> Affixes { get; } = Data.Affixes.Select(ToAffix).ToArray();
+    public static IReadOnlyList<AffixDefinition> Affixes { get; } = Data.Affixes
+        .Where(value => !P30EquipmentAffixes.IsRemovedImportedFamily(value.StableFamilyId))
+        .Select(ToAffix)
+        .Select(P30EquipmentAffixes.NormalizeImported)
+        .ToArray();
 
     private static Snapshot Load()
     {

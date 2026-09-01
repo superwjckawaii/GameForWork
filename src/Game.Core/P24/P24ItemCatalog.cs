@@ -20,8 +20,8 @@ public static class P24ItemCatalog
     {
         if (Bases.Count != 50 || Bases.Select(value => value.StableId).Distinct().Count() != 50)
             throw new InvalidDataException("P24 item catalog must contain fifty unique bases.");
-        if (Families.Count != 45 || Families.Select(value => value.StableId).Distinct().Count() != 45 || Affixes.Count != 135)
-            throw new InvalidDataException("P24 item catalog must contain forty-five three-tier affix families.");
+        if (Families.Count != 49 || Families.Select(value => value.StableId).Distinct().Count() != 49 || Affixes.Count != 147)
+            throw new InvalidDataException("P24 item catalog must contain forty-four retained and five new three-tier special affix families.");
     }
 
     private static IReadOnlyList<ItemBaseDefinition> BuildBases()
@@ -65,6 +65,10 @@ public static class P24ItemCatalog
             ("poison", "淬毒", AffixPosition.Prefix, ItemModifierKind.IncreasedBleedChanceBasisPoints, "毒素积累提高。"),
             ("trap_limit", "设伏", AffixPosition.Suffix, ItemModifierKind.ExtraSupportLinkCapacity, "陷阱上限提高。"),
             ("evasion", "无踪", AffixPosition.Suffix, ItemModifierKind.IncreasedEvasionBasisPoints, "移动后闪避提高。"));
+        AddTheme(result, "trap", "陷阱", ["dagger"],
+            ("damage", "爆裂", AffixPosition.Prefix, ItemModifierKind.IncreasedTrapDamageBasisPoints, "陷阱伤害提高。"),
+            ("deployment", "疾布", AffixPosition.Suffix, ItemModifierKind.IncreasedTrapDeploymentSpeedBasisPoints, "陷阱布设速度提高。"),
+            ("range", "广触", AffixPosition.Suffix, ItemModifierKind.IncreasedTrapRangeBasisPoints, "陷阱触发范围提高。"));
         AddTheme(result, "minion", "召唤", ["summoning_focus", "minion"],
             ("maximum", "统御", AffixPosition.Prefix, ItemModifierKind.ExtraSupportLinkCapacity, "召唤物上限提高。"),
             ("damage", "军势", AffixPosition.Prefix, ItemModifierKind.IncreasedPhysicalDamageBasisPoints, "召唤物伤害提高。"),
@@ -91,7 +95,9 @@ public static class P24ItemCatalog
             ("damage", "刚拳", AffixPosition.Prefix, ItemModifierKind.AddedPhysicalDamage, "徒手攻击附加物理伤害。"),
             ("combo", "连势", AffixPosition.Suffix, ItemModifierKind.IncreasedAttackSpeedBasisPoints, "连击保留时间提高。"),
             ("stance", "阴阳", AffixPosition.Prefix, ItemModifierKind.IncreasedPhysicalDamageBasisPoints, "姿态效果提高。"),
-            ("phantom", "百影", AffixPosition.Suffix, ItemModifierKind.ExtraSupportLinkCapacity, "幻身上限提高。"));
+            ("phantom", "百影", AffixPosition.Suffix, ItemModifierKind.ExtraSupportLinkCapacity, "幻身上限提高。"),
+            ("phantom_ratio", "映身", AffixPosition.Prefix, ItemModifierKind.PhantomDamageRatioBasisPoints, "幻身复制伤害比例提高。"),
+            ("phantom_duration", "留影", AffixPosition.Suffix, ItemModifierKind.IncreasedPhantomDurationBasisPoints, "幻身持续时间提高。"));
         AddTheme(result, "companion", "灵兽", ["beast_talisman", "companion"],
             ("damage", "兽怒", AffixPosition.Prefix, ItemModifierKind.IncreasedPhysicalDamageBasisPoints, "灵兽伤害提高。"),
             ("guard", "兽护", AffixPosition.Prefix, ItemModifierKind.FlatMaximumLife, "灵兽最大生命提高。"),
@@ -102,7 +108,6 @@ public static class P24ItemCatalog
         AddTheme(result, "rune", "符文", ["runeblade"],
             ("imprint", "刻印", AffixPosition.Prefix, ItemModifierKind.AddedPhysicalDamage, "刻印获得量提高。"),
             ("trigger", "应答", AffixPosition.Suffix, ItemModifierKind.IncreasedAttackSpeedBasisPoints, "攻击触发冷却恢复提高。"),
-            ("spellblade", "法武", AffixPosition.Prefix, ItemModifierKind.IncreasedPhysicalDamageBasisPoints, "法术伤害转为攻击伤害提高。"),
             ("spellarmor", "魔铠", AffixPosition.Prefix, ItemModifierKind.IncreasedArmorBasisPoints, "魔铠效果提高。"));
         AddTheme(result, "construct", "构装", ["construct_idol", "construct"],
             ("maximum", "增殖", AffixPosition.Prefix, ItemModifierKind.ExtraSupportLinkCapacity, "构装体上限提高。"),
@@ -115,19 +120,85 @@ public static class P24ItemCatalog
 
     private static IReadOnlyList<AffixDefinition> BuildAffixes()
     {
-        var result = new List<AffixDefinition>(135);
+        var result = new List<AffixDefinition>(147);
         foreach (P24AffixFamily family in Families)
         for (int tier = 3; tier >= 1; tier--)
         {
             int power = 4 - tier;
             IReadOnlyList<ItemCategory> categories = Categories(family.Tags);
+            IReadOnlyList<AffixModifierComponent> components = ComponentsFor(family, tier);
+            AffixModifierComponent primary = components[0];
             result.Add(new AffixDefinition(family.StableId, family.DisplayName, categories[0], family.Position,
-                tier, tier == 3 ? 1 : tier == 2 ? 25 : 60, power * 300, power * 500,
-                1_200 / power, family.Modifier, family.StableId, categories,
+                tier, tier == 3 ? 1 : tier == 2 ? 45 : 85, primary.MinimumValue, primary.MaximumValue,
+                1_200 / power, primary.Kind, family.StableId, categories,
                 family.Tags.ToDictionary(tag => tag, _ => 1_000 / power, StringComparer.Ordinal),
-                "P24", family.RuleText, family.Tags, Source: "Natural"));
+                "P24", family.RuleText, family.Tags, Source: "P24Special", Components: components,
+                RequiredBaseTags: family.Tags));
         }
         return result;
+    }
+
+    private static IReadOnlyList<AffixModifierComponent> ComponentsFor(P24AffixFamily family, int tier)
+    {
+        int Scale(int top) => Math.Max(1, top * (tier == 1 ? 100 : tier == 2 ? 70 : 45) / 100);
+        AffixModifierComponent Percent(ItemModifierKind kind, int minimum, int maximum) =>
+            new(kind, Scale(minimum), Scale(maximum), DisplayText: family.RuleText);
+        AffixModifierComponent Discrete(ItemModifierKind kind, int value = 1) =>
+            new(kind, value, value, DisplayText: family.RuleText);
+        string id = family.StableId;
+        return id switch
+        {
+            "p24.affix.projectile.added_projectile" => [Discrete(ItemModifierKind.AdditionalProjectile)],
+            "p24.affix.projectile.projectile_speed" => [Percent(ItemModifierKind.ProjectileSpeedBasisPoints, 3_500, 4_500)],
+            "p24.affix.projectile.pierce" => [Discrete(ItemModifierKind.AdditionalPierce, tier == 1 ? 2 : 1)],
+            "p24.affix.projectile.far_damage" => [Percent(ItemModifierKind.IncreasedProjectileDamageBasisPoints, 4_500, 6_000)],
+            "p24.affix.projectile.mark_effect" => [Percent(ItemModifierKind.IncreasedCurseEffectBasisPoints, 2_000, 3_000)],
+            "p24.affix.shadow.backstab" => [Percent(ItemModifierKind.IncreasedCriticalMultiplierBasisPoints, 3_000, 4_000)],
+            "p24.affix.shadow.poison" => [Percent(ItemModifierKind.PoisonChanceBasisPoints, 3_000, 4_000)],
+            "p24.affix.shadow.trap_limit" => [Discrete(ItemModifierKind.AdditionalTrapMaximum)],
+            "p24.affix.shadow.evasion" => [Percent(ItemModifierKind.IncreasedEvasionBasisPoints, 4_500, 6_000)],
+            "p24.affix.trap.damage" => [Percent(ItemModifierKind.IncreasedTrapDamageBasisPoints, 4_500, 6_000)],
+            "p24.affix.trap.deployment" => [Percent(ItemModifierKind.IncreasedTrapDeploymentSpeedBasisPoints, 1_500, 2_000)],
+            "p24.affix.trap.range" => [Percent(ItemModifierKind.IncreasedTrapRangeBasisPoints, 2_000, 3_000)],
+            "p24.affix.minion.maximum" => [Discrete(ItemModifierKind.AdditionalMinionMaximum)],
+            "p24.affix.minion.damage" => [Percent(ItemModifierKind.IncreasedMinionDamageBasisPoints, 4_500, 6_000)],
+            "p24.affix.minion.life" => [Percent(ItemModifierKind.IncreasedMinionLifeBasisPoints, 4_500, 6_000)],
+            "p24.affix.minion.speed" => [Percent(ItemModifierKind.IncreasedMinionSpeedBasisPoints, 1_400, 1_800)],
+            "p24.affix.minion.aura" => [Percent(ItemModifierKind.IncreasedAuraEffectBasisPoints, 1_500, 2_000)],
+            "p24.affix.curse.effect" => [Percent(ItemModifierKind.IncreasedCurseEffectBasisPoints, 2_000, 3_000)],
+            "p24.affix.curse.duration" => [Percent(ItemModifierKind.IncreasedCurseDurationBasisPoints, 2_000, 3_000)],
+            "p24.affix.curse.propagation" => [Percent(ItemModifierKind.IncreasedCurseRangeBasisPoints, 2_000, 3_000)],
+            "p24.affix.curse.reservation" => [Percent(ItemModifierKind.ReservationEfficiencyBasisPoints, 1_000, 1_400)],
+            "p24.affix.spell.elemental" => [Percent(ItemModifierKind.IncreasedElementalDamageBasisPoints, 4_500, 6_000)],
+            "p24.affix.spell.void" => [Percent(ItemModifierKind.IncreasedVoidDamageBasisPoints, 4_500, 6_000)],
+            "p24.affix.spell.cast_speed" => [Percent(ItemModifierKind.IncreasedCastSpeedBasisPoints, 1_400, 1_800)],
+            "p24.affix.spell.shield" => [Percent(ItemModifierKind.IncreasedMaximumShieldBasisPoints, 1_200, 1_600)],
+            "p24.affix.spell.recharge" => [Percent(ItemModifierKind.IncreasedResourceRecoveryRateBasisPoints, 2_000, 3_000)],
+            "p24.affix.occult.wither" => [Percent(ItemModifierKind.IncreasedVoidDamageBasisPoints, 3_500, 4_500)],
+            "p24.affix.occult.shield_leech" => [Percent(ItemModifierKind.ShieldLeechBasisPoints, 60, 100)],
+            "p24.affix.occult.shield_cost" => [Percent(ItemModifierKind.ReducedShieldRechargeDelayBasisPoints, 2_000, 3_000)],
+            "p24.affix.occult.barrier" => [Percent(ItemModifierKind.IncreasedSpiritBarrierBasisPoints, 3_500, 4_500)],
+            "p24.affix.unarmed.damage" => [new(ItemModifierKind.AddedMinimumPhysicalDamage, Scale(18), Scale(28), DisplayText: family.RuleText), new(ItemModifierKind.AddedMaximumPhysicalDamage, Scale(36), Scale(52), DisplayText: family.RuleText)],
+            "p24.affix.unarmed.combo" => [Percent(ItemModifierKind.IncreasedTemporaryBuffDurationBasisPoints, 2_000, 3_000)],
+            "p24.affix.unarmed.stance" => [Percent(ItemModifierKind.IncreasedTemporaryBuffEffectBasisPoints, 2_000, 3_000)],
+            "p24.affix.unarmed.phantom" => [Discrete(ItemModifierKind.AdditionalPhantomMaximum)],
+            "p24.affix.unarmed.phantom_ratio" => [Percent(ItemModifierKind.PhantomDamageRatioBasisPoints, 1_000, 1_500)],
+            "p24.affix.unarmed.phantom_duration" => [Percent(ItemModifierKind.IncreasedPhantomDurationBasisPoints, 2_000, 3_000)],
+            "p24.affix.companion.damage" => [Percent(ItemModifierKind.IncreasedCompanionDamageBasisPoints, 4_500, 6_000)],
+            "p24.affix.companion.guard" => [Percent(ItemModifierKind.IncreasedCompanionLifeBasisPoints, 4_500, 6_000)],
+            "p24.affix.companion.revive" => [Percent(ItemModifierKind.IncreasedCompanionReviveRateBasisPoints, 2_500, 3_500)],
+            "p24.affix.companion.bond" => [Percent(ItemModifierKind.IncreasedCompanionDamageBasisPoints, 2_500, 3_500)],
+            "p24.affix.monk.mobility" => [Percent(ItemModifierKind.IncreasedCooldownRecoveryBasisPoints, 2_000, 3_000)],
+            "p24.affix.rune.imprint" => [Percent(ItemModifierKind.IncreasedTemporaryBuffEffectBasisPoints, 2_000, 3_000)],
+            "p24.affix.rune.trigger" => [Percent(ItemModifierKind.IncreasedCooldownRecoveryBasisPoints, 2_000, 3_000)],
+            "p24.affix.rune.spellarmor" => [Percent(ItemModifierKind.IncreasedArmorBasisPoints, 4_500, 6_000)],
+            "p24.affix.construct.maximum" => [Discrete(ItemModifierKind.AdditionalConstructMaximum)],
+            "p24.affix.construct.damage" => [Percent(ItemModifierKind.IncreasedConstructDamageBasisPoints, 4_500, 6_000)],
+            "p24.affix.construct.life" => [Percent(ItemModifierKind.IncreasedConstructLifeBasisPoints, 4_500, 6_000)],
+            "p24.affix.construct.priority" => [Percent(ItemModifierKind.MoreRareBossDamageBasisPoints, 3_000, 4_000)],
+            "p24.affix.construct.rebuild" => [Percent(ItemModifierKind.IncreasedConstructRebuildRateBasisPoints, 2_000, 3_000)],
+            _ => [Percent(family.Modifier, 3_500, 4_500)],
+        };
     }
 
     private static void AddWeapons(ICollection<ItemBaseDefinition> target, string key, ItemCategory category,
@@ -207,13 +278,15 @@ public static class P24ItemRules
 {
     public static P24ItemMechanicProfile Resolve(ItemInstance item)
     {
-        int Value(string suffix) => item.Affixes.Where(affix => affix.Definition.StableFamilyId.EndsWith(suffix, StringComparison.Ordinal))
-            .Sum(affix => affix.EffectiveValue);
+        int Value(ItemModifierKind kind) => item.Affixes.SelectMany(affix => affix.Effects)
+            .Where(effect => effect.Kind == kind).Sum(effect => effect.Value);
         return new P24ItemMechanicProfile(
-            Math.Min(10, Value("minion.maximum") / 300),
-            Math.Min(5, Value("construct.maximum") / 300),
-            Math.Min(5, Value("shadow.trap_limit") / 300),
-            Math.Min(5, Value("unarmed.phantom") / 300),
-            Value("minion.aura"), Value("spell.recharge"), Value("construct.priority"));
+            Math.Min(10, Value(ItemModifierKind.AdditionalMinionMaximum)),
+            Math.Min(5, Value(ItemModifierKind.AdditionalConstructMaximum)),
+            Math.Min(5, Value(ItemModifierKind.AdditionalTrapMaximum)),
+            Math.Min(5, Value(ItemModifierKind.AdditionalPhantomMaximum)),
+            Value(ItemModifierKind.IncreasedAuraEffectBasisPoints),
+            Value(ItemModifierKind.IncreasedResourceRecoveryRateBasisPoints),
+            Value(ItemModifierKind.MoreRareBossDamageBasisPoints));
     }
 }

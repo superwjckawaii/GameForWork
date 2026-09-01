@@ -53,10 +53,10 @@ public sealed class P1CombatRulesTests
     }
 
     [Fact]
-    public void HitChanceUsesFiveAndNinetyFivePercentCaps()
+    public void HitChanceUsesFiveAndOneHundredPercentCaps()
     {
         Assert.Equal(500, DamageRules.HitChance(1, 10_000, false).Value);
-        Assert.Equal(9_500, DamageRules.HitChance(10_000, 0, false).Value);
+        Assert.Equal(10_000, DamageRules.HitChance(10_000, 0, false).Value);
         Assert.Equal(10_000, DamageRules.HitChance(0, 10_000, true).Value);
     }
 
@@ -65,7 +65,7 @@ public sealed class P1CombatRulesTests
     {
         CalculatedValue result = DamageRules.ArmorReduction(100, 20);
         Assert.Equal(5_000, result.Value);
-        Assert.Equal(2, result.Steps.Count);
+        Assert.Single(result.Steps);
     }
 
     [Fact]
@@ -232,7 +232,7 @@ public sealed class P1CombatRulesTests
 
         Assert.True(preview.AverageHitDamage.Value >= 1);
         Assert.True(preview.AttacksPerSecondMilli.Value > 0);
-        Assert.InRange(preview.HitChanceBasisPoints.Value, 500, 9_500);
+        Assert.InRange(preview.HitChanceBasisPoints.Value, 500, 10_000);
         Assert.NotEmpty(preview.AverageHitDamage.Steps);
         Assert.True(preview.EffectiveLife.Value >= sheet.MaximumLife().Value);
     }

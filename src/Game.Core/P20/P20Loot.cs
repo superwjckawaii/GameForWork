@@ -10,6 +10,7 @@ using GameForWork.Core.P14;
 using GameForWork.Core.P26;
 using GameForWork.Core.P27;
 using GameForWork.Core.P29;
+using GameForWork.Core.P30;
 using GameForWork.Core.Simulation;
 
 namespace GameForWork.Core.P20;
@@ -123,9 +124,11 @@ public static class P20DropFormula
         {
             string pool = P20LegendaryDrops.ResolvePool(context, defeated);
             P14UniqueDefinition unique = P20LegendaryDrops.Pick(pool, random);
-            equipment.Add(P14UniqueItems.Create(unique.StableId, Math.Min(120, context.MonsterLevel + 2),
-                $"drop-{context.SourceId}-{unique.StableId.Split('.')[^1]}-{seed:x8}") with
-                { DropSource = $"p29.source.legendary.{pool}" });
+            ItemInstance dropped = P14UniqueItems.Create(unique.StableId, Math.Min(120, context.MonsterLevel + 2),
+                $"drop-{context.SourceId}-{unique.StableId.Split('.')[^1]}-{seed:x8}");
+            if (unique.StableId == "p30.unique.paired_virtue_girdle")
+                dropped = P30VirtueViceEquipment.ApplyBeltRoll(dropped, random.NextUInt());
+            equipment.Add(dropped with { DropSource = $"p29.source.legendary.{pool}" });
         }
 
         int goldRoute = (context.Route == MapRoute.Safe ? 12_500 : 10_000) +
@@ -427,7 +430,8 @@ public static class P20LegendaryDrops
     private static readonly string[] RedPool = ["core.unique.red_vow", "core.unique.iron_moon", "p29.unique.executioners_due", "p29.unique.blood_tithe"];
     private static readonly string[] BluePool = ["core.unique.blue_vow", "core.unique.glass_horizon", "p29.unique.frozen_moment", "p29.unique.starfall_lens"];
     private static readonly string[] WarfrontPool = ["core.unique.last_banner", "core.unique.black_tide", "p29.unique.commanders_burden", "p29.unique.broken_standard"];
-    private static readonly string[] CommonIds = ["core.unique.ravens_answer", "core.unique.starless_prayer", "core.unique.pilgrims_debt", "core.unique.silent_anvil", "core.unique.hunters_eclipse", "core.unique.famine_ring", "p29.unique.wayfarers_compass", "p29.unique.void_balance"];
+    private static readonly string[] CommonIds = ["core.unique.ravens_answer", "core.unique.starless_prayer", "core.unique.pilgrims_debt", "core.unique.silent_anvil", "core.unique.hunters_eclipse", "core.unique.famine_ring", "p29.unique.wayfarers_compass", "p29.unique.void_balance",
+        "p30.unique.humility_crown", "p30.unique.arrogance_grasp", "p30.unique.rage_temperance_carapace", "p30.unique.paired_virtue_girdle"];
     private static readonly P14UniqueDefinition[] Common = CommonIds.Select(Get).ToArray();
 
     public static IReadOnlyList<P14UniqueDefinition> ExchangePool => P14UniqueItems.All

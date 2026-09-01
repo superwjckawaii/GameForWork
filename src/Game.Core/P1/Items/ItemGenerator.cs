@@ -47,7 +47,7 @@ public static class ItemGenerator
         Pcg32 random)
     {
         var available = P1Affixes.For(itemBase, itemLevel)
-            .Where(affix => IsApplicableToBase(affix.ModifierKind, itemBase))
+            .Where(affix => IsApplicableToBase(affix, itemBase))
             .ToList();
         var selected = new List<AffixRoll>();
         while (selected.Count < desiredCount)
@@ -61,9 +61,7 @@ public static class ItemGenerator
             }
 
             AffixDefinition definition = WeightedPick(candidates, itemBase, random);
-            selected.Add(new AffixRoll(
-                definition,
-                RollInclusive(random, definition.MinimumValue, definition.MaximumValue)));
+            selected.Add(Roll(definition, random));
             available.RemoveAll(candidate =>
                 candidate.StableFamilyId == definition.StableFamilyId ||
                 candidate.MutualExclusionGroup == definition.MutualExclusionGroup);
@@ -77,7 +75,7 @@ public static class ItemGenerator
         ArgumentNullException.ThrowIfNull(item);
         var random = new Pcg32(seed);
         AffixDefinition[] candidates = P1Affixes.For(item.Base, item.ItemLevel)
-            .Where(affix => IsApplicableToBase(affix.ModifierKind, item.Base))
+            .Where(affix => IsApplicableToBase(affix, item.Base))
             .Where(affix => item.Affixes.All(existing => existing.Definition.StableFamilyId != affix.StableFamilyId))
             .Where(affix => item.Affixes.All(existing =>
                 existing.Definition.MutualExclusionGroup != affix.MutualExclusionGroup))
@@ -85,7 +83,22 @@ public static class ItemGenerator
             .ToArray();
         if (candidates.Length == 0) return null;
         AffixDefinition selected = WeightedPick(candidates, item.Base, random);
-        return new AffixRoll(selected, RollInclusive(random, selected.MinimumValue, selected.MaximumValue));
+        return Roll(selected, random);
+    }
+
+    private static AffixRoll Roll(AffixDefinition definition, Pcg32 random)
+    {
+        RolledAffixComponent[] components = definition.EffectComponents
+            .Select(component => new RolledAffixComponent(
+                component.Kind,
+                RollInclusive(random, component.MinimumValue, component.MaximumValue),
+                component.Scope,
+                component.DisplayText))
+            .ToArray();
+        int primary = components.Length == 0
+            ? RollInclusive(random, definition.MinimumValue, definition.MaximumValue)
+            : components[0].Value;
+        return new AffixRoll(definition, primary, Components: components);
     }
 
     private static AffixDefinition WeightedPick(
@@ -109,13 +122,15 @@ public static class ItemGenerator
         return candidates[^1];
     }
 
-    private static bool IsApplicableToBase(ItemModifierKind kind, ItemBaseDefinition itemBase) => kind switch
-    {
-        ItemModifierKind.IncreasedArmorBasisPoints => itemBase.Armor > 0,
-        ItemModifierKind.IncreasedEvasionBasisPoints => itemBase.Evasion > 0,
-        ItemModifierKind.IncreasedShieldBasisPoints => itemBase.Shield > 0,
-        _ => true,
-    };
+    private static bool IsApplicableToBase(AffixDefinition definition, ItemBaseDefinition itemBase) =>
+        definition.EffectComponents.Where(component => component.Scope == ItemModifierScope.LocalDefense).All(component => component.Kind switch
+        {
+            ItemModifierKind.IncreasedArmorBasisPoints => itemBase.Armor > 0 || definition.EffectComponents.Any(effect => effect.Kind == ItemModifierKind.FlatArmor),
+            ItemModifierKind.IncreasedEvasionBasisPoints => itemBase.Evasion > 0 || definition.EffectComponents.Any(effect => effect.Kind == ItemModifierKind.FlatEvasion),
+            ItemModifierKind.IncreasedShieldBasisPoints => itemBase.Shield > 0 || definition.EffectComponents.Any(effect => effect.Kind == ItemModifierKind.FlatShield),
+            ItemModifierKind.IncreasedSpiritBarrierBasisPoints => itemBase.SpiritBarrier > 0 || definition.EffectComponents.Any(effect => effect.Kind == ItemModifierKind.FlatSpiritBarrier),
+            _ => true,
+        });
 
     private static int RollInclusive(Pcg32 random, int minimum, int maximum)
     {

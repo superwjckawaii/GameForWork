@@ -19,6 +19,7 @@ public sealed class CharacterProgression
     public int Experience { get; private set; }
     public int EarnedPassivePoints { get; private set; }
     public bool FirstBossPassivePointClaimed { get; private set; }
+    public int StoryPassivePointsClaimed { get; private set; }
     public int LevelCap { get; private set; } = InitialMaximumLevel;
 
     public ExperienceGainResult AddExperience(int amount)
@@ -61,7 +62,7 @@ public sealed class CharacterProgression
         if (level is < 1 or > MaximumLevel ||
             experience < CumulativeExperienceForLevel(level) ||
             experience > TotalExperienceToCap ||
-            earnedPassivePoints is < 0 or > MaximumLevel)
+            earnedPassivePoints is < 0 or > 149)
         {
             throw new InvalidDataException("Character progression snapshot is invalid.");
         }
@@ -71,6 +72,12 @@ public sealed class CharacterProgression
         Experience = experience;
         EarnedPassivePoints = earnedPassivePoints;
         FirstBossPassivePointClaimed = firstBossPassivePointClaimed;
+    }
+
+    public void SynchronizeStoryPassivePoints(int completedStoryNodes)
+    {
+        StoryPassivePointsClaimed = Math.Clamp(completedStoryNodes, 0, 30);
+        EarnedPassivePoints = Math.Min(149, Math.Max(0, Level - 1) + StoryPassivePointsClaimed);
     }
 
     public bool UnlockFinalBreakthrough()
@@ -94,7 +101,7 @@ public sealed class CharacterProgression
 
         Level = minimumLevel;
         Experience = CumulativeExperienceForLevel(minimumLevel);
-        EarnedPassivePoints = Math.Max(EarnedPassivePoints, minimumLevel - 1 + (FirstBossPassivePointClaimed ? 1 : 0));
+        EarnedPassivePoints = Math.Max(EarnedPassivePoints, minimumLevel - 1 + StoryPassivePointsClaimed);
     }
 
     public static int RequiredExperience(int fromLevel)

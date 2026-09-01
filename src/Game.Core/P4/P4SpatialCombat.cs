@@ -11,6 +11,7 @@ using GameForWork.Core.P17;
 using GameForWork.Core.P18;
 using GameForWork.Core.P23;
 using GameForWork.Core.P27;
+using GameForWork.Core.P30;
 
 namespace GameForWork.Core.P4;
 
@@ -173,7 +174,8 @@ public sealed record P4NodeCombatRequest(
     int IncomingHitBasisPoints = 10_000,
     bool ExtraBossPhase = false,
     IReadOnlyList<string>? GardenTags = null,
-    IReadOnlyList<EnemyProfile>? EnemyPool = null);
+    IReadOnlyList<EnemyProfile>? EnemyPool = null,
+    P30VirtueViceState? VirtueVice = null);
 
 public sealed record P4NodeCombatResult(
     P1BattleOutcome Outcome,
@@ -214,7 +216,15 @@ public sealed class P4SpatialCombatRunner
         int dodgeUntilTick = 0, dodgeReadyTick = 0;
         P18CombatProfile ascendancy = request.Build.Ascendancy ?? P18CombatProfile.Empty;
         var ascendancyRuntime = new P18CombatRuntime(ascendancy);
-        request = request with { AscendancyRuntime = ascendancyRuntime };
+        P30VirtueViceKind[] held = P30Ascendancies.PermanentVirtueVice(ascendancy).ToArray();
+        P30VirtueViceLoadout loadout = request.Build.VirtueViceLoadout ?? P30VirtueViceLoadout.Empty;
+        held = held.Concat(loadout.HeldAtMaximum).Distinct().ToArray();
+        var maxima = new Dictionary<P30VirtueViceKind, int>(loadout.AdditionalMaximum);
+        foreach (P30VirtueViceKind kind in P30Ascendancies.PermanentVirtueVice(ascendancy))
+            maxima[kind] = maxima.GetValueOrDefault(kind) + 1;
+        var virtueVice = request.VirtueVice ?? new P30VirtueViceState(
+            maxima, held);
+        request = request with { AscendancyRuntime = ascendancyRuntime, VirtueVice = virtueVice };
         HashSet<P1FlaskKind> flaskKinds = (request.Build.Flasks ??
             (request.Build.LifeFlask is null ? [] : [P1FlaskKind.Life])).ToHashSet();
         LifeFlaskState? flask = request.Build.LifeFlask is null || !flaskKinds.Contains(P1FlaskKind.Life)
@@ -322,6 +332,7 @@ public sealed class P4SpatialCombatRunner
         for (tick = 0; (request.MaximumTicks == 0 || tick < request.MaximumTicks) &&
              hero.IsAlive && enemies.Any(enemy => enemy.Life > 0); tick++)
         {
+            virtueVice.Advance(TickMilliseconds);
             P4Point beforeMovement = heroPosition;
             foreach (P4EnemyUnit unit in enemies)
                 unit.LinkedBy = enemies.FirstOrDefault(source => source != unit && source.Life > 0 &&
@@ -590,7 +601,8 @@ public sealed class P4SpatialCombatRunner
                             P4SpatialEventKind.HeavyStrike, heroPosition, events,
                             checked(request.Build.IncreasedBleedChanceBasisPoints + heavyStrike.BleedChanceBasisPoints), hero,
                             ascendancy.Has(P18NodeIds.BloodTideSmall) ? 100 : 0);
-                        int speedBasisPoints = Math.Max(1_000, 10_000 + ascendancyRuntime.AttackSpeedBasisPoints);
+                        int speedBasisPoints = Math.Max(1_000, 10_000 + ascendancyRuntime.AttackSpeedBasisPoints +
+                            virtueVice.Bonuses().IncreasedActionSpeedBasisPoints);
                         int attackInterval = checked((heavyStrike.AttackIntervalTicks * 10_000 + speedBasisPoints - 1) / speedBasisPoints);
                         heroNextActionTick = tick + attackInterval;
                     }
@@ -624,6 +636,12 @@ public sealed class P4SpatialCombatRunner
             foreach (EnemyHazard hazard in hazards.Where(h => h.Expires > tick && tick >= h.Start && (tick - h.Start) % 10 == 0))
             {
                 int damage = InRange(heroPosition, hazard.Position, hazard.Radius) ? hazard.Damage : 0;
+                if (damage > 0)
+                {
+                    int barrier = request.Build.Sheet.SpiritBarrier().Value;
+                    int reduction = P30CombatRules.SpiritBarrierReduction(barrier, checked(damage * 2));
+                    damage = Math.Max(1, checked(damage * (10_000 - reduction) / 10_000));
+                }
                 if (damage > 0) hero.ApplyDamage(damage, tick);
                 events.Add(Event(tick, P4SpatialEventKind.EnemyAttack, hazard.Source, "hero", damage,
                     hazard.Position, hazard.Position, $"持续危险地面|radius:{hazard.Radius}|until:{hazard.Expires * TickMilliseconds}"));
@@ -905,8 +923,8 @@ public sealed class P4SpatialCombatRunner
         raw = checked(raw * multiplier / 10_000);
         raw = checked(raw * ascendancyMultiplier / 10_000);
         raw = checked(raw * (10_000 + enemy.ShockStacks * 500) / 10_000);
-        int criticalChance = request.Build.CannotCrit ? 0 : checked(
-            request.Build.Weapon.CriticalChanceBasisPoints + request.Build.IncreasedCriticalChanceBasisPoints);
+        int criticalChance = request.Build.CannotCrit ? 0 : P30CombatRules.CriticalChance(
+            request.Build.Weapon.CriticalChanceBasisPoints, request.Build.IncreasedCriticalChanceBasisPoints);
         if (skill.Role != P17SkillRole.DamageOverTime && random.NextUInt() % 10_000 < Math.Clamp(criticalChance, 0, 10_000))
             raw = checked(raw * request.Build.CriticalMultiplierBasisPoints / 10_000);
         int armor = enemy.Scaled.Armor * Math.Max(0, 10_000 - enemy.ArmorBreakStacks * runtime.ArmorBreakPerStackBasisPoints) / 10_000;
@@ -915,8 +933,9 @@ public sealed class P4SpatialCombatRunner
             armor, enemy.Scaled.FireResistanceBasisPoints + request.EnemyElementalResistanceBasisPoints,
             enemy.Scaled.ColdResistanceBasisPoints + request.EnemyElementalResistanceBasisPoints,
             enemy.Scaled.LightningResistanceBasisPoints + request.EnemyElementalResistanceBasisPoints,
-            enemy.Scaled.VoidResistanceBasisPoints + request.EnemyVoidResistanceBasisPoints);
-        int value = damage.Total - damage.Physical * Math.Clamp(request.EnemyPhysicalReductionBasisPoints, 0, 9_000) / 10_000;
+            enemy.Scaled.VoidResistanceBasisPoints + request.EnemyVoidResistanceBasisPoints,
+            enemy.Scaled.PhysicalResistanceBasisPoints + request.EnemyPhysicalReductionBasisPoints);
+        int value = damage.Total;
         int beforeShieldLink = enemy.Life;
         enemy.Life = Math.Max(0, enemy.Life - value);
         value = beforeShieldLink - enemy.Life;
@@ -924,7 +943,7 @@ public sealed class P4SpatialCombatRunner
             (runtime.Has(P18NodeIds.BloodTideSmall) && tags.HasFlag(SkillTag.Attack) &&
              skill.DamageType == P17DamageType.Physical ? 100 : 0);
         if (value > 0 && leech > 0)
-            hero.HealLife(Math.Max(1, value * leech / 10_000));
+            hero.AddLifeLeech(Math.Max(1, value * leech / 10_000));
 
         bool ailmentAllowed = !configuration.Supports.HasFlag(SkillSupport.ElementalFocus) &&
                               random.NextUInt() % 10_000 < Math.Clamp(skill.AilmentChanceBasisPoints, 0, 10_000);
@@ -1152,12 +1171,17 @@ public sealed class P4SpatialCombatRunner
                     _ => 0,
                 };
                 int effectiveResistance = activeSkill.DamageType == EnemyDamageType.Physical ? 0 :
-                    Math.Max(-10_000, request.Build.Sheet.CappedResistance(resistance) - request.EnemyPenetrationBasisPoints);
-                damage = Math.Max(1, damage * (10_000 - effectiveResistance) / 10_000);
+                    P30CombatRules.EffectiveResistance(resistance,
+                        activeSkill.DamageType == EnemyDamageType.Void
+                            ? request.Build.Sheet.MaximumVoidResistanceBasisPoints
+                            : request.Build.Sheet.MaximumElementalResistanceBasisPoints,
+                        request.EnemyPenetrationBasisPoints);
+                damage = Math.Max(1, P30CombatRules.MitigateByResistance(damage, effectiveResistance));
                 int suppression = request.Build.Sheet.EffectiveSpellSuppressionBasisPoints;
                 if (spell && suppression > 0 && random.NextUInt() % 10_000 < suppression)
                 {
-                    damage = Math.Max(1, damage * 3_000 / 10_000);
+                    damage = Math.Max(1, P30CombatRules.SuppressedDamage(damage,
+                        request.Build.Sheet.SpellSuppressionEffectBasisPoints));
                     events.Add(Event(tick, P4SpatialEventKind.Guard, "hero", enemy.EntityId, 0,
                         heroPosition, enemy.Position, "spell_suppression"));
                 }
@@ -1167,7 +1191,8 @@ public sealed class P4SpatialCombatRunner
             if (request.Build.HasShield && ascendancy.Has(P18NodeIds.BastionAttackBlockCore)) blockChance += 1_200;
             if (spell && ascendancy.Has(P18NodeIds.BastionSpellBlockSmall)) blockChance += 800;
             if (spell && ascendancy.Has(P18NodeIds.BastionSpellBlockCore)) blockChance += request.Build.BlockChanceBasisPoints * 6 / 10;
-            int blockCap = ascendancy.Has(P18NodeIds.BastionAttackBlockCore) ? 8_000 : 7_500;
+            int blockCap = ascendancy.Has(P18NodeIds.BastionAttackBlockCore) ? 8_000 :
+                request.Build.Sheet.MaximumBlockChanceBasisPoints;
             bool blocked = damage > 0 && request.Build.HasShield && blockChance > 0 &&
                 random.NextUInt() % 10_000 < Math.Min(blockCap, blockChance);
             if (blocked)
@@ -1198,9 +1223,11 @@ public sealed class P4SpatialCombatRunner
                 if (!spell) ascendancy.OnUnblockedAttack(tick);
             }
             if (activeSkill.Kind is EnemySkillKind.GroundHazard or EnemySkillKind.Artillery)
-                hazards.Add(new(enemy.EntityId, impactPoint, 1_800, Math.Max(1, damage / 2), tick + 10, tick + 90));
+                hazards.Add(new(enemy.EntityId, impactPoint, 1_800, Math.Max(1, damage / 2), tick + 10, tick + 90,
+                    activeSkill.DamageType));
             if (request.ExtraBossPhase && enemy.Boss && enemy.BossPhase > 0)
-                hazards.Add(new(enemy.EntityId, impactPoint, 2_000, Math.Max(1, damage / 2), tick + 20, tick + 31));
+                hazards.Add(new(enemy.EntityId, impactPoint, 2_000, Math.Max(1, damage / 2), tick + 20, tick + 31,
+                    activeSkill.DamageType));
             if (areaAttack && !InRange(heroPosition, impactPoint, 2_000)) damage = 0;
             if (activeSkill.Kind == EnemySkillKind.RootSnare && damage > 0)
             {
@@ -1210,6 +1237,10 @@ public sealed class P4SpatialCombatRunner
             }
             if (damage > 0)
             {
+                P30VirtueViceBonuses virtueBonuses = request.VirtueVice?.Bonuses() ?? new P30VirtueViceState().Bonuses();
+                damage = activeSkill.DamageType is EnemyDamageType.Physical or EnemyDamageType.Void
+                    ? damage * virtueBonuses.PhysicalVoidDamageTakenMultiplierBasisPoints / 10_000
+                    : damage * virtueBonuses.ElementalDamageTakenMultiplierBasisPoints / 10_000;
                 hero.ApplyDamage(damage, tick);
             }
 
@@ -1262,19 +1293,32 @@ public sealed class P4SpatialCombatRunner
             checked(request.Build.IncreasedDamageBasisPoints + (request.Build.PassiveProfile ?? P205PassiveModifiers.Empty).DamageFor(tags) +
                 ((request.Build.ActiveSkills ?? []).FirstOrDefault(s => s.SkillId == skillId)?.Quality ?? 0) * 100),
             [skillMultiplier, ascendancyMultiplier, 10_000 + (request.Build.PassiveProfile?.MoreDamageBasisPoints ?? 0)],
-            request.Build.CannotCrit ? 0 : checked(request.Build.Weapon.CriticalChanceBasisPoints + request.Build.IncreasedCriticalChanceBasisPoints),
+            request.Build.CannotCrit ? 0 : P30CombatRules.CriticalChance(
+                request.Build.Weapon.CriticalChanceBasisPoints, request.Build.IncreasedCriticalChanceBasisPoints),
             request.Build.CriticalMultiplierBasisPoints,
             TargetArmor: enemy.Scaled.Armor,
             TargetEvasion: request.Build.AlwaysHit ? 0 : enemy.Scaled.Evasion,
             Accuracy: request.Build.Sheet.Accuracy(request.Build.FlatAccuracy).Value,
             IsSpell: kind is P4SpatialEventKind.SpiritBladeHit or P4SpatialEventKind.ChainHit,
             BleedChanceBasisPoints: checked(bleedChance + runtime.AdditionalBleedChance)), random);
-        int value = damage.Hit ? damage.FinalPhysicalDamage *
-            (10_000 - Math.Clamp(request.EnemyPhysicalReductionBasisPoints, 0, 9_000)) / 10_000 : 0;
+        int physicalResistance = P30CombatRules.EffectiveResistance(
+            enemy.Scaled.PhysicalResistanceBasisPoints + request.EnemyPhysicalReductionBasisPoints, 3_500);
+        int value = damage.Hit ? P30CombatRules.MitigateByResistance(damage.FinalPhysicalDamage, physicalResistance) : 0;
+        if (damage.Critical && request.VirtueVice is { } virtueVice)
+            value = checked(value * (10_000 + virtueVice.Bonuses().MoreCriticalDamageBasisPoints) / 10_000);
+        if (value > 0 && enemy.Rarity is EnemyRarity.Rare or EnemyRarity.Boss && request.VirtueVice is { } oathState)
+        {
+            IReadOnlyList<P30VirtueViceKind> oaths = request.Build.VirtueViceLoadout?.Oaths ?? [];
+            string action = $"{tick}:{skillId}:{enemy.EntityId}";
+            if (oaths.Contains(P30VirtueViceKind.Rage)) oathState.TryOathChance(P30VirtueViceKind.Rage, action, 1_200, random.NextUInt());
+            if (damage.Critical && oaths.Contains(P30VirtueViceKind.Arrogance))
+                oathState.TryOathChance(P30VirtueViceKind.Arrogance, action, 1_200, random.NextUInt());
+            if (oaths.Contains(P30VirtueViceKind.Sloth)) oathState.RecordSlothOathHit($"{tick}:{skillId}");
+        }
         enemy.Life = Math.Max(0, enemy.Life - value);
         if (hero is not null && value > 0 && lifeLeechBasisPoints > 0)
         {
-            hero.HealLife(Math.Max(1, checked(value * lifeLeechBasisPoints / 10_000)));
+            hero.AddLifeLeech(Math.Max(1, checked(value * lifeLeechBasisPoints / 10_000)));
         }
         if (damage.AppliedBleed && enemy.Life > 0)
         {
@@ -1790,5 +1834,6 @@ public sealed class P4SpatialCombatRunner
         int LifeLeechBasisPoints);
 
     private sealed record PendingAftershock(int ImpactTick, string TargetId, int ActualHitDamage, P4Point Origin);
-    private sealed record EnemyHazard(string Source, P4Point Position, int Radius, int Damage, int Start, int Expires);
+    private sealed record EnemyHazard(string Source, P4Point Position, int Radius, int Damage, int Start, int Expires,
+        EnemyDamageType DamageType);
 }

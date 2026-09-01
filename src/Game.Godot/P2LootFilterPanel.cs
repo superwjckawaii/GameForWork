@@ -127,7 +127,7 @@ public partial class P2LootFilterPanel : VBoxContainer
         _minimumLinks = AddSpin(linkRow, "最低连接数", 0, 6);
         _maximumLinks = AddSpin(linkRow, "最高连接数（0=任意）", 0, 6);
         body.AddChild(new Label { Text = "词缀族 Stable ID（留空为任意）" });
-        _affixFamily = new LineEdit { PlaceholderText = "例如 core.affix.ring.life" };
+        _affixFamily = new LineEdit { PlaceholderText = "例如 p30.affix.maximum.life" };
         body.AddChild(_affixFamily);
         _minimumAffixValue = AddSpin(body, "词缀最低数值（0=任意）", 0, 100_000);
         body.AddChild(new Label { Text = "底材标签（留空为任意）" });

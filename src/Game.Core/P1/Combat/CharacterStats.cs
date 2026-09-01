@@ -1,3 +1,5 @@
+using GameForWork.Core.P30;
+
 namespace GameForWork.Core.P1.Combat;
 
 public sealed record CharacterAttributes(int Physique, int Dexterity, int Spirit, int Energy)
@@ -25,11 +27,29 @@ public sealed record CharacterSheet(
     int BlockChanceBasisPoints = 0,
     int SpellSuppressionBasisPoints = 0,
     int FlatLifeRegeneration = 0,
-    int IncreasedMovementSpeedBasisPoints = 0)
+    int IncreasedMovementSpeedBasisPoints = 0,
+    int IncreasedMaximumManaBasisPoints = 0,
+    int FlatMaximumShield = 0,
+    int EquipmentSpiritBarrier = 0,
+    int FlatSpiritBarrier = 0,
+    int IncreasedSpiritBarrierBasisPoints = 0,
+    int MaximumPhysicalResistanceBasisPoints = 3_500,
+    int MaximumElementalResistanceBasisPoints = 7_500,
+    int MaximumVoidResistanceBasisPoints = 7_500,
+    int MaximumBlockChanceBasisPoints = 7_500,
+    int SpellSuppressionEffectBasisPoints = 7_000)
 {
-    public int CappedResistance(int value) => Math.Clamp(value, -10_000, 7_500);
+    public int CappedResistance(int value) => Math.Clamp(value, P30CombatRules.MinimumResistance,
+        MaximumElementalResistanceBasisPoints);
 
-    public int EffectiveBlockChanceBasisPoints => Math.Clamp(BlockChanceBasisPoints, 0, 7_500);
+    public int CappedPhysicalResistance(int value) => Math.Clamp(value, P30CombatRules.MinimumResistance,
+        Math.Min(MaximumPhysicalResistanceBasisPoints, P30CombatRules.AbsolutePhysicalResistanceMaximum));
+
+    public int CappedVoidResistance(int value) => Math.Clamp(value, P30CombatRules.MinimumResistance,
+        Math.Min(MaximumVoidResistanceBasisPoints, P30CombatRules.AbsoluteElementalResistanceMaximum));
+
+    public int EffectiveBlockChanceBasisPoints => P30CombatRules.BlockChance(BlockChanceBasisPoints,
+        MaximumBlockChanceBasisPoints);
 
     public int EffectiveSpellSuppressionBasisPoints => Math.Clamp(SpellSuppressionBasisPoints, 0, 10_000);
     public CalculatedValue MaximumLife()
@@ -37,26 +57,28 @@ public sealed record CharacterSheet(
         var trace = new FormulaTraceBuilder();
         int baseLife = checked(80 + (8 * Level) + Attributes.Physique + FlatMaximumLife);
         trace.Add("基础最大生命", $"80 + 8 × {Level} + {Attributes.Physique} + {FlatMaximumLife}", baseLife);
-        int final = ApplyIncreased(baseLife, IncreasedMaximumLifeBasisPoints);
+        int final = P30CombatRules.MaximumLife(Level, Attributes.Physique, FlatMaximumLife,
+            IncreasedMaximumLifeBasisPoints);
         trace.Add("最大生命增加", $"{baseLife} × (10000 + {IncreasedMaximumLifeBasisPoints}) / 10000", final);
         return trace.Build(final);
     }
 
     public CalculatedValue MaximumMana()
     {
-        int value = checked(40 + (2 * Level) + (2 * Attributes.Spirit) + FlatMaximumMana);
-        return CalculatedValue.Single(
-            "最大法力",
-            $"40 + 2 × {Level} + 2 × {Attributes.Spirit} + {FlatMaximumMana}",
+        int value = P30CombatRules.MaximumMana(Level, Attributes.Spirit, FlatMaximumMana,
+            IncreasedMaximumManaBasisPoints);
+        return CalculatedValue.Single("最大法力",
+            $"(40 + 2 × {Level} + 2 × {Attributes.Spirit} + {FlatMaximumMana}) × (10000 + {IncreasedMaximumManaBasisPoints}) / 10000",
             value);
     }
 
     public CalculatedValue MaximumShield()
     {
         var trace = new FormulaTraceBuilder();
-        int baseShield = checked(Equipment.Shield + (2 * Attributes.Energy));
-        trace.Add("基础最大护盾", $"{Equipment.Shield} + 2 × {Attributes.Energy}", baseShield);
-        int final = ApplyIncreased(baseShield, IncreasedShieldBasisPoints);
+        int baseShield = checked(Equipment.Shield + (2 * Attributes.Energy) + FlatMaximumShield);
+        trace.Add("基础最大护盾", $"{Equipment.Shield} + 2 × {Attributes.Energy} + {FlatMaximumShield}", baseShield);
+        int final = P30CombatRules.MaximumShield(Equipment.Shield, Attributes.Energy, FlatMaximumShield,
+            IncreasedShieldBasisPoints);
         trace.Add("最大护盾增加", $"{baseShield} × (10000 + {IncreasedShieldBasisPoints}) / 10000", final);
         return trace.Build(final);
     }
@@ -78,6 +100,15 @@ public sealed record CharacterSheet(
         return CalculatedValue.Single(
             "闪避",
             $"({Equipment.Evasion} + {Attributes.Dexterity}) × (10000 + {IncreasedEvasionBasisPoints}) / 10000",
+            value);
+    }
+
+    public CalculatedValue SpiritBarrier()
+    {
+        int value = P30CombatRules.SpiritBarrier(Level, Attributes.Spirit, EquipmentSpiritBarrier,
+            FlatSpiritBarrier, IncreasedSpiritBarrierBasisPoints);
+        return CalculatedValue.Single("灵障",
+            $"(2 × {Level} + 4 × {Attributes.Spirit} + {EquipmentSpiritBarrier} + {FlatSpiritBarrier}) × (10000 + {IncreasedSpiritBarrierBasisPoints}) / 10000",
             value);
     }
 
@@ -139,9 +170,19 @@ public sealed record CharacterSheet(
 
 public sealed class ResourceState
 {
+    private sealed class LeechInstance(int remaining, int basePerSecond)
+    {
+        public int Remaining { get; set; } = remaining;
+        public int BasePerSecond { get; } = basePerSecond;
+        public int Remainder { get; set; }
+    }
+
     private int _manaRecoveryRemainder;
     private int _lifeRecoveryRemainder;
     private int _shieldRecoveryRemainder;
+    private readonly List<LeechInstance> _lifeLeech = [];
+    private readonly List<LeechInstance> _manaLeech = [];
+    private readonly List<LeechInstance> _shieldLeech = [];
 
     public ResourceState(
         CharacterSheet sheet,
@@ -220,6 +261,18 @@ public sealed class ResourceState
         return Mana - previous;
     }
 
+    public int RestoreShield(int amount)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(amount);
+        int previous = Shield;
+        Shield = Math.Min(MaximumShield, checked(Shield + amount));
+        return Shield - previous;
+    }
+
+    public void AddLifeLeech(int amount) => AddLeech(_lifeLeech, amount);
+    public void AddManaLeech(int amount) => AddLeech(_manaLeech, amount);
+    public void AddShieldLeech(int amount) => AddLeech(_shieldLeech, amount);
+
     public void AdvanceRegenerationTick(int tick)
     {
         const int ticksPerSecond = 20;
@@ -233,6 +286,10 @@ public sealed class ResourceState
         Life = Math.Min(MaximumLife, Life + (_lifeRecoveryRemainder / ticksPerSecond));
         _lifeRecoveryRemainder %= ticksPerSecond;
 
+        AdvanceLeech(_lifeLeech, MaximumLife, HealLife);
+        AdvanceLeech(_manaLeech, MaximumMana, RestoreMana);
+        AdvanceLeech(_shieldLeech, MaximumShield, RestoreShield);
+
         if (tick - LastDamageTick < 2 * ticksPerSecond)
         {
             _shieldRecoveryRemainder = 0;
@@ -243,5 +300,32 @@ public sealed class ResourceState
         _shieldRecoveryRemainder += shieldPerSecond;
         Shield = Math.Min(MaximumShield, Shield + (_shieldRecoveryRemainder / ticksPerSecond));
         _shieldRecoveryRemainder %= ticksPerSecond;
+    }
+
+    private static void AddLeech(ICollection<LeechInstance> instances, int amount)
+    {
+        if (amount <= 0) return;
+        instances.Add(new(amount, Math.Max(1, (amount + 1) / 2)));
+    }
+
+    private static void AdvanceLeech(List<LeechInstance> instances, int maximum, Func<int, int> restore)
+    {
+        const int ticksPerSecond = 20;
+        if (maximum <= 0 || instances.Count == 0) return;
+        int budget = Math.Max(1, maximum * P30CombatRules.DefaultLeechPerSecondMaximum / 10_000 / ticksPerSecond);
+        foreach (LeechInstance instance in instances.ToArray())
+        {
+            if (budget <= 0) break;
+            instance.Remainder += instance.BasePerSecond;
+            int available = Math.Min(instance.Remaining, instance.Remainder / ticksPerSecond);
+            int consumed = Math.Min(budget, available);
+            if (consumed <= 0) continue;
+            int restored = restore(consumed);
+            instance.Remaining -= restored;
+            instance.Remainder -= restored * ticksPerSecond;
+            budget -= restored;
+            if (restored == 0) instance.Remaining = 0;
+        }
+        instances.RemoveAll(instance => instance.Remaining <= 0);
     }
 }

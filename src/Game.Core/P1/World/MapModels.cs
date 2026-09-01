@@ -367,7 +367,8 @@ public sealed record P1TeamBuild(
     bool AlwaysHit = false,
     bool CannotCrit = false,
     int IncreasedWarCryCooldownRecoveryBasisPoints = 0,
-    int IncreasedWarCryRangeBasisPoints = 0);
+    int IncreasedWarCryRangeBasisPoints = 0,
+    P30.P30VirtueViceLoadout? VirtueViceLoadout = null);
 
 public sealed record MapNodeResult(
     int NodeIndex,

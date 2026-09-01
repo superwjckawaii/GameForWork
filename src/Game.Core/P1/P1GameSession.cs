@@ -17,6 +17,7 @@ using GameForWork.Core.P24;
 using GameForWork.Core.P26;
 using GameForWork.Core.P28;
 using GameForWork.Core.P29;
+using GameForWork.Core.P30;
 
 namespace GameForWork.Core.P1;
 
@@ -115,11 +116,12 @@ public sealed record P1GameSessionSnapshot(
     P9TownSnapshot? Town = null,
     P10EndgameSnapshot? Endgame = null,
     IReadOnlyDictionary<string, int>? MasterySelections = null,
-    IReadOnlyDictionary<string, PassiveJewelKind>? SocketedJewels = null);
+    IReadOnlyDictionary<string, PassiveJewelKind>? SocketedJewels = null,
+    P30JewelStateSnapshot? P30Jewels = null);
 
 public sealed class P1GameSession
 {
-    public const int CurrentFormatVersion = 21;
+    public const int CurrentFormatVersion = 22;
     private readonly P1WorldSimulator _simulator = new(new P1MapAttemptResolver());
     private readonly P2CampaignSimulator _campaignSimulator = new();
     private AssembledCharacterBuild _heroBuild;
@@ -138,6 +140,7 @@ public sealed class P1GameSession
         P8DemoJourney journey,
         P9TownState town,
         P10EndgameState endgame,
+        P30JewelState jewels,
         ulong seed,
         int simulationSequence,
         bool debugTwentyTimes)
@@ -155,6 +158,8 @@ public sealed class P1GameSession
         Journey = journey;
         Town = town;
         Endgame = endgame;
+        Jewels = jewels;
+        World.Hero.Progression.SynchronizeStoryPassivePoints(Campaign.CompletedNodeIds.Count);
         Seed = seed;
         SimulationSequence = simulationSequence;
         DebugTwentyTimes = debugTwentyTimes;
@@ -179,6 +184,7 @@ public sealed class P1GameSession
     public P8DemoJourney Journey { get; }
     public P9TownState Town { get; }
     public P10EndgameState Endgame { get; }
+    public P30JewelState Jewels { get; }
     public int UnlockedFlaskSlots => Math.Clamp(2 + Town.Level(P9BuildingKind.Teleporter),
         P14Flasks.InitialSlots, P14Flasks.MaximumSlots);
     public bool IsExpeditionUnlocked => Campaign.Completed;
@@ -231,6 +237,7 @@ public sealed class P1GameSession
             P8DemoJourney.CreateNew(tutorialEnabled),
             town,
             new P10EndgameState(),
+            new P30JewelState(),
             seed,
             simulationSequence: 0,
             debugTwentyTimes: false);
@@ -242,7 +249,8 @@ public sealed class P1GameSession
         bool migratingV18 = snapshot.FormatVersion == 18;
         bool migratingV19 = snapshot.FormatVersion == 19;
         bool migratingV20 = snapshot.FormatVersion == 20;
-        if ((!migratingV18 && !migratingV19 && !migratingV20 && snapshot.FormatVersion != CurrentFormatVersion) || snapshot.SimulationSequence < 0)
+        bool migratingV21 = snapshot.FormatVersion == 21;
+        if ((!migratingV18 && !migratingV19 && !migratingV20 && !migratingV21 && snapshot.FormatVersion != CurrentFormatVersion) || snapshot.SimulationSequence < 0)
         {
             throw new InvalidDataException(
                 $"P1 session snapshot version {snapshot.FormatVersion} is unsupported; expected {CurrentFormatVersion}.");
@@ -259,7 +267,7 @@ public sealed class P1GameSession
         P23BaseClass baseClass = migratingV18 ? P23BaseClass.Fighter : snapshot.Player.BaseClass;
         P23ClassDefinition classDefinition = P23ClassCatalog.Get(baseClass);
         PlayerIdentity player = snapshot.Player with { BaseClass = baseClass };
-        PassiveTreeAllocation passives = migratingV18 || migratingV19
+        PassiveTreeAllocation passives = migratingV18 || migratingV19 || migratingV20 || migratingV21
             ? new PassiveTreeAllocation(snapshot.MemoryAshes, classDefinition.PassiveStart)
             : PassiveTreeAllocation.Restore(snapshot.AllocatedPassives, snapshot.MemoryAshes,
                 snapshot.MasterySelections, snapshot.SocketedJewels, classDefinition.PassiveStart);
@@ -291,6 +299,7 @@ public sealed class P1GameSession
             P8DemoJourney.Restore(snapshot.Journey, legacy: false),
             town,
             endgame,
+            P30JewelState.Restore(snapshot.P30Jewels),
             snapshot.Seed,
             snapshot.SimulationSequence,
             snapshot.DebugTwentyTimes);
@@ -327,7 +336,8 @@ public sealed class P1GameSession
         Town.Capture(),
         Endgame.Capture(),
         new Dictionary<string, int>(Passives.MasterySelections),
-        new Dictionary<string, PassiveJewelKind>(Passives.SocketedJewels));
+        new Dictionary<string, PassiveJewelKind>(Passives.SocketedJewels),
+        Jewels.Capture());
 
     public P1OfflineResult Advance(long realElapsedMilliseconds)
     {
@@ -382,7 +392,7 @@ public sealed class P1GameSession
         AdvanceTownSystems(simulatedMilliseconds);
         if (!Campaign.Completed)
         {
-            _campaignSimulator.NodeResolved = () => { SynchronizeCampaignAscendancyPoints(); RefreshHeroBuild(); Journey.Synchronize(this); };
+            _campaignSimulator.NodeResolved = () => { SynchronizeCampaignPassivePoints(); SynchronizeCampaignAscendancyPoints(); RefreshHeroBuild(); Journey.Synchronize(this); };
             P2CampaignAdvanceResult campaignResult = _campaignSimulator.Simulate(
                 Campaign,
                 World,
@@ -392,6 +402,7 @@ public sealed class P1GameSession
                 offline,
                 asyncPreparation);
             SynchronizeCampaignAscendancyPoints();
+            SynchronizeCampaignPassivePoints();
             SimulationSequence = checked(SimulationSequence + campaignResult.NodesCompleted);
             if (campaignResult.NodesCompleted > 0) RefreshHeroBuild();
             return new P1OfflineResult(
@@ -470,6 +481,7 @@ public sealed class P1GameSession
                     if (!World.Storage.TryStore(item)) Management.AddToRecovery(item, "苍誓保底奖励");
                 }
             }
+            if (run.Succeeded) RollP30Jewels(run.Map, seed);
             if (rewards.Encounters.Any(e => e.Kills > 0)) Management.AddHistory(
                 $"P28 T{run.Map.Tier} {run.Route}：命能+{rewards.LifeForce} 战功+{rewards.Merit} 声望+{rewards.Reputation}；" +
                 (run.Succeeded ? "已完成" : "保留已击败怪物与已兑现奖励；未完成/苍誓承诺不发放"));
@@ -489,6 +501,46 @@ public sealed class P1GameSession
         }
         EnsureWarfrontDiscoveryMap(); SynchronizeWarfrontRouteCandidates();
         RefreshHeroTeamBuild(); RefreshMercenaryPartyBuild(); Journey.Synchronize(this);
+    }
+
+    private void RollP30Jewels(P1MapItem map, ulong seed)
+    {
+        int tier = Math.Clamp(map.Tier, 1, 20);
+        int itemLevel = Math.Clamp(map.MonsterLevel, 1, 100);
+        TryRoll(P30Jewels.MapCompletionDropChanceBasisPoints(tier), seed ^ 0x30a11ceUL, itemLevel, "map");
+        TryRoll(P30Jewels.BossDropChanceBasisPoints(tier), seed ^ 0x30b055UL, Math.Min(100, itemLevel + 2), "boss");
+
+        if (tier >= 6)
+        {
+            int memoryChance = tier <= 10 ? 15 : tier <= 15 ? 25 : 40;
+            ulong legendaryRoll = Mix(seed ^ 0x30cafeUL);
+            if (legendaryRoll % 10_000 < (ulong)memoryChance)
+            {
+                string[] pool = ["crimson_memory", "verdant_memory", "golden_memory", "azure_memory"];
+                AddJewel(P30Jewels.CreateLegendary(pool[(int)((legendaryRoll >> 16) % 4)], itemLevel,
+                    $"p30-jewel-{SimulationSequence:000000}-memory"));
+            }
+        }
+
+        void TryRoll(int chance, ulong rollSeed, int level, string source)
+        {
+            ulong roll = Mix(rollSeed);
+            if (roll % 10_000 >= (ulong)chance) return;
+            AddJewel(P30Jewels.RollPrismatic(level, roll, $"p30-jewel-{SimulationSequence:000000}-{source}"));
+        }
+        void AddJewel(P30JewelInstance jewel)
+        {
+            if (Jewels.TryAdd(jewel)) Management.AddHistory($"获得珠宝：{jewel.DisplayName}（物品等级 {jewel.ItemLevel}）");
+            else Management.AddHistory($"珠宝仓已满，{jewel.DisplayName}进入恢复记录。");
+        }
+    }
+
+    private static ulong Mix(ulong value)
+    {
+        value += 0x9e3779b97f4a7c15UL;
+        value = (value ^ (value >> 30)) * 0xbf58476d1ce4e5b9UL;
+        value = (value ^ (value >> 27)) * 0x94d049bb133111ebUL;
+        return value ^ (value >> 31);
     }
 
     public bool TryExchangeWarfrontSupply(P28RewardPreference preference)
@@ -868,6 +920,7 @@ public sealed class P1GameSession
         bool changed = Passives.TryRefund(stableId);
         if (changed)
         {
+            Jewels.TryUnsocket(stableId);
             RefreshHeroBuild();
         }
 
@@ -881,6 +934,7 @@ public sealed class P1GameSession
             : Passives.TryReset();
         if (changed)
         {
+            Jewels.UnsocketAll();
             RefreshHeroBuild();
         }
 
@@ -1144,7 +1198,8 @@ public sealed class P1GameSession
             P23ClassCatalog.Get(Player.BaseClass).StartingAttributes,
             hypothetical,
             Passives,
-            new SkillConfiguration(P1SkillIds.HeavyStrike, HeavyStrikeSupports));
+            new SkillConfiguration(P1SkillIds.HeavyStrike, HeavyStrikeSupports),
+            Jewels);
         CombatPreview currentPreview = GetCombatPreview();
         CombatPreview proposedPreview = Preview(proposed);
         EquipmentSummary current = HeroEquipment.CalculateSummary();
@@ -1197,7 +1252,8 @@ public sealed class P1GameSession
             P23ClassCatalog.Get(Player.BaseClass).StartingAttributes,
             HeroEquipment,
             Passives,
-            new SkillConfiguration(P1SkillIds.HeavyStrike, HeavyStrikeSupports));
+            new SkillConfiguration(P1SkillIds.HeavyStrike, HeavyStrikeSupports),
+            Jewels);
         return build with { Sheet = P18AscendancyRules.ApplySheet(build.Sheet, AscendancyProfile()) };
     }
 
@@ -1238,6 +1294,28 @@ public sealed class P1GameSession
     public bool TrySocketJewel(string stableId, PassiveJewelKind jewel)
     {
         bool changed = Passives.TrySocketJewel(stableId, jewel);
+        if (changed) RefreshHeroBuild();
+        return changed;
+    }
+
+    private void SynchronizeCampaignPassivePoints() =>
+        World.Hero.Progression.SynchronizeStoryPassivePoints(Campaign.CompletedNodeIds.Count);
+
+    public bool TrySocketP30Jewel(string stableId, string instanceId, out string reason)
+    {
+        if (!Passives.Allocated.Contains(stableId))
+        {
+            reason = "需要先分配该记忆棱孔。";
+            return false;
+        }
+        bool changed = Jewels.TrySocket(stableId, instanceId, World.Hero.Progression.Level, out reason);
+        if (changed) RefreshHeroBuild();
+        return changed;
+    }
+
+    public bool TryUnsocketP30Jewel(string stableId)
+    {
+        bool changed = Jewels.TryUnsocket(stableId);
         if (changed) RefreshHeroBuild();
         return changed;
     }
@@ -1360,7 +1438,8 @@ public sealed class P1GameSession
         AlwaysHit: build.Passives.Advanced?.ResoluteTechnique == true,
         CannotCrit: build.Passives.Advanced?.ResoluteTechnique == true,
         IncreasedWarCryCooldownRecoveryBasisPoints: build.Passives.IncreasedWarCryCooldownRecoveryBasisPoints,
-        IncreasedWarCryRangeBasisPoints: build.Passives.IncreasedWarCryRangeBasisPoints) with
+        IncreasedWarCryRangeBasisPoints: build.Passives.IncreasedWarCryRangeBasisPoints,
+        VirtueViceLoadout: build.VirtueViceLoadout) with
         {
             AiSummary = $"{ai.Preset} · {(ai.MatchMode == AiRuleMatchMode.All ? "全部满足" : "任一满足")}：" +
                 $"敌人≥{ai.MinimumEnemyCount}、稀有度 {ai.EnemyRarity}、距离≤{ai.MaximumEnemyDistance}、" +

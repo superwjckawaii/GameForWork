@@ -84,7 +84,8 @@ public static class P29WarfrontBases
 
     public static IReadOnlyList<ItemBaseDefinition> All { get; } =
     [
-        B("p29.base.warfront.vanguard_iron_ring", "军锋铁戒", ItemCategory.Ring, 70, ItemModifierKind.AddedPhysicalDamage, 14, "攻击附加 10–18 物理伤害"),
+        B("p29.base.warfront.vanguard_iron_ring", "军锋铁戒", ItemCategory.Ring, 70, ItemModifierKind.AddedMinimumPhysicalDamage, 10, "攻击附加 10–18 物理伤害",
+            new ItemBaseImplicit(ItemModifierKind.AddedMaximumPhysicalDamage, 18, "攻击附加物理伤害上限 +18")),
         B("p29.base.warfront.sentry_alloy_ring", "哨戒合金戒", ItemCategory.Ring, 70, ItemModifierKind.FireResistanceBasisPoints, 1_400, "四元素抗性 +12–16%",
             new ItemBaseImplicit(ItemModifierKind.ColdResistanceBasisPoints, 1_400, "寒霜抗性 +14%"), new ItemBaseImplicit(ItemModifierKind.LightningResistanceBasisPoints, 1_400, "闪电抗性 +14%"), new ItemBaseImplicit(ItemModifierKind.VoidResistanceBasisPoints, 1_400, "虚空抗性 +14%")),
         B("p29.base.warfront.vanguard_medal", "前锋章", ItemCategory.Amulet, 70, ItemModifierKind.Physique, 35, "体魄与灵巧 +30–40", new ItemBaseImplicit(ItemModifierKind.Dexterity, 35, "灵巧 +35")),
@@ -95,14 +96,15 @@ public static class P29WarfrontBases
         B("p29.base.warfront.execution_ring", "处刑印戒", ItemCategory.Ring, 85, ItemModifierKind.IncreasedCriticalChanceBasisPoints, 12_000, "全局暴击率 +100–140%"),
         B("p29.base.warfront.iron_curtain_ring", "铁幕指环", ItemCategory.Ring, 85, ItemModifierKind.BlockChanceBasisPoints, 700, "格挡 +6–8%；法术压制 +10–14%", new ItemBaseImplicit(ItemModifierKind.SpellSuppressionBasisPoints, 1_200, "法术压制 +12%")),
         B("p29.base.warfront.quartermaster_insignia", "军械总管徽记", ItemCategory.Amulet, 85, ItemModifierKind.ExtraSupportLinkCapacity, 1, "核心技能辅助连接容量 +1"),
-        B("p29.base.warfront.swift_command_insignia", "迅令徽记", ItemCategory.Amulet, 85, ItemModifierKind.IncreasedAttackSpeedBasisPoints, 1_400, "攻击与施法速度 +12–16%；冷却恢复 +20–25%", new ItemBaseImplicit(ItemModifierKind.IncreasedCooldownRecoveryBasisPoints, 2_250, "技能冷却恢复 +22.5%")),
+        B("p29.base.warfront.swift_command_insignia", "迅令徽记", ItemCategory.Amulet, 85, ItemModifierKind.IncreasedAttackSpeedBasisPoints, 1_400, "攻击与施法速度 +14%；冷却恢复 +22.5%",
+            new ItemBaseImplicit(ItemModifierKind.IncreasedCastSpeedBasisPoints, 1_400, "施法速度 +14%"), new ItemBaseImplicit(ItemModifierKind.IncreasedCooldownRecoveryBasisPoints, 2_250, "技能冷却恢复 +22.5%")),
         B("p29.base.warfront.bastion_waistguard", "壁垒腰铠", ItemCategory.Belt, 85, ItemModifierKind.IncreasedArmorBasisPoints, 4_750, "护甲、闪避与护盾 +40–55%", new ItemBaseImplicit(ItemModifierKind.IncreasedEvasionBasisPoints, 4_750, "闪避 +47.5%"), new ItemBaseImplicit(ItemModifierKind.IncreasedShieldBasisPoints, 4_750, "护盾 +47.5%")),
         B("p29.base.warfront.inexhaustible_warbelt", "不竭军带", ItemCategory.Belt, 85, ItemModifierKind.IncreasedLifeFlaskEffectBasisPoints, 2_750, "药剂效果 +25–30%；充能获取 +50–70%", new ItemBaseImplicit(ItemModifierKind.IncreasedFlaskChargeGainBasisPoints, 6_000, "药剂充能获取 +60%")),
 
         B("p29.base.warfront.decisive_ring", "决胜印戒", ItemCategory.Ring, 100, ItemModifierKind.MoreRareBossDamageBasisPoints, 2_250, "对稀有与首领敌人造成 20–25% 更多伤害"),
         B("p29.base.warfront.three_oaths_ring", "三誓指环", ItemCategory.Ring, 100, ItemModifierKind.MaximumAllResistanceBasisPoints, 300, "四元素最大抗性 +3%；四元素抗性 +15–20%",
             new ItemBaseImplicit(ItemModifierKind.FireResistanceBasisPoints, 1_750, "火焰抗性 +17.5%"), new ItemBaseImplicit(ItemModifierKind.ColdResistanceBasisPoints, 1_750, "寒霜抗性 +17.5%"), new ItemBaseImplicit(ItemModifierKind.LightningResistanceBasisPoints, 1_750, "闪电抗性 +17.5%"), new ItemBaseImplicit(ItemModifierKind.VoidResistanceBasisPoints, 1_750, "虚空抗性 +17.5%")),
-        B("p29.base.warfront.marshal_decree", "元帅敕令", ItemCategory.Amulet, 100, ItemModifierKind.ExtraSupportLinkCapacity, 1, "核心技能容量 +1；辅助连接容量 +1", new ItemBaseImplicit(ItemModifierKind.ActiveSkillGemLevels, 1, "核心技能容量 +1")),
+        B("p29.base.warfront.marshal_decree", "元帅敕令", ItemCategory.Amulet, 100, ItemModifierKind.ExtraSupportLinkCapacity, 1, "核心技能容量 +1；辅助连接容量 +1", new ItemBaseImplicit(ItemModifierKind.AdditionalCoreSkillCapacity, 1, "核心技能容量 +1")),
         B("p29.base.warfront.last_banner_emblem", "末旗圣徽", ItemCategory.Amulet, 100, ItemModifierKind.ActiveSkillGemLevels, 2, "已镶嵌主动与辅助技能石等级 +2", new ItemBaseImplicit(ItemModifierKind.SupportSkillGemLevels, 2, "辅助技能石等级 +2")),
         B("p29.base.warfront.war_machine_girdle", "战争机器腰封", ItemCategory.Belt, 100, ItemModifierKind.IncreasedMaximumLifeBasisPoints, 1_350, "最大生命、法力与护盾 +12–15%", new ItemBaseImplicit(ItemModifierKind.IncreasedMaximumManaBasisPoints, 1_350, "最大法力 +13.5%"), new ItemBaseImplicit(ItemModifierKind.IncreasedMaximumShieldBasisPoints, 1_350, "最大护盾 +13.5%")),
         B("p29.base.warfront.perpetual_arsenal", "永续军库", ItemCategory.Belt, 100, ItemModifierKind.IncreasedFlaskChargeGainBasisPoints, 10_000, "药剂充能获取 +100%；效果 +35%；持续时间 20% 更少", new ItemBaseImplicit(ItemModifierKind.IncreasedLifeFlaskEffectBasisPoints, 3_500, "药剂效果 +35%"), new ItemBaseImplicit(ItemModifierKind.IncreasedFlaskDurationBasisPoints, -2_000, "药剂持续时间 20% 更少")),

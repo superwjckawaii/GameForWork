@@ -667,10 +667,11 @@ public partial class P2Dashboard : VBoxContainer
                 ? "天赋已退还。"
                 : "洗点会切断已分配路径，或记忆灰烬不足。");
         };
-        _passiveTree.JewelDropRequested += (stableId, jewelKind) => Changed(
-            RequireSession().TrySocketJewel(stableId, jewelKind)
-                ? "记忆珠宝已从珠宝仓拖入棱孔。"
-                : "该孔未分配，或同名珠宝已经镶嵌。");
+        _passiveTree.JewelDropRequested += (stableId, instanceId) =>
+        {
+            bool changed = RequireSession().TrySocketP30Jewel(stableId, instanceId, out string reason);
+            Changed(changed ? "珠宝已从珠宝仓拖入棱孔。" : reason);
+        };
         main.AddChild(_passiveTree);
 
         var overlay = new VBoxContainer { MouseFilter = MouseFilterEnum.Ignore, ZIndex = 10 };
@@ -732,23 +733,12 @@ public partial class P2Dashboard : VBoxContainer
             Changed(id is not null && RequireSession().TrySelectMastery(id, mastery.Selected)
                 ? "专精效果已切换。" : "请先分配并选中一个专精节点。");
         });
-        var jewel = new OptionButton { TooltipText = "记忆珠宝会影响插槽周围主题并提供基础效果。" };
-        jewel.AddItem("赤铁记忆：攻击", (int)PassiveJewelKind.CrimsonMemory);
-        jewel.AddItem("翠生记忆：生命", (int)PassiveJewelKind.VerdantMemory);
-        jewel.AddItem("苍风记忆：移速", (int)PassiveJewelKind.AzureMemory);
-        specialization.AddChild(jewel);
-        Button socketJewel = AddButton(specialization, "镶嵌记忆珠宝", () =>
-        {
-            string? id = _passiveTree?.SelectedStableId;
-            Changed(id is not null && RequireSession().TrySocketJewel(id, (PassiveJewelKind)jewel.GetItemId(jewel.Selected))
-                ? "记忆珠宝已镶嵌，半径主题效果已生效。" : "请先分配并选中记忆棱孔。");
-        });
         Button unsocketJewel = AddButton(specialization, "取下珠宝", () =>
         {
             string? id = _passiveTree?.SelectedStableId;
-            Changed(id is not null && RequireSession().TryUnsocketJewel(id) ? "记忆珠宝已取下。" : "该棱孔没有珠宝。");
+            Changed(id is not null && RequireSession().TryUnsocketP30Jewel(id) ? "珠宝已取下。" : "该棱孔没有珠宝。");
         });
-        _heroOnlyControls.AddRange([chooseMastery, socketJewel, unsocketJewel]);
+        _heroOnlyControls.AddRange([chooseMastery, unsocketJewel]);
         overlay.AddChild(TreeHud(footer));
         _ascendancyPanel = new P18AscendancyPanel { Name = "升华", SizeFlagsVertical = SizeFlags.ExpandFill };
         _ascendancyPanel.Initialize(RequireSession, Changed);
@@ -1677,7 +1667,7 @@ public partial class P2Dashboard : VBoxContainer
                 .ToArray();
             _equipmentGrid!.SetSlots(slots);
             _passiveTree!.SetState(_session.Passives.Allocated, _session.World.Hero.Progression.EarnedPassivePoints,
-                _session.Passives.StartKind, _session.Passives.SocketedJewels);
+                _session.Passives.StartKind, _session.Jewels.Socketed);
             _jewelStashPanel?.RefreshState();
             _ascendancyPanel?.Refresh();
             bool heroSelected = _selectedCharacter == P2CharacterKind.Hero;

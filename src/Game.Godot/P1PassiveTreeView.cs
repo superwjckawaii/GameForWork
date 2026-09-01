@@ -18,7 +18,7 @@ public partial class P1PassiveTreeView : Control
     private readonly HashSet<string> _planned = new(StringComparer.Ordinal);
     private PassiveNodeDefinition[] _nodes = [];
     private IReadOnlySet<string> _allocated = new HashSet<string>();
-    private IReadOnlyDictionary<string, PassiveJewelKind> _socketedJewels = new Dictionary<string, PassiveJewelKind>();
+    private IReadOnlyDictionary<string, string> _socketedJewels = new Dictionary<string, string>();
     private int _earnedPoints;
     private PassiveStartKind _start = PassiveStartKind.Physique;
     private string _search = string.Empty;
@@ -33,7 +33,7 @@ public partial class P1PassiveTreeView : Control
     public event Action<string>? NodeSelected;
     public event Action<string>? NodeAllocateRequested;
     public event Action<string>? NodeRefundRequested;
-    public event Action<string, PassiveJewelKind>? JewelDropRequested;
+    public event Action<string, string>? JewelDropRequested;
     public string? SelectedStableId { get; private set; }
 
     public override void _Ready()
@@ -91,8 +91,7 @@ public partial class P1PassiveTreeView : Control
             bool selected = SelectedStableId == node.StableId;
             bool search = SearchMatch(node);
             Color fill = allocated ? AllocatedColor : available ? AvailableColor : LockedColor;
-            if (_socketedJewels.TryGetValue(node.StableId, out PassiveJewelKind socketedJewel))
-                fill = P205JewelVisual.ColorFor(socketedJewel).Darkened(.2f);
+            if (_socketedJewels.ContainsKey(node.StableId)) fill = new Color("9266bd").Darkened(.2f);
             Color border = selected || search ? SelectedColor : _planned.Contains(node.StableId) ? PlannedColor : fill.Lightened(0.3f);
             DrawCircle(center, radius, fill);
             DrawCircle(center, radius, border, false, selected || search ? 3 : 1.5f);
@@ -125,9 +124,9 @@ public partial class P1PassiveTreeView : Control
     }
 
     public void SetState(IReadOnlySet<string> allocated, int earnedPoints, PassiveStartKind start = PassiveStartKind.Physique,
-        IReadOnlyDictionary<string, PassiveJewelKind>? socketedJewels = null)
+        IReadOnlyDictionary<string, string>? socketedJewels = null)
     {
-        socketedJewels ??= new Dictionary<string, PassiveJewelKind>();
+        socketedJewels ??= new Dictionary<string, string>();
         string signature = earnedPoints + "|" + start + "|" + string.Join('|', allocated.OrderBy(id => id, StringComparer.Ordinal)) +
                            "|" + string.Join('|', socketedJewels.OrderBy(pair => pair.Key).Select(pair => $"{pair.Key}:{pair.Value}"));
         if (signature == _stateSignature) return;
@@ -168,7 +167,7 @@ public partial class P1PassiveTreeView : Control
 
     public override void _DropData(Vector2 atPosition, Variant data)
     {
-        if (TryParseJewel(data, out PassiveJewelKind jewel) &&
+        if (TryParseJewel(data, out string jewel) &&
             HitTest(atPosition) is { Kind: PassiveNodeKind.JewelSocket } node && _allocated.Contains(node.StableId))
             JewelDropRequested?.Invoke(node.StableId, jewel);
     }
@@ -269,14 +268,13 @@ public partial class P1PassiveTreeView : Control
     private static float NodeRadius(PassiveNodeDefinition node) => node.Kind switch
     { PassiveNodeKind.Start => 16, PassiveNodeKind.Small => 7, PassiveNodeKind.Notable => 11, PassiveNodeKind.Mastery => 13, PassiveNodeKind.Rule => 15, _ => 12 };
 
-    private static bool TryParseJewel(Variant data, out PassiveJewelKind jewel)
+    private static bool TryParseJewel(Variant data, out string jewel)
     {
-        jewel = default;
+        jewel = string.Empty;
         if (data.VariantType != Variant.Type.String) return false;
         string[] parts = data.AsString().Split('|');
-        if (parts.Length != 2 || parts[0] != "p205-jewel" || !int.TryParse(parts[1], out int raw) ||
-            !Enum.IsDefined(typeof(PassiveJewelKind), raw)) return false;
-        jewel = (PassiveJewelKind)raw;
+        if (parts.Length != 2 || parts[0] != "p30-jewel" || string.IsNullOrWhiteSpace(parts[1])) return false;
+        jewel = parts[1];
         return true;
     }
 

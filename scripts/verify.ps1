@@ -52,12 +52,15 @@ Invoke-NativeChecked -FilePath $dotnetBinary -Arguments @('run', '--project',
 Invoke-NativeChecked -FilePath $dotnetBinary -Arguments @('run', '--project',
     (Join-Path $repositoryRoot 'tools\P22Audit\P22Audit.csproj'), '--configuration', $Configuration, '--no-build', '--',
     '100', $combatAudit) -Label 'Regenerate P22 combat audit'
-if ((Get-Content -LiteralPath $economyAudit -Raw) -ne
-    (Get-Content -LiteralPath (Join-Path $repositoryRoot 'docs\v0.4\P29_ECONOMY_AUDIT.md') -Raw)) {
+function Read-NormalizedText([string]$Path) {
+    return (Get-Content -LiteralPath $Path -Raw).Replace("`r`n", "`n")
+}
+if ((Read-NormalizedText $economyAudit) -ne
+    (Read-NormalizedText (Join-Path $repositoryRoot 'docs\v0.4\P29_ECONOMY_AUDIT.md'))) {
     throw 'Generated P29 economy audit differs from the committed release audit.'
 }
-if ((Get-Content -LiteralPath $combatAudit -Raw) -ne
-    (Get-Content -LiteralPath (Join-Path $repositoryRoot 'docs\v0.2\P22_COMBAT_AUDIT.md') -Raw)) {
+if ((Read-NormalizedText $combatAudit) -ne
+    (Read-NormalizedText (Join-Path $repositoryRoot 'docs\v0.2\P22_COMBAT_AUDIT.md'))) {
     throw 'Generated P22 combat audit differs from the committed release audit.'
 }
 Write-Host '[verify] PASS: assets, restore, build, tests, audits, Godot import and startup all succeeded.'

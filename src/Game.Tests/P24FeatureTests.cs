@@ -21,8 +21,9 @@ public sealed class P24FeatureTests
         Assert.Equal(88, P2SkillStones.All.Count(value => value.Kind == SkillStoneKind.Support));
         Assert.Equal(148, P1ItemBases.All.Count);
         Assert.Equal(50, P24ItemCatalog.Bases.Count);
-        Assert.Equal(45, P24ItemCatalog.Families.Count);
-        Assert.Equal(135, P24ItemCatalog.Affixes.Count);
+        Assert.Equal(49, P24ItemCatalog.Families.Count);
+        Assert.Equal(147, P24ItemCatalog.Affixes.Count);
+        Assert.DoesNotContain(P24ItemCatalog.Families, value => value.StableId == "p24.affix.rune.spellblade");
         Assert.All(Enum.GetValues<P23BaseClass>().Where(value => value != P23BaseClass.Fighter), theme =>
             Assert.Equal(10, P24SkillCatalog.Active.Count(value => value.Theme == theme)));
     }
@@ -123,7 +124,7 @@ public sealed class P24FeatureTests
         Assert.Equal(15, P24ArtContract.Ascendancies.Count);
         Assert.Equal(4, P24ArtContract.DirectionCount);
         Assert.Equal(20, P24ArtContract.SkillVfx.Count);
-        Assert.Contains(P24GuideCatalog.Entries, value => value.StableId == "p24.guide.item_families" && value.Rules.Count == 45);
+        Assert.Contains(P24GuideCatalog.Entries, value => value.StableId == "p24.guide.item_families" && value.Rules.Count == 49);
     }
 
     [Fact]

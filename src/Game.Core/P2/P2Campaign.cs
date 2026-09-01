@@ -469,11 +469,6 @@ public sealed class P2CampaignSimulator
         management.AddSkillExperience(60 + node.Act * 10);
         if (node.Kind == CampaignNodeKind.StoryEvent)
             world.Economy.AddDispositionProceeds(4 * node.Act, 0);
-        if (node.Kind == CampaignNodeKind.ActBoss)
-        {
-            world.Hero.Progression.ClaimFirstBossPassivePoint();
-        }
-
         if (node.Kind != CampaignNodeKind.StoryEvent && campaign.ActiveTimeline is not null)
             GrantCombatLoot(world, management, node, campaign.ActiveTimeline, seed, completed: true);
 

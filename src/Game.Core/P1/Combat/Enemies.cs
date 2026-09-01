@@ -1,5 +1,6 @@
 using GameForWork.Core.Simulation;
 using GameForWork.Core.P27;
+using GameForWork.Core.P30;
 
 namespace GameForWork.Core.P1.Combat;
 
@@ -175,7 +176,8 @@ public sealed record ScaledEnemy(EnemyProfile Base, int AreaLevel, EnemyRarity R
     int MinimumPhysicalDamage, int MaximumPhysicalDamage, int Armor, int Evasion, int AttacksPerSecondMilli,
     IReadOnlyList<EliteAffix> EliteAffixes, bool AbyssRoute,
     int FireResistanceBasisPoints = 0, int ColdResistanceBasisPoints = 0,
-    int LightningResistanceBasisPoints = 0, int VoidResistanceBasisPoints = 0);
+    int LightningResistanceBasisPoints = 0, int VoidResistanceBasisPoints = 0,
+    int PhysicalResistanceBasisPoints = 0);
 
 public static class EnemyRules
 {
@@ -208,10 +210,29 @@ public static class EnemyRules
         int maximumDamage = ScaleAtLeastOne(profile.MaximumPhysicalDamage, damageMultiplier);
         int armor = ScaleNonNegative(profile.Armor, defenseMultiplier);
         int evasion = ScaleNonNegative(profile.Evasion, defenseMultiplier);
+        int physicalResistance = 0;
         int fireResistance = profile.Family == EnemyFamily.AshenLegion ? 2_000 : 500;
         int coldResistance = profile.Family == EnemyFamily.FrostwildPack ? 2_000 : 500;
         int lightningResistance = profile.Family == EnemyFamily.BloodforgeConstruct ? 2_000 : 500;
         int voidResistance = profile.Family == EnemyFamily.VoidCult ? 2_000 : 500;
+        if (monsterLevel >= 70)
+        {
+            int mapTier = Math.Clamp(1 + (monsterLevel - 70) * 19 / 30, 1, 20);
+            P30CombatRarity p30Rarity = rarity.Value switch
+            {
+                EnemyRarity.Magic => P30CombatRarity.Magic,
+                EnemyRarity.Rare => P30CombatRarity.Rare,
+                EnemyRarity.Boss => P30CombatRarity.MapBoss,
+                _ => P30CombatRarity.Normal,
+            };
+            P30ResistanceProfile resistance = P30CombatRules.MonsterResistances(mapTier, p30Rarity);
+            physicalResistance = resistance.Physical;
+            fireResistance = resistance.Fire;
+            coldResistance = resistance.Cold;
+            lightningResistance = resistance.Lightning;
+            voidResistance = resistance.Void;
+            armor = P30CombatRules.MonsterArmor(mapTier, p30Rarity);
+        }
         int attackRate = profile.AttacksPerSecondMilli;
         (int rarityLife, int rarityDamage) = rarity.Value switch
         {
@@ -289,8 +310,12 @@ public static class EnemyRules
         }
 
         return new ScaledEnemy(profile, monsterLevel, rarity.Value, life, minimumDamage, maximumDamage, armor, evasion,
-            attackRate, affixes, abyssRoute, Math.Min(7_500, fireResistance), Math.Min(7_500, coldResistance),
-            Math.Min(7_500, lightningResistance), Math.Min(7_500, voidResistance));
+            attackRate, affixes, abyssRoute,
+            Math.Clamp(fireResistance, P30CombatRules.MinimumResistance, 9_000),
+            Math.Clamp(coldResistance, P30CombatRules.MinimumResistance, 9_000),
+            Math.Clamp(lightningResistance, P30CombatRules.MinimumResistance, 9_000),
+            Math.Clamp(voidResistance, P30CombatRules.MinimumResistance, 9_000),
+            Math.Clamp(physicalResistance, P30CombatRules.MinimumResistance, 5_000));
     }
 
     public static IReadOnlyList<EliteAffix> RollEliteAffixes(Pcg32 random) =>

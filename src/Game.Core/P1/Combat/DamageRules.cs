@@ -1,4 +1,5 @@
 using GameForWork.Core.Simulation;
+using GameForWork.Core.P30;
 
 namespace GameForWork.Core.P1.Combat;
 
@@ -58,12 +59,9 @@ public static class DamageRules
             return CalculatedValue.Single("法术命中率", "法术默认必中", 10_000);
         }
 
-        int denominator = checked(accuracy + targetEvasion);
-        int raw = denominator == 0 ? 9_500 : checked((int)((long)accuracy * 10_000 / denominator));
-        int clamped = Math.Clamp(raw, 500, 9_500);
+        int clamped = P30CombatRules.HitChance(accuracy, targetEvasion);
         var trace = new FormulaTraceBuilder();
-        trace.Add("原始命中率", $"{accuracy} × 10000 / ({accuracy} + {targetEvasion})", raw);
-        trace.Add("命中率上下限", $"clamp({raw}, 500, 9500)", clamped);
+        trace.Add("P30 命中率", $"clamp((命中 / (命中 + (闪避 / 4)^0.8)) / 0.98, 5%, 100%)", clamped);
         return trace.Build(clamped);
     }
 
@@ -74,12 +72,9 @@ public static class DamageRules
             return CalculatedValue.Single("物理减伤率", "伤害为 0", 0);
         }
 
-        int denominator = checked(armor + (5 * physicalHitDamage));
-        int raw = denominator == 0 ? 0 : checked((int)((long)armor * 10_000 / denominator));
-        int clamped = Math.Clamp(raw, 0, 9_000);
+        int clamped = P30CombatRules.ArmorReduction(armor, physicalHitDamage);
         var trace = new FormulaTraceBuilder();
-        trace.Add("原始物理减伤率", $"{armor} × 10000 / ({armor} + 5 × {physicalHitDamage})", raw);
-        trace.Add("护甲减伤上限", $"min({raw}, 9000)", clamped);
+        trace.Add("P30 护甲减伤率", $"min(90%, {armor} / ({armor} + 5 × {physicalHitDamage}))", clamped);
         return trace.Build(clamped);
     }
 

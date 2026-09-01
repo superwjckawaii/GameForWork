@@ -1,0 +1,866 @@
+[
+  {
+    "ascendancy": "BloodFighter",
+    "displayName": "血战士",
+    "branches": [
+      {
+        "direction": "生命支付",
+        "reinforcementName": "血肉薪火",
+        "reinforcementEffect": "最大生命提高 10%；技能生命消耗降低 15%。",
+        "coreName": "血铸契约",
+        "coreEffect": "攻击技能原本的最终法力消耗按数值 1:1 改为生命支付，法术不受影响；转换与生命消耗修正结算后，每次最终生命消耗至少为最大生命的 2%，且支付本身不能致死。成功支付生命的攻击，其击中伤害和由该攻击造成的流血伤害分别造成 50% 更多伤害。"
+      },
+      {
+        "direction": "双重流血",
+        "reinforcementName": "深红割痕",
+        "reinforcementEffect": "斧、剑及徒手攻击造成流血的概率 +30%；流血伤害提高 20%。",
+        "coreName": "双痕并行",
+        "coreEffect": "同一目标可以保留两层你的流血。仅有一层时该层造成 100% 伤害；有两层时最强两层各造成 80% 伤害，其余只记录、不造成伤害。"
+      },
+      {
+        "direction": "裂伤加速",
+        "reinforcementName": "急血",
+        "reinforcementEffect": "流血伤害加快 20%，不改变该次流血的总伤害。",
+        "coreName": "裂伤连锁",
+        "coreEffect": "攻击击中正在流血的敌人时施加 1 层裂伤，最多 3 层、共享 4 秒持续时间并刷新。每层使该敌人身上的你的流血伤害加快 15%；满层等效把流血 DPS 提高 45%，不增加总伤害。"
+      },
+      {
+        "direction": "暴怒核心",
+        "reinforcementName": "沸血战意",
+        "reinforcementEffect": "成功支付生命的攻击获得 1 层暴怒，每个技能动作最多获得 1 层；每层暴怒额外使物理伤害和流血伤害提高 3%。",
+        "coreName": "血怒不息",
+        "coreEffect": "暴怒上限 +1；战斗中始终维持当前最大暴怒层数。每层暴怒再使物理伤害和流血伤害提高 5%，不提高暴怒基础效果本身。"
+      },
+      {
+        "direction": "低生命",
+        "reinforcementName": "濒战本能",
+        "reinforcementEffect": "低生命时生命恢复率提高 20%，攻击速度提高 10%。",
+        "coreName": "绝境屠戮",
+        "coreEffect": "低生命时，物理击中与流血分别造成 60% 更多伤害，受到的击中伤害总降 25%，且免疫眩晕。低生命固定指当前生命不高于最大生命的 50%。"
+      },
+      {
+        "direction": "强敌续航",
+        "reinforcementName": "噬血",
+        "reinforcementEffect": "物理攻击伤害的 1% 偷取为生命；生命偷取每秒最大恢复率提高 20%。",
+        "coreName": "血河不竭",
+        "coreEffect": "稀有或 Boss 敌人受你的流血影响时，每秒恢复 4% 最大生命；存在有效生命偷取时受到的击中伤害总降 20%。流血敌人死亡时，把其剩余伤害最高的一层流血以 100% 剩余总伤害传播给 4 米内最多 5 个敌人；传播的流血不能再次传播。"
+      }
+    ]
+  },
+  {
+    "ascendancy": "Marksman",
+    "displayName": "神射手",
+    "branches": [
+      {
+        "direction": "远距狙击",
+        "reinforcementName": "长风校准",
+        "reinforcementEffect": "投射物伤害提高 20%，投射物速度提高 20%。",
+        "coreName": "视界之外",
+        "coreEffect": "投射物从发射点累计飞行至少 6 米后，对敌造成 50% 更多伤害；连锁、返回不会重置累计飞行距离。"
+      },
+      {
+        "direction": "移动射击",
+        "reinforcementName": "踏风",
+        "reinforcementEffect": "移动速度提高 12%；移动时闪避值提高 20%。",
+        "coreName": "行进火力",
+        "coreEffect": "远程攻击动作不再令角色停步。最近 2 秒实际移动至少 2 米时，远程攻击造成 40% 更多伤害；传送、强制位移和原地播放移动动画不计入距离。"
+      },
+      {
+        "direction": "多重齐射",
+        "reinforcementName": "分弦",
+        "reinforcementEffect": "投射物速度提高 15%，投射物伤害提高 15%。",
+        "coreName": "三线齐发",
+        "coreEffect": "技能额外发射 2 个投射物，每个投射物造成 30% 更少伤害。同一技能动作最多有 2 个投射物命中同一目标；对单目标理论上限为原本的 140%，清怪仍保留三路覆盖。"
+      },
+      {
+        "direction": "穿透余势",
+        "reinforcementName": "穿云",
+        "reinforcementEffect": "投射物穿透 2 个额外目标。",
+        "coreName": "贯日",
+        "coreEffect": "投射物命中时，每剩余 1 次穿透使该次命中造成 20% 更多伤害，最多 60%；命中后才扣除一次穿透次数。仅取命中瞬间的剩余次数。"
+      },
+      {
+        "direction": "连锁回返",
+        "reinforcementName": "折线追猎",
+        "reinforcementEffect": "投射物额外连锁 1 次，最大连锁搜索距离提高 30%。",
+        "coreName": "归弦",
+        "coreEffect": "最后一次连锁结束后投射物返回。返回命中造成原伤害包的 40%，每个目标每次释放最多被返回命中一次；没有可连锁目标时，首次命中后直接返回。普通连锁命中额外造成 25% 更多伤害。"
+      },
+      {
+        "direction": "傲慢核心",
+        "reinforcementName": "逐风命中",
+        "reinforcementEffect": "投射物攻击暴击率提高 30%，暴击伤害倍率 +20%；傲慢持续时间提高 50%。",
+        "coreName": "风暴射界",
+        "coreEffect": "傲慢上限 +1；战斗中始终维持当前最大傲慢层数。每层傲慢额外使投射物伤害提高 5%、投射物速度提高 5%，不提高傲慢基础效果本身。"
+      }
+    ]
+  },
+  {
+    "ascendancy": "SoulShepherd",
+    "displayName": "牧魂师",
+    "branches": [
+      {
+        "direction": "懒惰军团",
+        "reinforcementName": "缓行召集",
+        "reinforcementEffect": "普通召唤物持续时间提高 30%，召唤速度提高 25%；懒惰持续时间提高 50%。",
+        "coreName": "万魂列阵",
+        "coreEffect": "懒惰上限 +1；战斗中始终维持当前最大懒惰层数。每层懒惰额外使普通召唤物伤害提高 6%；懒惰提供的召唤物上限仍受普通召唤物硬上限 16 约束。"
+      },
+      {
+        "direction": "尸体循环",
+        "reinforcementName": "拾骸",
+        "reinforcementEffect": "敌方尸体保留时间提高 50%；消耗尸体时恢复 2% 最大法力与 2% 最大护盾。",
+        "coreName": "亡骸轮转",
+        "coreEffect": "每次消耗尸体获得 1 层亡骸轮转，最多 5 层、共享 6 秒并刷新；每层使普通召唤物行动速度提高 8%。同一尸体只能结算一次。"
+      },
+      {
+        "direction": "主从继承",
+        "reinforcementName": "灵契摹写",
+        "reinforcementEffect": "普通召唤物继承主角通用伤害提高、攻击速度提高和施法速度提高数值的 20%。",
+        "coreName": "魂印传承",
+        "coreEffect": "上述继承比例提高到 50%；普通召唤物额外获得主角面板火焰、冰霜、闪电、虚空抗性的 100%，继承后仍按单位抗性上限结算。局部武器、防具和技能专属修正不继承。"
+      },
+      {
+        "direction": "指挥集火",
+        "reinforcementName": "猎魂号令",
+        "reinforcementEffect": "普通召唤物移动速度提高 20%，切换目标所需时间降低 50%。",
+        "coreName": "王敌敕令",
+        "coreEffect": "你指定的稀有或 Boss 目标受到普通召唤物 50% 更多伤害。指定目标死亡、不可达或离场后，AI 才按普通优先级重新选择；未指定目标时该更多伤害不生效。"
+      },
+      {
+        "direction": "灵体复起",
+        "reinforcementName": "不散残魂",
+        "reinforcementEffect": "普通召唤物死亡后 4 秒自动复起；同一召唤物 12 秒内至多触发一次。",
+        "coreName": "归魂",
+        "coreEffect": "复起延迟缩短为 2 秒；复起后的 4 秒内该召唤物造成 50% 更多伤害，并免疫再次触发复起。超出数量上限而消失不算死亡，也不触发本路线。"
+      },
+      {
+        "direction": "献祭保命",
+        "reinforcementName": "魂血回馈",
+        "reinforcementEffect": "普通召唤物死亡时恢复主角 2% 最大生命和 2% 最大护盾；每 0.5 秒最多结算一次。",
+        "coreName": "替命契约",
+        "coreEffect": "本应使主角死亡的击中改由一只存活的普通召唤物承受并使其死亡，随后主角恢复 30% 最大生命与 30% 最大护盾，并在 2 秒内受到的击中伤害总降 30%；冷却 12 秒。没有合法召唤物时不生效。"
+      }
+    ]
+  },
+  {
+    "ascendancy": "Elementalist",
+    "displayName": "元素使",
+    "branches": [
+      {
+        "direction": "元素择形",
+        "reinforcementName": "择相",
+        "reinforcementEffect": "在城镇选择火焰、冰霜或闪电为主元素；所选元素伤害提高 20%。远征中不可切换。",
+        "coreName": "原初映照",
+        "coreEffect": "获得等同于技能原始物理基础伤害 60% 的所选元素额外伤害。额外包保留物理阶段历史，但不能再次被本节点递归复制。"
+      },
+      {
+        "direction": "火焰与点燃",
+        "reinforcementName": "炽种",
+        "reinforcementEffect": "火焰伤害提高 25%，造成点燃的概率 +30%。",
+        "coreName": "双焰心",
+        "coreEffect": "同一敌人可同时承受你的两层点燃；仅一层时造成 100% 伤害，两层时最强两层各造成 80% 伤害。火焰击中对已被你点燃的敌人造成 30% 更多伤害。"
+      },
+      {
+        "direction": "冰霜与冻结",
+        "reinforcementName": "寒髓",
+        "reinforcementEffect": "冰霜伤害提高 25%，冰缓效果提高 25%。",
+        "coreName": "永冻界",
+        "coreEffect": "Boss 的冻结阈值总降 40%。冰霜伤害对冻结敌人造成 50% 更多伤害；目标仅被冰缓而未冻结时改为 25% 更多，两者不叠加。"
+      },
+      {
+        "direction": "闪电与感电",
+        "reinforcementName": "雷脉",
+        "reinforcementEffect": "闪电伤害提高 25%，感电效果提高 25%。",
+        "coreName": "超载震域",
+        "coreEffect": "你的感电承伤上限由普通上限提高至 75%；闪电暴击对受你感电影响的敌人造成 50% 更多伤害。感电本身仍按实际击中与阈值计算。"
+      },
+      {
+        "direction": "元素异常",
+        "reinforcementName": "三相侵染",
+        "reinforcementEffect": "元素异常持续时间提高 25%，造成元素异常的概率 +25%。",
+        "coreName": "灾相叠鸣",
+        "coreEffect": "目标每受到你的一种元素家族异常，使你的元素伤害造成 15% 更多伤害；火焰、冰霜、闪电三家族各至多计一次，最多 45% 更多。冰缓与冻结同属冰霜家族。"
+      },
+      {
+        "direction": "节制共鸣",
+        "reinforcementName": "三相节律",
+        "reinforcementEffect": "非触发技能造成火、冰、雷伤害时获得对应共鸣，三种共鸣各至多 1 层、持续 8 秒；节制持续时间提高 50%。",
+        "coreName": "三元素共鸣",
+        "coreEffect": "节制上限 +1；战斗中始终维持当前最大节制层数。每层节制额外使元素伤害提高 5%、元素异常效果提高 4%。同时拥有三种共鸣时，下一个非触发元素技能造成 30% 更多伤害并消耗三种共鸣。"
+      }
+    ]
+  },
+  {
+    "ascendancy": "MartialMonk",
+    "displayName": "行武僧",
+    "branches": [
+      {
+        "direction": "徒手根基",
+        "reinforcementName": "空掌",
+        "reinforcementEffect": "徒手攻击速度提高 20%，闪避值提高 20%。",
+        "coreName": "身即兵刃",
+        "coreEffect": "每 10 点灵巧与精神之和使徒手攻击伤害提高 1%；徒手攻击额外造成 45% 更多伤害。属性提高只进入普通提高乘区。"
+      },
+      {
+        "direction": "连段",
+        "reinforcementName": "连步",
+        "reinforcementEffect": "徒手攻击命中获得 1 层连段，每个技能动作最多获得 1 层；连段最多 10 层、持续 4 秒并刷新，每层攻击速度提高 2%。",
+        "coreName": "百式归一",
+        "coreEffect": "切换目标不再清除连段；满 10 层时徒手攻击造成 50% 更多伤害。脱离战斗或持续时间结束仍会清除。"
+      },
+      {
+        "direction": "慈悲架势",
+        "reinforcementName": "阴阳架",
+        "reinforcementEffect": "攻击架势使徒手伤害提高 20%；守御架势使受到的伤害总降 10%；慈悲持续时间提高 50%。",
+        "coreName": "阴阳轮转",
+        "coreEffect": "慈悲上限 +1；战斗中始终维持当前最大慈悲层数。每层慈悲额外使徒手伤害提高 5%、徒手技能范围提高 5%。切换架势后保留上一架势 3 秒，触发冷却 3 秒。"
+      },
+      {
+        "direction": "自然走位",
+        "reinforcementName": "游身",
+        "reinforcementEffect": "移动攻击冷却恢复速度提高 30%，移动距离提高 20%。",
+        "coreName": "踏隙重击",
+        "coreEffect": "自上次触发后实际移动累计至少 2 米，使下一次徒手攻击造成 60% 更多伤害并必定暴击，随后清空累计距离；最多每 2 秒触发一次。传送和强制位移不计入。"
+      },
+      {
+        "direction": "闪避反击",
+        "reinforcementName": "听劲",
+        "reinforcementEffect": "成功闪避或格挡后 2 秒内，反击伤害提高 40%；反击冷却恢复速度提高 20%。",
+        "coreName": "返势",
+        "coreEffect": "闪避或格挡攻击后立刻触发一次不可闪避的徒手反击，基础伤害为当前普通徒手攻击基础伤害的 250%，可暴击、可造成异常，冷却 1 秒；不复制敌人的伤害包。"
+      },
+      {
+        "direction": "终结技",
+        "reinforcementName": "蓄势",
+        "reinforcementEffect": "终结技每消耗 1 层连段使其伤害提高 8%。",
+        "coreName": "十式归一",
+        "coreEffect": "终结技消耗全部连段，并按每层 12% 更多伤害形成一个线性更多乘区；10 层时为 120% 更多。命中后立即恢复 5 层连段。"
+      }
+    ]
+  },
+  {
+    "ascendancy": "Runecarver",
+    "displayName": "刻印师",
+    "branches": [
+      {
+        "direction": "交替灌注",
+        "reinforcementName": "武法灌注",
+        "reinforcementEffect": "使用攻击后，下一个非触发法术获得等同武器局部基础伤害 20% 的额外伤害；该额外包不记录为下一次灌注来源。",
+        "coreName": "交错铭刻",
+        "coreEffect": "攻击与非触发自施法交替使用时，下一个技能获得前一个技能“应用提高与更多之前的基础伤害包”60% 的额外伤害。附加包保留类型历史，但不能递归、不能由触发或复写动作再次记录。"
+      },
+      {
+        "direction": "攻击触法",
+        "reinforcementName": "疾刻",
+        "reinforcementEffect": "攻击暴击率提高 20%；触发法术的冷却恢复速度提高 20%。",
+        "coreName": "三击成咒",
+        "coreEffect": "每第三次非触发攻击触发一个已连接法术；该法术不消耗资源、造成 30% 更少伤害。触发法术不推进交替、三击或叠纹计数，也不能再次触发技能。"
+      },
+      {
+        "direction": "元素转刻",
+        "reinforcementName": "择印转化",
+        "reinforcementEffect": "在城镇选择火焰、冰霜或闪电，把物理伤害的 25% 转化为该元素；远征中不可切换。",
+        "coreName": "纯相铭文",
+        "coreEffect": "该转化提高到 100%；由这条路径转化得到的元素伤害造成 50% 更多伤害。物理阶段提高与目标元素阶段提高按转化历史各应用一次，不能逆流。"
+      },
+      {
+        "direction": "六重叠纹",
+        "reinforcementName": "叠纹",
+        "reinforcementEffect": "第一个非触发攻击或自施法获得 1 层刻印；之后只有攻击与自施法类别交替时才再获得 1 层，同类连续使用不获得也不清除。刻印最多 6 层，触发与复写动作不参与。",
+        "coreName": "六印复写",
+        "coreEffect": "达到 6 层后，下一个非触发攻击或自施法消耗全部刻印并复写一次；复写造成原伤害包 75% 的伤害，不支付资源、不推进任何计数、不能再次复写或触发。"
+      },
+      {
+        "direction": "谦逊交错",
+        "reinforcementName": "攻守换铭",
+        "reinforcementEffect": "自施法后 4 秒武器伤害提高 30%；攻击后 4 秒施法速度提高 20%；谦逊持续时间提高 50%。",
+        "coreName": "交错战法",
+        "coreEffect": "谦逊上限 +1；战斗中始终维持当前最大谦逊层数。两种换铭效果可以共存且数值翻倍；每层谦逊额外使攻击与法术伤害提高 4%，不提高谦逊基础效果本身。"
+      },
+      {
+        "direction": "天地刻爆",
+        "reinforcementName": "爆纹",
+        "reinforcementEffect": "在城镇为爆纹选择火焰、冰霜或闪电；每第三个非触发攻击或自施法动作，在目标处产生一次相当于武器局部基础伤害 120% 的所选元素范围爆炸，爆炸不能递归触发。若同时分配择印转化，两处必须共用同一个所选元素。",
+        "coreName": "天地刻爆",
+        "coreEffect": "爆纹基础伤害提高到武器局部基础伤害的 300%，范围提高 40%，对稀有或 Boss 敌人额外造成 30% 更多伤害；爆炸与触发动作可以各命中目标一次。"
+      }
+    ]
+  },
+  {
+    "ascendancy": "IronGuardian",
+    "displayName": "铁壁卫",
+    "branches": [
+      {
+        "direction": "体魄堆叠",
+        "reinforcementName": "铁血根基",
+        "reinforcementEffect": "体魄 +120；体魄提高 8%。",
+        "coreName": "千钧铁躯",
+        "coreEffect": "每完整 100 点最终体魄，获得 +300 护甲、攻击伤害提高 80%。"
+      },
+      {
+        "direction": "攻击格挡",
+        "reinforcementName": "盾列操练",
+        "reinforcementEffect": "装备盾牌时攻击格挡概率 +8 个百分点；盾牌提供的护甲提高 25%。",
+        "coreName": "绝对盾面",
+        "coreEffect": "装备盾牌时攻击格挡概率再 +12 个百分点，攻击格挡概率上限 +5 个百分点；未格挡的攻击击中伤害总降 20%。"
+      },
+      {
+        "direction": "复仇反击",
+        "reinforcementName": "回震刃缘",
+        "reinforcementEffect": "反击伤害提高 40%，反击冷却恢复速度提高 25%，反击范围提高 20%。",
+        "coreName": "复仇壁垒",
+        "coreEffect": "每次成功格挡获得 1 层复仇，最多 3 层；达到 3 层时触发的反击消耗全部层数，造成 180% 更多伤害并恢复 8% 最大生命。每次格挡至多获得 1 层。"
+      },
+      {
+        "direction": "受击成垒",
+        "reinforcementName": "受击成垒",
+        "reinforcementEffect": "受到未格挡攻击击中后 2 秒内护甲提高 25%。",
+        "coreName": "不破阵地",
+        "coreEffect": "每次受到未格挡攻击击中后获得 1 层壁垒，最多 5 层；每层使受到的击中伤害总降 5%，五层合并为一个最高 25% 的总降乘区。满层时反击造成 50% 更多伤害、每秒恢复 4% 最大生命；成功格挡攻击后失去全部壁垒。新获得的层数不减免产生该层的那次击中。"
+      },
+      {
+        "direction": "护卫与战旗",
+        "reinforcementName": "守护轮转",
+        "reinforcementEffect": "护卫技能冷却恢复速度提高 30%，持续时间提高 25%。",
+        "coreName": "守誓疆域",
+        "coreEffect": "最大生命提高 20%；战旗保留消耗总降 50%、效果提高 30%；护卫技能生效期间受到的击中伤害总降 25%，每秒恢复 5% 最大生命。"
+      },
+      {
+        "direction": "法术格挡",
+        "reinforcementName": "咒击偏转",
+        "reinforcementEffect": "装备盾牌时法术格挡概率 +8 个百分点。",
+        "coreName": "镜铁守誓",
+        "coreEffect": "获得等同最终攻击格挡概率 60% 的额外法术格挡概率；成功法术格挡按完整格挡归零伤害。未格挡的法术击中伤害总降 25%。法术格挡仍受自身默认与绝对上限约束。"
+      }
+    ]
+  },
+  {
+    "ascendancy": "Shadowblade",
+    "displayName": "影刃客",
+    "branches": [
+      {
+        "direction": "灵巧堆叠",
+        "reinforcementName": "迅影根基",
+        "reinforcementEffect": "灵巧 +120；灵巧提高 8%。",
+        "coreName": "千刃迅影",
+        "coreEffect": "每完整 100 点最终灵巧，获得 +300 闪避值、攻击伤害提高 80%。"
+      },
+      {
+        "direction": "连续暴击",
+        "reinforcementName": "冷刃磨砺",
+        "reinforcementEffect": "匕首基础暴击率 +2 个百分点；匕首暴击伤害倍率 +25%。",
+        "coreName": "致命精算",
+        "coreEffect": "匕首攻击暴击后获得 1 层杀意，每个技能动作最多 1 层，最多 5 层；每层使匕首暴击造成 10% 更多伤害。一次非暴击匕首命中结算伤害后清空全部杀意。"
+      },
+      {
+        "direction": "单体标记",
+        "reinforcementName": "猎物刻痕",
+        "reinforcementEffect": "对被标记敌人的命中伤害提高 20%，标记持续时间提高 30%。",
+        "coreName": "孤猎印记",
+        "coreEffect": "同时只能由你标记 1 个敌人；被标记的稀有或 Boss 敌人受到你 40% 更多伤害，并且不能闪避你的攻击。更换标记立即移除旧目标效果。"
+      },
+      {
+        "direction": "背刺",
+        "reinforcementName": "绕后步",
+        "reinforcementEffect": "从目标背面发动攻击时暴击率提高 40%，移动速度提高 10%。",
+        "coreName": "背影绝杀",
+        "coreEffect": "从目标后方 120° 扇区发动的攻击造成 50% 更多伤害；对每个敌人的第一次背刺暴击必定采用该次攻击伤害范围的最高值。目标转身在攻击动作开始时锁定，动作中转身不改变判定。"
+      },
+      {
+        "direction": "隐匿",
+        "reinforcementName": "敛息",
+        "reinforcementEffect": "进入战斗时获得隐匿；连续 4 秒未造成伤害且未受到伤害后重新进入隐匿。",
+        "coreName": "无声猎手",
+        "coreEffect": "隐匿时不会成为普通敌人的优先目标；主动攻击会破除隐匿，破除隐匿的首次攻击命中造成 80% 更多伤害。同一技能动作的后续重复命中不再获得该倍率。"
+      },
+      {
+        "direction": "处决",
+        "reinforcementName": "割喉线",
+        "reinforcementEffect": "对低生命敌人的攻击伤害提高 25%；低生命固定为当前生命不高于最大生命的 50%。",
+        "coreName": "无赦处决",
+        "coreEffect": "攻击命中生命不高于 20% 的非 Boss 敌人时直接处决；Boss 处于低生命时，受到你的攻击伤害提高为 50% 更多。规则性免疫处决的目标只使用 Boss 分支。"
+      }
+    ]
+  },
+  {
+    "ascendancy": "SpiritCantor",
+    "displayName": "颂灵师",
+    "branches": [
+      {
+        "direction": "精神堆叠",
+        "reinforcementName": "灵歌根基",
+        "reinforcementEffect": "精神 +120；精神提高 8%。",
+        "coreName": "万籁共鸣",
+        "coreEffect": "每完整 100 点最终精神，获得 +300 全局附加灵障、光环效果提高 8%。附加灵障进入灵障基础加法段，不乘两次精神的天然收益。"
+      },
+      {
+        "direction": "光环扩幅",
+        "reinforcementName": "共鸣扩幅",
+        "reinforcementEffect": "光环效果提高 25%，光环范围提高 30%。",
+        "coreName": "众声同调",
+        "coreEffect": "你的光环对主角、同行佣兵和己方单位的效果提高 50%；这是提高而非更多，并与精神堆叠的光环效果相加。"
+      },
+      {
+        "direction": "祝福同伴",
+        "reinforcementName": "祝祷延续",
+        "reinforcementEffect": "祝福持续时间提高 30%，祝福冷却恢复速度提高 25%，祝福效果提高 20%。",
+        "coreName": "并肩祝福",
+        "coreEffect": "允许 1 名未被派遣的佣兵加入主角队伍；主角与同行佣兵受到你的祝福效果再提高 40%。任一方倒下后另一方继续战斗，双方都倒下才判定失败。"
+      },
+      {
+        "direction": "战歌",
+        "reinforcementName": "战歌起拍",
+        "reinforcementEffect": "战吼和战歌效果提高 25%，持续时间提高 30%。",
+        "coreName": "不息战歌",
+        "coreEffect": "战歌不占用技能动作时间；每次使用使全队造成 15% 更多伤害，持续 6 秒，最多 3 层并共享刷新，满层为一个 45% 更多乘区。"
+      },
+      {
+        "direction": "佣兵合奏",
+        "reinforcementName": "同袍训练",
+        "reinforcementEffect": "同行佣兵攻击速度、施法速度和移动速度分别提高 15%。",
+        "coreName": "英雄合奏",
+        "coreEffect": "同行佣兵受到主角光环的效果提高 50%，并对主角当前目标造成 40% 更多伤害；主角没有合法当前目标时不获得该倍率。"
+      },
+      {
+        "direction": "团队庇护",
+        "reinforcementName": "守护和声",
+        "reinforcementEffect": "受你光环影响的友军受到的击中伤害总降 8%。",
+        "coreName": "终曲庇护",
+        "coreEffect": "任一受你光环影响的友军首次进入低生命时，全队获得容量等于各自最大生命与最大护盾合计 20% 的屏障，持续 4 秒；屏障存在时受到的击中伤害额外总降 20%。全队共享 10 秒冷却。"
+      }
+    ]
+  },
+  {
+    "ascendancy": "VoidScholar",
+    "displayName": "虚空学者",
+    "branches": [
+      {
+        "direction": "能量堆叠",
+        "reinforcementName": "空识根基",
+        "reinforcementEffect": "能量 +120；能量提高 8%。",
+        "coreName": "无垠空识",
+        "coreEffect": "每完整 100 点最终能量，获得 +300 最大护盾、虚空伤害提高 80%。这里的最大护盾是全局附加值，不重复读取每点能量自带的 +2 最大护盾。"
+      },
+      {
+        "direction": "双层腐化",
+        "reinforcementName": "虚蚀研习",
+        "reinforcementEffect": "虚空持续伤害提高 25%，持续时间提高 20%。",
+        "coreName": "无光腐域",
+        "coreEffect": "同一目标可以保留两层同名虚空持续伤害；只有一层时造成 100% 伤害，存在两层时最强两层各造成 75% 伤害，其余只记录、不造成伤害。"
+      },
+      {
+        "direction": "侵蚀",
+        "reinforcementName": "侵蚀标本",
+        "reinforcementEffect": "虚空命中施加 1 层侵蚀，每个技能动作最多 1 层；默认最多 5 层、持续 6 秒并共享刷新，每层降低 10% 虚空抗性。",
+        "coreName": "防线溶解",
+        "coreEffect": "侵蚀最大层数 +3，持续时间提高 100%；每层侵蚀额外使你的虚空伤害提高 5%。抗性仍可降至负值，不改成“视为 0”。"
+      },
+      {
+        "direction": "凋零",
+        "reinforcementName": "凋零触须",
+        "reinforcementEffect": "造成虚空伤害的技能动作施加 1 层凋零，每个动作最多 1 层；默认最多 10 层、持续 6 秒，每层使目标承受 8% 更多虚空伤害。",
+        "coreName": "深层凋零",
+        "coreEffect": "凋零最大层数 +5；每次施加改为 2 层。目标达到最大凋零层数时，你对其造成的虚空持续伤害额外造成 30% 更多伤害。"
+      },
+      {
+        "direction": "禁术代价",
+        "reinforcementName": "禁术代价",
+        "reinforcementEffect": "虚空技能资源消耗提高 25%，虚空伤害提高 25%。",
+        "coreName": "越界施法",
+        "coreEffect": "虚空技能可以支付 5% 最大生命代替全部法力消耗，生命支付不能直接致死；成功支付生命的虚空技能造成 50% 更多伤害。没有生命可合法支付时技能不能使用。"
+      },
+      {
+        "direction": "终末引爆",
+        "reinforcementName": "坍缩预兆",
+        "reinforcementEffect": "你的虚空持续伤害自然结束时，追加一次等于该效果原始总伤害 30% 的虚空击中；提前移除不触发。",
+        "coreName": "终末奇点",
+        "coreEffect": "对满层凋零敌人使用非触发虚空技能时，引爆该敌人身上全部由你造成的虚空持续伤害，以 120% 未结算剩余总伤害造成一次虚空击中并移除这些效果，冷却 4 秒；本次移除不触发坍缩预兆。"
+      }
+    ]
+  },
+  {
+    "ascendancy": "BeastKeeper",
+    "displayName": "灵兽使",
+    "branches": [
+      {
+        "direction": "双属性堆叠",
+        "reinforcementName": "灵兽同修",
+        "reinforcementEffect": "灵巧 +80、精神 +80；灵巧提高 5%、精神提高 5%。",
+        "coreName": "双魂成长",
+        "coreEffect": "每完整 100 点最终灵巧，使主角与核心灵兽行动速度提高 4%，并使灵兽命中 +300；每完整 100 点最终精神，使核心灵兽伤害提高 80%、最大生命提高 20%。两种属性分别计数。"
+      },
+      {
+        "direction": "三种兽相",
+        "reinforcementName": "兽相训练",
+        "reinforcementEffect": "灵兽可以切换猛攻、守护、追猎形态。猛攻使伤害提高 25%、行动速度提高 15%；守护使受到的击中伤害总降 20%并提高嘲讽优先级；追猎使移动速度提高 30%、暴击率提高 30%。",
+        "coreName": "三相本能",
+        "coreEffect": "三种形态的全部数值效果提高 100%；切换形态不占用技能动作，冷却缩短为 2 秒。一次只能生效一种形态。"
+      },
+      {
+        "direction": "协同合击",
+        "reinforcementName": "协同狩猎",
+        "reinforcementEffect": "主角与灵兽攻击同一目标时，双方伤害分别提高 20%。",
+        "coreName": "双魂夹击",
+        "coreEffect": "主角和灵兽在 2 秒内先后命中同一目标时触发一次合击，合击基础包等于两次触发攻击防御前伤害包之和的 150%，由灵兽造成并重新经过目标防御；冷却 1.5 秒。合击不能触发另一轮合击或复制。"
+      },
+      {
+        "direction": "分痛与偷取",
+        "reinforcementName": "分痛纽带",
+        "reinforcementEffect": "主角防御结算后、扣除护盾与生命前的击中伤害有 15% 转由灵兽直接失去生命；该部分不再次经过灵兽防御，也不视为对灵兽的击中。",
+        "coreName": "同生契",
+        "coreEffect": "分担比例提高到 30%；主角或灵兽的生命偷取产生实际恢复时，另一方同时恢复该实际恢复量的 50%，不额外占用原角色的偷取预算。"
+      },
+      {
+        "direction": "护主救援",
+        "reinforcementName": "护主咆哮",
+        "reinforcementEffect": "主角首次进入低生命时，灵兽嘲讽 6 米内敌人并获得 4 秒 30% 击中承伤总降，冷却 8 秒。",
+        "coreName": "濒死救援",
+        "coreEffect": "本应使主角死亡的击中改由存活灵兽承受并使其倒地，主角恢复至 30% 最大生命；冷却 20 秒。灵兽倒地或不存在时不生效。"
+      },
+      {
+        "direction": "原初形态",
+        "reinforcementName": "野性积累",
+        "reinforcementEffect": "灵兽击杀敌人或命中 Boss 获得 1 层野性，每个技能动作最多 1 层；最多 10 层、持续 8 秒并刷新。",
+        "coreName": "原初兽王",
+        "coreEffect": "达到 10 层时消耗全部野性，进入原初形态 8 秒；体型和技能范围提高 50%，造成 80% 更多伤害。原初形态期间不能获得野性，结束后可以重新积累。"
+      }
+    ]
+  },
+  {
+    "ascendancy": "Spellarmor",
+    "displayName": "魔铠师",
+    "branches": [
+      {
+        "direction": "双属性堆叠",
+        "reinforcementName": "魔铠根基",
+        "reinforcementEffect": "体魄 +80、能量 +80；体魄提高 5%、能量提高 5%。",
+        "coreName": "刚能并铸",
+        "coreEffect": "每完整 100 点最终体魄，获得 +200 护甲、攻击伤害提高 50%；每完整 100 点最终能量，获得 +200 最大护盾、法术伤害提高 50%。两种属性分别计数。"
+      },
+      {
+        "direction": "受击蓄能",
+        "reinforcementName": "受击蓄能",
+        "reinforcementEffect": "受到击中获得 1 层铠能，每 0.25 秒最多获得 1 层；最多 10 层，每层护甲提高 3%。",
+        "coreName": "蓄能魔铠",
+        "coreEffect": "每层铠能同时使法术伤害提高 4%；下一个非触发自施法消耗全部铠能，并按每层 8% 更多伤害形成一个线性更多乘区，10 层为 80% 更多。"
+      },
+      {
+        "direction": "护盾吸收",
+        "reinforcementName": "铠能吸收",
+        "reinforcementEffect": "护盾实际承受伤害后，恢复等于本次护盾损失 5% 的生命。",
+        "coreName": "逆流装甲",
+        "coreEffect": "恢复比例提高到 25%；满生命时改为补充专属逆流屏障，最多为最大生命的 30%、持续 4 秒并刷新。过量恢复不重复转换，未实际损失的护盾不产生恢复。"
+      },
+      {
+        "direction": "主动过载",
+        "reinforcementName": "热机",
+        "reinforcementEffect": "护盾高于 50% 时攻击速度和施法速度分别提高 15%。",
+        "coreName": "魔铠过载",
+        "coreEffect": "主动失去 50% 当前护盾，进入过载 6 秒；攻击与法术分别造成 50% 更多伤害，冷却 8 秒。失去护盾不触发受击、护盾吸收或破盾效果。"
+      },
+      {
+        "direction": "破盾爆发",
+        "reinforcementName": "裂甲电弧",
+        "reinforcementEffect": "护盾被敌方伤害耗尽时，对附近敌人造成等于最大护盾 30% 的闪电范围击中，冷却 6 秒。该伤害受通用、闪电和范围修正影响，不受攻击或法术修正影响且不能暴击。",
+        "coreName": "破盾反击",
+        "coreEffect": "裂甲电弧基础伤害提高到最大护盾的 100%，必定眩晕普通敌人，并对 Boss 施加 5 层破甲；仍使用同一 6 秒冷却。主动失去或支付护盾不触发。"
+      },
+      {
+        "direction": "护卫循环",
+        "reinforcementName": "奥术护甲",
+        "reinforcementEffect": "使用护卫技能时同时获得容量等于最大护盾 15% 的屏障，持续时间跟随该护卫技能。",
+        "coreName": "永动壁甲",
+        "coreEffect": "护卫技能生效期间，受到敌方击中会获得 1 层铠能；首次达到 10 层时刷新该护卫技能至其完整基础持续时间，每次护卫激活最多刷新一次。"
+      }
+    ]
+  },
+  {
+    "ascendancy": "Warbreaker",
+    "displayName": "破军者",
+    "branches": [
+      {
+        "direction": "双手重击",
+        "reinforcementName": "巨兵驾驭",
+        "reinforcementEffect": "双手武器攻击伤害提高 25%，攻击速度提高 8%；双手攻击命中额外获得 8 点破阵值。",
+        "coreName": "重兵裁决",
+        "coreEffect": "双手攻击击中造成 60% 更多伤害，攻击速度总降 10%；阵线崩解期间不再承受这项攻击速度负面。"
+      },
+      {
+        "direction": "猛击余震",
+        "reinforcementName": "震域扩张",
+        "reinforcementEffect": "猛击范围提高 25%，猛击伤害提高 20%；余震范围提高 20%。",
+        "coreName": "震岳余势",
+        "coreEffect": "猛击命中 0.5 秒后产生一次余震，复制该次命中已完成进攻计算、尚未经过目标防御的伤害包并造成 100% 伤害。余震重新经过防御、可以造成异常并额外获得 15 点破阵值，但不能再次产生余震、触发技能或复写。"
+      },
+      {
+        "direction": "破阵专精",
+        "reinforcementName": "破阵先声",
+        "reinforcementEffect": "获得的破阵值提高 50%；破阵值开始衰减所需时间延长 2 秒。",
+        "coreName": "摧城崩线",
+        "coreEffect": "阵线崩解持续时间延长 2 秒；崩解期间你的双手攻击、猛击或余震只要满足其中任一标签便造成 50% 更多伤害，同一伤害包不能因同时拥有多个标签重复获得该倍率。目标仍保留强制阶段规则。"
+      },
+      {
+        "direction": "眩晕",
+        "reinforcementName": "撼魂重势",
+        "reinforcementEffect": "眩晕积累提高 50%，眩晕持续时间提高 30%；成功造成眩晕时额外获得 50 点破阵值。",
+        "coreName": "山崩之王",
+        "coreEffect": "稀有和 Boss 可以受到完整眩晕；眩晕期间承受你的伤害提高为 100% 更多。眩晕开始时产生一次造成触发击中防御前伤害包 150% 的震波，震波不能再次眩晕、产生震波或推进破阵值。"
+      },
+      {
+        "direction": "破甲",
+        "reinforcementName": "碎甲专断",
+        "reinforcementEffect": "物理攻击每个技能动作有 35% 概率额外施加 1 层破甲；施加破甲后获得 10 点破阵值。",
+        "coreName": "碎城铁律",
+        "coreEffect": "破甲最大层数 +3，提高至 8 层；目标达到 8 层破甲时，受到你的物理伤害额外造成 50% 更多伤害。破甲仍为每层降低 10% 护甲，不能超过 90% 合计降低上限。"
+      },
+      {
+        "direction": "战吼",
+        "reinforcementName": "号令回响",
+        "reinforcementEffect": "战吼冷却恢复速度提高 35%，效果和持续时间分别提高 30%；战吼使 8 米内敌人获得 30 点破阵值。",
+        "coreName": "号令无尽",
+        "coreEffect": "战吼不占用技能动作时间，并强化接下来 4 次近战攻击；强化攻击造成 50% 更多伤害、获得的破阵值翻倍。再次战吼覆盖尚未使用的次数，不累计多组强化攻击。"
+      }
+    ]
+  },
+  {
+    "ascendancy": "Venomist",
+    "displayName": "毒术师",
+    "branches": [
+      {
+        "direction": "千层剧毒",
+        "reinforcementName": "淬毒锋",
+        "reinforcementEffect": "造成中毒的概率 +30 个百分点；中毒持续时间提高 25%。",
+        "coreName": "千毒同蚀",
+        "coreEffect": "目标身上前 20 层你的中毒，每层使该目标受到你的中毒伤害 3% 更多，合并为一个最高 60% 的更多乘区；超过 20 层仍正常造成伤害，但不继续提高该乘区。"
+      },
+      {
+        "direction": "催化配方",
+        "reinforcementName": "毒性配制",
+        "reinforcementEffect": "目标有至少 10 层你的中毒时，每 2 秒自动催化一次。急性使当前中毒在 2 秒内伤害加快 50%，重复催化只刷新而不叠加；扩散从最强 10 层各抽取 25% 剩余伤害并把合计值作为一层持续 2 秒的新中毒复制给 4 米内最多 3 个敌人；爆裂从最强 10 层各抽取 35% 剩余伤害，造成等于抽取总量 100% 的虚空范围击中。",
+        "coreName": "极效催化",
+        "coreEffect": "触发要求降至 5 层，目标冷却缩短为 1.5 秒。急性改为伤害加快 100%；扩散抽取比例提高至 50%、目标数提高至 5；爆裂抽取比例提高至 50%，击中伤害提高为抽取总量的 150%。"
+      },
+      {
+        "direction": "毒潮扩散",
+        "reinforcementName": "疫雾蔓延",
+        "reinforcementEffect": "中毒敌人死亡时，把剩余总伤害最高的 3 层中毒以 100% 剩余伤害复制给 4 米内最近的 1 个敌人。",
+        "coreName": "毒潮传染",
+        "coreEffect": "死亡传播改为复制最强 10 层，并影响 4 米内最多 5 个敌人；每个复制实例保留原实例 80% 的剩余总伤害。死亡传播、催化扩散和其他复制产生的中毒不能再次触发死亡传播。"
+      },
+      {
+        "direction": "毒陷阱",
+        "reinforcementName": "毒阱工艺",
+        "reinforcementEffect": "陷阱上限 +1，陷阱布置速度提高 30%，陷阱造成中毒的概率 +25 个百分点。",
+        "coreName": "连环毒阱",
+        "coreEffect": "陷阱触发时，使 5 米内其他陷阱立即获得 50% 触发进度；毒陷阱的击中和造成的中毒分别造成 50% 更多伤害。同一陷阱不能由一次连环事件重复获得进度。"
+      },
+      {
+        "direction": "药剂循环",
+        "reinforcementName": "药剂回流",
+        "reinforcementEffect": "药剂持续时间提高 25%；击杀中毒敌人额外获得 1 点各合法药剂充能。",
+        "coreName": "永续毒剂",
+        "coreEffect": "任意药剂生效期间，中毒造成 50% 更多伤害。药剂已满时继续获得的充能进入该药剂独立溢流池，最多保存该药剂一次基础消耗量；自动使用消耗后立即把溢流充能转回，不能超过正常最大充能。"
+      },
+      {
+        "direction": "毒性爆裂",
+        "reinforcementName": "毒囊压缩",
+        "reinforcementEffect": "中毒敌人死亡时，把其最强 10 层中毒的未结算剩余伤害合计值 30% 转为一次虚空范围击中；目标已经死亡，因此不再扣除实例。",
+        "coreName": "万疫爆裂",
+        "coreEffect": "死亡毒爆改为读取最强 20 层并造成剩余合计值 80% 的击中，范围提高 50%。Boss 每首次跨过 80%/60%/40%/20% 生命阈值时，抽取其最强 20 层中毒各 40% 剩余伤害，造成抽取总量 150% 的虚空范围击中；每个阈值每场战斗只触发一次。"
+      }
+    ]
+  },
+  {
+    "ascendancy": "Hexbinder",
+    "displayName": "咒契师",
+    "branches": [
+      {
+        "direction": "三重咒契",
+        "reinforcementName": "重叠咒文",
+        "reinforcementEffect": "诅咒效果提高 25%，持续时间提高 30%。",
+        "coreName": "三重恶契",
+        "coreEffect": "诅咒上限 +2；首咒效果额外提高 25%，次咒使目标造成的伤害再总降 5%，终咒获得咒印速度提高 100%。目标每多承受一个你的不同诅咒，受到你的持续伤害 15% 更多，最多 30%。"
+      },
+      {
+        "direction": "法力献契",
+        "reinforcementName": "耗能咒式",
+        "reinforcementEffect": "诅咒技能法力消耗提高 50%，诅咒效果提高 30%。",
+        "coreName": "魔力献契",
+        "coreEffect": "施放诅咒时额外消耗 10% 当前法力，使该诅咒效果提高 100%，并立即获得 2 层咒印；法力为 0 时只能施放原技能且不获得核心收益。额外消耗不受技能消耗降低影响。"
+      },
+      {
+        "direction": "诅咒扩散",
+        "reinforcementName": "恶言回响",
+        "reinforcementEffect": "被诅咒敌人死亡时，把其持续时间最长的一个诅咒复制给 4 米内最近的 1 个敌人。",
+        "coreName": "万口同咒",
+        "coreEffect": "扩散改为复制全部合法诅咒，并影响 4 米内最多 5 个敌人；复制诅咒保留原剩余持续时间与咒印层数比例。每个原始诅咒家族每秒最多扩散一次，复制品不能再次扩散。"
+      },
+      {
+        "direction": "衰弱囚笼",
+        "reinforcementName": "衰弱刻印",
+        "reinforcementEffect": "被你诅咒的敌人造成的伤害总降 10%。",
+        "coreName": "绝望囚笼",
+        "coreEffect": "同时承受三个你的不同诅咒时，这个升华提供的敌方伤害总降统一提高到 25%，替代首咒/次咒与衰弱刻印的同类数值而不彼此叠加；敌人行动速度总降 30%。Boss 的行动速度总降仍受 Boss 控制效果上限约束。"
+      },
+      {
+        "direction": "灵魂保命",
+        "reinforcementName": "摄魂偿付",
+        "reinforcementEffect": "被诅咒敌人死亡时获得 1 层灵魂，每个技能动作或同一死亡事件最多 1 层；最多 10 层，持续到战斗结束。",
+        "coreName": "灵魂契约",
+        "coreEffect": "每层灵魂使诅咒效果提高 3%。本应使你死亡的击中消耗全部灵魂，每层恢复 3% 最大生命与 3% 最大护盾，并使该次击中最多把生命降至 1；至少需要 5 层，触发后 12 秒内不能再次生效。"
+      },
+      {
+        "direction": "咒印成熟",
+        "reinforcementName": "末咒",
+        "reinforcementEffect": "首咒和次咒也能积累咒印，但速度为终咒的 50%；所有诅咒的咒印上限保持 5 层，终咒槽中的诅咒效果提高 30%。",
+        "coreName": "咒印处决",
+        "coreEffect": "目标所有当前诅咒都达到 5 层咒印时，自动消耗全部咒印但不移除诅咒，使目标进入 4 秒末咒状态：每个被消耗的成熟诅咒使其受到你 20% 更多伤害，最多 60%。末咒开始时，生命不高于 20% 的非 Boss 敌人直接被处决；Boss 不能被处决。同一目标冷却 6 秒。"
+      }
+    ]
+  },
+  {
+    "ascendancy": "AegisMage",
+    "displayName": "秘盾师",
+    "branches": [
+      {
+        "direction": "最大护盾",
+        "reinforcementName": "秘能扩容",
+        "reinforcementEffect": "最大护盾提高 20%，护盾充能速度提高 15%。",
+        "coreName": "无垠秘盾",
+        "coreEffect": "最大护盾总增 30%；超充护盾上限额外 +10 个百分点，达到最大护盾的 40%。"
+      },
+      {
+        "direction": "超充循环",
+        "reinforcementName": "快速归流",
+        "reinforcementEffect": "护盾充能速度提高 30%，超充开始衰减前的等待时间延长 1 秒。",
+        "coreName": "永续超充",
+        "coreEffect": "护盾充能延迟由 2 秒降至 1 秒，充能速度再提高 50%；超充上限额外 +20 个百分点，达到基础的 50%，超充衰减速度总降 50%。与无垠秘盾同时分配时上限为 60%。"
+      },
+      {
+        "direction": "超充施法",
+        "reinforcementName": "盾能施法",
+        "reinforcementEffect": "普通护盾与超充护盾合计高于最大护盾 50% 时，施法速度提高 20%。",
+        "coreName": "秘盾供能",
+        "coreEffect": "非触发法术优先用超充护盾按数值 1:1 支付最终法力消耗；仅当全部最终法力消耗都由超充支付时，该法术造成 50% 更多伤害。支付不会中断充能，也不触发受击或破盾。"
+      },
+      {
+        "direction": "护盾门限",
+        "reinforcementName": "过量吸收",
+        "reinforcementEffect": "超充护盾受到的击中伤害总降 20%；超充衰减期间仍保留该效果。",
+        "coreName": "无损容器",
+        "coreEffect": "超充达到当前上限时获得护盾门限。下一次敌方击中先清空超充，但该次击中最多把普通护盾降至 1；持续伤害和规则性失去不触发。触发后冷却 10 秒，冷却期间即使重新满超充也不获得门限。"
+      },
+      {
+        "direction": "法术反击",
+        "reinforcementName": "法术偏振",
+        "reinforcementEffect": "受到未格挡法术击中后，法术格挡概率 +20 个百分点，持续 2 秒。",
+        "coreName": "镜式反击",
+        "coreEffect": "成功格挡法术时，向来源释放一次最近自行施放的合法非保留法术，造成原技能 60% 伤害、不消耗资源，冷却 1 秒。反击法术不能推进施法历史、消耗超充、触发技能或再次反击。"
+      },
+      {
+        "direction": "破盾回响",
+        "reinforcementName": "破盾回响",
+        "reinforcementEffect": "普通护盾被敌方伤害耗尽时，法术伤害提高 30%、施法速度提高 15%，持续 4 秒；冷却 8 秒。",
+        "coreName": "零界爆发",
+        "coreEffect": "普通护盾被敌方伤害耗尽时获得 2 秒伤害免疫，并立即免费复演最近自行施放的合法法术，造成 100% 伤害；冷却 12 秒。支付、献祭、衰减和主动失去护盾不能触发。"
+      }
+    ]
+  },
+  {
+    "ascendancy": "PhantomMaster",
+    "displayName": "幻身宗师",
+    "branches": [
+      {
+        "direction": "幻身生成",
+        "reinforcementName": "残影步",
+        "reinforcementEffect": "把基础生成频率提高为主角每完成第 4 个合法技能动作生成 1 个幻身，幻身上限提高到 2 个；幻身生成计数不因切换目标清除。",
+        "coreName": "万相分身",
+        "coreEffect": "改为每第 3 个合法技能动作生成幻身，持续时间提高到 8 秒，幻身上限提高到 4 个；超限时移除剩余时间最短者，属于消失而非死亡。"
+      },
+      {
+        "direction": "复制能力",
+        "reinforcementName": "招式映刻",
+        "reinforcementEffect": "幻身可以复演攻击，造成快照伤害包 30% 的伤害；同一幻身对同一技能每秒最多复演一次。",
+        "coreName": "镜技同施",
+        "coreEffect": "幻身也可以复演法术，复制比例提高到 50%；攻击和法术仍互斥判定。复制伤害可以暴击和造成异常，但不能产生偷取、击回或“你施放”类收益。"
+      },
+      {
+        "direction": "记忆编排",
+        "reinforcementName": "追忆成列",
+        "reinforcementEffect": "技能记忆队列长度 +1，提高到 4；幻身相邻复演的基础间隔由 0.5 秒降至 0.4 秒。",
+        "coreName": "轮回演武",
+        "coreEffect": "在城镇选择一种复演模式。顺演按最旧到最新使用普通复制比例；聚焦只复演最新技能 3 次、每次造成 40% 更少幻身伤害；回溯按最新到最旧复演，幻身伤害造成 20% 更多，但复演间隔延长 50%。远征中不可切换。"
+      },
+      {
+        "direction": "自动换位",
+        "reinforcementName": "移形印",
+        "reinforcementEffect": "主角单次敌方击中实际损失达到最大生命与最大护盾合计 20% 时，自动与最远的存活幻身交换位置，冷却 5 秒；交换发生在该次伤害结算后。",
+        "coreName": "无定真身",
+        "coreEffect": "交换冷却缩短至 2 秒；交换后 1 秒内主角不可被敌方选为新目标，已经发出的投射物和已经开始的范围攻击仍可命中。交换不打断当前不可打断动作。"
+      },
+      {
+        "direction": "虚实续航",
+        "reinforcementName": "虚实轮转",
+        "reinforcementEffect": "幻身到期或被规则移除时，主角恢复 2% 最大生命与 2% 最大护盾；每 0.5 秒最多结算一次。",
+        "coreName": "替身受难",
+        "coreEffect": "主角每 3 秒获得一次替身保护；下一次敌方击中改由最近的存活幻身承受并使其消失，主角不承受该次击中。没有幻身时不消耗保护；被替代击中不能触发主角受击收益。"
+      },
+      {
+        "direction": "同调合击",
+        "reinforcementName": "同调",
+        "reinforcementEffect": "每个在场幻身使主角伤害提高 6%、移动速度提高 2%，最多按 4 个计算；幻身对主角当前稀有或 Boss 目标造成 30% 更多伤害。",
+        "coreName": "百影合击",
+        "coreEffect": "4 个幻身在场且主角命中稀有或 Boss 时，消耗全部幻身；每个幻身各复演一次技能记忆队列中最新的合法技能，造成 75% 快照伤害。冷却 8 秒；合击复演不能触发幻身生成、替身恢复、另一轮合击或任何复演链。"
+      }
+    ]
+  },
+  {
+    "ascendancy": "IdolForger",
+    "displayName": "铸像师",
+    "branches": [
+      {
+        "direction": "构装数量",
+        "reinforcementName": "增殖铸模",
+        "reinforcementEffect": "构装体上限 +1，构装体最大生命提高 25%。",
+        "coreName": "群像工坊",
+        "coreEffect": "构装体上限再 +2；每个在场构装体使所有构装体行动速度提高 6%，最多按 6 个计算。普通树和升华合计仍受构装体硬上限 8 约束。"
+      },
+      {
+        "direction": "远程炮台",
+        "reinforcementName": "远射校具",
+        "reinforcementEffect": "远程构装射程提高 30%，投射物速度提高 25%，命中提高 300。",
+        "coreName": "炮台协议",
+        "coreEffect": "远程构装优先攻击稀有和 Boss，并对其造成 50% 更多伤害；热量至少 50 时额外获得 1 个投射物，但同一技能动作仍至多由一个投射物命中同一目标，除非技能明确允许重复命中。"
+      },
+      {
+        "direction": "符文阵",
+        "reinforcementName": "阵地刻线",
+        "reinforcementEffect": "每个构装体周围形成 3 米符文阵，使阵内友军护甲和最大护盾分别提高 15%；同一强化节点不叠加。",
+        "coreName": "重叠阵列",
+        "coreEffect": "不同构装体的符文阵可以叠加，最多 3 层；每层使阵内友军伤害提高 10%、受到的击中伤害总降 5%。离开所有符文阵后同帧失效。"
+      },
+      {
+        "direction": "集火指令",
+        "reinforcementName": "操偶指令",
+        "reinforcementEffect": "构装体切换目标所需时间降低 50%，移动速度提高 20%。",
+        "coreName": "全机集火",
+        "coreEffect": "所有构装体优先攻击主角当前目标，并对该目标造成 50% 更多伤害；主角没有合法目标时恢复普通 AI。集火不能读取未鉴定掉落或未来战斗结果。"
+      },
+      {
+        "direction": "过载与自爆",
+        "reinforcementName": "过载核心",
+        "reinforcementEffect": "构装体达到 100 热量时，停机前最后一个技能动作造成 80% 更多伤害、范围提高 40%；装配稳压模块时改为每第 10 个技能动作获得该强化。",
+        "coreName": "自毁协议",
+        "coreEffect": "构装体死亡时造成等于其最大生命 100% 的物理与火焰各半范围击中；对 Boss 造成 50% 更少伤害。该节点会直接授予死亡爆炸；已装爆芯模块时把 30% 提高为 100%，两者不相加。超限移除、换图、主动取消和重铸替换不算死亡；爆炸不能触发构装死亡、生成构装或再次爆炸。"
+      },
+      {
+        "direction": "自动重铸",
+        "reinforcementName": "备用铸件",
+        "reinforcementEffect": "被摧毁的构装体 8 秒后自动重铸；已装回炉模块时缩短为 6 秒。",
+        "coreName": "永续工坊",
+        "coreEffect": "重铸延迟统一缩短为 4 秒；重铸后的 4 秒内构装体造成 50% 更多伤害、受到的伤害总降 50%，热量从 0 开始。重铸本身不是召唤、死亡或技能动作，不能触发自爆或递归重铸。"
+      }
+    ]
+  }
+]

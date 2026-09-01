@@ -31,8 +31,13 @@ public static class P29ResourceCrafting
             target = family.FirstOrDefault(definition => P1Affixes.TierFor(item.Base, definition) == desired);
         }
         if (target is null) return Fail("该词缀已处于唯一边界档位。", RedFavorCost);
-        int span = Math.Max(1, target.MaximumValue - target.MinimumValue + 1);
-        var replacement = new AffixRoll(target, target.MinimumValue + (int)(random.NextUInt() % (uint)span));
+        RolledAffixComponent[] components = target.EffectComponents.Select(component =>
+        {
+            int span = Math.Max(1, component.MaximumValue - component.MinimumValue + 1);
+            return new RolledAffixComponent(component.Kind,
+                component.MinimumValue + (int)(random.NextUInt() % (uint)span), component.Scope, component.DisplayText);
+        }).ToArray();
+        var replacement = new AffixRoll(target, components[0].Value, Components: components);
         ItemInstance result = item with { Affixes = item.Affixes.Select(affix => ReferenceEquals(affix, current) ? replacement : affix).ToArray() };
         string verb = desired < currentTier ? "提升" : "降低";
         return new(true, $"赤誓将 {current.Definition.DisplayName} 从 T{currentTier} {verb}至 T{desired}。", result, RedFavorCost);

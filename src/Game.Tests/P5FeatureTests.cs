@@ -129,11 +129,13 @@ public sealed class P5FeatureTests
     public void RefundChecksRemainingGraphConnectivity()
     {
         var allocation = new PassiveTreeAllocation(memoryAshes: 5);
-        Assert.True(allocation.TryAllocate("core.passive.v3.travel.00.15", 2));
-        Assert.True(allocation.TryAllocate("core.passive.v3.travel.00.14", 2));
+        string first = P1PassiveTree.Neighbors(P1PassiveTree.StartNode(allocation.StartKind)).First();
+        string second = P1PassiveTree.Neighbors(first).First(id => id != P1PassiveTree.StartNode(allocation.StartKind));
+        Assert.True(allocation.TryAllocate(first, 2));
+        Assert.True(allocation.TryAllocate(second, 2));
 
-        Assert.False(allocation.TryRefund("core.passive.v3.travel.00.15"));
-        Assert.True(allocation.TryRefund("core.passive.v3.travel.00.14"));
+        Assert.False(allocation.TryRefund(first));
+        Assert.True(allocation.TryRefund(second));
         Assert.Equal(4, allocation.MemoryAshes);
     }
 
@@ -142,9 +144,9 @@ public sealed class P5FeatureTests
     {
         PassiveNodeDefinition[] masteries = P1PassiveTree.Nodes.Where(node => node.Kind == PassiveNodeKind.Mastery).ToArray();
 
-        Assert.Equal(72, masteries.Length);
-        Assert.All(masteries, mastery => Assert.Equal(6, P1PassiveTree.MasteryOptions(mastery).Count));
-        Assert.Equal(12, masteries.Select(mastery => mastery.Branch).Distinct().Count());
+        Assert.Equal(168, masteries.Length);
+        Assert.All(masteries, mastery => Assert.Equal(7, P1PassiveTree.MasteryOptions(mastery).Count));
+        Assert.Equal(6, masteries.Select(mastery => mastery.Branch).Distinct().Count());
     }
 
     private static P1GameSession CreateSession() => P1GameSession.CreateNew(new PlayerIdentity(

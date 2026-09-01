@@ -1,4 +1,5 @@
 using System.Text;
+using GameForWork.Core.P1.Combat;
 using GameForWork.Core.P1.Items;
 using GameForWork.Core.P1.Progression;
 using GameForWork.Core.P14;
@@ -22,20 +23,20 @@ internal static class P1UiText
             $"灵巧 {item.Base.RequiredDexterity} · 精神 {item.Base.RequiredSpirit} · 能量 {item.Base.RequiredEnergy}");
         if (item.Base.Category is ItemCategory.TwoHandWeapon or ItemCategory.OneHandWeapon)
         {
-            int finalMinimum = QualityScale(item.Base.MinimumPhysicalDamage, item.Quality);
-            int finalMaximum = QualityScale(item.Base.MaximumPhysicalDamage, item.Quality);
-            text.AppendLine($"物理伤害 {finalMinimum}–{finalMaximum}");
-            text.AppendLine($"攻击频率 {item.Base.AttacksPerSecondMilli / 1000.0:0.00}/秒 · 暴击 {item.Base.CriticalChanceBasisPoints / 100.0:0.0}%");
+            WeaponProfile weapon = EquipmentLoadout.CalculateWeapon(item);
+            text.AppendLine($"物理伤害 {weapon.MinimumPhysicalDamage}–{weapon.MaximumPhysicalDamage}");
+            text.AppendLine($"攻击频率 {weapon.AttacksPerSecondMilli / 1000.0:0.00}/秒 · 暴击 {weapon.CriticalChanceBasisPoints / 100.0:0.0}%");
         }
 
-        if (item.Base.Armor + item.Base.Evasion + item.Base.Shield > 0)
+        var localDefense = EquipmentLoadout.CalculateLocalDefense(item);
+        if (localDefense.Armor + localDefense.Evasion + localDefense.Shield + localDefense.SpiritBarrier > 0)
         {
-            text.AppendLine($"护甲 {QualityScale(item.Base.Armor, item.Quality)} · " +
-                $"闪避 {QualityScale(item.Base.Evasion, item.Quality)} · 护盾 {QualityScale(item.Base.Shield, item.Quality)}");
+            text.AppendLine($"护甲 {localDefense.Armor} · 闪避 {localDefense.Evasion} · " +
+                $"护盾 {localDefense.Shield} · 灵障 {localDefense.SpiritBarrier}");
         }
-        if (item.Base.BlockChanceBasisPoints > 0)
+        if (localDefense.BlockChanceBasisPoints > 0)
         {
-            text.AppendLine($"基础格挡 {item.Base.BlockChanceBasisPoints / 100.0:0.#}%");
+            text.AppendLine($"装备格挡 {localDefense.BlockChanceBasisPoints / 100.0:0.#}%");
         }
 
         if (item.LinkedSocketCount > 0)
@@ -54,7 +55,7 @@ internal static class P1UiText
             text.AppendLine($"（基底词缀）{implicitModifier.DisplayText}");
 
         if (item.Enchantment is not null)
-            text.AppendLine($"（附魔）{item.Enchantment.DisplayName}：{Modifier(item.Enchantment.ModifierKind, item.Enchantment.Value)}");
+            text.AppendLine($"（附魔）{item.Enchantment.DisplayName}：{string.Join("；", item.Enchantment.EffectComponents.Select(effect => Modifier(effect.Kind, effect.MinimumValue)))}");
 
         if (item.LegendaryRule is not null)
         {
@@ -68,9 +69,10 @@ internal static class P1UiText
             int tier = P1Affixes.TierFor(item.Base, affix.Definition);
             string markers = (affix.Crafted ? "（工匠）" : string.Empty) + (item.IsFractured(affix) ? "（破溃）" : string.Empty);
             string source = affix.Crafted ? "工匠" : affix.Definition.Source == "Natural" ? "自然" : affix.Definition.Source;
-            text.AppendLine($"[TIER:{tier}]{PositionName(affix.Definition.Position)} T{tier} " +
-                $"{affix.Definition.DisplayName}{markers}：{Modifier(affix.Definition.ModifierKind, affix.EffectiveValue)} " +
-                $"[{affix.EffectiveMinimumValue}–{affix.EffectiveMaximumValue}] · {source}");
+            text.AppendLine(tier <= 0
+                ? $"{PositionName(affix.Definition.Position)} 固定 {affix.Definition.DisplayName}{markers}：{AffixEffects(affix)} · {source}"
+                : $"[TIER:{tier}]{PositionName(affix.Definition.Position)} T{tier} " +
+                  $"{affix.Definition.DisplayName}{markers}：{AffixEffects(affix)} · {source}");
         }
 
         if (P1FlaskRules.KindForBase(item.Base.StableId) is { } flaskKind)
@@ -174,9 +176,34 @@ internal static class P1UiText
     private static string Modifier(ItemModifierKind kind, int value)
     {
         string name = ModifierName(kind);
+        string sign = value >= 0 ? "+" : string.Empty;
         return kind.ToString().Contains("BasisPoints", StringComparison.Ordinal)
-            ? $"{name} +{value / 100.0:0.#}%"
-            : $"{name} +{value}";
+            ? $"{name} {sign}{value / 100.0:0.#}%"
+            : $"{name} {sign}{value}";
+    }
+
+    private static string AffixEffects(AffixRoll affix)
+    {
+        IReadOnlyList<RolledAffixComponent> effects = affix.Effects;
+        string Damage(ItemModifierKind minimum, ItemModifierKind maximum, string name)
+        {
+            RolledAffixComponent? low = effects.FirstOrDefault(effect => effect.Kind == minimum);
+            RolledAffixComponent? high = effects.FirstOrDefault(effect => effect.Kind == maximum);
+            return low is null || high is null ? string.Empty : $"{name} {low.Value}–{high.Value}";
+        }
+        foreach ((ItemModifierKind Min, ItemModifierKind Max, string Name) pair in new[]
+        {
+            (ItemModifierKind.AddedMinimumPhysicalDamage, ItemModifierKind.AddedMaximumPhysicalDamage, "附加物理伤害"),
+            (ItemModifierKind.AddedMinimumFireDamage, ItemModifierKind.AddedMaximumFireDamage, "附加火焰伤害"),
+            (ItemModifierKind.AddedMinimumColdDamage, ItemModifierKind.AddedMaximumColdDamage, "附加冰霜伤害"),
+            (ItemModifierKind.AddedMinimumLightningDamage, ItemModifierKind.AddedMaximumLightningDamage, "附加闪电伤害"),
+            (ItemModifierKind.AddedMinimumVoidDamage, ItemModifierKind.AddedMaximumVoidDamage, "附加虚空伤害"),
+        })
+        {
+            string damage = Damage(pair.Min, pair.Max, pair.Name);
+            if (damage.Length > 0 && effects.Count == 2) return damage;
+        }
+        return string.Join("；", effects.Select(effect => Modifier(effect.Kind, effect.Value)));
     }
 
     private static string ModifierName(ItemModifierKind kind) => kind switch
@@ -217,6 +244,120 @@ internal static class P1UiText
         ItemModifierKind.MoreRareBossDamageBasisPoints => "对稀有与Boss伤害总增",
         ItemModifierKind.ActiveSkillGemLevels => "主动技能石等级",
         ItemModifierKind.SupportSkillGemLevels => "辅助技能石等级",
+        ItemModifierKind.AddedMinimumPhysicalDamage => "附加物理伤害下限",
+        ItemModifierKind.AddedMaximumPhysicalDamage => "附加物理伤害上限",
+        ItemModifierKind.AddedMinimumFireDamage => "附加火焰伤害下限",
+        ItemModifierKind.AddedMaximumFireDamage => "附加火焰伤害上限",
+        ItemModifierKind.AddedMinimumColdDamage => "附加冰霜伤害下限",
+        ItemModifierKind.AddedMaximumColdDamage => "附加冰霜伤害上限",
+        ItemModifierKind.AddedMinimumLightningDamage => "附加闪电伤害下限",
+        ItemModifierKind.AddedMaximumLightningDamage => "附加闪电伤害上限",
+        ItemModifierKind.AddedMinimumVoidDamage => "附加虚空伤害下限",
+        ItemModifierKind.AddedMaximumVoidDamage => "附加虚空伤害上限",
+        ItemModifierKind.FlatArmor => "护甲",
+        ItemModifierKind.FlatEvasion => "闪避",
+        ItemModifierKind.FlatShield => "最大护盾",
+        ItemModifierKind.FlatSpiritBarrier => "灵障",
+        ItemModifierKind.IncreasedSpiritBarrierBasisPoints => "灵障提高",
+        ItemModifierKind.IncreasedLocalBlockBasisPoints => "盾牌基础格挡提高",
+        ItemModifierKind.IncreasedAttackDamageBasisPoints => "攻击伤害提高",
+        ItemModifierKind.IncreasedSpellDamageBasisPoints => "法术伤害提高",
+        ItemModifierKind.IncreasedElementalDamageBasisPoints => "元素伤害提高",
+        ItemModifierKind.IncreasedFireDamageBasisPoints => "火焰伤害提高",
+        ItemModifierKind.IncreasedColdDamageBasisPoints => "冰霜伤害提高",
+        ItemModifierKind.IncreasedLightningDamageBasisPoints => "闪电伤害提高",
+        ItemModifierKind.IncreasedVoidDamageBasisPoints => "虚空伤害提高",
+        ItemModifierKind.IncreasedMeleeDamageBasisPoints => "近战伤害提高",
+        ItemModifierKind.IncreasedProjectileDamageBasisPoints => "投射物伤害提高",
+        ItemModifierKind.IncreasedAreaDamageBasisPoints => "范围伤害提高",
+        ItemModifierKind.IncreasedDamageOverTimeBasisPoints => "持续伤害提高",
+        ItemModifierKind.DamageOverTimeMultiplierBasisPoints => "持续伤害倍率",
+        ItemModifierKind.IncreasedBleedDamageBasisPoints => "流血伤害提高",
+        ItemModifierKind.IncreasedPoisonDamageBasisPoints => "中毒伤害提高",
+        ItemModifierKind.IncreasedIgniteDamageBasisPoints => "点燃伤害提高",
+        ItemModifierKind.FasterBleedBasisPoints => "流血伤害加快",
+        ItemModifierKind.FasterPoisonBasisPoints => "中毒伤害加快",
+        ItemModifierKind.FasterIgniteBasisPoints => "点燃伤害加快",
+        ItemModifierKind.IncreasedCriticalMultiplierBasisPoints => "暴击伤害倍率",
+        ItemModifierKind.IncreasedCastSpeedBasisPoints => "施法速度提高",
+        ItemModifierKind.ProjectileSpeedBasisPoints => "投射物速度提高",
+        ItemModifierKind.SkillAreaBasisPoints => "技能范围效果提高",
+        ItemModifierKind.SkillRangeBasisPoints => "技能距离提高",
+        ItemModifierKind.AdditionalProjectile => "额外投射物",
+        ItemModifierKind.AdditionalChain => "额外连锁",
+        ItemModifierKind.AdditionalStrikeTarget => "额外打击目标",
+        ItemModifierKind.AdditionalPierce => "额外穿透目标",
+        ItemModifierKind.MaximumLifeRegenerationBasisPoints => "每秒恢复最大生命",
+        ItemModifierKind.MaximumShieldRegenerationBasisPoints => "每秒恢复最大护盾",
+        ItemModifierKind.IncreasedResourceRecoveryRateBasisPoints => "资源恢复率提高",
+        ItemModifierKind.PhysicalResistanceBasisPoints => "物理抗性",
+        ItemModifierKind.SpellSuppressionEffectBasisPoints => "法术压制效果",
+        ItemModifierKind.LifeLeechBasisPoints => "击中伤害生命偷取",
+        ItemModifierKind.ManaLeechBasisPoints => "击中伤害法力偷取",
+        ItemModifierKind.ShieldLeechBasisPoints => "击中伤害护盾偷取",
+        ItemModifierKind.LifeOnHit => "击中回复生命",
+        ItemModifierKind.ManaOnHit => "击中回复法力",
+        ItemModifierKind.ShieldOnHit => "击中回复护盾",
+        ItemModifierKind.ReservationEfficiencyBasisPoints => "保留效率",
+        ItemModifierKind.IncreasedAuraEffectBasisPoints => "光环效果提高",
+        ItemModifierKind.IncreasedCurseEffectBasisPoints => "诅咒效果提高",
+        ItemModifierKind.AllActiveSkillGemLevels => "所有主动技能石等级",
+        ItemModifierKind.AllSupportSkillGemLevels => "所有辅助技能石等级",
+        ItemModifierKind.AdditionalUnitMaximum => "单位上限",
+        ItemModifierKind.AdditionalMinionMaximum => "召唤物上限",
+        ItemModifierKind.AdditionalConstructMaximum => "构装上限",
+        ItemModifierKind.AdditionalTrapMaximum => "陷阱上限",
+        ItemModifierKind.AdditionalPhantomMaximum => "幻身上限",
+        ItemModifierKind.FirePenetrationBasisPoints => "火焰穿透",
+        ItemModifierKind.ColdPenetrationBasisPoints => "冰霜穿透",
+        ItemModifierKind.LightningPenetrationBasisPoints => "闪电穿透",
+        ItemModifierKind.VoidPenetrationBasisPoints => "虚空穿透",
+        ItemModifierKind.BleedChanceBasisPoints => "流血概率",
+        ItemModifierKind.PoisonChanceBasisPoints => "中毒概率",
+        ItemModifierKind.IgniteChanceBasisPoints => "点燃概率",
+        ItemModifierKind.ShockChanceBasisPoints => "感电概率",
+        ItemModifierKind.ReducedShieldRechargeDelayBasisPoints => "护盾充能延迟缩短",
+        ItemModifierKind.AilmentAvoidanceBasisPoints => "避免元素异常",
+        ItemModifierKind.ReducedCurseEffectBasisPoints => "受到诅咒效果降低",
+        ItemModifierKind.ReducedDebuffDurationBasisPoints => "非异常负面持续时间降低",
+        ItemModifierKind.IncreasedLeechRecoveryRateBasisPoints => "偷取恢复速度提高",
+        ItemModifierKind.IncreasedMaximumLeechRateBasisPoints => "偷取每秒总恢复上限提高",
+        ItemModifierKind.PhysicalToFireConversionBasisPoints => "物理转火焰",
+        ItemModifierKind.PhysicalToColdConversionBasisPoints => "物理转冰霜",
+        ItemModifierKind.PhysicalToLightningConversionBasisPoints => "物理转闪电",
+        ItemModifierKind.PhysicalToVoidConversionBasisPoints => "物理转虚空",
+        ItemModifierKind.ColdToFireConversionBasisPoints => "冰霜转火焰",
+        ItemModifierKind.LightningToFireConversionBasisPoints => "闪电转火焰",
+        ItemModifierKind.FireToVoidConversionBasisPoints => "火焰转虚空",
+        ItemModifierKind.ColdToVoidConversionBasisPoints => "冰霜转虚空",
+        ItemModifierKind.LightningToVoidConversionBasisPoints => "闪电转虚空",
+        ItemModifierKind.PhysicalAsExtraFireBasisPoints => "物理额外获得火焰",
+        ItemModifierKind.PhysicalAsExtraColdBasisPoints => "物理额外获得冰霜",
+        ItemModifierKind.PhysicalAsExtraLightningBasisPoints => "物理额外获得闪电",
+        ItemModifierKind.ElementalAsExtraVoidBasisPoints => "元素额外获得虚空",
+        ItemModifierKind.IncreasedPhysiqueBasisPoints => "体魄提高",
+        ItemModifierKind.IncreasedDexterityBasisPoints => "灵巧提高",
+        ItemModifierKind.IncreasedSpiritBasisPoints => "精神提高",
+        ItemModifierKind.IncreasedEnergyBasisPoints => "能量提高",
+        ItemModifierKind.IncreasedAllAttributesBasisPoints => "所有属性提高",
+        ItemModifierKind.AdditionalCoreSkillCapacity => "核心技能容量",
+        ItemModifierKind.HoldHumilityAtMaximum => "谦逊常驻最大层数",
+        ItemModifierKind.HoldArroganceAtMaximum => "傲慢常驻最大层数",
+        ItemModifierKind.HoldRageAtMaximum => "暴怒常驻最大层数",
+        ItemModifierKind.HoldTemperanceAtMaximum => "节制常驻最大层数",
+        ItemModifierKind.HoldMercyAtMaximum => "慈悲常驻最大层数",
+        ItemModifierKind.HoldSlothAtMaximum => "懒惰常驻最大层数",
+        ItemModifierKind.IncreasedFlaskRecoveryAmountBasisPoints => "药剂恢复量提高",
+        ItemModifierKind.IncreasedFlaskRecoveryRateBasisPoints => "药剂恢复速度提高",
+        ItemModifierKind.IncreasedFlaskChargesPerUseBasisPoints => "药剂每次充能消耗提高",
+        ItemModifierKind.InstantFlaskRecoveryPortionBasisPoints => "药剂立即恢复比例",
+        ItemModifierKind.FlaskRecoveryAtEnd => "药剂效果结束时结算恢复",
+        ItemModifierKind.FlaskLifeRemovedFromManaBasisPoints => "从法力移除生命恢复量",
+        ItemModifierKind.FlaskManaRemovedFromLifeBasisPoints => "从生命移除法力恢复量",
+        ItemModifierKind.FlaskBuffArmorBasisPoints => "药剂期间护甲提高",
+        ItemModifierKind.FlaskBuffEvasionBasisPoints => "药剂期间闪避提高",
+        ItemModifierKind.FlaskBuffCriticalChanceBasisPoints => "药剂期间暴击率提高",
+        ItemModifierKind.FlaskBuffMovementSpeedBasisPoints => "药剂期间移动速度提高",
         _ => kind.ToString(),
     };
 

@@ -1,4 +1,5 @@
 using GameForWork.Core.P1.Combat;
+using GameForWork.Core.P30;
 
 namespace GameForWork.Core.P1.Progression;
 
@@ -222,9 +223,9 @@ public sealed record P205PassiveModifiers(
 
 public static class P1PassiveTree
 {
-    public const float LayoutExtent = 900f;
+    public const float LayoutExtent = P30PassiveTreeCatalog.LayoutExtent;
 
-    private static readonly IReadOnlyDictionary<string, PassiveNodeDefinition> NodeMap = P205PassiveTreeCatalog.Build()
+    private static readonly IReadOnlyDictionary<string, PassiveNodeDefinition> NodeMap = P30PassiveTreeCatalog.Build()
         .ToDictionary(node => node.StableId, StringComparer.Ordinal);
 
     private static readonly IReadOnlyDictionary<string, IReadOnlyList<string>> AdjacencyMap = BuildAdjacency(NodeMap.Values);
@@ -239,10 +240,10 @@ public static class P1PassiveTree
     public static IReadOnlyList<string> Neighbors(string stableId) =>
         AdjacencyMap.TryGetValue(stableId, out IReadOnlyList<string>? result) ? result : [];
 
-    public static string StartNode(PassiveStartKind start) => P205PassiveTreeCatalog.StartNode(start);
+    public static string StartNode(PassiveStartKind start) => P30PassiveTreeCatalog.StartNode(start);
 
     public static IReadOnlyList<PassiveEffect> MasteryOptions(PassiveNodeDefinition node) =>
-        P205PassiveTreeCatalog.MasteryOptions(node);
+        P30PassiveTreeCatalog.MasteryOptions(node);
 
     public static IReadOnlyList<string> FindShortestPath(string targetId, IReadOnlySet<string> allocated, PassiveStartKind start)
     {
@@ -251,7 +252,7 @@ public static class P1PassiveTree
         var previous = new Dictionary<string, string?>(StringComparer.Ordinal);
         var pending = new Queue<string>();
         IEnumerable<string> sources = allocated.Count == 0
-            ? new[] { P205PassiveTreeCatalog.StartNode(start) }
+            ? new[] { P30PassiveTreeCatalog.StartNode(start) }
             : allocated;
         foreach (string source in sources)
         {
@@ -270,7 +271,7 @@ public static class P1PassiveTree
         }
         if (!previous.ContainsKey(targetId)) return [];
         var path = new List<string>();
-        string root = P205PassiveTreeCatalog.StartNode(start);
+        string root = P30PassiveTreeCatalog.StartNode(start);
         for (string? current = targetId; current is not null && !allocated.Contains(current); current = previous[current])
         {
             if (current == root) break;
@@ -280,7 +281,7 @@ public static class P1PassiveTree
         return path;
     }
 
-    public static int AllocatedNodesInRadius(string socketId, IReadOnlySet<string> allocated, float radius = P205PassiveTreeCatalog.JewelRadius)
+    public static int AllocatedNodesInRadius(string socketId, IReadOnlySet<string> allocated, float radius = P30PassiveTreeCatalog.JewelRadius)
     {
         PassiveNodeDefinition socket = Get(socketId);
         float square = radius * radius;
@@ -563,7 +564,7 @@ public static class P1PassiveTree
 
 public sealed class PassiveTreeAllocation
 {
-    public const int MaximumAllocatedPoints = 120;
+    public const int MaximumAllocatedPoints = 149;
 
     private readonly HashSet<string> _allocated = new(StringComparer.Ordinal);
     private readonly Dictionary<string, int> _masterySelections = new(StringComparer.Ordinal);
@@ -596,7 +597,7 @@ public sealed class PassiveTreeAllocation
         {
             return false;
         }
-        string root = P205PassiveTreeCatalog.StartNode(StartKind);
+        string root = P30PassiveTreeCatalog.StartNode(StartKind);
         if (!P1PassiveTree.Neighbors(root).Contains(stableId) &&
             !P1PassiveTree.Neighbors(stableId).Any(_allocated.Contains))
         {
@@ -647,7 +648,7 @@ public sealed class PassiveTreeAllocation
             id => P1PassiveTree.Neighbors(id).Where(remaining.Contains).ToList(), StringComparer.Ordinal);
 
         var reachable = new HashSet<string>(StringComparer.Ordinal);
-        string root = P205PassiveTreeCatalog.StartNode(StartKind);
+        string root = P30PassiveTreeCatalog.StartNode(StartKind);
         var pending = new Queue<string>(P1PassiveTree.Neighbors(root).Where(remaining.Contains));
         while (pending.TryDequeue(out string? current))
         {
@@ -748,7 +749,7 @@ public sealed class PassiveTreeAllocation
             {
                 PassiveNodeDefinition node = P1PassiveTree.Get(stableId);
                 return result._allocated.Count == 0
-                    ? P1PassiveTree.Neighbors(P205PassiveTreeCatalog.StartNode(start)).Contains(stableId)
+                    ? P1PassiveTree.Neighbors(P30PassiveTreeCatalog.StartNode(start)).Contains(stableId)
                     : node.Start is PassiveStartKind.None &&
                       P1PassiveTree.Neighbors(stableId).Any(result._allocated.Contains);
             }).ToArray();

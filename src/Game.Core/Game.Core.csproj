@@ -9,5 +9,7 @@
   </ItemGroup>
   <ItemGroup>
     <EmbeddedResource Include="P19\Data\p19_catalog.json" />
+    <EmbeddedResource Include="P30\Data\p30-passive-tree.json" />
+    <EmbeddedResource Include="P30\Data\p30-ascendancies.json" />
   </ItemGroup>
 </Project>

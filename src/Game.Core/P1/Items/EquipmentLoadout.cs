@@ -39,7 +39,11 @@ public sealed record EquipmentModifiers(
     int MaximumAllResistanceBasisPoints = 0,
     int MoreRareBossDamageBasisPoints = 0,
     int ActiveSkillGemLevels = 0,
-    int SupportSkillGemLevels = 0);
+    int SupportSkillGemLevels = 0,
+    IReadOnlyDictionary<ItemModifierKind, int>? Extended = null)
+{
+    public int Value(ItemModifierKind kind) => Extended?.GetValueOrDefault(kind) ?? 0;
+}
 
 public sealed record EquipmentSummary(
     DefensiveEquipment Defense,
@@ -49,7 +53,8 @@ public sealed record EquipmentSummary(
     WeaponProfile? Weapon,
     LegendaryRule? WeaponLegendaryRule,
     bool HasShield = false,
-    int BaseBlockChanceBasisPoints = 0);
+    int BaseBlockChanceBasisPoints = 0,
+    int SpiritBarrier = 0);
 
 public sealed class EquipmentLoadout
 {
@@ -128,25 +133,22 @@ public sealed class EquipmentLoadout
     public EquipmentSummary CalculateSummary()
     {
         ItemInstance[] equipped = _items.Values.ToArray();
-        int armor = equipped.Sum(item => QualityScale(item.Base.Armor, item.Quality));
-        int evasion = equipped.Sum(item => QualityScale(item.Base.Evasion, item.Quality));
-        int shield = equipped.Sum(item => QualityScale(item.Base.Shield, item.Quality));
+        int armor = equipped.Sum(item => LocalDefense(item, item.Base.Armor, ItemModifierKind.FlatArmor, ItemModifierKind.IncreasedArmorBasisPoints));
+        int evasion = equipped.Sum(item => LocalDefense(item, item.Base.Evasion, ItemModifierKind.FlatEvasion, ItemModifierKind.IncreasedEvasionBasisPoints));
+        int shield = equipped.Sum(item => LocalDefense(item, item.Base.Shield, ItemModifierKind.FlatShield, ItemModifierKind.IncreasedShieldBasisPoints));
+        int spiritBarrier = equipped.Sum(item => LocalDefense(item, item.Base.SpiritBarrier, ItemModifierKind.FlatSpiritBarrier, ItemModifierKind.IncreasedSpiritBarrierBasisPoints));
         int[] sums = new int[Enum.GetValues<ItemModifierKind>().Length];
         foreach (ItemInstance item in equipped)
         {
-            sums[(int)item.Base.ImplicitModifier] = checked(sums[(int)item.Base.ImplicitModifier] + item.EffectiveImplicitValue);
+            AddGlobal(sums, item.Base.ImplicitModifier, item.EffectiveImplicitValue, item.Base.ImplicitScope);
             foreach (ItemBaseImplicit implicitModifier in item.Base.ExtraImplicits)
-                sums[(int)implicitModifier.ModifierKind] = checked(sums[(int)implicitModifier.ModifierKind] + implicitModifier.Value);
+                AddGlobal(sums, implicitModifier.ModifierKind, implicitModifier.Value, implicitModifier.Scope);
             foreach (AffixRoll affix in item.Affixes)
-            {
-                sums[(int)affix.Definition.ModifierKind] = checked(
-                    sums[(int)affix.Definition.ModifierKind] + affix.EffectiveValue);
-            }
+            foreach (RolledAffixComponent effect in affix.Effects)
+                AddGlobal(sums, effect.Kind, effect.Value, effect.Scope);
             if (item.Enchantment is not null)
-            {
-                sums[(int)item.Enchantment.ModifierKind] = checked(
-                    sums[(int)item.Enchantment.ModifierKind] + item.Enchantment.Value);
-            }
+            foreach (AffixModifierComponent effect in item.Enchantment.EffectComponents)
+                AddGlobal(sums, effect.Kind, effect.MinimumValue, effect.Scope);
         }
 
         var modifiers = new EquipmentModifiers(
@@ -163,7 +165,7 @@ public sealed class EquipmentLoadout
             sums[(int)ItemModifierKind.IncreasedArmorBasisPoints],
             sums[(int)ItemModifierKind.IncreasedEvasionBasisPoints],
             sums[(int)ItemModifierKind.IncreasedShieldBasisPoints],
-            sums[(int)ItemModifierKind.IncreasedLifeFlaskEffectBasisPoints],
+            checked(sums[(int)ItemModifierKind.IncreasedLifeFlaskEffectBasisPoints] + sums[(int)ItemModifierKind.IncreasedFlaskRecoveryAmountBasisPoints]),
             sums[(int)ItemModifierKind.IncreasedManaRegenerationBasisPoints],
             sums[(int)ItemModifierKind.Dexterity],
             sums[(int)ItemModifierKind.Energy],
@@ -184,29 +186,84 @@ public sealed class EquipmentLoadout
             sums[(int)ItemModifierKind.MaximumAllResistanceBasisPoints],
             sums[(int)ItemModifierKind.MoreRareBossDamageBasisPoints],
             sums[(int)ItemModifierKind.ActiveSkillGemLevels],
-            sums[(int)ItemModifierKind.SupportSkillGemLevels]);
+            sums[(int)ItemModifierKind.SupportSkillGemLevels],
+            Enum.GetValues<ItemModifierKind>().ToDictionary(kind => kind, kind => sums[(int)kind]));
         ItemInstance? weaponItem = _items.GetValueOrDefault(EquipmentSlot.MainHand);
         return new EquipmentSummary(
             new DefensiveEquipment(armor, evasion, shield),
             modifiers,
-            equipped.Sum(item => item.Base.CoreSkillCapacity) + (equipped.Any(item => item.Base.StableId == "p29.base.warfront.marshal_decree") ? 1 : 0),
+            equipped.Sum(item => item.Base.CoreSkillCapacity) + sums[(int)ItemModifierKind.AdditionalCoreSkillCapacity],
             equipped.Sum(item => item.Base.SupportLinkCapacity) + sums[(int)ItemModifierKind.ExtraSupportLinkCapacity],
-            weaponItem?.Base.Category is ItemCategory.TwoHandWeapon or ItemCategory.OneHandWeapon ? QualityWeapon(weaponItem) : null,
+            weaponItem?.Base.Category is ItemCategory.TwoHandWeapon or ItemCategory.OneHandWeapon ? CalculateWeapon(weaponItem) : null,
             weaponItem?.LegendaryRule,
             _items.GetValueOrDefault(EquipmentSlot.OffHand)?.Base.ItemTags.Contains("shield", StringComparer.Ordinal) == true,
-            equipped.Sum(item => item.Base.BlockChanceBasisPoints));
+            equipped.Sum(LocalBlock),
+            spiritBarrier);
     }
 
     private static int QualityScale(int value, int quality) => checked(value * (100 + Math.Clamp(quality, 0, 40)) / 100);
 
-    private static WeaponProfile QualityWeapon(ItemInstance item)
+    public static WeaponProfile CalculateWeapon(ItemInstance item)
     {
         WeaponProfile weapon = item.Base.ToWeaponProfile();
+        int addedMinimum = LocalValue(item, ItemModifierKind.AddedMinimumPhysicalDamage) + LocalValue(item, ItemModifierKind.AddedPhysicalDamage);
+        int addedMaximum = LocalValue(item, ItemModifierKind.AddedMaximumPhysicalDamage) + LocalValue(item, ItemModifierKind.AddedPhysicalDamage);
+        int physicalIncrease = LocalValue(item, ItemModifierKind.IncreasedPhysicalDamageBasisPoints);
+        int attackSpeedIncrease = LocalValue(item, ItemModifierKind.IncreasedAttackSpeedBasisPoints);
+        int criticalIncrease = LocalValue(item, ItemModifierKind.IncreasedCriticalChanceBasisPoints);
         return weapon with
         {
-            MinimumPhysicalDamage = QualityScale(weapon.MinimumPhysicalDamage, item.Quality),
-            MaximumPhysicalDamage = QualityScale(weapon.MaximumPhysicalDamage, item.Quality),
+            MinimumPhysicalDamage = LocalWeaponDamage(weapon.MinimumPhysicalDamage, addedMinimum, physicalIncrease, item.Quality),
+            MaximumPhysicalDamage = LocalWeaponDamage(weapon.MaximumPhysicalDamage, addedMaximum, physicalIncrease, item.Quality),
+            AttacksPerSecondMilli = checked(weapon.AttacksPerSecondMilli * (10_000 + attackSpeedIncrease) / 10_000),
+            CriticalChanceBasisPoints = checked(weapon.CriticalChanceBasisPoints * (10_000 + criticalIncrease) / 10_000),
         };
+    }
+
+    public static (int Armor, int Evasion, int Shield, int SpiritBarrier, int BlockChanceBasisPoints) CalculateLocalDefense(ItemInstance item) =>
+        (LocalDefense(item, item.Base.Armor, ItemModifierKind.FlatArmor, ItemModifierKind.IncreasedArmorBasisPoints),
+         LocalDefense(item, item.Base.Evasion, ItemModifierKind.FlatEvasion, ItemModifierKind.IncreasedEvasionBasisPoints),
+         LocalDefense(item, item.Base.Shield, ItemModifierKind.FlatShield, ItemModifierKind.IncreasedShieldBasisPoints),
+         LocalDefense(item, item.Base.SpiritBarrier, ItemModifierKind.FlatSpiritBarrier, ItemModifierKind.IncreasedSpiritBarrierBasisPoints),
+         LocalBlock(item));
+
+    private static int LocalWeaponDamage(int baseValue, int flat, int increasedBasisPoints, int quality) => checked(
+        (baseValue + flat) * (10_000 + increasedBasisPoints) / 10_000 * (100 + Math.Clamp(quality, 0, 40)) / 100);
+
+    private static int LocalDefense(ItemInstance item, int baseValue, ItemModifierKind flatKind, ItemModifierKind increasedKind)
+    {
+        int flat = LocalValue(item, flatKind);
+        int increased = LocalValue(item, increasedKind);
+        return checked((baseValue + flat) * (10_000 + increased) / 10_000 * (100 + Math.Clamp(item.Quality, 0, 40)) / 100);
+    }
+
+    private static int LocalBlock(ItemInstance item)
+    {
+        int increased = LocalValue(item, ItemModifierKind.IncreasedLocalBlockBasisPoints);
+        return checked(item.Base.BlockChanceBasisPoints * (10_000 + increased) / 10_000);
+    }
+
+    private static int LocalValue(ItemInstance item, ItemModifierKind kind)
+    {
+        int value = item.Base.ImplicitModifier == kind && item.Base.ImplicitScope is ItemModifierScope.LocalWeapon or ItemModifierScope.LocalDefense or ItemModifierScope.LocalBlock
+            ? item.EffectiveImplicitValue : 0;
+        value += item.Base.ExtraImplicits.Where(effect => effect.ModifierKind == kind && effect.Scope is ItemModifierScope.LocalWeapon or ItemModifierScope.LocalDefense or ItemModifierScope.LocalBlock)
+            .Sum(effect => effect.Value);
+        value += item.Affixes.SelectMany(affix => affix.Effects)
+            .Where(effect => effect.Kind == kind && effect.Scope is ItemModifierScope.LocalWeapon or ItemModifierScope.LocalDefense or ItemModifierScope.LocalBlock)
+            .Sum(effect => effect.Value);
+        if (item.Enchantment is not null)
+            value += item.Enchantment.EffectComponents
+                .Where(effect => effect.Kind == kind && effect.Scope is ItemModifierScope.LocalWeapon or ItemModifierScope.LocalDefense or ItemModifierScope.LocalBlock)
+                .Sum(effect => effect.MinimumValue);
+        return value;
+    }
+
+    private static void AddGlobal(int[] sums, ItemModifierKind kind, int value, ItemModifierScope scope)
+    {
+        if (kind == ItemModifierKind.None || scope is ItemModifierScope.LocalWeapon or ItemModifierScope.LocalDefense or ItemModifierScope.LocalBlock)
+            return;
+        sums[(int)kind] = checked(sums[(int)kind] + value);
     }
 
     public static bool CanEquip(EquipmentSlot slot, ItemCategory category) => category switch
