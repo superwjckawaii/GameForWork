@@ -92,6 +92,37 @@ public sealed class P29FeatureTests
     }
 
     [Fact]
+    public void SaveOnePinnacleTwoHandRuleHasRealSwordCandidates()
+    {
+        ItemBaseDefinition[] pinnacleSwords = P1ItemBases.All
+            .Where(item => item.Category == ItemCategory.TwoHandWeapon && item.ItemTags.Contains("sword", StringComparer.Ordinal))
+            .Where(item => P29DropCatalog.BaseTier(item) == P29BaseTier.Pinnacle)
+            .ToArray();
+        Assert.NotEmpty(pinnacleSwords);
+        Assert.Contains(pinnacleSwords, item => item.StableId == "p19.base.ezomyte_blade");
+
+        var filter = new LootFilter([
+            new LootFilterRule("save1.keep.pinnacle.twohand", LootDisposition.Keep,
+                MinimumRarity: ItemRarity.Basic, MaximumRarity: ItemRarity.Legendary,
+                Category: ItemCategory.TwoHandWeapon, BaseTier: P29BaseTier.Pinnacle),
+            new LootFilterRule("save1.keep.high.twohand", LootDisposition.Keep,
+                Category: ItemCategory.TwoHandWeapon, BaseTier: P29BaseTier.High),
+            new LootFilterRule("save1.sell.rest", LootDisposition.Sell,
+                MinimumRarity: ItemRarity.Basic, MaximumRarity: ItemRarity.Legendary),
+        ]);
+        ItemInstance wanted = ItemGenerator.Generate(pinnacleSwords[0].StableId, 100, ItemRarity.Basic, 0x2913, "save1-wanted");
+        Assert.Equal(LootDisposition.Keep, filter.Evaluate(wanted));
+
+        var random = new Pcg32(0x2914);
+        P29SourceProfile source = P29DropCatalog.Source(EnemyFamily.RiftBeast, EnemyRarity.Rare);
+        ItemBaseDefinition[] sampled = Enumerable.Range(0, 10_000)
+            .Select(_ => P20DropFormula.PickBase(100, source, random)).ToArray();
+        Assert.Contains(sampled, item => item.Category == ItemCategory.TwoHandWeapon &&
+            item.ItemTags.Contains("sword", StringComparer.Ordinal) &&
+            P29DropCatalog.BaseTier(item) == P29BaseTier.Pinnacle);
+    }
+
+    [Fact]
     public void SaveOneFilterSellsLowRarityAndNonPinnacleDropsEvenWhenTheyHaveManyLinks()
     {
         var filter = new LootFilter([

@@ -133,20 +133,38 @@ public sealed class P12FeatureTests
     }
 
     [Fact]
-    public void BatchCraftNeverExceedsPerMapBudget()
+    public void BatchCraftStopsAndKeepsMapWhenMaterialsRunOut()
     {
         P1GameSession session = P1GameSession.CreateNew(new PlayerIdentity("制图测试", CharacterGender.Androgynous,
             CharacterSkinTone.Umber, CharacterHairStyle.Cropped, P23BaseClass.Fighter), 12);
         session.World.MapInventory.Add(new P1MapItem("p12-batch", 4));
         session.World.Economy.AddMetal(MetalCurrencyKind.PolishingCobalt, 10);
-        session.World.Economy.AddMetal(MetalCurrencyKind.AlchemicalGold, 10);
 
-        P12MapBatchResult result = session.BatchCraftMaps(new P12MapBatchRule(MaximumMetalSpendPerMap: 4));
+        P12MapBatchResult result = session.BatchCraftMaps(new P12MapBatchRule());
 
         Assert.Equal(4, result.MetalsSpent);
         Assert.Equal(1, result.Skipped);
         Assert.Equal(20, session.World.MapInventory[0].Quality);
         Assert.Equal(P12MapRarity.Basic, session.World.MapInventory[0].Rarity);
+    }
+
+    [Fact]
+    public void BatchCraftCanFillRareMapToSixAffixesWithExaltedGold()
+    {
+        P1GameSession session = P1GameSession.CreateNew(new PlayerIdentity("崇高制图", CharacterGender.Androgynous,
+            CharacterSkinTone.Umber, CharacterHairStyle.Cropped, P23BaseClass.Fighter), 120);
+        P1MapItem rare = new P1MapItem("p12-exalted", 12, Rarity: P12MapRarity.Rare,
+            Affixes: P12MapRules.RollAffixes(P12MapRarity.Rare, 12, 4)).EnsureFormal(4);
+        session.World.MapInventory.Add(rare);
+        session.World.Economy.AddMetal(MetalCurrencyKind.ExaltedGold, 2);
+
+        P12MapBatchResult result = session.BatchCraftMaps(new P12MapBatchRule(
+            TargetRarity: P12MapRarity.Rare, MinimumQuality: 0, FillAffixes: true));
+
+        Assert.Equal(1, result.Completed);
+        Assert.Equal(2, result.MetalsSpent);
+        Assert.Equal(6, session.World.MapInventory[0].EffectiveAffixes.Count);
+        Assert.Equal(6, session.World.MapInventory[0].EffectiveAffixes.Select(affix => affix.Kind).Distinct().Count());
     }
 
     [Fact]

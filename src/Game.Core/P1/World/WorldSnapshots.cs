@@ -2,7 +2,9 @@ using GameForWork.Core.P1.Items;
 using GameForWork.Core.P4;
 using GameForWork.Core.P5;
 using GameForWork.Core.P6;
+using GameForWork.Core.P12;
 using GameForWork.Core.P26;
+using GameForWork.Core.P30;
 
 namespace GameForWork.Core.P1.World;
 
@@ -59,7 +61,8 @@ public sealed record P1WorldSnapshot(
     P26MapFilter? MapCraftFilter = null,
     P26MapFilter? MapSaleFilter = null,
     P26MapFilter? AutoSellMapFilter = null,
-    long NextMapAcquiredSequence = 1);
+    long NextMapAcquiredSequence = 1,
+    P12MapBatchRule? MapCraftRule = null);
 
 public static class P1WorldSnapshots
 {
@@ -91,7 +94,8 @@ public static class P1WorldSnapshots
             state.MapCraftFilter,
             state.MapSaleFilter,
             state.AutoSellMapFilter,
-            state.NextMapAcquiredSequence);
+            state.NextMapAcquiredSequence,
+            state.MapCraftRule);
     }
 
     public static P1WorldState Restore(P1WorldSnapshot snapshot)
@@ -107,7 +111,7 @@ public static class P1WorldSnapshots
         var storage = new EquipmentStorage(snapshot.Storage.Capacity);
         foreach (ItemInstance item in snapshot.Storage.Items)
         {
-            if (!storage.TryStore(P6SocketRules.Ensure(item)))
+            if (!storage.TryStore(P6SocketRules.Ensure(P30EquipmentAffixes.RemoveForbiddenGlobalWeaponAffixes(item))))
             {
                 throw new InvalidDataException("Storage snapshot exceeds its capacity.");
             }
@@ -126,6 +130,7 @@ public static class P1WorldSnapshots
         state.MapCraftFilter = (snapshot.MapCraftFilter ?? P26MapFilter.All).Validate();
         state.MapSaleFilter = (snapshot.MapSaleFilter ?? P26MapFilter.All).Validate();
         state.AutoSellMapFilter = (snapshot.AutoSellMapFilter ?? P26MapFilter.All).Validate();
+        state.MapCraftRule = (snapshot.MapCraftRule ?? new P12MapBatchRule()).Validate();
         state.RestoreNextMapAcquiredSequence(snapshot.NextMapAcquiredSequence);
         foreach (P1MapItem source in snapshot.MapInventory)
         {

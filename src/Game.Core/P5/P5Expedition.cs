@@ -12,7 +12,12 @@ public enum P5ExpeditionTarget
     AbyssWarden,
     AbyssWardenPractice,
     WarfrontMaps,
+    AshenCitadel,
+    AshenCitadelPractice,
+    FinalBreakthrough,
 }
+
+public sealed record P5BossScheduleResult(P1MapItem? Map, string FailureReason = "boss_unavailable");
 
 public enum P5DispatchMode
 {
@@ -52,17 +57,19 @@ public sealed class P5ExpeditionDirector
     public int BossSequence { get; private set; }
     public IReadOnlyDictionary<ExpeditionTeamKind, P5TeamDispatchSnapshot> Dispatches => _dispatches;
     public IReadOnlyList<P6CombatReport> Reports => _reports;
+    public Func<P5ExpeditionTarget, P5BossScheduleResult>? BossMapFactory { get; set; }
 
     public P5TeamDispatchSnapshot? Get(ExpeditionTeamKind team) => _dispatches.GetValueOrDefault(team);
 
-    public void Assign(ExpeditionTeamKind team, P5ExpeditionTarget target, P5DispatchMode mode)
+    public void Assign(ExpeditionTeamKind team, P5ExpeditionTarget target, P5DispatchMode mode, int requestedRuns = 1)
     {
-        if (target is P5ExpeditionTarget.AbyssWarden or P5ExpeditionTarget.AbyssWardenPractice)
+        if (target == P5ExpeditionTarget.FinalBreakthrough)
         {
             mode = P5DispatchMode.Once;
+            requestedRuns = 1;
         }
 
-        int remaining = mode == P5DispatchMode.Once ? 1 : int.MaxValue;
+        int remaining = mode == P5DispatchMode.Once ? Math.Clamp(requestedRuns, 1, 999) : int.MaxValue;
         _dispatches[team] = new P5TeamDispatchSnapshot(team, target, mode, true, remaining, "waiting");
     }
 
@@ -87,27 +94,41 @@ public sealed class P5ExpeditionDirector
         P1MapItem? map;
         MapRoute route;
         string status;
-        if (dispatch.Target is P5ExpeditionTarget.AbyssWarden or P5ExpeditionTarget.AbyssWardenPractice)
+        if (IsBossTarget(dispatch.Target))
         {
-            bool practice = dispatch.Target == P5ExpeditionTarget.AbyssWardenPractice;
-            if (!practice && AbyssWardenTickets <= 0)
+            bool warden = dispatch.Target is P5ExpeditionTarget.AbyssWarden or P5ExpeditionTarget.AbyssWardenPractice;
+            bool practice = dispatch.Target is P5ExpeditionTarget.AbyssWardenPractice or P5ExpeditionTarget.AshenCitadelPractice;
+            if (warden && !practice && AbyssWardenTickets <= 0)
             {
                 Stop(team, dispatch, "boss_ticket_missing");
                 return false;
             }
 
-            if (!practice)
+            if (warden && !practice)
             {
                 AbyssWardenTickets--;
             }
 
             BossSequence++;
-            map = new P1MapItem(
-                $"{(practice ? PracticePrefix : BossPrefix)}{BossSequence:000000}",
-                10).EnsureFormal((ulong)BossSequence);
-            if (!map.EffectiveRouteCandidates.Contains(MapRoute.Abyss))
-                map = map with { RouteCandidates = map.EffectiveRouteCandidates.Append(MapRoute.Abyss).Distinct().Take(3).ToArray() };
-            map = map with { SelectedRoute = MapRoute.Abyss };
+            if (warden)
+            {
+                map = new P1MapItem(
+                    $"{(practice ? PracticePrefix : BossPrefix)}{BossSequence:000000}",
+                    10).EnsureFormal((ulong)BossSequence);
+                if (!map.EffectiveRouteCandidates.Contains(MapRoute.Abyss))
+                    map = map with { RouteCandidates = map.EffectiveRouteCandidates.Append(MapRoute.Abyss).Distinct().Take(3).ToArray() };
+                map = map with { SelectedRoute = MapRoute.Abyss };
+            }
+            else
+            {
+                P5BossScheduleResult scheduled = BossMapFactory?.Invoke(dispatch.Target) ?? new(null);
+                if (scheduled.Map is null)
+                {
+                    Stop(team, dispatch, scheduled.FailureReason);
+                    return false;
+                }
+                map = scheduled.Map;
+            }
             route = MapRoute.Abyss;
             status = practice ? "practice_scheduled" : "boss_scheduled";
         }
@@ -142,11 +163,13 @@ public sealed class P5ExpeditionDirector
                 P5ExpeditionTarget.WarfrontMaps => MapRoute.Warfront,
                 _ => null,
             };
-            route = requestedRoute ?? map.SelectedRoute ??
+            MapRoute? selectedRoute = map.SelectedRoute is { } selected &&
+                !(team.Policy.BlockedRoutes ?? []).Contains(selected) ? selected : null;
+            route = requestedRoute ?? selectedRoute ??
                 (dispatch.Target == P5ExpeditionTarget.HighestTierMaps && map.EffectiveRouteCandidates.Contains(MapRoute.Abyss)
                     ? MapRoute.Abyss
                     : team.Policy.SelectUnattendedRoute(map, team.Progression.Level, (ulong)BossSequence));
-            if (requestedRoute is not null) map = map with { SelectedRoute = route };
+            map = map with { SelectedRoute = route };
             status = "map_scheduled";
         }
 
@@ -249,8 +272,14 @@ public sealed class P5ExpeditionDirector
         return result;
     }
 
-    public static bool IsBoss(P1MapItem map) => map.InstanceId.StartsWith(BossPrefix, StringComparison.Ordinal);
-    public static bool IsPractice(P1MapItem map) => map.InstanceId.StartsWith(PracticePrefix, StringComparison.Ordinal);
+    public static bool IsBoss(P1MapItem map) => map.InstanceId.StartsWith(BossPrefix, StringComparison.Ordinal) ||
+        GameForWork.Core.P10.P10EndgameState.IsCitadel(map) || GameForWork.Core.P10.P10EndgameState.IsBreakthroughTrial(map);
+    public static bool IsPractice(P1MapItem map) => map.InstanceId.StartsWith(PracticePrefix, StringComparison.Ordinal) ||
+        GameForWork.Core.P10.P10EndgameState.IsCitadelPractice(map);
+    public static bool IsBossTarget(P5ExpeditionTarget target) => target is
+        P5ExpeditionTarget.AbyssWarden or P5ExpeditionTarget.AbyssWardenPractice or
+        P5ExpeditionTarget.AshenCitadel or P5ExpeditionTarget.AshenCitadelPractice or
+        P5ExpeditionTarget.FinalBreakthrough;
 
     private static int SelectMapIndex(
         IReadOnlyList<P1MapItem> maps,
@@ -301,8 +330,8 @@ public sealed class P5ExpeditionDirector
     private static bool MatchesAltar(P1MapItem map, MapAltarPreference preference) => preference switch
     {
         MapAltarPreference.Avoid => map.Altar == GameForWork.Core.P12.P12MapAltar.None,
-        MapAltarPreference.RedOath => map.Altar == GameForWork.Core.P12.P12MapAltar.RedOath,
-        MapAltarPreference.BlueOath => map.Altar == GameForWork.Core.P12.P12MapAltar.BlueOath,
+        MapAltarPreference.RedOath => map.Altar != GameForWork.Core.P12.P12MapAltar.BlueOath,
+        MapAltarPreference.BlueOath => map.Altar != GameForWork.Core.P12.P12MapAltar.RedOath,
         _ => true,
     };
 

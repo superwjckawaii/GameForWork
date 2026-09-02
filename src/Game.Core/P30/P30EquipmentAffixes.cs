@@ -6,6 +6,25 @@ namespace GameForWork.Core.P30;
 
 public static partial class P30EquipmentAffixes
 {
+    private static readonly HashSet<ItemModifierKind> ForbiddenGlobalWeaponDamageIncreases =
+    [
+        ItemModifierKind.IncreasedAttackDamageBasisPoints,
+        ItemModifierKind.IncreasedSpellDamageBasisPoints,
+        ItemModifierKind.IncreasedElementalDamageBasisPoints,
+        ItemModifierKind.IncreasedPhysicalDamageBasisPoints,
+        ItemModifierKind.IncreasedFireDamageBasisPoints,
+        ItemModifierKind.IncreasedColdDamageBasisPoints,
+        ItemModifierKind.IncreasedLightningDamageBasisPoints,
+        ItemModifierKind.IncreasedVoidDamageBasisPoints,
+        ItemModifierKind.IncreasedMeleeDamageBasisPoints,
+        ItemModifierKind.IncreasedProjectileDamageBasisPoints,
+        ItemModifierKind.IncreasedAreaDamageBasisPoints,
+        ItemModifierKind.IncreasedDamageOverTimeBasisPoints,
+        ItemModifierKind.IncreasedBleedDamageBasisPoints,
+        ItemModifierKind.IncreasedPoisonDamageBasisPoints,
+        ItemModifierKind.IncreasedIgniteDamageBasisPoints,
+    ];
+
     private static readonly HashSet<string> RemovedImportedFamilies = new(StringComparer.Ordinal)
     {
         "p19.affix.localarmourandenergyshieldandstunrecovery",
@@ -21,6 +40,19 @@ public static partial class P30EquipmentAffixes
     private static readonly ItemCategory[] General = [.. Weapons, .. Armour, .. Jewellery];
 
     public static IReadOnlyList<AffixDefinition> Ordinary { get; } = BuildOrdinary();
+
+    public static ItemInstance RemoveForbiddenGlobalWeaponAffixes(ItemInstance item)
+    {
+        ArgumentNullException.ThrowIfNull(item);
+        if (item.Base.Category is not (ItemCategory.OneHandWeapon or ItemCategory.TwoHandWeapon)) return item;
+        AffixRoll[] retained = item.Affixes.Where(affix => !affix.Effects.Any(effect =>
+            effect.Scope == ItemModifierScope.Global && ForbiddenGlobalWeaponDamageIncreases.Contains(effect.Kind))).ToArray();
+        if (retained.Length == item.Affixes.Count) return item;
+        string fractured = retained.Any(affix => affix.Definition.StableFamilyId == item.FracturedAffixFamilyId)
+            ? item.FracturedAffixFamilyId
+            : string.Empty;
+        return item with { Affixes = retained, FracturedAffixFamilyId = fractured };
+    }
 
     public static bool IsRemovedImportedFamily(string stableFamilyId) => RemovedImportedFamilies.Contains(stableFamilyId);
 
@@ -112,22 +144,24 @@ public static partial class P30EquipmentAffixes
     {
         var result = new List<AffixDefinition>();
 
-        AddSix(result, "attack.damage", "攻击伤害提高", AffixPosition.Prefix, ItemModifierKind.IncreasedAttackDamageBasisPoints, 3_500, 4_500, Weapons.Concat(Jewellery));
-        AddSix(result, "spell.damage", "法术伤害提高", AffixPosition.Prefix, ItemModifierKind.IncreasedSpellDamageBasisPoints, 3_500, 4_500, Weapons.Concat(Jewellery), requiredTags: ["caster", "wand", "focus", "runeblade"]);
-        AddSix(result, "elemental.damage", "元素伤害提高", AffixPosition.Prefix, ItemModifierKind.IncreasedElementalDamageBasisPoints, 3_500, 4_500, Weapons.Concat(Jewellery));
-        AddSix(result, "physical.damage", "物理伤害提高", AffixPosition.Prefix, ItemModifierKind.IncreasedPhysicalDamageBasisPoints, 3_500, 4_500, Weapons.Concat(Jewellery));
-        AddSix(result, "fire.damage", "火焰伤害提高", AffixPosition.Prefix, ItemModifierKind.IncreasedFireDamageBasisPoints, 4_500, 5_500, Weapons.Concat(Jewellery));
-        AddSix(result, "cold.damage", "冰霜伤害提高", AffixPosition.Prefix, ItemModifierKind.IncreasedColdDamageBasisPoints, 4_500, 5_500, Weapons.Concat(Jewellery));
-        AddSix(result, "lightning.damage", "闪电伤害提高", AffixPosition.Prefix, ItemModifierKind.IncreasedLightningDamageBasisPoints, 4_500, 5_500, Weapons.Concat(Jewellery));
-        AddSix(result, "void.damage", "虚空伤害提高", AffixPosition.Prefix, ItemModifierKind.IncreasedVoidDamageBasisPoints, 4_500, 5_500, Weapons.Concat(Jewellery));
-        AddSix(result, "melee.damage", "近战伤害提高", AffixPosition.Prefix, ItemModifierKind.IncreasedMeleeDamageBasisPoints, 3_500, 4_500, Weapons, requiredTags: ["melee"]);
-        AddSix(result, "projectile.damage", "投射物伤害提高", AffixPosition.Prefix, ItemModifierKind.IncreasedProjectileDamageBasisPoints, 3_500, 4_500, Weapons.Concat(Jewellery), requiredTags: ["projectile", "bow", "quiver"]);
-        AddSix(result, "area.damage", "范围伤害提高", AffixPosition.Prefix, ItemModifierKind.IncreasedAreaDamageBasisPoints, 3_500, 4_500, Weapons.Concat(Jewellery));
-        AddSix(result, "dot.damage", "持续伤害提高", AffixPosition.Prefix, ItemModifierKind.IncreasedDamageOverTimeBasisPoints, 4_000, 5_000, Weapons.Concat(Jewellery));
+        // Global damage increases are deliberately not weapon affixes. Weapons scale through
+        // their local damage, speed and critical rolls; global increases remain jewellery rolls.
+        AddSix(result, "attack.damage", "攻击伤害提高", AffixPosition.Prefix, ItemModifierKind.IncreasedAttackDamageBasisPoints, 3_500, 4_500, Jewellery);
+        AddSix(result, "spell.damage", "法术伤害提高", AffixPosition.Prefix, ItemModifierKind.IncreasedSpellDamageBasisPoints, 3_500, 4_500, Jewellery);
+        AddSix(result, "elemental.damage", "元素伤害提高", AffixPosition.Prefix, ItemModifierKind.IncreasedElementalDamageBasisPoints, 3_500, 4_500, Jewellery);
+        AddSix(result, "physical.damage", "物理伤害提高", AffixPosition.Prefix, ItemModifierKind.IncreasedPhysicalDamageBasisPoints, 3_500, 4_500, Jewellery);
+        AddSix(result, "fire.damage", "火焰伤害提高", AffixPosition.Prefix, ItemModifierKind.IncreasedFireDamageBasisPoints, 4_500, 5_500, Jewellery);
+        AddSix(result, "cold.damage", "冰霜伤害提高", AffixPosition.Prefix, ItemModifierKind.IncreasedColdDamageBasisPoints, 4_500, 5_500, Jewellery);
+        AddSix(result, "lightning.damage", "闪电伤害提高", AffixPosition.Prefix, ItemModifierKind.IncreasedLightningDamageBasisPoints, 4_500, 5_500, Jewellery);
+        AddSix(result, "void.damage", "虚空伤害提高", AffixPosition.Prefix, ItemModifierKind.IncreasedVoidDamageBasisPoints, 4_500, 5_500, Jewellery);
+        AddSix(result, "melee.damage", "近战伤害提高", AffixPosition.Prefix, ItemModifierKind.IncreasedMeleeDamageBasisPoints, 3_500, 4_500, Jewellery);
+        AddSix(result, "projectile.damage", "投射物伤害提高", AffixPosition.Prefix, ItemModifierKind.IncreasedProjectileDamageBasisPoints, 3_500, 4_500, Jewellery);
+        AddSix(result, "area.damage", "范围伤害提高", AffixPosition.Prefix, ItemModifierKind.IncreasedAreaDamageBasisPoints, 3_500, 4_500, Jewellery);
+        AddSix(result, "dot.damage", "持续伤害提高", AffixPosition.Prefix, ItemModifierKind.IncreasedDamageOverTimeBasisPoints, 4_000, 5_000, Jewellery);
         AddSix(result, "dot.multiplier", "持续伤害倍率", AffixPosition.Suffix, ItemModifierKind.DamageOverTimeMultiplierBasisPoints, 1_800, 2_400, Weapons.Concat(Jewellery), weight: 500);
-        AddSix(result, "bleed.damage", "流血伤害提高", AffixPosition.Prefix, ItemModifierKind.IncreasedBleedDamageBasisPoints, 4_500, 6_000, Weapons.Concat(Jewellery));
-        AddSix(result, "poison.damage", "中毒伤害提高", AffixPosition.Prefix, ItemModifierKind.IncreasedPoisonDamageBasisPoints, 4_500, 6_000, Weapons.Concat(Jewellery));
-        AddSix(result, "ignite.damage", "点燃伤害提高", AffixPosition.Prefix, ItemModifierKind.IncreasedIgniteDamageBasisPoints, 4_500, 6_000, Weapons.Concat(Jewellery));
+        AddSix(result, "bleed.damage", "流血伤害提高", AffixPosition.Prefix, ItemModifierKind.IncreasedBleedDamageBasisPoints, 4_500, 6_000, Jewellery);
+        AddSix(result, "poison.damage", "中毒伤害提高", AffixPosition.Prefix, ItemModifierKind.IncreasedPoisonDamageBasisPoints, 4_500, 6_000, Jewellery);
+        AddSix(result, "ignite.damage", "点燃伤害提高", AffixPosition.Prefix, ItemModifierKind.IncreasedIgniteDamageBasisPoints, 4_500, 6_000, Jewellery);
         AddSix(result, "bleed.faster", "流血伤害加快", AffixPosition.Suffix, ItemModifierKind.FasterBleedBasisPoints, 1_500, 2_000, Weapons.Concat(Jewellery), weight: 500);
         AddSix(result, "poison.faster", "中毒伤害加快", AffixPosition.Suffix, ItemModifierKind.FasterPoisonBasisPoints, 1_500, 2_000, Weapons.Concat(Jewellery), weight: 500);
         AddSix(result, "ignite.faster", "点燃伤害加快", AffixPosition.Suffix, ItemModifierKind.FasterIgniteBasisPoints, 1_500, 2_000, Weapons.Concat(Jewellery), weight: 500);

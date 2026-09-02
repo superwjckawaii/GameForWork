@@ -214,8 +214,8 @@ public static class P12MapRules
     }
 }
 
-public enum P12MapCraftOperation { PolishQuality, AwakenMagic, AlchemicalRare, ChaosReroll, Corrupt }
-public enum P12BatchFailureBehavior { Keep, Skip, Stop }
+public enum P12MapCraftOperation { PolishQuality, AwakenMagic, AlchemicalRare, ChaosReroll, ExaltedAdd, Corrupt }
+public enum P12BatchFailureBehavior { Keep, Sell }
 public sealed record P12MapCraftResult(bool Succeeded, P1MapItem? Map, MetalCurrencyKind Currency, int Cost, string Summary,
     bool Destroyed = false);
 
@@ -227,6 +227,7 @@ public static class P12MapCrafting
         P12MapCraftOperation.AwakenMagic => (MetalCurrencyKind.AwakeningCopper, 1),
         P12MapCraftOperation.AlchemicalRare => (MetalCurrencyKind.AlchemicalGold, 1),
         P12MapCraftOperation.ChaosReroll => (MetalCurrencyKind.ChaosGold, 1),
+        P12MapCraftOperation.ExaltedAdd => (MetalCurrencyKind.ExaltedGold, 1),
         P12MapCraftOperation.Corrupt => (MetalCurrencyKind.CorruptionIron, 1),
         _ => throw new ArgumentOutOfRangeException(nameof(operation)),
     };
@@ -241,8 +242,10 @@ public static class P12MapCrafting
         {
             P12MapCraftOperation.PolishQuality when map.Quality >= 20 => "quality_maximum",
             P12MapCraftOperation.AwakenMagic when map.Rarity != P12MapRarity.Basic => "basic_required",
-            P12MapCraftOperation.AlchemicalRare when map.Rarity != P12MapRarity.Basic => "basic_required",
+            P12MapCraftOperation.AlchemicalRare when map.Rarity == P12MapRarity.Rare => "not_rare_required",
             P12MapCraftOperation.ChaosReroll when map.Rarity != P12MapRarity.Rare => "rare_required",
+            P12MapCraftOperation.ExaltedAdd when map.Rarity != P12MapRarity.Rare => "rare_required",
+            P12MapCraftOperation.ExaltedAdd when map.EffectiveAffixes.Count >= 6 => "affixes_full",
             P12MapCraftOperation.Corrupt when map.Rarity != P12MapRarity.Rare => "rare_required",
             P12MapCraftOperation.Corrupt when map.IsCorrupted => "already_corrupted",
             _ when map.IsCorrupted => "map_corrupted",
@@ -257,6 +260,7 @@ public static class P12MapCrafting
             P12MapCraftOperation.AwakenMagic => map with { Rarity = P12MapRarity.Magic, Affixes = P12MapRules.RollAffixes(P12MapRarity.Magic, map.Tier, seed) },
             P12MapCraftOperation.AlchemicalRare => map with { Rarity = P12MapRarity.Rare, Affixes = P12MapRules.RollAffixes(P12MapRarity.Rare, map.Tier, seed) },
             P12MapCraftOperation.ChaosReroll => map with { Affixes = P12MapRules.RollAffixes(P12MapRarity.Rare, map.Tier, seed) },
+            P12MapCraftOperation.ExaltedAdd => map with { Affixes = P26MapRules.AddExaltedAffix(map, seed) },
             _ => map,
         };
         if (operation == P12MapCraftOperation.Corrupt)
@@ -272,13 +276,13 @@ public sealed record P12MapBatchRule(
     P12MapRarity TargetRarity = P12MapRarity.Rare,
     int MinimumQuality = 20,
     IReadOnlyList<P12MapAffixKind>? ExcludedAffixes = null,
-    int MaximumMetalSpendPerMap = 8,
+    bool FillAffixes = false,
     bool Corrupt = false,
-    P12BatchFailureBehavior FailureBehavior = P12BatchFailureBehavior.Keep)
+    P12BatchFailureBehavior ExcludedAffixBehavior = P12BatchFailureBehavior.Keep)
 {
     public P12MapBatchRule Validate()
     {
-        if (MinimumQuality is < 0 or > 20 || MaximumMetalSpendPerMap is < 0 or > 100 || !Enum.IsDefined(TargetRarity))
+        if (MinimumQuality is < 0 or > 20 || !Enum.IsDefined(TargetRarity) || !Enum.IsDefined(ExcludedAffixBehavior))
             throw new ArgumentOutOfRangeException(nameof(MinimumQuality));
         return this;
     }

@@ -197,16 +197,34 @@ public static class P26MapRules
         return selected.Select(definition => P26MapAffixCatalog.Create(definition, rank)).ToArray();
     }
 
+    public static IReadOnlyList<P12MapAffix> AddExaltedAffix(P1MapItem map, ulong seed)
+    {
+        if (map.Rarity != P12MapRarity.Rare || map.EffectiveAffixes.Count >= 6)
+            throw new InvalidOperationException("A rare map with an open affix slot is required.");
+        var random = new Pcg32(seed);
+        int prefixes = map.EffectiveAffixes.Count(affix => affix.Family == P26MapAffixFamily.DangerousPrefix);
+        int suffixes = map.EffectiveAffixes.Count(affix => affix.Family == P26MapAffixFamily.RewardSuffix);
+        P26MapAffixDefinition[] candidates = P26MapAffixCatalog.All
+            .Where(definition => !map.EffectiveAffixes.Any(affix => affix.Kind == definition.Kind))
+            .Where(definition => definition.Family == P26MapAffixFamily.DangerousPrefix ? prefixes < 3 : suffixes < 3)
+            .Where(definition => definition.Group == P26MapAffixGroup.None ||
+                !map.EffectiveAffixes.Any(affix => P26MapAffixCatalog.Get(affix.Kind).Group == definition.Group))
+            .OrderBy(_ => random.NextUInt()).ToArray();
+        if (candidates.Length == 0) throw new InvalidOperationException("No compatible map affix remains.");
+        return map.EffectiveAffixes.Append(P26MapAffixCatalog.Create(candidates[0], P26MapAffixCatalog.RankForTier(map.Tier))).ToArray();
+    }
+
     public static P1MapItem NormalizeLegacy(P1MapItem map, ulong seed)
     {
         P12MapRarity rarity = map.IsCorrupted ? P12MapRarity.Rare : map.Rarity;
         P26CorruptionRule corruption = map.IsCorrupted && map.CorruptionRule == P26CorruptionRule.None
             ? (P26CorruptionRule)(1 + seed % 4) : map.CorruptionRule;
         if (rarity == P12MapRarity.Basic) return map with { Affixes = null, CorruptionRule = P26CorruptionRule.None };
-        int expected = rarity == P12MapRarity.Magic ? 2 : 4;
-        bool formal = map.EffectiveAffixes.Count == expected &&
-            map.EffectiveAffixes.Count(affix => affix.Family == P26MapAffixFamily.DangerousPrefix) == expected / 2 &&
-            map.EffectiveAffixes.Count(affix => affix.Family == P26MapAffixFamily.RewardSuffix) == expected / 2;
+        int prefixes = map.EffectiveAffixes.Count(affix => affix.Family == P26MapAffixFamily.DangerousPrefix);
+        int suffixes = map.EffectiveAffixes.Count(affix => affix.Family == P26MapAffixFamily.RewardSuffix);
+        bool formal = rarity == P12MapRarity.Magic
+            ? map.EffectiveAffixes.Count == 2 && prefixes == 1 && suffixes == 1
+            : map.EffectiveAffixes.Count is >= 4 and <= 6 && prefixes is >= 2 and <= 3 && suffixes is >= 2 and <= 3;
         return map with { Rarity = rarity, CorruptionRule = corruption,
             Affixes = formal ? map.EffectiveAffixes : RollAffixes(rarity, map.Tier, seed) };
     }

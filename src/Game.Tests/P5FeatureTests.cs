@@ -80,6 +80,68 @@ public sealed class P5FeatureTests
     }
 
     [Fact]
+    public void SpecifiedRunCountSchedulesExactlyRequestedMaps()
+    {
+        P1GameSession session = CreateSession();
+        session.World.MapInventory.AddRange([
+            new P1MapItem("p5-count-1", 1),
+            new P1MapItem("p5-count-2", 1),
+            new P1MapItem("p5-count-3", 1),
+            new P1MapItem("p5-count-4", 1),
+        ]);
+        session.World.Expedition.Assign(ExpeditionTeamKind.Hero, P5ExpeditionTarget.HighestTierMaps,
+            P5DispatchMode.Once, 3);
+
+        for (int index = 0; index < 3; index++)
+        {
+            Assert.True(session.World.Expedition.PrepareNext(session.World, session.World.Hero));
+            Assert.True(session.World.Hero.Queue.TryDequeue(out _));
+        }
+
+        Assert.False(session.World.Expedition.PrepareNext(session.World, session.World.Hero));
+        P5TeamDispatchSnapshot dispatch = session.World.Expedition.Get(ExpeditionTeamKind.Hero)!;
+        Assert.False(dispatch.Enabled);
+        Assert.Equal(0, dispatch.RemainingRuns);
+        Assert.Single(session.World.MapInventory);
+    }
+
+    [Fact]
+    public void AbandonExpeditionConsumesActiveMapAndStopsTeam()
+    {
+        P1GameSession session = CreateSession();
+        session.World.MapInventory.Add(new P1MapItem("p5-abandon", 1));
+        session.AssignExpedition(ExpeditionTeamKind.Hero, P5ExpeditionTarget.HighestTierMaps,
+            P5DispatchMode.Repeat);
+        new P1WorldSimulator(new P1MapAttemptResolver()).Simulate(session.World, 1, 55);
+
+        Assert.NotNull(session.World.Hero.ActiveMap);
+        Assert.True(session.AbandonExpedition(ExpeditionTeamKind.Hero));
+
+        Assert.Null(session.World.Hero.ActiveMap);
+        Assert.True(session.World.Hero.IsStopped);
+        Assert.Equal("abandoned", session.World.Hero.StopReason);
+        Assert.DoesNotContain(session.World.MapInventory, map => map.InstanceId == "p5-abandon");
+    }
+
+    [Fact]
+    public void RepeatedWardenChallengeConsumesTicketsUntilExhausted()
+    {
+        P1GameSession session = CreateSession();
+        for (int index = 0; index < 24; index++)
+            session.World.Expedition.RecordResolved(new P1MapItem($"warden-ticket-{index}", 10), true);
+        session.World.Expedition.Assign(ExpeditionTeamKind.Hero, P5ExpeditionTarget.AbyssWarden, P5DispatchMode.Repeat);
+
+        Assert.True(session.World.Expedition.PrepareNext(session.World, session.World.Hero));
+        Assert.True(session.World.Hero.Queue.TryDequeue(out _));
+        Assert.True(session.World.Expedition.PrepareNext(session.World, session.World.Hero));
+        Assert.True(session.World.Hero.Queue.TryDequeue(out _));
+        Assert.False(session.World.Expedition.PrepareNext(session.World, session.World.Hero));
+
+        Assert.Equal(0, session.World.Expedition.AbyssWardenTickets);
+        Assert.Equal("boss_ticket_missing", session.World.Hero.StopReason);
+    }
+
+    [Fact]
     public void ExpeditionProgressAndAssignmentsSurviveSessionSnapshot()
     {
         P1GameSession session = CreateSession();

@@ -186,9 +186,9 @@ public sealed record P1MapItem(
         if (string.IsNullOrWhiteSpace(InstanceId) || InstanceId.Length > 128 ||
             Tier is < MinimumTier or > MaximumTier || ResumeNode is < 1 or > 32 ||
             Quality is < 0 or > 20 || !Enum.IsDefined(Rarity) || !Enum.IsDefined(Altar) ||
-            EffectiveAffixes.Count > 4 || EffectiveRouteCandidates.Count > 3 ||
-            EffectiveAffixes.Count(affix => affix.Family == P26MapAffixFamily.DangerousPrefix) > 2 ||
-            EffectiveAffixes.Count(affix => affix.Family == P26MapAffixFamily.RewardSuffix) > 2 ||
+            EffectiveAffixes.Count > 6 || EffectiveRouteCandidates.Count > 3 ||
+            EffectiveAffixes.Count(affix => affix.Family == P26MapAffixFamily.DangerousPrefix) > 3 ||
+            EffectiveAffixes.Count(affix => affix.Family == P26MapAffixFamily.RewardSuffix) > 3 ||
             EffectiveAffixes.GroupBy(affix => P26MapAffixCatalog.Get(affix.Kind).Group)
                 .Any(group => group.Key != P26MapAffixGroup.None && group.Count() > 1) ||
             EffectiveRouteCandidates.Any(route => !Enum.IsDefined(route)) ||

@@ -129,6 +129,52 @@ public sealed class P30EquipmentAffixTests
     }
 
     [Fact]
+    public void GlobalDamageIncreaseAffixesNeverRollOnWeapons()
+    {
+        HashSet<ItemModifierKind> globalDamageIncreases =
+        [
+            ItemModifierKind.IncreasedAttackDamageBasisPoints,
+            ItemModifierKind.IncreasedSpellDamageBasisPoints,
+            ItemModifierKind.IncreasedElementalDamageBasisPoints,
+            ItemModifierKind.IncreasedPhysicalDamageBasisPoints,
+            ItemModifierKind.IncreasedFireDamageBasisPoints,
+            ItemModifierKind.IncreasedColdDamageBasisPoints,
+            ItemModifierKind.IncreasedLightningDamageBasisPoints,
+            ItemModifierKind.IncreasedVoidDamageBasisPoints,
+            ItemModifierKind.IncreasedMeleeDamageBasisPoints,
+            ItemModifierKind.IncreasedProjectileDamageBasisPoints,
+            ItemModifierKind.IncreasedAreaDamageBasisPoints,
+            ItemModifierKind.IncreasedDamageOverTimeBasisPoints,
+            ItemModifierKind.IncreasedBleedDamageBasisPoints,
+            ItemModifierKind.IncreasedPoisonDamageBasisPoints,
+            ItemModifierKind.IncreasedIgniteDamageBasisPoints,
+        ];
+        ItemBaseDefinition[] weapons = P1ItemBases.All.Where(item =>
+            item.Category is ItemCategory.OneHandWeapon or ItemCategory.TwoHandWeapon).ToArray();
+
+        Assert.DoesNotContain(P30EquipmentAffixes.Ordinary, affix =>
+            globalDamageIncreases.Contains(affix.ModifierKind) && weapons.Any(affix.Supports));
+        Assert.Contains(P30EquipmentAffixes.Ordinary, affix =>
+            affix.StableFamilyId == "p30.affix.attack.damage" && affix.ApplicableCategories!.Contains(ItemCategory.Ring));
+    }
+
+    [Fact]
+    public void RestoringLegacyWeaponsRemovesGlobalDamageButKeepsLocalPhysicalDamage()
+    {
+        ItemBaseDefinition itemBase = P1ItemBases.Get("p19.base.broad_sword");
+        AffixDefinition global = P30EquipmentAffixes.Ordinary.First(affix => affix.StableFamilyId == "p30.affix.attack.damage");
+        AffixDefinition local = P1Affixes.All.First(affix => affix.StableFamilyId == "p19.affix.localphysicaldamage" && affix.Supports(itemBase));
+        var item = new ItemInstance("legacy-global-weapon", itemBase, 100, ItemRarity.Rare,
+            [new AffixRoll(global, global.MinimumValue), new AffixRoll(local, local.MinimumValue)]);
+
+        ItemInstance normalized = P30EquipmentAffixes.RemoveForbiddenGlobalWeaponAffixes(item);
+
+        AffixRoll kept = Assert.Single(normalized.Affixes);
+        Assert.Equal(local.StableFamilyId, kept.Definition.StableFamilyId);
+        Assert.Contains(kept.Effects, effect => effect.Scope == ItemModifierScope.LocalWeapon);
+    }
+
+    [Fact]
     public void ConversionOverOneHundredPercentIsNormalizedWithoutReverseFlow()
     {
         RolledAffixComponent[] effects =

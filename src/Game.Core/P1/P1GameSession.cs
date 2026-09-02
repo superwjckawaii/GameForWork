@@ -21,6 +21,8 @@ using GameForWork.Core.P30;
 
 namespace GameForWork.Core.P1;
 
+public sealed record P5BossChallengeAvailability(bool Unlocked, int AvailableRuns, string Requirement);
+
 public enum CharacterGender
 {
     Woman,
@@ -169,6 +171,7 @@ public sealed class P1GameSession
         _heroBuild = AssembleHero();
         RefreshHeroTeamBuild();
         RefreshMercenaryPartyBuild();
+        World.Expedition.BossMapFactory = CreateBossMap;
     }
 
     public PlayerIdentity Player { get; }
@@ -841,11 +844,12 @@ public sealed class P1GameSession
     public void AssignExpedition(
         ExpeditionTeamKind teamKind,
         P5ExpeditionTarget target,
-        P5DispatchMode mode)
+        P5DispatchMode mode,
+        int requestedRuns = 1)
     {
         P1TeamExpeditionState team = Team(teamKind);
         ReturnQueuedMaps(team);
-        World.Expedition.Assign(teamKind, target, mode);
+        World.Expedition.Assign(teamKind, target, mode, requestedRuns);
         team.ResumeForNewDispatch();
         World.Expedition.PrepareNext(World, team);
         if (team.Queue.Maps.FirstOrDefault() is { } queued)
@@ -854,6 +858,34 @@ public sealed class P1GameSession
                 AtlasSnapshot = Endgame.AtlasPassives.Order(StringComparer.Ordinal).ToArray(),
             });
         Journey.Synchronize(this);
+    }
+
+    public P5BossChallengeAvailability GetBossChallengeAvailability(P5ExpeditionTarget target) => target switch
+    {
+        P5ExpeditionTarget.AbyssWarden => new(true, World.Expedition.AbyssWardenTickets,
+            "消耗 1 张深渊监守者门票"),
+        P5ExpeditionTarget.AbyssWardenPractice => new(true, int.MaxValue, "练习模式，不消耗门票且不获得奖励"),
+        P5ExpeditionTarget.AshenCitadel => new(true, Endgame.CitadelTickets, "消耗 1 张灰烬天垒门票"),
+        P5ExpeditionTarget.AshenCitadelPractice => new(true, int.MaxValue, "练习模式，不消耗门票且不获得奖励"),
+        P5ExpeditionTarget.FinalBreakthrough => new(World.Hero.Progression.Level >= 100 && !Endgame.FinalBreakthroughCompleted,
+            World.Hero.Progression.Level >= 100 && !Endgame.FinalBreakthroughCompleted ? 1 : 0,
+            Endgame.FinalBreakthroughCompleted ? "已经完成最终突破" : "需要角色达到 100 级"),
+        _ => new(false, 0, "不是 Boss 挑战"),
+    };
+
+    public bool AssignBossChallenge(P5ExpeditionTarget target, P5DispatchMode mode, int requestedRuns = 1)
+    {
+        if (!P5ExpeditionDirector.IsBossTarget(target)) return false;
+        P1TeamExpeditionState team = World.Hero;
+        P5BossChallengeAvailability availability = GetBossChallengeAvailability(target);
+        if (!availability.Unlocked || availability.AvailableRuns == 0 || team.ActiveMap is not null || team.Queue.Count > 0)
+            return false;
+        World.Expedition.BossMapFactory = CreateBossMap;
+        World.Expedition.Assign(ExpeditionTeamKind.Hero, target, mode, requestedRuns);
+        team.ResumeForNewDispatch();
+        World.Expedition.PrepareNext(World, team);
+        Journey.Synchronize(this);
+        return team.Queue.Count > 0 || team.ActiveMap is not null;
     }
 
     public void RecordJourneyEvent(P8JourneyEvent journeyEvent)
@@ -868,6 +900,40 @@ public sealed class P1GameSession
         ReturnQueuedMaps(team);
         World.Expedition.Cancel(teamKind);
         team.Stop("manual_stop");
+    }
+
+    public bool AbandonExpedition(ExpeditionTeamKind teamKind)
+    {
+        P1TeamExpeditionState team = Team(teamKind);
+        ReturnQueuedMaps(team);
+        bool abandoned = team.AbandonActiveMap() is not null;
+        World.Expedition.Cancel(teamKind, "abandoned");
+        team.Stop("abandoned");
+        return abandoned;
+    }
+
+    private P5BossScheduleResult CreateBossMap(P5ExpeditionTarget target)
+    {
+        SimulationSequence++;
+        return target switch
+        {
+            P5ExpeditionTarget.AshenCitadel when !Endgame.TryConsumeCitadelTicket() => new(null, "citadel_ticket_missing"),
+            P5ExpeditionTarget.AshenCitadel => new(new P1MapItem(
+                $"{P10EndgameState.CitadelMapPrefix}{SimulationSequence:000000}", 20,
+                RouteCandidates: [MapRoute.Abyss], SelectedRoute: MapRoute.Abyss,
+                AtlasSnapshot: Endgame.AtlasPassives.Order(StringComparer.Ordinal).ToArray())),
+            P5ExpeditionTarget.AshenCitadelPractice => new(new P1MapItem(
+                $"{P10EndgameState.CitadelPracticeMapPrefix}{SimulationSequence:000000}", 20,
+                RouteCandidates: [MapRoute.Abyss], SelectedRoute: MapRoute.Abyss,
+                AtlasSnapshot: Endgame.AtlasPassives.Order(StringComparer.Ordinal).ToArray())),
+            P5ExpeditionTarget.FinalBreakthrough when World.Hero.Progression.Level < 100 => new(null, "level_100_required"),
+            P5ExpeditionTarget.FinalBreakthrough when Endgame.FinalBreakthroughCompleted => new(null, "breakthrough_completed"),
+            P5ExpeditionTarget.FinalBreakthrough => new(new P1MapItem(
+                $"{P10EndgameState.BreakthroughMapPrefix}{SimulationSequence:000000}", 16,
+                RouteCandidates: [MapRoute.Safe], SelectedRoute: MapRoute.Safe,
+                AtlasSnapshot: Endgame.AtlasPassives.Order(StringComparer.Ordinal).ToArray())),
+            _ => new(null),
+        };
     }
 
     public void SetHeroAi(HeroAiConfiguration configuration)
@@ -1067,27 +1133,25 @@ public sealed class P1GameSession
         P12MapBatchRule rule = requestedRule.Validate();
         P26MapFilter filter = (requestedFilter ?? World.MapCraftFilter).Validate();
         World.MapCraftFilter = filter;
+        World.MapCraftRule = rule;
         string[] selectedIds = filter.Select(World.MapInventory).Where(map => !map.IsProtected)
             .Select(map => map.InstanceId).ToArray();
-        int processed = 0, completed = 0, skipped = 0, destroyed = 0, spent = 0;
+        int processed = 0, completed = 0, skipped = 0, destroyed = 0, sold = 0, saleGold = 0, spent = 0;
         bool stopped = false;
         foreach (string selectedId in selectedIds)
         {
             int index = World.MapInventory.FindIndex(map => map.InstanceId == selectedId);
             if (index < 0) continue;
             P1MapItem map = World.MapInventory[index].EnsureFormal(Seed ^ (ulong)index);
-            int mapSpent = 0;
             bool failed = false, mapDestroyed = false;
 
             bool Apply(P12MapCraftOperation operation)
             {
-                (_, int cost) = P12MapCrafting.Cost(operation);
-                if (mapSpent + cost > rule.MaximumMetalSpendPerMap) return false;
                 ulong operationSeed = Seed ^ (ulong)SimulationSequence++ ^ (ulong)(index + 1) * 0x517cc1b727220a95UL;
                 P12MapCraftResult result = P12MapCrafting.Apply(World.Economy, map, operation, operationSeed, World.MaximumUnlockedMapTier,
                     P26AtlasEffects.Has(Endgame.AtlasPassives.ToArray(), "p26.atlas.craft.02") ? 10 : 5);
                 if (!result.Succeeded) return false;
-                mapSpent += result.Cost;
+                spent += result.Cost;
                 if (result.Destroyed) { mapDestroyed = true; return true; }
                 map = result.Map!;
                 return true;
@@ -1101,24 +1165,52 @@ public sealed class P1GameSession
                     ? P12MapCraftOperation.AlchemicalRare : P12MapCraftOperation.AwakenMagic;
                 if (!Apply(upgrade)) failed = true;
             }
-            while (!failed && !mapDestroyed && (rule.ExcludedAffixes?.Any(kind => map.EffectiveAffixes.Any(affix => affix.Kind == kind)) ?? false))
+            int rerolls = 0;
+            while (!failed && !mapDestroyed && map.Rarity == P12MapRarity.Rare && rerolls++ < 1_000 &&
+                   (rule.ExcludedAffixes?.Any(kind => map.EffectiveAffixes.Any(affix => affix.Kind == kind)) ?? false))
             {
-                if (map.Rarity != P12MapRarity.Rare || !Apply(P12MapCraftOperation.ChaosReroll)) failed = true;
+                if (!Apply(P12MapCraftOperation.ChaosReroll)) failed = true;
+            }
+            while (!failed && !mapDestroyed && rule.FillAffixes && map.Rarity == P12MapRarity.Rare && map.EffectiveAffixes.Count < 6)
+                if (!Apply(P12MapCraftOperation.ExaltedAdd)) failed = true;
+            bool excludedAtEnd = rule.ExcludedAffixes?.Any(kind => map.EffectiveAffixes.Any(affix => affix.Kind == kind)) ?? false;
+            if (!failed && !mapDestroyed && excludedAtEnd)
+            {
+                if (rule.ExcludedAffixBehavior == P12BatchFailureBehavior.Sell)
+                {
+                    saleGold += P26MapRules.SaleGold(map);
+                    World.MapInventory.RemoveAt(index);
+                    sold++;
+                }
+                else
+                {
+                    World.MapInventory[index] = map;
+                    skipped++;
+                }
+                processed++;
+                continue;
             }
             if (!failed && !mapDestroyed && rule.Corrupt && !map.IsCorrupted && !Apply(P12MapCraftOperation.Corrupt)) failed = true;
 
-            processed++; spent += mapSpent;
+            processed++;
             if (mapDestroyed) { World.MapInventory.RemoveAt(index); destroyed++; }
             else World.MapInventory[index] = map;
             if (!failed) completed++;
             else
             {
                 skipped++;
-                if (rule.FailureBehavior == P12BatchFailureBehavior.Stop) { stopped = true; break; }
+                stopped = true;
+                break;
             }
         }
+        if (saleGold > 0)
+        {
+            saleGold = saleGold * (10_000 + P26AtlasEffects.MapSaleIncrease(Endgame.AtlasPassives.ToArray())) / 10_000;
+            World.Economy.AddDispositionProceeds(saleGold, 0);
+        }
         return new(processed, completed, skipped, spent, stopped,
-            $"处理 {processed} 张，完成 {completed} 张，腐化摧毁 {destroyed} 张，跳过 {skipped} 张，消耗金属 {spent}。");
+            $"处理 {processed} 张，完成 {completed} 张，出售 {sold} 张（{saleGold} 金币），腐化摧毁 {destroyed} 张，未达目标保留 {skipped} 张，消耗金属 {spent}。" +
+            (stopped ? " 材料不足，批处理已停止。" : string.Empty));
     }
 
     public (int Sold, int Gold) SellMaps(P26MapFilter requestedFilter)
@@ -1147,17 +1239,7 @@ public sealed class P1GameSession
     }
 
     public bool TryChallengeFinalBreakthrough()
-    {
-        P1TeamExpeditionState team = World.Hero;
-        if (World.Hero.Progression.Level < 100 || Endgame.FinalBreakthroughCompleted ||
-            team.ActiveMap is not null || team.Queue.Count > 0) return false;
-        World.Expedition.Cancel(ExpeditionTeamKind.Hero, "breakthrough_scheduled");
-        team.Resume();
-        team.ApplyPolicy(new ExpeditionPolicy(RouteSelectionMode.Automatic, MapRoute.Safe,
-            QueueFailureBehavior.Stop, StorageFullBehavior.AcceptStackablesOnly, StopAfterConsecutiveFailures: 1));
-        return team.Queue.TryEnqueue(new P1MapItem($"{P10EndgameState.BreakthroughMapPrefix}{SimulationSequence:000000}", 16,
-            AtlasSnapshot: Endgame.AtlasPassives.Order(StringComparer.Ordinal).ToArray()));
-    }
+        => AssignBossChallenge(P5ExpeditionTarget.FinalBreakthrough, P5DispatchMode.Once);
 
     public CombatPreview GetCombatPreview() => CombatPreviewRules.Calculate(
         _heroBuild.Sheet,
@@ -1409,28 +1491,10 @@ public sealed class P1GameSession
     }
 
     public bool TryChallengeCitadel()
-    {
-        P1TeamExpeditionState team = World.Hero;
-        if (team.ActiveMap is not null || team.Queue.Count > 0 || !Endgame.TryConsumeCitadelTicket()) return false;
-        World.Expedition.Cancel(ExpeditionTeamKind.Hero, "citadel_scheduled");
-        team.Resume();
-        team.ApplyPolicy(new ExpeditionPolicy(RouteSelectionMode.Automatic, MapRoute.Abyss,
-            QueueFailureBehavior.Stop, StorageFullBehavior.AcceptStackablesOnly, StopAfterConsecutiveFailures: 1));
-        return team.Queue.TryEnqueue(new P1MapItem($"{P10EndgameState.CitadelMapPrefix}{SimulationSequence:000000}", 20,
-            AtlasSnapshot: Endgame.AtlasPassives.Order(StringComparer.Ordinal).ToArray()));
-    }
+        => AssignBossChallenge(P5ExpeditionTarget.AshenCitadel, P5DispatchMode.Once);
 
     public bool TryPracticeCitadel()
-    {
-        P1TeamExpeditionState team = World.Hero;
-        if (team.ActiveMap is not null || team.Queue.Count > 0) return false;
-        World.Expedition.Cancel(ExpeditionTeamKind.Hero, "citadel_practice_scheduled");
-        team.Resume();
-        team.ApplyPolicy(new ExpeditionPolicy(RouteSelectionMode.Automatic, MapRoute.Abyss,
-            QueueFailureBehavior.Stop, StorageFullBehavior.AcceptStackablesOnly, StopAfterConsecutiveFailures: 1));
-        return team.Queue.TryEnqueue(new P1MapItem($"{P10EndgameState.CitadelPracticeMapPrefix}{SimulationSequence:000000}", 20,
-            AtlasSnapshot: Endgame.AtlasPassives.Order(StringComparer.Ordinal).ToArray()));
-    }
+        => AssignBossChallenge(P5ExpeditionTarget.AshenCitadelPractice, P5DispatchMode.Once);
 
     private void RefreshMercenaryPartyBuild() => World.Mercenaries.UpdateBuild(
         Town.BuildMercenaryParty(World.Mercenaries.Progression.Level));

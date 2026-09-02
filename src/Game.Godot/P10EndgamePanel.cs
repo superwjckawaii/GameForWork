@@ -134,7 +134,6 @@ public partial class P10EndgamePanel : Control
     private Action<string>? _changed;
     private Label? _summary;
     private P10AtlasTreeView? _atlas;
-    private Button? _breakthrough;
     private Label? _preflight;
     private string _signature = string.Empty;
 
@@ -158,15 +157,7 @@ public partial class P10EndgamePanel : Control
 
         var bottom = new VBoxContainer();
         var bossActions = new HFlowContainer(); bottom.AddChild(bossActions);
-        var boss = new Button { Text = "正式挑战：灰烬天垒", TooltipText = "消耗 1 枚天垒门票；正式模式只有一次战斗机会。" };
-        boss.Pressed += () => { changed(session().TryChallengeCitadel() ? "灰烬天垒三阶段已排入主角远征。" : "主角队必须空闲，并持有由 8 枚 T11+ 碎片合成的门票。"); Refresh(true); };
-        bossActions.AddChild(boss);
-        var practice = new Button { Text = "天垒练习", TooltipText = "免费练习三阶段；不消耗门票，也不产生奖励。" };
-        practice.Pressed += () => { changed(session().TryPracticeCitadel() ? "灰烬天垒练习已排入主角远征。" : "主角队必须空闲。"); Refresh(true); };
-        bossActions.AddChild(practice);
-        _breakthrough = new Button { Text = "门扉突破试炼", TooltipText = "达到 100 级后免费重复挑战；胜利开放 101–120 级和 T17–T20。" };
-        _breakthrough.Pressed += () => { changed(session().TryChallengeFinalBreakthrough() ? "百级门扉试炼已排入主角远征。" : "需要 100 级、未完成突破且主角队空闲。"); Refresh(true); };
-        bossActions.AddChild(_breakthrough);
+        bossActions.AddChild(new Label { Text = "Boss 挑战已统一移动到：远征 → 主角派遣。" });
         for (int tier = 1; tier <= 3; tier++)
         {
             int selectedTier = tier;
@@ -206,12 +197,6 @@ public partial class P10EndgamePanel : Control
             $"亡旗 {(state.WarfrontDiscovered ? $"战功 {state.WarfrontMerit} / 声望 {state.WarfrontReputation}" : "未发现")}\n" +
             $"天垒碎片 {state.CitadelFragments}/{P10EndgameState.CitadelFragmentsPerTicket} · 门票 {state.CitadelTickets} · " +
             $"升华 {P18AscendancyCatalog.DisplayName(state.SelectedAscendancy)} · 升华点 {state.AscendancyPassives.Count}/{state.BreakthroughPoints} · 天垒胜利 {state.CitadelVictories} · 神话重铸 {state.MythicReforgeMaterials}";
-        if (_breakthrough is not null)
-        {
-            _breakthrough.Text = state.FinalBreakthroughCompleted ? "门扉突破已完成" :
-                _session().World.Hero.Progression.Level >= 100 ? "门扉突破试炼（可挑战）" : "门扉突破试炼（需要 100 级）";
-            _breakthrough.Disabled = state.FinalBreakthroughCompleted || _session().World.Hero.Progression.Level < 100;
-        }
         if (_preflight is not null)
         {
             P14BossDefinition boss = P14Bosses.CitadelStages[^1];

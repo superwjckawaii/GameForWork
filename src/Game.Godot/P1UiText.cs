@@ -297,6 +297,13 @@ internal static class P1UiText
         return ranges.Count == 0 ? string.Empty : string.Join(' ', ranges);
     }
 
+    internal static string AffixComponentRange(ItemModifierKind kind, int minimum, int maximum)
+    {
+        string low = RangeValue(kind, minimum);
+        string high = RangeValue(kind, maximum);
+        return $"{ModifierName(kind)} {low}{(low == high ? string.Empty : $"–{high}")}";
+    }
+
     private static string RangeValue(ItemModifierKind kind, int value)
     {
         string sign = value >= 0 ? "+" : string.Empty;
@@ -305,7 +312,7 @@ internal static class P1UiText
             : $"{sign}{value}";
     }
 
-    private static string ModifierName(ItemModifierKind kind) => kind switch
+    internal static string ModifierName(ItemModifierKind kind) => kind switch
     {
         ItemModifierKind.AddedPhysicalDamage => "附加物理伤害",
         ItemModifierKind.IncreasedPhysicalDamageBasisPoints => "物理伤害增加",

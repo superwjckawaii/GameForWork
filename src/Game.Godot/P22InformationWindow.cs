@@ -4,7 +4,7 @@ using Godot;
 
 namespace GameForWork.GodotClient;
 
-public partial class P22InformationWindow : Window
+public partial class P22InformationWindow : P30IndependentWindow
 {
     private Func<P1GameSession?>? _session;
     private RichTextLabel? _journey;
@@ -12,24 +12,7 @@ public partial class P22InformationWindow : Window
     public void Initialize(Func<P1GameSession?> session)
     {
         _session = session;
-        Title = "游戏信息与指引";
-        Size = new Vector2I(780, 520);
-        MinSize = new Vector2I(640, 440);
-        Exclusive = true;
-        Transient = true;
-        CloseRequested += Hide;
-
-        var margin = new MarginContainer();
-        margin.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
-        margin.AddThemeConstantOverride("margin_left", 12);
-        margin.AddThemeConstantOverride("margin_top", 12);
-        margin.AddThemeConstantOverride("margin_right", 12);
-        margin.AddThemeConstantOverride("margin_bottom", 12);
-        AddChild(margin);
-
-        var root = new VBoxContainer();
-        root.AddThemeConstantOverride("separation", 8);
-        margin.AddChild(root);
+        VBoxContainer root = InitializePixelWindow("游戏信息与指引", new Vector2I(900, 620), new Vector2I(720, 480));
         root.AddChild(new Label
         {
             Text = "暗门远征指南 · 这里集中保存流程、构筑、操作与词缀资料。",
@@ -64,7 +47,7 @@ public partial class P22InformationWindow : Window
     public void Open()
     {
         RefreshJourney();
-        PopupCentered();
+        OpenCentered();
     }
 
     private void RefreshJourney()

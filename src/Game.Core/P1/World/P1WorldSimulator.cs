@@ -6,6 +6,7 @@ using GameForWork.Core.P1.Progression;
 using GameForWork.Core.P1.Combat;
 using GameForWork.Core.P5;
 using GameForWork.Core.P6;
+using GameForWork.Core.P12;
 using GameForWork.Core.P26;
 using GameForWork.Core.P20;
 
@@ -154,6 +155,18 @@ public sealed class P1TeamExpeditionState
     {
         IsStopped = true;
         StopReason = reason;
+    }
+
+    public P1MapItem? AbandonActiveMap()
+    {
+        P1MapItem? abandoned = ActiveMap;
+        ActiveMap = null;
+        ActiveRun = null;
+        RemainingMapTimeMilliseconds = 0;
+        ActivePolicySnapshot = null;
+        RouteDecisionRemainingMilliseconds = 0;
+        CommitPendingPolicy();
+        return abandoned;
     }
 
     public void Resume()
@@ -305,6 +318,7 @@ public sealed class P1WorldState
     public P26MapFilter MapCraftFilter { get; set; } = P26MapFilter.All;
     public P26MapFilter MapSaleFilter { get; set; } = P26MapFilter.All;
     public P26MapFilter AutoSellMapFilter { get; set; } = P26MapFilter.All;
+    public P12MapBatchRule MapCraftRule { get; set; } = new();
     private long _nextMapAcquiredSequence = 1;
     public P1TeamExpeditionState Hero { get; }
     public P1TeamExpeditionState Mercenaries { get; }

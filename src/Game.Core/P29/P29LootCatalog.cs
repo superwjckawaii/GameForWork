@@ -44,7 +44,12 @@ public static class P29DropCatalog
     {
         if (item.ItemTags.Contains("warfront", StringComparer.Ordinal))
             return item.RequiredLevel >= 100 ? P29BaseTier.Pinnacle : item.RequiredLevel >= 85 ? P29BaseTier.High : P29BaseTier.Advanced;
-        return item.RequiredLevel switch { >= 86 => P29BaseTier.Pinnacle, >= 70 => P29BaseTier.High, >= 40 => P29BaseTier.Advanced, _ => P29BaseTier.Normal };
+        // The imported PoE-style catalog tops out around level 60-80 rather than level 100.
+        // Its explicit top-tier identity is authoritative; the fallback bands cover custom
+        // jewellery and armour bases which do not carry that imported tag.
+        if (item.ItemTags.Contains("top_tier_base_item_type", StringComparer.Ordinal) || item.RequiredLevel >= 70)
+            return P29BaseTier.Pinnacle;
+        return item.RequiredLevel switch { >= 55 => P29BaseTier.High, >= 30 => P29BaseTier.Advanced, _ => P29BaseTier.Normal };
     }
 
     public static string BaseTierName(P29BaseTier tier) => tier switch
