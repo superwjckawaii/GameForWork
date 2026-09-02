@@ -23,6 +23,7 @@ if ($Mode -eq 'Offline48h') {
 if ($Seconds -lt 10) { throw 'Seconds must be at least 10.' }
 $GodotPath = Resolve-GodotBinary -RequestedPath $GodotPath
 & (Join-Path $repositoryRoot 'scripts\verify_p21_assets.ps1') -RepositoryRoot $repositoryRoot
+& (Join-Path $repositoryRoot 'scripts\verify_p31_assets.ps1') -RepositoryRoot $repositoryRoot
 Invoke-NativeChecked -FilePath $dotnetBinary -Arguments @('build', (Join-Path $projectPath 'GameForWork.csproj'), '--configuration', 'Debug') -Label 'Godot C# build'
 Invoke-NativeChecked -FilePath $GodotPath -Arguments @('--headless', '--path', $projectPath, '--editor', '--quit') `
     -Label 'Godot asset import before stability run' -RejectGodotErrors
@@ -42,8 +43,8 @@ if ([double]$report.PeakWorkingSetBytes -gt 700 * $megabyte) {
 if ($Seconds -ge 60 -and [double]$report.WorkingSetGrowthBytes -gt 80 * $megabyte) {
     throw "Working-set growth exceeded 80 MB: $([math]::Round($report.WorkingSetGrowthBytes / $megabyte, 1)) MB"
 }
-if ($Mode -eq 'Tray' -and $Seconds -ge 60 -and [double]$report.AverageCpuPercent -gt 2.0) {
-    throw "Tray CPU exceeded 2%: $([math]::Round($report.AverageCpuPercent, 2))%"
+if ($Mode -eq 'Tray' -and $Seconds -ge 60 -and [double]$report.AverageCpuPercent -gt 1.0) {
+    throw "Tray CPU exceeded 1%: $([math]::Round($report.AverageCpuPercent, 2))%"
 }
 if ($Mode -eq 'Visible' -and [double]$report.PeakFrameMilliseconds -gt 40) {
     throw "Visible frame hitch exceeded 40 ms after warmup: $([math]::Round($report.PeakFrameMilliseconds, 2)) ms"

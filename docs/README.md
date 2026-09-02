@@ -71,3 +71,4 @@
 - [P30 装备词缀一次性修改提案（已审核并实施）](v0.4/P30_EQUIPMENT_AFFIX_FINAL_PROPOSAL.md)
 - [P30 美德、恶德与六个外环大型簇（完整确认）](v0.4/P30_VIRTUE_VICE_CLUSTERS.md)
 - [P30 怪物等级与数值成长规格](v0.4/P30_MONSTER_BALANCE.md)
+- [P31 表现、性能与 v0.4.0 封版规格](v0.4/P31_SPECIFICATION.md)

@@ -5,6 +5,7 @@ namespace GameForWork.Core.Persistence;
 
 public sealed class SaveRepository : IDisposable
 {
+    public const int CurrentSchemaVersion = 4;
     private const int AutoBackupLimit = 5;
     private const int RecoveryLimit = 10;
     private readonly object _backupSync = new();
@@ -489,11 +490,14 @@ public sealed class SaveRepository : IDisposable
             );
             INSERT OR IGNORE INTO schema_migrations(version, applied_utc_ms) VALUES (1, $now);
             INSERT OR IGNORE INTO schema_migrations(version, applied_utc_ms) VALUES (2, $now);
+            INSERT OR IGNORE INTO schema_migrations(version, applied_utc_ms) VALUES (3, $now);
+            INSERT OR IGNORE INTO schema_migrations(version, applied_utc_ms) VALUES (4, $now);
             INSERT OR IGNORE INTO save_meta(id, schema_version, created_utc_ms, last_observed_utc_ms)
-            VALUES (1, 2, $now, $now);
-            UPDATE save_meta SET schema_version = 2 WHERE id = 1 AND schema_version < 2;
+            VALUES (1, $schema, $now, $now);
+            UPDATE save_meta SET schema_version = $schema WHERE id = 1 AND schema_version < $schema;
             """;
         command.Parameters.AddWithValue("$now", DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
+        command.Parameters.AddWithValue("$schema", CurrentSchemaVersion);
         command.ExecuteNonQuery();
         transaction.Commit();
     }

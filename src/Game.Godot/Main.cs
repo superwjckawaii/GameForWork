@@ -25,6 +25,7 @@ public partial class Main : Node
     private HFlowContainer? _standardToolbar;
     private P3PixelTitleBar? _pixelTitleBar;
     private P22InformationWindow? _informationWindow;
+    private AcceptDialog? _displaySettingsDialog;
     private P3ToastOverlay? _toast;
     private VBoxContainer? _interfaceRoot;
     private HBoxContainer? _miniToolbar;
@@ -86,6 +87,7 @@ public partial class Main : Node
         AppDomain.CurrentDomain.UnhandledException += OnUnhandledException;
         TaskScheduler.UnobservedTaskException += OnUnobservedTaskException;
         _settingsStore = new SettingsStore(Path.Combine(userDirectory, "settings.json"));
+        ApplyVisualPreferences(_settingsStore.Load());
         _logger.Write(GameLogLevel.Information, "p1a.start", "application", "P1A application started.");
         string[] userArguments = OS.GetCmdlineUserArgs();
         bool stabilityRun = userArguments.Any(argument =>
@@ -254,7 +256,7 @@ public partial class Main : Node
             if (!string.IsNullOrWhiteSpace(directory)) Directory.CreateDirectory(directory);
             File.WriteAllText(_stabilityReportPath, JsonSerializer.Serialize(new
             {
-                Version = "0.3.0",
+                Version = "0.4.0",
                 Mode = _stabilityMode,
                 ElapsedSeconds = elapsedSeconds,
                 InitialWorkingSetBytes = _stabilityInitialWorkingSet,
@@ -351,6 +353,7 @@ public partial class Main : Node
         _alwaysOnTopToggle.Toggled += enabled => _windowController?.SetAlwaysOnTop(enabled);
         _standardToolbar.AddChild(_alwaysOnTopToggle);
         AddButton(_standardToolbar, "隐藏到托盘 (Tab)", () => _windowController?.HideToTray());
+        AddButton(_standardToolbar, "显示设置", () => _displaySettingsDialog?.PopupCentered(new Vector2I(500, 330)));
         int initialOpacity = _settingsStore?.Load().OpacityPercent ?? 100;
         var opacity = new HSlider
         {
@@ -459,6 +462,9 @@ public partial class Main : Node
         AddChild(_informationWindow);
         _informationWindow.Initialize(() => _session);
 
+        _displaySettingsDialog = BuildDisplaySettingsDialog(root.Theme);
+        AddChild(_displaySettingsDialog);
+
         _closeDialog = new ConfirmationDialog
         {
             Title = "关闭 GameForWork",
@@ -508,6 +514,78 @@ public partial class Main : Node
         _informationWindow?.Open();
     }
 
+    private AcceptDialog BuildDisplaySettingsDialog(Theme theme)
+    {
+        GameSettings settings = _settingsStore?.Load() ?? new GameSettings();
+        var dialog = new AcceptDialog
+        {
+            Title = "战斗显示设置",
+            DialogText = string.Empty,
+            OkButtonText = "完成",
+            MinSize = new Vector2I(500, 330),
+            Theme = theme,
+        };
+        var margin = new MarginContainer { Position = new Vector2(20, 20), Size = new Vector2(450, 230) };
+        margin.AddThemeConstantOverride("margin_left", 8);
+        margin.AddThemeConstantOverride("margin_right", 8);
+        var content = new VBoxContainer();
+        content.AddThemeConstantOverride("separation", 12);
+        content.AddChild(new Label
+        {
+            Text = "迷你窗口自动使用低密度特效；恢复标准窗口后使用下列设置。",
+            AutowrapMode = TextServer.AutowrapMode.WordSmart,
+        });
+        var density = AddSettingOptions(content, "特效密度", ["低", "中", "高"],
+            Math.Clamp(settings.CombatEffectDensity, 0, 2));
+        var numbers = AddSettingOptions(content, "伤害数字", ["关闭", "合并", "完整"],
+            Math.Clamp(settings.DamageNumberMode, 0, 2));
+        var shake = new CheckButton
+        {
+            Text = "屏幕震动（默认关闭）",
+            ButtonPressed = settings.CombatScreenShake,
+            TooltipText = "仅重击、首领阶段与死亡等强反馈触发轻微震动。",
+        };
+        content.AddChild(shake);
+        density.ItemSelected += index => SaveVisualPreferences((int)index, (int)numbers.Selected, shake.ButtonPressed);
+        numbers.ItemSelected += index => SaveVisualPreferences((int)density.Selected, (int)index, shake.ButtonPressed);
+        shake.Toggled += enabled => SaveVisualPreferences((int)density.Selected, (int)numbers.Selected, enabled);
+        margin.AddChild(content);
+        dialog.AddChild(margin);
+        return dialog;
+    }
+
+    private static OptionButton AddSettingOptions(Container parent, string label, IReadOnlyList<string> choices, int selected)
+    {
+        var row = new HBoxContainer();
+        row.AddChild(new Label { Text = label, CustomMinimumSize = new Vector2(120, 0) });
+        var options = new OptionButton { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+        foreach (string choice in choices) options.AddItem(choice);
+        options.Select(selected);
+        row.AddChild(options);
+        parent.AddChild(row);
+        return options;
+    }
+
+    private void SaveVisualPreferences(int density, int numbers, bool shake)
+    {
+        if (_settingsStore is null) return;
+        GameSettings updated = _settingsStore.Load() with
+        {
+            CombatEffectDensity = Math.Clamp(density, 0, 2),
+            DamageNumberMode = Math.Clamp(numbers, 0, 2),
+            CombatScreenShake = shake,
+        };
+        _settingsStore.Save(updated);
+        ApplyVisualPreferences(updated);
+    }
+
+    private static void ApplyVisualPreferences(GameSettings settings)
+    {
+        P31VisualPreferences.EffectDensity = (P31EffectDensity)Math.Clamp(settings.CombatEffectDensity, 0, 2);
+        P31VisualPreferences.DamageNumbers = (P31DamageNumberMode)Math.Clamp(settings.DamageNumberMode, 0, 2);
+        P31VisualPreferences.ScreenShake = settings.CombatScreenShake;
+    }
+
     private void SetFontScale(int percent)
     {
         int clamped = Math.Clamp(percent, 80, 150);
@@ -524,6 +602,7 @@ public partial class Main : Node
         {
             _informationWindow.Theme = P2ThemeFactory.Create(clamped);
         }
+        if (_displaySettingsDialog is not null) _displaySettingsDialog.Theme = P2ThemeFactory.Create(clamped);
         if (_resetDialog is not null) _resetDialog.Theme = P2ThemeFactory.Create(clamped);
 
         if (_settingsStore is not null)
@@ -915,6 +994,9 @@ public partial class Main : Node
             return;
         }
 
+        // A modal larger than the 256x160 observer window is clipped by the main
+        // native window. Restore the standard layout before asking the question.
+        EnsureStandardWindow();
         _rememberCloseChoice!.ButtonPressed = false;
         _closeDialog!.PopupCentered(new Vector2I(460, 200));
     }

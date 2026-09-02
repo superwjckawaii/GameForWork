@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
     [string]$GodotPath = $env:GODOT_BIN,
-    [string]$Version = '0.2.0'
+    [string]$Version = '0.4.0'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -16,6 +16,7 @@ Set-DotnetEnvironment -DotnetBinary $dotnetBinary
 $GodotPath = Resolve-GodotBinary -RequestedPath $GodotPath
 
 & (Join-Path $repositoryRoot 'scripts\verify_p21_assets.ps1') -RepositoryRoot $repositoryRoot
+& (Join-Path $repositoryRoot 'scripts\verify_p31_assets.ps1') -RepositoryRoot $repositoryRoot
 Invoke-NativeChecked -FilePath $GodotPath -Arguments @('--headless', '--path', $projectPath, '--editor', '--quit') `
     -Label 'Godot asset import before release export' -RejectGodotErrors
 
@@ -40,7 +41,7 @@ if (-not (Test-Path -LiteralPath $executable) -or (Get-Item -LiteralPath $execut
 
 $readme = Join-Path $repositoryRoot 'README.md'
 if (Test-Path -LiteralPath $readme) { Copy-Item -LiteralPath $readme -Destination $outputDirectory }
-$releaseNotes = Join-Path $repositoryRoot 'docs\v0.2\V0_2_RELEASE_NOTES.md'
+$releaseNotes = Join-Path $repositoryRoot 'docs\v0.4\V0_4_RELEASE_NOTES.md'
 if (Test-Path -LiteralPath $releaseNotes) {
     Copy-Item -LiteralPath $releaseNotes -Destination (Join-Path $outputDirectory 'VERSION.md')
 }
@@ -48,5 +49,8 @@ Compress-Archive -Path (Join-Path $outputDirectory '*') -DestinationPath $archiv
 $archive = Get-Item -LiteralPath $archivePath
 if ($archive.Length -lt 50MB) { throw "Portable ZIP is unexpectedly small: $($archive.Length) bytes." }
 $archiveHash = (Get-FileHash -LiteralPath $archivePath -Algorithm SHA256).Hash
+$hashPath = "$archivePath.sha256"
+"$($archiveHash.ToLowerInvariant())  $([System.IO.Path]::GetFileName($archivePath))" |
+    Set-Content -LiteralPath $hashPath -Encoding ascii
 Write-Host "[package] $archivePath"
-Write-Host "[package] bytes=$($archive.Length) sha256=$archiveHash"
+Write-Host "[package] bytes=$($archive.Length) sha256=$archiveHash sidecar=$hashPath"

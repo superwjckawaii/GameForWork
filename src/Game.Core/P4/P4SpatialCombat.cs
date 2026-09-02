@@ -110,7 +110,9 @@ public sealed record P4EnemyFrame(
     int MaximumLife,
     P4Point Position,
     string TargetId,
-    IReadOnlyList<EliteAffix>? EliteAffixes = null, bool Summoned = false);
+    IReadOnlyList<EliteAffix>? EliteAffixes = null, bool Summoned = false,
+    int BleedStacks = 0, P17Ailment DamageOverTimeAilment = P17Ailment.None,
+    int ArmorBreakStacks = 0, int ShockStacks = 0, bool Impaired = false);
 
 public sealed record P4AllyFrame(string EntityId, P4Point Position, bool Frontline);
 
@@ -126,7 +128,8 @@ public sealed record P4SpatialFrame(
     int HeroMaximumShield,
     string HeroTargetId,
     IReadOnlyList<P4EnemyFrame> Enemies,
-    IReadOnlyList<P4AllyFrame>? Allies = null);
+    IReadOnlyList<P4AllyFrame>? Allies = null,
+    IReadOnlyDictionary<P30VirtueViceKind, int>? HeroVirtueViceLayers = null);
 
 public sealed record P4SpatialEvent(
     long AtMilliseconds,
@@ -327,7 +330,7 @@ public sealed class P4SpatialCombatRunner
         int lastProgressTick = 0;
         P1BattleOutcome? projectedOutcome = null;
         CaptureFrame(frames, 0, request.NodeIndex, heroPosition, hero, heroTargetId, enemies,
-            request.Build.PartySize, request.Build.FrontlineCount);
+            request.Build.PartySize, request.Build.FrontlineCount, request.VirtueVice, 0);
 
         for (tick = 0; (request.MaximumTicks == 0 || tick < request.MaximumTicks) &&
              hero.IsAlive && enemies.Any(enemy => enemy.Life > 0); tick++)
@@ -665,7 +668,7 @@ public sealed class P4SpatialCombatRunner
 
             if (request.MaximumTicks > 0 || (tick & 3) == 0)
                 CaptureFrame(frames, tick * TickMilliseconds, request.NodeIndex, heroPosition, hero, heroTargetId, enemies,
-                    request.Build.PartySize, request.Build.FrontlineCount);
+                    request.Build.PartySize, request.Build.FrontlineCount, request.VirtueVice, tick);
         }
 
         bool victory = enemies.All(enemy => enemy.Life <= 0);
@@ -675,7 +678,7 @@ public sealed class P4SpatialCombatRunner
         events.Add(Event(tick, victory ? P4SpatialEventKind.NodeCleared : P4SpatialEventKind.HeroDefeated,
             victory ? "hero" : "enemies", string.Empty, 0, heroPosition, heroPosition, outcome.ToString()));
         CaptureFrame(frames, tick * TickMilliseconds, request.NodeIndex, heroPosition, hero, heroTargetId, enemies,
-            request.Build.PartySize, request.Build.FrontlineCount);
+            request.Build.PartySize, request.Build.FrontlineCount, request.VirtueVice, tick);
         string hash = Hash(seed, outcome, tick, hero, enemies, events);
         return new P4NodeCombatResult(outcome, tick, hero.Life, hero.Mana, hero.Shield, frames, events, hash);
     }
@@ -927,7 +930,9 @@ public sealed class P4SpatialCombatRunner
             ScaleOffensive(addedWeapon.Lightning), ScaleOffensive(addedWeapon.Void));
         int criticalChance = request.Build.CannotCrit ? 0 : P30CombatRules.CriticalChance(
             request.Build.Weapon.CriticalChanceBasisPoints, request.Build.IncreasedCriticalChanceBasisPoints);
-        if (skill.Role != P17SkillRole.DamageOverTime && random.NextUInt() % 10_000 < Math.Clamp(criticalChance, 0, 10_000))
+        bool critical = skill.Role != P17SkillRole.DamageOverTime &&
+                        random.NextUInt() % 10_000 < Math.Clamp(criticalChance, 0, 10_000);
+        if (critical)
         {
             raw = checked(raw * request.Build.CriticalMultiplierBasisPoints / 10_000);
             addedWeapon = new(
@@ -1020,7 +1025,8 @@ public sealed class P4SpatialCombatRunner
                 source, enemy.Position, $"skill:{skill.SkillId}|ailment:{skill.Ailment.ToString().ToLowerInvariant()}"));
         }
         events.Add(Event(tick, P4SpatialEventKind.SkillEffect, "hero", enemy.EntityId, value,
-            source, enemy.Position, $"skill:{skill.SkillId}|damage:{damage.Compact}|supports:{(ulong)configuration.Supports}"));
+            source, enemy.Position,
+            $"skill:{skill.SkillId}|damage:{damage.Compact}|supports:{(ulong)configuration.Supports}{(critical ? "|critical" : string.Empty)}"));
         if (enemy.Life == 0)
             events.Add(Event(tick, P4SpatialEventKind.EnemyDefeated, "hero", enemy.EntityId, 0,
                 source, enemy.Position, enemy.Profile.StableId));
@@ -1259,7 +1265,8 @@ public sealed class P4SpatialCombatRunner
             if (request.ExtraBossPhase && enemy.Boss && enemy.BossPhase > 0)
                 hazards.Add(new(enemy.EntityId, impactPoint, 2_000, Math.Max(1, damage / 2), tick + 20, tick + 31,
                     activeSkill.DamageType));
-            if (areaAttack && !InRange(heroPosition, impactPoint, 2_000)) damage = 0;
+            bool areaAvoided = areaAttack && !InRange(heroPosition, impactPoint, 2_000);
+            if (areaAvoided) damage = 0;
             if (activeSkill.Kind == EnemySkillKind.RootSnare && damage > 0)
             {
                 rootedUntilTick = Math.Max(rootedUntilTick, tick + 20);
@@ -1275,7 +1282,7 @@ public sealed class P4SpatialCombatRunner
                 hero.ApplyDamage(damage, tick);
             }
 
-            string attackDetail = $"{activeSkill.DisplayName}|{activeSkill.Telegraph}|{activeSkill.DamageType}|{activeSkill.Avoidable}|{(spell ? "spell" : "attack")}";
+            string attackDetail = $"{activeSkill.DisplayName}|{activeSkill.Telegraph}|{activeSkill.DamageType}|{activeSkill.Avoidable}|{(spell ? "spell" : "attack")}|result:{(areaAvoided ? "dodge" : blocked ? "block" : "hit")}";
             events.Add(Event(tick, P4SpatialEventKind.EnemyAttack, enemy.EntityId, "hero", damage,
                 enemy.Position, impactPoint, attackDetail));
             int interval = Math.Max(8, checked((20_000 + attacksPerSecond - 1) / attacksPerSecond));
@@ -1671,7 +1678,9 @@ public sealed class P4SpatialCombatRunner
         string target,
         IEnumerable<P4EnemyUnit> enemies,
         int partySize,
-        int frontlineCount)
+        int frontlineCount,
+        P30VirtueViceState? virtueVice,
+        int tick)
     {
         if (frames.LastOrDefault()?.AtMilliseconds == at)
         {
@@ -1701,14 +1710,26 @@ public sealed class P4SpatialCombatRunner
                 enemy.MaximumLife,
                 enemy.Position,
                 "hero",
-                enemy.Scaled.EliteAffixes, enemy.Summoned)).ToArray(),
-            BuildAllies(heroPosition, partySize, frontlineCount)));
+                enemy.Scaled.EliteAffixes, enemy.Summoned,
+                enemy.BleedPulses > 0 ? 1 : 0, enemy.P17DotPulses > 0 ? enemy.P17DotAilment : P17Ailment.None,
+                enemy.ArmorBreakStacks, enemy.ShockStacks, tick < enemy.ImpairedUntilTick)).ToArray(),
+            BuildAllies(heroPosition, partySize, frontlineCount),
+            CaptureVirtueVice(virtueVice)));
         // Keep simulation exact, but bound playback snapshots in extremely long battles.
         if (frames is List<P4SpatialFrame> list && list.Count > 4_096)
         {
             P4SpatialFrame[] retained = list.Where((_, index) => index == 0 || index % 2 == 1 || index == list.Count - 1).ToArray();
             list.Clear(); list.AddRange(retained);
         }
+    }
+
+    private static IReadOnlyDictionary<P30VirtueViceKind, int>? CaptureVirtueVice(P30VirtueViceState? state)
+    {
+        if (state is null) return null;
+        Dictionary<P30VirtueViceKind, int> layers = Enum.GetValues<P30VirtueViceKind>()
+            .Where(kind => state.Layers(kind) > 0)
+            .ToDictionary(kind => kind, state.Layers);
+        return layers.Count == 0 ? null : layers;
     }
 
     private static IReadOnlyList<P4AllyFrame> BuildAllies(P4Point leader, int partySize, int frontlineCount)

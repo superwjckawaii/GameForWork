@@ -64,6 +64,9 @@ public sealed class OfflineAndSettingsTests(ITestOutputHelper output)
                 OpacityPercent = 75,
                 FontScalePercent = 80,
                 CloseToTray = true,
+                CombatEffectDensity = 2,
+                DamageNumberMode = 2,
+                CombatScreenShake = true,
             };
             store.Save(expected);
             Assert.Equal(expected, store.Load());

@@ -13,6 +13,9 @@ public sealed record GameSettings
     public int StandardY { get; init; } = -1;
     public bool StartMini { get; init; }
     public bool GlobalHotkeyEnabled { get; init; }
+    public int CombatEffectDensity { get; init; } = 1;
+    public int DamageNumberMode { get; init; } = 1;
+    public bool CombatScreenShake { get; init; }
 }
 
 public sealed class SettingsStore(string path)

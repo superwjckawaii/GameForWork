@@ -1,0 +1,9 @@
+{
+  "version": "0.4.0",
+  "source": "art-source/p31/imagegen/p31-vfx-master.png",
+  "generated": "assets/p31/vfx/p31-combat-vfx.png",
+  "grid": "4x4",
+  "cell": "64x64",
+  "isolation": "per-cell alpha bounds with 4px destination padding",
+  "sha256": "a61d394bf3a3ef4a16a6495aff444f77a906caea330efa5270400453414083b6"
+}

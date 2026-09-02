@@ -6,7 +6,10 @@ using GameForWork.Core.P2;
 using GameForWork.Core.P3;
 using GameForWork.Core.P4;
 using GameForWork.Core.P12;
+using GameForWork.Core.P17;
 using GameForWork.Core.P21;
+using GameForWork.Core.P30;
+using GameForWork.Core.P31;
 using Godot;
 
 namespace GameForWork.GodotClient;
@@ -34,6 +37,7 @@ public partial class P1WorldView : Control
     private Texture2D? _bossAtlas;
     private Texture2D? _regionAtlas;
     private Texture2D? _vfxAtlas;
+    private Texture2D? _p31VfxAtlas;
     private Texture2D? _actorAnimationAtlas;
     private Texture2D? _enemyAnimationAtlas;
     private Texture2D? _bossAnimationAtlas;
@@ -83,6 +87,7 @@ public partial class P1WorldView : Control
                        LoadOptional("res://assets/p15/regions/p15-region-atlas.png");
         _vfxAtlas = LoadOptional("res://assets/p21/vfx/p21-combat-vfx.png") ??
                     LoadOptional("res://assets/p15/vfx/p15-skill-mechanic-atlas.png");
+        _p31VfxAtlas = LoadOptional("res://assets/p31/vfx/p31-combat-vfx.png");
         _actorAnimationAtlas = LoadOptional("res://assets/p21/characters/p21-actor-animation.png");
         _enemyAnimationAtlas = LoadOptional("res://assets/p21/enemies/p21-enemy-animation.png");
         _bossAnimationAtlas = LoadOptional("res://assets/p21/enemies/p21-boss-animation.png");
@@ -107,7 +112,8 @@ public partial class P1WorldView : Control
 
     public override void _Draw()
     {
-        Rect2 bounds = new(4, 4, Math.Max(100, Size.X - 8), Math.Max(80, Size.Y - 8));
+        Vector2 shake = P31VisualPreferences.ScreenShake ? ScreenShakeOffset() : Vector2.Zero;
+        Rect2 bounds = new(new Vector2(4, 4) + shake, new Vector2(Math.Max(100, Size.X - 8), Math.Max(80, Size.Y - 8)));
         DrawRect(bounds, new Color("0c1017"), true);
         DrawActiveBattle(bounds);
 
@@ -376,6 +382,7 @@ public partial class P1WorldView : Control
                 DrawBar(new Rect2(position + new Vector2(-16, 10), new Vector2(32, 4)),
                     enemy.MaximumLife <= 0 ? 0 : (float)enemy.Life / enemy.MaximumLife,
                     enemy.Boss ? new Color("cf4055") : new Color("8d2739"));
+                DrawEnemyStatusIcons(position, enemy);
             }
         }
 
@@ -409,8 +416,10 @@ public partial class P1WorldView : Control
             DrawBar(new Rect2(actor + new Vector2(-30, 24), new Vector2(60, 3)),
                 (float)current.HeroShield / current.HeroMaximumShield, new Color("76c7d9"));
         }
+        DrawVirtueViceIcons(actor, current.HeroVirtueViceLayers);
 
         DrawSpatialNumbers(field, _positions, _recentEvents, elapsed);
+        DrawRewardStrip(bounds, hero);
         DrawCaption(bounds, observed.Title, new Color("e5d7be"));
         int alive = current.Enemies.Count(enemy => enemy.Life > 0);
         string target = current.Enemies.FirstOrDefault(enemy => enemy.EntityId == current.HeroTargetId)?.DisplayName ?? "移动接敌";
@@ -502,10 +511,13 @@ public partial class P1WorldView : Control
         IEnumerable<P3SceneEvent> recent,
         long elapsed)
     {
+        int effectLimit = P31VisualPreferences.EffectLimit(Size.X);
         foreach (P3SceneEvent item in recent.OrderByDescending(item => item.Kind == P3SceneEventKind.BossPhase || item.Detail.Contains("持续危险地面", StringComparison.Ordinal))
-                     .ThenByDescending(item => item.AtMilliseconds).Take(24))
+                     .ThenByDescending(item => item.AtMilliseconds).Take(effectLimit))
         {
-            float age = Math.Clamp((elapsed - item.AtMilliseconds) / 900f, 0, 1);
+            P31SkillVisualDescriptor? visual = VisualForEvent(item);
+            float lifetime = visual?.LifetimeMilliseconds ?? 900f;
+            float age = Math.Clamp((elapsed - item.AtMilliseconds) / lifetime, 0, 1);
             string[] ids = item.Detail.Split('|');
             Vector2 target = ids.Length > 1 && positions.TryGetValue(ids[1], out Vector2 live)
                 ? live
@@ -523,6 +535,24 @@ public partial class P1WorldView : Control
             }
             int vfxIndex = VfxIndex(item.Kind);
             if (vfxIndex >= 0 && age < .58f) DrawVfx(vfxIndex, target, item.Kind == P3SceneEventKind.BossPhase ? 54 : 38);
+            if (visual is not null && age < .86f)
+            {
+                float size = 38f * visual.ScaleBasisPoints / 10_000f * (visual.Signature ? 1.12f : 1f);
+                Vector2 variation = new((visual.VariationSeed % 3 - 1) * 2, ((visual.VariationSeed / 3) % 3 - 1) * 2);
+                Vector2 center = (visual.UsesSourceToTarget ? source.Lerp(target, Math.Clamp(age * 1.25f, 0, 1)) : target) + variation;
+                DrawP31Vfx(visual.AtlasCell, center, size, visual.UsesSourceToTarget ? source.AngleToPoint(target) : 0);
+                if (visual.Signature && age > .28f)
+                {
+                    float secondAge = Math.Clamp((age - .28f) / .58f, 0, 1);
+                    DrawP31Vfx((visual.AtlasCell + 1 + visual.VariationSeed) % 15, target,
+                        size * (.72f + secondAge * .45f), -secondAge * .8f);
+                }
+                DrawSupportLayers(source, target, center, age, ReadSupportLayers(item.Detail));
+            }
+            else if (item.Kind == P3SceneEventKind.BossPhase && age < .9f)
+            {
+                DrawP31Vfx((int)P31SkillVisualFamily.BossWarning, target, 58 + age * 24, age * .35f);
+            }
             if (item.Kind == P3SceneEventKind.WarCry)
             {
                 DrawArc(actor, 14 + age * 38, 0, MathF.Tau, 24, new Color(0.95f, 0.62f, 0.2f, 1 - age), 3);
@@ -582,6 +612,7 @@ public partial class P1WorldView : Control
                     new Color(1, .35f, .15f, 1 - age), false, 2);
             }
         }
+        DrawCombatFeedback(field, positions, recent, elapsed);
     }
 
     private void DrawSpatialNumbers(
@@ -590,22 +621,31 @@ public partial class P1WorldView : Control
         IEnumerable<P3SceneEvent> recent,
         long elapsed)
     {
-        var merged = recent.Where(item => item.Value > 0 && item.Kind is
+        if (P31VisualPreferences.DamageNumbers == P31DamageNumberMode.Off) return;
+        P3SceneEvent[] candidates = recent.Where(item => item.Value > 0 && item.Kind is
                 P3SceneEventKind.HeavyStrike or P3SceneEventKind.EarthCleave or P3SceneEventKind.SpiritBlade or
                 P3SceneEventKind.Chain or P3SceneEventKind.SeismicCharge or P3SceneEventKind.BloodTideSpin or
                 P3SceneEventKind.AshJavelin or P3SceneEventKind.EmberNova or P3SceneEventKind.StormBrand or
-                P3SceneEventKind.EnemyAttack or P3SceneEventKind.Bleed)
-            .GroupBy(item =>
+                P3SceneEventKind.EnemyAttack or P3SceneEventKind.Bleed or P3SceneEventKind.SkillEffect or
+                P3SceneEventKind.Ascendancy or P3SceneEventKind.Ailment).ToArray();
+        List<(P3SceneEvent Event, int Value)> entries;
+        if (P31VisualPreferences.DamageNumbers == P31DamageNumberMode.Full)
+        {
+            entries = candidates.Select(item => (item, item.Value)).ToList();
+        }
+        else
+        {
+            entries = candidates.GroupBy(item =>
             {
                 string[] parts = item.Detail.Split('|');
                 string target = parts.Length > 1 ? parts[1] : item.Position.ToString();
-                return $"{target}|{item.AtMilliseconds / 50}|{(item.Kind == P3SceneEventKind.EnemyAttack ? "hero" : "enemy")}";
+                return $"{target}|{item.AtMilliseconds / 100}|{DamageGroup(item)}";
             })
             .Select(group => (Event: group.OrderByDescending(item => item.AtMilliseconds).First(), Value: group.Sum(item => item.Value)))
-            .OrderBy(entry => entry.Event.AtMilliseconds)
-            .ToArray();
+            .OrderBy(entry => entry.Event.AtMilliseconds).ToList();
+        }
         int lane = 0;
-        foreach ((P3SceneEvent item, int value) in merged)
+        foreach ((P3SceneEvent item, int value) in entries.Take(P31VisualPreferences.EffectLimit(Size.X) * 2))
         {
             float age = Math.Clamp((elapsed - item.AtMilliseconds) / 900f, 0, 1);
             string[] ids = item.Detail.Split('|');
@@ -616,8 +656,10 @@ public partial class P1WorldView : Control
                 ? live
                 : MapPoint(field, new P4Point(item.Position.X * 1_000, item.Position.Y * 1_000));
             Vector2 position = origin + new Vector2((lane++ % 3 - 1) * 12, -18 - age * 30);
-            DrawString(ThemeDB.FallbackFont, position, value.ToString(), HorizontalAlignment.Center, 42, 14,
-                heroDamage ? new Color(1, 0.35f, 0.3f, 1 - age * 0.7f) : new Color(1, 0.82f, 0.35f, 1 - age * 0.7f));
+            bool critical = item.Detail.Contains("critical", StringComparison.Ordinal);
+            Color color = heroDamage ? new Color(1, 0.35f, 0.3f, 1 - age * 0.7f) : DamageColor(item.Detail, 1 - age * .7f);
+            DrawString(ThemeDB.FallbackFont, position, critical ? $"!{value:N0}" : $"{value:N0}",
+                HorizontalAlignment.Center, critical ? 54 : 46, critical ? 17 : 14, color);
         }
     }
 
@@ -765,19 +807,52 @@ public partial class P1WorldView : Control
         if (_session is null) return;
         if (_session.HeroEquipment.Items.TryGetValue(EquipmentSlot.MainHand, out ItemInstance? weapon))
         {
-            Color color = P1UiText.RarityColor(weapon.Rarity);
+            Color color = EquipmentOverlayColor(weapon);
             float side = facing == P21Facing.Left ? -1 : 1;
-            DrawLine(actor + new Vector2(side * 7, -28), actor + new Vector2(side * 18, -44), color, 2);
+            float length = weapon.Base.Category == ItemCategory.TwoHandWeapon ? 24 : 17;
+            float width = weapon.Base.WeaponFamily is WeaponFamily.Mace or WeaponFamily.Axe ? 4 : 2;
+            Vector2 grip = actor + new Vector2(side * 7, -27);
+            Vector2 tip = actor + new Vector2(side * length, -43);
+            DrawLine(grip, tip, color.Lightened(Math.Min(.35f, weapon.Quality / 100f)), width);
+            if (weapon.Base.WeaponFamily == WeaponFamily.Axe)
+                DrawLine(tip, tip + new Vector2(-side * 7, -2), color, 4);
+            else if (weapon.Base.WeaponFamily == WeaponFamily.Mace)
+                DrawRect(new Rect2(tip - new Vector2(4, 3), new Vector2(8, 6)), color, true);
+            else if (weapon.Base.WeaponFamily == WeaponFamily.Bow)
+                DrawArc(grip + new Vector2(side * 7, -7), 12, -1.5f, 1.5f, 10, color, 2);
+            Color? elemental = ElementalOverlayColor(weapon);
+            if (elemental is { } glow)
+                DrawArc(tip, 5 + MathF.Sin((float)_visualClock * 5) * 1.2f, 0, MathF.Tau, 10,
+                    new Color(glow.R, glow.G, glow.B, .62f), 2);
         }
         if (_session.HeroEquipment.Items.ContainsKey(EquipmentSlot.OffHand))
         {
             float side = facing == P21Facing.Right ? -1 : 1;
             DrawArc(actor + new Vector2(side * 10, -23), 6, -.8f, 2.2f, 8, new Color("a7b0b7"), 2);
         }
-        if (_session.HeroEquipment.Items.ContainsKey(EquipmentSlot.Helmet))
-            DrawLine(actor + new Vector2(-5, -47), actor + new Vector2(5, -47), new Color("c0aa78"), 2);
-        if (_session.HeroEquipment.Items.ContainsKey(EquipmentSlot.Chest))
-            DrawRect(new Rect2(actor + new Vector2(-3, -32), new Vector2(6, 3)), new Color("8d6f52"), true);
+        if (_session.HeroEquipment.Items.TryGetValue(EquipmentSlot.Helmet, out ItemInstance? helmet))
+        {
+            Color color = EquipmentOverlayColor(helmet);
+            DrawLine(actor + new Vector2(-6, -47), actor + new Vector2(6, -47), color, 2);
+            DrawLine(actor + new Vector2(0, -47), actor + new Vector2(0, -53), color.Darkened(.15f), 2);
+        }
+        if (_session.HeroEquipment.Items.TryGetValue(EquipmentSlot.Chest, out ItemInstance? chest))
+        {
+            Color color = EquipmentOverlayColor(chest).Darkened(.22f);
+            DrawRect(new Rect2(actor + new Vector2(-6, -34), new Vector2(12, 7)), color, true);
+        }
+        if (_session.HeroEquipment.Items.TryGetValue(EquipmentSlot.Gloves, out ItemInstance? gloves))
+        {
+            Color color = EquipmentOverlayColor(gloves).Darkened(.1f);
+            DrawCircle(actor + new Vector2(-9, -25), 2.2f, color);
+            DrawCircle(actor + new Vector2(9, -25), 2.2f, color);
+        }
+        if (_session.HeroEquipment.Items.TryGetValue(EquipmentSlot.Boots, out ItemInstance? boots))
+        {
+            Color color = EquipmentOverlayColor(boots).Darkened(.18f);
+            DrawLine(actor + new Vector2(-6, -4), actor + new Vector2(-10, 0), color, 3);
+            DrawLine(actor + new Vector2(6, -4), actor + new Vector2(10, 0), color, 3);
+        }
     }
 
     private void DrawVfx(int index, Vector2 center, float size)
@@ -786,6 +861,173 @@ public partial class P1WorldView : Control
         Rect2 source = new((index % 8) * 64, (index / 8) * 64, 64, 64);
         DrawTextureRectRegion(_vfxAtlas, new Rect2(center - new Vector2(size / 2, size / 2), new Vector2(size, size)), source);
     }
+
+    private static Color EquipmentOverlayColor(ItemInstance item)
+    {
+        Color color;
+        if (item.Rarity == ItemRarity.Legendary)
+        {
+            Color[] legendary = [new("c68cff"), new("ef8f5b"), new("7bd1cb"), new("e4c05d"), new("d7779f")];
+            string identity = item.LegendaryRule?.StableId ?? item.DisplayName;
+            color = legendary[StableVisualIndex(identity, legendary.Length)];
+        }
+        else color = P1UiText.RarityColor(item.Rarity);
+        float tierLight = Math.Clamp((item.Base.RequiredLevel - 40) / 160f, 0, .32f);
+        return color.Lightened(tierLight);
+    }
+
+    private static Color? ElementalOverlayColor(ItemInstance item)
+    {
+        string combined = string.Join('|', item.Affixes.SelectMany(affix => affix.Effects)
+            .Select(effect => effect.Kind.ToString()));
+        if (combined.Contains("Void", StringComparison.Ordinal)) return new Color("a269e1");
+        if (combined.Contains("Lightning", StringComparison.Ordinal)) return new Color("ead34e");
+        if (combined.Contains("Cold", StringComparison.Ordinal)) return new Color("62c8e4");
+        if (combined.Contains("Fire", StringComparison.Ordinal)) return new Color("ed6538");
+        return null;
+    }
+
+    private void DrawP31Vfx(int index, Vector2 center, float size, float rotation)
+    {
+        if (_p31VfxAtlas is null) return;
+        Rect2 source = new((index % 4) * 64, (index / 4) * 64, 64, 64);
+        DrawSetTransform(center, rotation, Vector2.One);
+        DrawTextureRectRegion(_p31VfxAtlas, new Rect2(new Vector2(-size / 2, -size / 2), new Vector2(size, size)), source);
+        DrawSetTransform(Vector2.Zero, 0, Vector2.One);
+    }
+
+    private void DrawSupportLayers(Vector2 source, Vector2 target, Vector2 center, float age, P31SupportVisualLayer layers)
+    {
+        float alpha = Math.Clamp(1 - age, 0, 1);
+        if (layers.HasFlag(P31SupportVisualLayer.ExtraProjectiles))
+        {
+            Vector2 perpendicular = (target - source).Normalized().Orthogonal() * 7;
+            DrawLine(source + perpendicular, target + perpendicular, new Color(.88f, .83f, .55f, alpha * .65f), 1);
+            DrawLine(source - perpendicular, target - perpendicular, new Color(.88f, .83f, .55f, alpha * .65f), 1);
+        }
+        if (layers.HasFlag(P31SupportVisualLayer.ChainOrFork))
+            DrawPolyline([source, center + new Vector2(0, -10), target], new Color(.42f, .86f, 1, alpha), 2);
+        if (layers.HasFlag(P31SupportVisualLayer.Return))
+            DrawArc(center, 10 + age * 15, .2f, 5.2f, 16, new Color(.95f, .8f, .32f, alpha), 2);
+        if (layers.HasFlag(P31SupportVisualLayer.AreaPulse))
+            DrawArc(target, 10 + age * 30, 0, MathF.Tau, 20, new Color(.75f, .54f, 1, alpha), 2);
+        if (layers.HasFlag(P31SupportVisualLayer.Repeat))
+            DrawArc(center, 7 + age * 18, 0, MathF.Tau, 14, new Color(1, .55f, .2f, alpha), 2);
+        if (layers.HasFlag(P31SupportVisualLayer.CriticalFlash))
+        {
+            DrawLine(center - new Vector2(8, 0), center + new Vector2(8, 0), new Color(1, .92f, .55f, alpha), 2);
+            DrawLine(center - new Vector2(0, 8), center + new Vector2(0, 8), new Color(1, .92f, .55f, alpha), 2);
+        }
+        if (layers.HasFlag(P31SupportVisualLayer.AilmentTrail))
+            DrawCircle(center + new Vector2(0, age * 10), 3, new Color(.48f, .92f, .3f, alpha));
+        if (layers.HasFlag(P31SupportVisualLayer.GuardShell))
+            DrawArc(source, 15, 0, MathF.Tau, 18, new Color(.35f, .8f, 1, alpha), 2);
+        if (layers.HasFlag(P31SupportVisualLayer.TriggerRune))
+            DrawRect(new Rect2(target - new Vector2(7, 7), new Vector2(14, 14)), new Color(.72f, .36f, 1, alpha), false, 2);
+        if (layers.HasFlag(P31SupportVisualLayer.MinionAura))
+            DrawArc(source, 20 + age * 10, 0, MathF.Tau, 18, new Color(.58f, .84f, .62f, alpha), 2);
+    }
+
+    private void DrawCombatFeedback(Rect2 field, IReadOnlyDictionary<string, Vector2> positions,
+        IEnumerable<P3SceneEvent> recent, long elapsed)
+    {
+        int lane = 0;
+        foreach (P3SceneEvent item in recent.Where(NeedsFeedback).OrderByDescending(item => item.AtMilliseconds)
+                     .Take(P31VisualPreferences.EffectLimit(Size.X)))
+        {
+            string[] ids = item.Detail.Split('|');
+            string targetId = ids.Length > 1 ? ids[1] : "hero";
+            Vector2 target = positions.TryGetValue(targetId, out Vector2 live)
+                ? live : MapPoint(field, new P4Point(item.Position.X * 1_000, item.Position.Y * 1_000));
+            float age = Math.Clamp((elapsed - item.AtMilliseconds) / 850f, 0, 1);
+            string text = FeedbackText(item);
+            if (text.Length == 0) continue;
+            Color color = item.Kind switch
+            {
+                P3SceneEventKind.Block or P3SceneEventKind.Guard => new Color(.4f, .85f, 1, 1 - age),
+                P3SceneEventKind.SkillFailed => new Color(1, .45f, .35f, 1 - age),
+                P3SceneEventKind.Ailment => new Color(.65f, .9f, .36f, 1 - age),
+                P3SceneEventKind.EnemyDefeated => new Color(1, .78f, .3f, 1 - age),
+                _ => new Color(1, .9f, .7f, 1 - age),
+            };
+            Vector2 position = target + new Vector2((lane++ % 3 - 1) * 16, -34 - age * 22);
+            DrawString(ThemeDB.FallbackFont, position, text, HorizontalAlignment.Center, 72, 12, color);
+        }
+    }
+
+    private void DrawRewardStrip(Rect2 bounds, bool hero)
+    {
+        if (_session is null) return;
+        P1TeamExpeditionState team = hero ? _session.World.Hero : _session.World.Mercenaries;
+        ItemInstance[] items = team.Backpack.Items.TakeLast(Math.Min(5, team.Backpack.Count)).ToArray();
+        if (items.Length == 0) return;
+        float width = Math.Min(bounds.Size.X - 28, 360);
+        Rect2 strip = new(bounds.End.X - width - 12, bounds.End.Y - 27, width, 18);
+        DrawRect(strip, new Color(0.03f, .04f, .06f, .82f), true);
+        DrawRect(strip, new Color("78623f"), false, 1);
+        string text = "拾取 " + string.Join(" · ", items.Select(item => item.DisplayName));
+        DrawString(ThemeDB.FallbackFont, strip.Position + new Vector2(6, 13), text,
+            HorizontalAlignment.Left, (int)strip.Size.X - 12, 11, new Color("e3c98c"));
+    }
+
+    private void DrawEnemyStatusIcons(Vector2 position, P4EnemyFrame enemy)
+    {
+        var statuses = new List<(string Text, Color Color, int Layers)>();
+        if (enemy.BleedStacks > 0) statuses.Add(("血", new Color("d64252"), enemy.BleedStacks));
+        if (enemy.DamageOverTimeAilment != P17Ailment.None)
+            statuses.Add((AilmentGlyph(enemy.DamageOverTimeAilment), AilmentColor(enemy.DamageOverTimeAilment), 1));
+        if (enemy.ShockStacks > 0) statuses.Add(("电", new Color("f0d64c"), enemy.ShockStacks));
+        if (enemy.ArmorBreakStacks > 0) statuses.Add(("破", new Color("c88950"), enemy.ArmorBreakStacks));
+        if (enemy.Impaired) statuses.Add(("缓", new Color("68cde5"), 1));
+        int index = 0;
+        foreach ((string text, Color color, int layers) in statuses.Take(5))
+        {
+            Vector2 origin = position + new Vector2(-14 + index * 7, 17);
+            DrawRect(new Rect2(origin, new Vector2(6, 6)), new Color(.03f, .04f, .06f, .9f), true);
+            DrawString(ThemeDB.FallbackFont, origin + new Vector2(0, 6), layers > 1 ? layers.ToString() : text,
+                HorizontalAlignment.Center, 6, 6, color);
+            index++;
+        }
+    }
+
+    private void DrawVirtueViceIcons(Vector2 actor, IReadOnlyDictionary<P30VirtueViceKind, int>? layers)
+    {
+        if (layers is null || layers.Count == 0) return;
+        int index = 0;
+        foreach ((P30VirtueViceKind kind, int count) in layers.OrderBy(item => item.Key))
+        {
+            Color color = kind switch
+            {
+                P30VirtueViceKind.Mercy => new Color("70c98b"),
+                P30VirtueViceKind.Temperance => new Color("7bb6db"),
+                P30VirtueViceKind.Humility => new Color("d1c29a"),
+                P30VirtueViceKind.Rage => new Color("db4a3f"),
+                P30VirtueViceKind.Sloth => new Color("8971c7"),
+                _ => new Color("d4a14e"),
+            };
+            Vector2 origin = actor + new Vector2(-18 + index * 8, 30);
+            DrawCircle(origin, 3, color);
+            DrawString(ThemeDB.FallbackFont, origin + new Vector2(-3, 8), count.ToString(),
+                HorizontalAlignment.Center, 7, 7, color.Lightened(.2f));
+            index++;
+        }
+    }
+
+    private static string AilmentGlyph(P17Ailment ailment) => ailment switch
+    {
+        P17Ailment.Ignite => "燃", P17Ailment.Erosion => "蚀", P17Ailment.Wither => "凋",
+        P17Ailment.Chill or P17Ailment.Freeze => "冰", P17Ailment.Shock => "电",
+        P17Ailment.Paralysis => "麻", P17Ailment.ArmorBreak => "破", _ => "异",
+    };
+
+    private static Color AilmentColor(P17Ailment ailment) => ailment switch
+    {
+        P17Ailment.Ignite => new Color("f06a38"),
+        P17Ailment.Chill or P17Ailment.Freeze => new Color("68cde5"),
+        P17Ailment.Shock or P17Ailment.Paralysis => new Color("f0d64c"),
+        P17Ailment.Erosion or P17Ailment.Wither => new Color("a56bd6"),
+        _ => new Color("70c96d"),
+    };
 
     private static int VfxIndex(P3SceneEventKind kind) => kind switch
     {
@@ -810,6 +1052,130 @@ public partial class P1WorldView : Control
         P3SceneEventKind.BossPhase => 40,
         _ => -1,
     };
+
+    private static P31SkillVisualDescriptor? VisualForEvent(P3SceneEvent item)
+    {
+        string skillId = ReadDetailValue(item.Detail, "skill:") ?? item.Kind switch
+        {
+            P3SceneEventKind.HeavyStrike => P1SkillIds.HeavyStrike,
+            P3SceneEventKind.EarthCleave => P1SkillIds.EarthCleave,
+            P3SceneEventKind.SpiritBlade or P3SceneEventKind.Chain => P1SkillIds.SpiritBlade,
+            P3SceneEventKind.SeismicCharge => P1SkillIds.SeismicCharge,
+            P3SceneEventKind.BloodTideSpin => P1SkillIds.BloodTideSpin,
+            P3SceneEventKind.AshJavelin => P1SkillIds.AshJavelin,
+            P3SceneEventKind.EmberNova => P1SkillIds.EmberNova,
+            P3SceneEventKind.StormBrand => P1SkillIds.StormBrand,
+            P3SceneEventKind.WarCry => P1SkillIds.WarCry,
+            P3SceneEventKind.Banner => P1SkillIds.IronOathBanner,
+            _ => string.Empty,
+        };
+        return skillId.Length > 0 && P31VisualCatalog.TryForSkill(skillId, out P31SkillVisualDescriptor? result)
+            ? result : null;
+    }
+
+    private static P31SupportVisualLayer ReadSupportLayers(string detail)
+    {
+        string? token = ReadDetailValue(detail, "supports:");
+        return ulong.TryParse(token, out ulong flags)
+            ? P31VisualCatalog.LayersForLegacySupport(flags)
+            : P31SupportVisualLayer.None;
+    }
+
+    private static string? ReadDetailValue(string detail, string prefix)
+    {
+        int start = detail.IndexOf(prefix, StringComparison.Ordinal);
+        if (start < 0) return null;
+        start += prefix.Length;
+        int end = detail.IndexOf('|', start);
+        return end < 0 ? detail[start..] : detail[start..end];
+    }
+
+    private static bool NeedsFeedback(P3SceneEvent item)
+    {
+        if (item.Kind is P3SceneEventKind.Block or P3SceneEventKind.Guard or P3SceneEventKind.SkillFailed or
+            P3SceneEventKind.Ailment or P3SceneEventKind.EnemyDefeated or P3SceneEventKind.BossPhase) return true;
+        return item.Detail.Contains("|miss|", StringComparison.Ordinal) || item.Detail.EndsWith("|miss", StringComparison.Ordinal) ||
+               item.Detail.Contains("result:dodge", StringComparison.Ordinal);
+    }
+
+    private static string FeedbackText(P3SceneEvent item)
+    {
+        if (item.Detail.Contains("spell_suppression", StringComparison.Ordinal)) return "法术压制";
+        if (item.Detail.Contains("result:dodge", StringComparison.Ordinal)) return "闪避";
+        if (item.Detail.Contains("|miss|", StringComparison.Ordinal) || item.Detail.EndsWith("|miss", StringComparison.Ordinal)) return "未命中";
+        return item.Kind switch
+        {
+            P3SceneEventKind.Block => "格挡",
+            P3SceneEventKind.Guard => "减伤",
+            P3SceneEventKind.SkillFailed => "资源不足",
+            P3SceneEventKind.EnemyDefeated => "击破",
+            P3SceneEventKind.BossPhase => item.Detail.Contains("enraged", StringComparison.Ordinal) ? "狂暴" : "阶段变化",
+            P3SceneEventKind.Ailment => AilmentText(ReadDetailValue(item.Detail, "ailment:") ?? ReadDetailValue(item.Detail, "dot:")),
+            _ => string.Empty,
+        };
+    }
+
+    private static string AilmentText(string? value) => value switch
+    {
+        "bleed" => "流血", "ignite" => "点燃", "chill" => "冰缓", "freeze" => "冻结",
+        "shock" => "感电", "paralysis" => "麻痹", "erosion" => "侵蚀", "wither" => "凋零",
+        "stun" => "眩晕", "armorbreak" or "armor-break" => "破甲", _ => "异常",
+    };
+
+    private static string DamageGroup(P3SceneEvent item)
+    {
+        if (item.Kind == P3SceneEventKind.EnemyAttack) return "hero";
+        return DamageGroup(item.Detail);
+    }
+
+    private static string DamageGroup(string detail)
+    {
+        string[] types = ["physical", "fire", "cold", "lightning", "void"];
+        return types.OrderByDescending(type => ReadDamageComponent(detail, type)).First();
+    }
+
+    private static Color DamageColor(string detail, float alpha)
+    {
+        return DamageGroup(detail) switch
+        {
+            "fire" => new Color(1, .37f, .12f, alpha),
+            "cold" => new Color(.38f, .78f, 1, alpha),
+            "lightning" => new Color(1, .87f, .28f, alpha),
+            "void" => new Color(.72f, .38f, 1, alpha),
+            _ => new Color(.94f, .82f, .58f, alpha),
+        };
+    }
+
+    private static int ReadDamageComponent(string detail, string type)
+    {
+        int start = detail.IndexOf(type + ":", StringComparison.Ordinal);
+        if (start < 0) return 0;
+        start += type.Length + 1;
+        int comma = detail.IndexOf(',', start);
+        int separator = detail.IndexOf('|', start);
+        int end = comma < 0 ? separator : separator < 0 ? comma : Math.Min(comma, separator);
+        ReadOnlySpan<char> value = end < 0 ? detail.AsSpan(start) : detail.AsSpan(start, end - start);
+        return int.TryParse(value, out int result) ? result : 0;
+    }
+
+    private Vector2 ScreenShakeOffset()
+    {
+        ObservedScene? observed = Observe();
+        if (observed is null) return Vector2.Zero;
+        IReadOnlyList<P3SceneEvent> events = observed.Timeline.Events;
+        for (int index = events.Count - 1; index >= 0; index--)
+        {
+            P3SceneEvent item = events[index];
+            long age = observed.ElapsedMilliseconds - item.AtMilliseconds;
+            if (age > 180) break;
+            if (age < 0 || item.Kind is not (P3SceneEventKind.HeavyStrike or P3SceneEventKind.BossPhase or
+                P3SceneEventKind.EnemyDefeated or P3SceneEventKind.Ascendancy)) continue;
+            float fade = 1 - age / 180f;
+            return new Vector2(MathF.Sin((float)_visualClock * 96) * 3 * fade,
+                MathF.Cos((float)_visualClock * 83) * 2 * fade);
+        }
+        return Vector2.Zero;
+    }
 
     private static int FindFrameIndex(IReadOnlyList<P4SpatialFrame> frames, long elapsed)
     {
@@ -930,6 +1296,7 @@ public partial class P1WorldView : Control
 
     private void DrawFloatingNumbers(Vector2 enemy, Vector2 actor, IEnumerable<P3SceneEvent> recent, long elapsed)
     {
+        if (P31VisualPreferences.DamageNumbers == P31DamageNumberMode.Off) return;
         int lane = 0;
         foreach (P3SceneEvent item in recent.Where(item => item.Value > 0 && item.Kind is
                      P3SceneEventKind.HeavyStrike or P3SceneEventKind.Aftershock or
