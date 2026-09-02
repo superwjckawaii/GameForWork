@@ -1,3 +1,4 @@
+using System.Globalization;
 using GameForWork.Core.P1.Items;
 using GameForWork.Core.P2;
 using Godot;
@@ -197,6 +198,22 @@ public partial class P2ItemTooltipPanel : PanelContainer
 
     private static string FormatTooltipLine(string line)
     {
+        const string dpsMarker = "[DPS:";
+        if (line.StartsWith(dpsMarker, StringComparison.Ordinal))
+        {
+            int dpsEnd = line.IndexOf(']');
+            if (dpsEnd > dpsMarker.Length && double.TryParse(
+                    line.AsSpan(dpsMarker.Length, dpsEnd - dpsMarker.Length),
+                    NumberStyles.Float,
+                    CultureInfo.InvariantCulture,
+                    out double dps))
+            {
+                float weight = (float)Math.Clamp(dps / 1_500.0, 0.0, 1.0);
+                Color dpsColor = new Color("eee7d8").Lerp(new Color("ff3030"), weight);
+                return $"[color=#{dpsColor.ToHtml(false)}]{EscapeBbCode(line[(dpsEnd + 1)..])}[/color]";
+            }
+        }
+
         const string legendaryMarker = "[LEGENDARY]";
         if (line.StartsWith(legendaryMarker, StringComparison.Ordinal))
         {

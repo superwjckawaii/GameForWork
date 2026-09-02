@@ -17,9 +17,7 @@ public partial class P5ExpeditionPanel : VBoxContainer
     private Action<string>? _changed;
     private Label? _resources;
     private GridContainer? _mapInventory;
-    private HFlowContainer? _mapActions;
     private VBoxContainer? _reports;
-    private Label? _mapDetails;
     private P26MapFilterWindow? _mapFilterWindow;
     private P12MapCraftWindow? _mapCraftWindow;
     private ConfirmationDialog? _abandonDialog;
@@ -27,7 +25,6 @@ public partial class P5ExpeditionPanel : VBoxContainer
     private Action? _pendingSwitchAction;
     private ExpeditionTeamKind _pendingAbandonTeam;
     private readonly Dictionary<MapFilterScope, Label> _filterCounts = [];
-    private int _selectedMapIndex = -1;
     private string _mapSignature = string.Empty;
     private string _reportSignature = string.Empty;
     private string _dispatchSignature = string.Empty;
@@ -106,14 +103,14 @@ public partial class P5ExpeditionPanel : VBoxContainer
         batch.Pressed += () =>
         {
             P12MapBatchResult result = _session!().BatchCraftMaps(_session!().World.MapCraftRule, _session!().World.MapCraftFilter);
-            _selectedMapIndex = -1; _mapSignature = string.Empty; _changed?.Invoke(result.Summary); RefreshState();
+            _mapSignature = string.Empty; _changed?.Invoke(result.Summary); RefreshState();
         };
         craftToolbar.AddChild(batch);
         var sell = new Button { Text = "出售筛选结果", TooltipText = "锁定、运行中、手动优先队列和任务地图不会出售。" };
         sell.Pressed += () =>
         {
             (int sold, int gold) = _session!().SellMaps(_session!().World.MapCraftFilter);
-            _selectedMapIndex = -1; _mapSignature = string.Empty;
+            _mapSignature = string.Empty;
             _changed?.Invoke($"已出售 {sold} 张地图，获得 {gold} 金币。"); RefreshState();
         };
         craftToolbar.AddChild(sell);
@@ -121,9 +118,11 @@ public partial class P5ExpeditionPanel : VBoxContainer
         var mapScroll = new ScrollContainer { CustomMinimumSize = new Vector2(0, 230), SizeFlagsVertical = SizeFlags.ExpandFill };
         _mapInventory = new GridContainer { Columns = 3, SizeFlagsHorizontal = SizeFlags.ExpandFill };
         mapScroll.AddChild(_mapInventory); warehouse.AddChild(mapScroll);
-        _mapDetails = new Label { AutowrapMode = TextServer.AutowrapMode.WordSmart, CustomMinimumSize = new Vector2(0, 72) };
-        warehouse.AddChild(_mapDetails);
-        _mapActions = new HFlowContainer(); warehouse.AddChild(_mapActions);
+        warehouse.AddChild(new Label
+        {
+            Text = "地图按 T 级与区域三列汇总。批量做图、出售与两队远征分别使用各自的地图筛选。",
+            AutowrapMode = TextServer.AutowrapMode.WordSmart,
+        });
         tabs.AddChild(warehouse);
 
         var reportsPage = new ScrollContainer { Name = "战斗报告", SizeFlagsHorizontal = SizeFlags.ExpandFill, SizeFlagsVertical = SizeFlags.ExpandFill };
@@ -170,7 +169,6 @@ public partial class P5ExpeditionPanel : VBoxContainer
         {
             _mapSignature = mapSignature;
             Clear(_mapInventory);
-            if (_selectedMapIndex >= session.World.MapInventory.Count) _selectedMapIndex = session.World.MapInventory.Count - 1;
             foreach (var group in mapGroups)
             {
                 var entries = group.ToArray();
@@ -182,33 +180,33 @@ public partial class P5ExpeditionPanel : VBoxContainer
                     .ThenByDescending(entry => entry.Map.Quality)
                     .ThenBy(entry => entry.Map.AcquiredSequence)
                     .First();
-                int mapIndex = representative.Index;
                 P1MapItem map = representative.Map;
                 P12MapArea area = ResolveArea(map);
                 int rare = entries.Count(entry => entry.Map.Rarity == P12MapRarity.Rare);
                 int magic = entries.Count(entry => entry.Map.Rarity == P12MapRarity.Magic);
                 int corrupted = entries.Count(entry => entry.Map.IsCorrupted);
                 int locked = entries.Count(entry => entry.Map.IsLocked);
-                bool selected = _selectedMapIndex >= 0 && _selectedMapIndex < session.World.MapInventory.Count &&
-                    session.World.MapInventory[_selectedMapIndex].Tier == group.Key.Tier &&
-                    string.Equals(session.World.MapInventory[_selectedMapIndex].AreaId, group.Key.AreaId, StringComparison.Ordinal);
-                var button = new Button
+                var card = new PanelContainer
+                {
+                    CustomMinimumSize = new Vector2(0, 52),
+                    SizeFlagsHorizontal = SizeFlags.ExpandFill,
+                };
+                card.AddThemeStyleboxOverride("panel", new StyleBoxFlat
+                {
+                    BgColor = new Color("151a22"), BorderColor = new Color("4b5665"),
+                    BorderWidthLeft = 1, BorderWidthTop = 1, BorderWidthRight = 1, BorderWidthBottom = 1,
+                    ContentMarginLeft = 8, ContentMarginTop = 5, ContentMarginRight = 8, ContentMarginBottom = 5,
+                });
+                card.AddChild(new Label
                 {
                     Text = $"T{map.Tier} · {area.DisplayName}　×{entries.Length}\n稀有 {rare} · 魔法 {magic}" +
                            (corrupted > 0 ? $" · 腐化 {corrupted}" : string.Empty) +
                            (locked > 0 ? $" · 锁定 {locked}" : string.Empty),
-                    Alignment = HorizontalAlignment.Left,
-                    CustomMinimumSize = new Vector2(0, 52),
-                    SizeFlagsHorizontal = SizeFlags.ExpandFill,
-                    TooltipText = $"该组共 {entries.Length} 张。点击后选中一张代表地图进行单图操作。",
-                    ButtonPressed = selected,
-                    ToggleMode = true,
-                };
-                button.Pressed += () => { _selectedMapIndex = mapIndex; _mapSignature = string.Empty; RefreshState(); };
-                _mapInventory.AddChild(button);
+                    AutowrapMode = TextServer.AutowrapMode.WordSmart,
+                });
+                _mapInventory.AddChild(card);
             }
             if (session.World.MapInventory.Count == 0) _mapInventory.AddChild(new Label { Text = "地图仓库为空" });
-            RefreshMapDetails(session);
         }
 
         string reportSignature = string.Join('|', session.World.Expedition.Reports.Select(report => report.StableId));
@@ -662,57 +660,10 @@ public partial class P5ExpeditionPanel : VBoxContainer
         }
     }
 
-    private void RefreshMapDetails(P1GameSession session)
-    {
-        if (_mapDetails is null || _mapActions is null) return;
-        Clear(_mapActions);
-        if (_selectedMapIndex < 0 || _selectedMapIndex >= session.World.MapInventory.Count)
-        {
-            _mapDetails.Text = "地图按 T 级与区域三列汇总。批量做图与出售使用本页地图筛选；两队远征各自保存筛选。";
-            return;
-        }
-        P1MapItem map = session.World.MapInventory[_selectedMapIndex];
-        _mapDetails.Text = "当前组代表地图：\n" + DescribeMap(map);
-        var lockButton = new Button { Text = map.IsLocked ? "解除地图锁定" : "锁定地图",
-            TooltipText = "锁定地图不会被批量制图、出售或自动远征消耗。" };
-        lockButton.Pressed += () =>
-        {
-            _session!().TrySetMapLocked(_selectedMapIndex, !map.IsLocked);
-            _mapSignature = string.Empty; _changed?.Invoke(map.IsLocked ? "地图已解除锁定。" : "地图已锁定。"); RefreshState();
-        };
-        _mapActions.AddChild(lockButton);
-        var routeBar = new HFlowContainer();
-        _mapActions.AddChild(new Label { Text = "选定路线：" });
-        _mapActions.AddChild(routeBar);
-        foreach (MapRoute route in map.EffectiveRouteCandidates)
-        {
-            var button = new Button { Text = RouteName(route), ToggleMode = true, ButtonPressed = map.SelectedRoute == route };
-            button.Pressed += () =>
-            {
-                _session!().TrySelectMapRoute(_selectedMapIndex, route);
-                _mapSignature = string.Empty; _changed?.Invoke($"已选路线：{RouteName(route)}。"); RefreshState();
-            };
-            routeBar.AddChild(button);
-        }
-    }
-
-    private static string DescribeMap(P1MapItem map)
-    {
-        P12MapArea area = ResolveArea(map);
-        string routes = string.Join(" / ", map.EffectiveRouteCandidates.Select(RouteName));
-        string corruption = map.IsCorrupted ? " · 已腐化" : string.Empty;
-        return $"{area.DisplayName} · T{map.Tier} · 怪物等级 {map.MonsterLevel} · {RarityMark(map.Rarity)} · 品质 {map.Quality}%{corruption}\n可选路线：{routes}";
-    }
-
     private static P12MapArea ResolveArea(P1MapItem map) =>
         P12MapCatalog.TryGet(map.AreaId, out P12MapArea area)
             ? area
             : new P12MapArea(map.AreaId, "未登记路印", "未知区域", "未知敌群", "未知首领");
-
-    private static string RarityMark(P12MapRarity rarity) => rarity switch
-    { P12MapRarity.Basic => "普通", P12MapRarity.Magic => "魔法", _ => "稀有" };
-    private static string RouteName(MapRoute route) => route switch
-    { MapRoute.Safe => "安全探索", MapRoute.Abyss => "裂渊追猎", MapRoute.LifeGarden => "命能花园", _ => "亡旗战阵" };
 
     private enum MapFilterScope { Hero, Mercenaries, Crafting }
     private sealed record BossControls(OptionButton Target, OptionButton Mode, SpinBox Count);

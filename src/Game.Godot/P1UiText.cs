@@ -32,19 +32,28 @@ internal static class P1UiText
         {
             LocalWeaponStats local = EquipmentLoadout.CalculateLocalWeapon(item);
             WeaponProfile weapon = local.Physical;
-            text.AppendLine($"物理伤害 {weapon.MinimumPhysicalDamage}–{weapon.MaximumPhysicalDamage}");
+            string baseDamageRange = includeAffixDetails
+                ? $" [底材 {item.Base.MinimumPhysicalDamage}–{item.Base.MaximumPhysicalDamage}]"
+                : string.Empty;
+            text.AppendLine($"物理伤害 {weapon.MinimumPhysicalDamage}–{weapon.MaximumPhysicalDamage}{baseDamageRange}");
             AppendDamageRange(text, "火焰伤害", local.Fire);
             AppendDamageRange(text, "冰霜伤害", local.Cold);
             AppendDamageRange(text, "闪电伤害", local.Lightning);
             AppendDamageRange(text, "虚空伤害", local.Void);
-            text.AppendLine($"攻击频率 {weapon.AttacksPerSecondMilli / 1000.0:0.00}/秒 · 暴击 {weapon.CriticalChanceBasisPoints / 100.0:0.0}%");
-            string[] dpsParts =
-            [
-                $"物理 {local.PhysicalDamagePerSecond:0.0}",
-                local.ElementalDamagePerSecond > 0 ? $"元素 {local.ElementalDamagePerSecond:0.0}" : string.Empty,
-                local.VoidDamagePerSecond > 0 ? $"虚空 {local.VoidDamagePerSecond:0.0}" : string.Empty,
-            ];
-            text.AppendLine($"武器秒伤 {local.TotalDamagePerSecond:0.0}（{string.Join(" · ", dpsParts.Where(part => part.Length > 0))}）");
+            string baseWeaponStats = includeAffixDetails
+                ? $" [底材 {item.Base.AttacksPerSecondMilli / 1000.0:0.00}/秒 · {item.Base.CriticalChanceBasisPoints / 100.0:0.0}%]"
+                : string.Empty;
+            text.AppendLine($"攻击频率 {weapon.AttacksPerSecondMilli / 1000.0:0.00}/秒 · 暴击 {weapon.CriticalChanceBasisPoints / 100.0:0.0}%{baseWeaponStats}");
+            if (includeAffixDetails)
+            {
+                string[] dpsParts =
+                [
+                    $"物理 {local.PhysicalDamagePerSecond:0.0}",
+                    local.ElementalDamagePerSecond > 0 ? $"元素 {local.ElementalDamagePerSecond:0.0}" : string.Empty,
+                    local.VoidDamagePerSecond > 0 ? $"虚空 {local.VoidDamagePerSecond:0.0}" : string.Empty,
+                ];
+                text.AppendLine($"[DPS:{local.TotalDamagePerSecond:0.###}]武器秒伤 {local.TotalDamagePerSecond:0.0}（{string.Join(" · ", dpsParts.Where(part => part.Length > 0))}）");
+            }
         }
 
         var localDefense = EquipmentLoadout.CalculateLocalDefense(item);
@@ -52,16 +61,19 @@ internal static class P1UiText
         {
             string[] defenses =
             [
-                localDefense.Armor > 0 ? $"护甲 {localDefense.Armor}" : string.Empty,
-                localDefense.Evasion > 0 ? $"闪避 {localDefense.Evasion}" : string.Empty,
-                localDefense.Shield > 0 ? $"护盾 {localDefense.Shield}" : string.Empty,
-                localDefense.SpiritBarrier > 0 ? $"灵障 {localDefense.SpiritBarrier}" : string.Empty,
+                localDefense.Armor > 0 ? $"护甲 {localDefense.Armor}{BaseRollRange(includeAffixDetails, item.Base.ArmorMinimum, item.Base.ArmorMaximum, item.Base.Armor)}" : string.Empty,
+                localDefense.Evasion > 0 ? $"闪避 {localDefense.Evasion}{BaseRollRange(includeAffixDetails, item.Base.EvasionMinimum, item.Base.EvasionMaximum, item.Base.Evasion)}" : string.Empty,
+                localDefense.Shield > 0 ? $"护盾 {localDefense.Shield}{BaseRollRange(includeAffixDetails, item.Base.ShieldMinimum, item.Base.ShieldMaximum, item.Base.Shield)}" : string.Empty,
+                localDefense.SpiritBarrier > 0 ? $"灵障 {localDefense.SpiritBarrier}{BaseRollRange(includeAffixDetails, item.Base.SpiritBarrier, item.Base.SpiritBarrier, item.Base.SpiritBarrier)}" : string.Empty,
             ];
             text.AppendLine(string.Join(" · ", defenses.Where(value => value.Length > 0)));
         }
         if (localDefense.BlockChanceBasisPoints > 0)
         {
-            text.AppendLine($"装备格挡 {localDefense.BlockChanceBasisPoints / 100.0:0.#}%");
+            string baseBlock = includeAffixDetails
+                ? $" [底材 {item.Base.BlockChanceBasisPoints / 100.0:0.#}%]"
+                : string.Empty;
+            text.AppendLine($"装备格挡 {localDefense.BlockChanceBasisPoints / 100.0:0.#}%{baseBlock}");
         }
 
         if (item.LinkedSocketCount > 0)
@@ -69,15 +81,19 @@ internal static class P1UiText
             text.AppendLine($"连接孔组：{item.LinkedSocketCount}连");
         }
 
-        if (item.Base.ImplicitModifier != ItemModifierKind.None)
+        if (includeAffixDetails && item.Base.ImplicitModifier != ItemModifierKind.None)
         {
             string label = string.IsNullOrWhiteSpace(item.Base.ImplicitText)
                 ? "底材固有"
                 : item.Base.ImplicitText;
-            text.AppendLine($"（基底词缀）{label}：{Modifier(item.Base.ImplicitModifier, item.EffectiveImplicitValue)}");
+            text.AppendLine($"（基底词缀）{label} {RangeValue(item.Base.ImplicitModifier, item.EffectiveImplicitValue)} " +
+                            $"[{RangeValue(item.Base.ImplicitModifier, item.Base.ImplicitMinimumValue)}, {RangeValue(item.Base.ImplicitModifier, item.Base.ImplicitMaximumValue)}]");
         }
-        foreach (ItemBaseImplicit implicitModifier in item.Base.ExtraImplicits)
-            text.AppendLine($"（基底词缀）{implicitModifier.DisplayText}");
+        if (includeAffixDetails)
+        {
+            foreach (ItemBaseImplicit implicitModifier in item.Base.ExtraImplicits)
+                text.AppendLine($"（基底词缀）{implicitModifier.DisplayText}");
+        }
 
         if (item.Enchantment is not null)
             text.AppendLine($"（附魔）{item.Enchantment.DisplayName}：{string.Join("；", item.Enchantment.EffectComponents.Select(effect => Modifier(effect.Kind, effect.MinimumValue)))}");
@@ -144,6 +160,14 @@ internal static class P1UiText
     private static void AppendDamageRange(StringBuilder text, string label, LocalDamageRange range)
     {
         if (range.HasDamage) text.AppendLine($"{label} {range.Minimum}–{range.Maximum}");
+    }
+
+    private static string BaseRollRange(bool includeDetails, int minimum, int maximum, int fallback)
+    {
+        if (!includeDetails) return string.Empty;
+        int low = minimum > 0 ? minimum : fallback;
+        int high = maximum > 0 ? maximum : low;
+        return $" [底材 {low}{(high == low ? string.Empty : $"–{high}")}]";
     }
 
     public static string PassiveTooltip(

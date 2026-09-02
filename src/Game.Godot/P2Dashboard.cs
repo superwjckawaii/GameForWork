@@ -64,6 +64,7 @@ public partial class P2Dashboard : VBoxContainer
     private Control? _metalMode;
     private TabContainer? _characterSidebar;
     private P205JewelStashPanel? _jewelStashPanel;
+    private Label? _bossFragmentsStatus;
     private Label? _miniStatus;
     private Label? _overviewStatus;
     private Label? _characterStatus;
@@ -525,6 +526,7 @@ public partial class P2Dashboard : VBoxContainer
         _jewelStashPanel = new P205JewelStashPanel { Name = "珠宝", SizeFlagsVertical = SizeFlags.ExpandFill };
         _jewelStashPanel.Initialize(RequireSession, Changed);
         sidebar.AddChild(_jewelStashPanel);
+        sidebar.AddChild(BuildBossFragmentMode());
         collapseSidebar.Pressed += () =>
         {
             sidebar.Visible = !sidebar.Visible;
@@ -623,6 +625,40 @@ public partial class P2Dashboard : VBoxContainer
         _metalPanel = new P9MetalPanel { Name = "打造", SizeFlagsHorizontal = SizeFlags.ExpandFill, SizeFlagsVertical = SizeFlags.ExpandFill };
         _metalPanel.Initialize(RequireSession, CurrentCraftTarget, Changed);
         return _metalPanel;
+    }
+
+    private Control BuildBossFragmentMode()
+    {
+        var scroll = new ScrollContainer
+        {
+            Name = "Boss 碎片",
+            SizeFlagsHorizontal = SizeFlags.ExpandFill,
+            SizeFlagsVertical = SizeFlags.ExpandFill,
+        };
+        var body = new VBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
+        body.AddThemeConstantOverride("separation", 8);
+        scroll.AddChild(body);
+        body.AddChild(new Label
+        {
+            Text = "Boss 碎片仓",
+            HorizontalAlignment = HorizontalAlignment.Center,
+        });
+        body.AddChild(new Label
+        {
+            Text = "碎片集齐后自动合成为门票；门票在主角派遣页选择 Boss 挑战时消耗。",
+            AutowrapMode = TextServer.AutowrapMode.WordSmart,
+        });
+        var frame = new PanelContainer();
+        frame.AddThemeStyleboxOverride("panel", new StyleBoxFlat
+        {
+            BgColor = new Color("111720"), BorderColor = new Color("786747"),
+            BorderWidthLeft = 1, BorderWidthTop = 1, BorderWidthRight = 1, BorderWidthBottom = 1,
+            ContentMarginLeft = 10, ContentMarginTop = 9, ContentMarginRight = 10, ContentMarginBottom = 9,
+        });
+        _bossFragmentsStatus = new Label { AutowrapMode = TextServer.AutowrapMode.WordSmart };
+        frame.AddChild(_bossFragmentsStatus);
+        body.AddChild(frame);
+        return scroll;
     }
 
     private Control BuildSkillMode()
@@ -1694,6 +1730,10 @@ public partial class P2Dashboard : VBoxContainer
             _passiveTree!.SetState(_session.Passives.Allocated, _session.World.Hero.Progression.EarnedPassivePoints,
                 _session.Passives.StartKind, _session.Jewels.Socketed);
             _jewelStashPanel?.RefreshState();
+            _bossFragmentsStatus!.Text =
+                $"◆ 深渊监守者\n碎片 {_session.World.Expedition.AbyssWardenFragments}/{P5ExpeditionDirector.FragmentsPerTicket}　门票 ×{_session.World.Expedition.AbyssWardenTickets}\n" +
+                $"下枚碎片进度 {_session.World.Expedition.MapsTowardNextFragment}/{P5ExpeditionDirector.MapsPerFragment}\n\n" +
+                $"◆ 灰烬天垒\n碎片 {_session.Endgame.CitadelFragments}/{P10EndgameState.CitadelFragmentsPerTicket}　门票 ×{_session.Endgame.CitadelTickets}";
             _ascendancyPanel?.Refresh();
             bool heroSelected = _selectedCharacter == P2CharacterKind.Hero;
             foreach (BaseButton control in _heroOnlyControls)
