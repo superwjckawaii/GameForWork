@@ -917,22 +917,28 @@ public sealed class P4SpatialCombatRunner
             ? Math.Max(1, request.AreaLevel * 5 + weaponRoll / 2)
             : Math.Max(1, weaponRoll + request.Build.AddedPhysicalDamage);
         P205PassiveModifiers profile = request.Build.PassiveProfile ?? P205PassiveModifiers.Empty;
-        raw = checked(raw * (10_000 + request.Build.IncreasedDamageBasisPoints + profile.DamageFor(tags) + configuration.Quality * 100) / 10_000);
-        raw = checked(raw * (10_000 + profile.MoreDamageBasisPoints) / 10_000);
-        raw = checked(raw * (10_000 + JewelMoreDamage(request.Build, tags,
-            skill.Role == P17SkillRole.DamageOverTime)) / 10_000);
-        raw = checked(raw * skill.BaseDamageBasisPoints / 10_000);
-        raw = checked(raw * P6CombatSkillRules.DamageMultiplier(skill, enemy.Life, enemy.MaximumLife) / 10_000);
-        raw = checked(raw * multiplier / 10_000);
-        raw = checked(raw * ascendancyMultiplier / 10_000);
-        raw = checked(raw * (10_000 + enemy.ShockStacks * 500) / 10_000);
+        P17AddedWeaponDamage addedWeapon = tags.HasFlag(SkillTag.Attack) && skill.Role != P17SkillRole.DamageOverTime &&
+                                           request.Build.LocalWeaponStats is { } localWeapon
+            ? new(Roll(localWeapon.Fire), Roll(localWeapon.Cold), Roll(localWeapon.Lightning), Roll(localWeapon.Void))
+            : default;
+        raw = ScaleOffensive(raw);
+        addedWeapon = new(
+            ScaleOffensive(addedWeapon.Fire), ScaleOffensive(addedWeapon.Cold),
+            ScaleOffensive(addedWeapon.Lightning), ScaleOffensive(addedWeapon.Void));
         int criticalChance = request.Build.CannotCrit ? 0 : P30CombatRules.CriticalChance(
             request.Build.Weapon.CriticalChanceBasisPoints, request.Build.IncreasedCriticalChanceBasisPoints);
         if (skill.Role != P17SkillRole.DamageOverTime && random.NextUInt() % 10_000 < Math.Clamp(criticalChance, 0, 10_000))
+        {
             raw = checked(raw * request.Build.CriticalMultiplierBasisPoints / 10_000);
+            addedWeapon = new(
+                checked(addedWeapon.Fire * request.Build.CriticalMultiplierBasisPoints / 10_000),
+                checked(addedWeapon.Cold * request.Build.CriticalMultiplierBasisPoints / 10_000),
+                checked(addedWeapon.Lightning * request.Build.CriticalMultiplierBasisPoints / 10_000),
+                checked(addedWeapon.Void * request.Build.CriticalMultiplierBasisPoints / 10_000));
+        }
         int armor = enemy.Scaled.Armor * Math.Max(0, 10_000 - enemy.ArmorBreakStacks * runtime.ArmorBreakPerStackBasisPoints) / 10_000;
         if (configuration.Supports.HasFlag(SkillSupport.ArmorPierce)) armor = armor * 7_000 / 10_000;
-        P17DamageBreakdown damage = P17DamageRules.Resolve(raw, skill.DamageType, configuration.Supports,
+        P17DamageBreakdown damage = P17DamageRules.ResolveMixed(raw, skill.DamageType, addedWeapon, configuration.Supports,
             armor, enemy.Scaled.FireResistanceBasisPoints + request.EnemyElementalResistanceBasisPoints,
             enemy.Scaled.ColdResistanceBasisPoints + request.EnemyElementalResistanceBasisPoints,
             enemy.Scaled.LightningResistanceBasisPoints + request.EnemyElementalResistanceBasisPoints,
@@ -947,6 +953,28 @@ public sealed class P4SpatialCombatRunner
              skill.DamageType == P17DamageType.Physical ? 100 : 0);
         if (value > 0 && leech > 0)
             ApplyLifeLeech(hero, Math.Max(1, value * leech / 10_000), request.Build.InstantLifeLeechBasisPoints);
+
+        int ScaleOffensive(int value)
+        {
+            if (value <= 0) return 0;
+            value = checked(value * (10_000 + request.Build.IncreasedDamageBasisPoints + profile.DamageFor(tags) +
+                                     configuration.Quality * 100) / 10_000);
+            value = checked(value * (10_000 + profile.MoreDamageBasisPoints) / 10_000);
+            value = checked(value * (10_000 + JewelMoreDamage(request.Build, tags,
+                skill.Role == P17SkillRole.DamageOverTime)) / 10_000);
+            value = checked(value * skill.BaseDamageBasisPoints / 10_000);
+            value = checked(value * P6CombatSkillRules.DamageMultiplier(skill, enemy.Life, enemy.MaximumLife) / 10_000);
+            value = checked(value * multiplier / 10_000);
+            value = checked(value * ascendancyMultiplier / 10_000);
+            return checked(value * (10_000 + enemy.ShockStacks * 500) / 10_000);
+        }
+
+        int Roll(LocalDamageRange range)
+        {
+            if (!range.HasDamage) return 0;
+            int span = range.Maximum - range.Minimum + 1;
+            return range.Minimum + (int)(random.NextUInt() % (uint)Math.Max(1, span));
+        }
 
         bool ailmentAllowed = !configuration.Supports.HasFlag(SkillSupport.ElementalFocus) &&
                               random.NextUInt() % 10_000 < Math.Clamp(skill.AilmentChanceBasisPoints, 0, 10_000);
@@ -1289,14 +1317,17 @@ public sealed class P4SpatialCombatRunner
             hero is not null && hero.Life * 2L <= hero.MaximumLife, !request.Build.HasShield,
             new P18EnemyState(enemy.ArmorBreakStacks, tick < enemy.StunnedUntilTick));
         if (runtime.Has(P18NodeIds.BloodLifeCore) && tags.HasFlag(SkillTag.Attack)) runtime.PaidLife(tick);
+        int increased = checked(request.Build.IncreasedDamageBasisPoints +
+            (request.Build.PassiveProfile ?? P205PassiveModifiers.Empty).DamageFor(tags) +
+            ((request.Build.ActiveSkills ?? []).FirstOrDefault(s => s.SkillId == skillId)?.Quality ?? 0) * 100);
+        int[] more = [skillMultiplier, ascendancyMultiplier, 10_000 + (request.Build.PassiveProfile?.MoreDamageBasisPoints ?? 0),
+            10_000 + JewelMoreDamage(request.Build, tags, false)];
         DamageResult damage = DamageRules.Resolve(new DamageRequest(
             request.Build.Weapon,
             request.Build.AddedPhysicalDamage,
             request.Build.AddedPhysicalDamage,
-            checked(request.Build.IncreasedDamageBasisPoints + (request.Build.PassiveProfile ?? P205PassiveModifiers.Empty).DamageFor(tags) +
-                ((request.Build.ActiveSkills ?? []).FirstOrDefault(s => s.SkillId == skillId)?.Quality ?? 0) * 100),
-            [skillMultiplier, ascendancyMultiplier, 10_000 + (request.Build.PassiveProfile?.MoreDamageBasisPoints ?? 0),
-                10_000 + JewelMoreDamage(request.Build, tags, false)],
+            increased,
+            more,
             request.Build.CannotCrit ? 0 : P30CombatRules.CriticalChance(
                 request.Build.Weapon.CriticalChanceBasisPoints, request.Build.IncreasedCriticalChanceBasisPoints),
             request.Build.CriticalMultiplierBasisPoints,
@@ -1307,7 +1338,21 @@ public sealed class P4SpatialCombatRunner
             BleedChanceBasisPoints: checked(bleedChance + runtime.AdditionalBleedChance)), random);
         int physicalResistance = P30CombatRules.EffectiveResistance(
             enemy.Scaled.PhysicalResistanceBasisPoints + request.EnemyPhysicalReductionBasisPoints, 3_500);
-        int value = damage.Hit ? P30CombatRules.MitigateByResistance(damage.FinalPhysicalDamage, physicalResistance) : 0;
+        int physicalDamage = damage.Hit ? P30CombatRules.MitigateByResistance(damage.FinalPhysicalDamage, physicalResistance) : 0;
+        SkillSupport supports = SupportsFor(request.Build, kind);
+        P17DamageBreakdown localDamage = damage.Hit && tags.HasFlag(SkillTag.Attack) &&
+                                             request.Build.LocalWeaponStats is { } localWeapon
+            ? P17DamageRules.ResolveMixed(0, P17DamageType.Physical,
+                new P17AddedWeaponDamage(
+                    ScaleLocal(Roll(localWeapon.Fire)), ScaleLocal(Roll(localWeapon.Cold)),
+                    ScaleLocal(Roll(localWeapon.Lightning)), ScaleLocal(Roll(localWeapon.Void))),
+                supports, 0, enemy.Scaled.FireResistanceBasisPoints + request.EnemyElementalResistanceBasisPoints,
+                enemy.Scaled.ColdResistanceBasisPoints + request.EnemyElementalResistanceBasisPoints,
+                enemy.Scaled.LightningResistanceBasisPoints + request.EnemyElementalResistanceBasisPoints,
+                enemy.Scaled.VoidResistanceBasisPoints + request.EnemyVoidResistanceBasisPoints,
+                physicalResistance)
+            : new P17DamageBreakdown(0, 0, 0, 0, 0, 0, []);
+        int value = checked(physicalDamage + localDamage.Total);
         if (damage.Critical && request.VirtueVice is { } virtueVice)
             value = checked(value * (10_000 + virtueVice.Bonuses().MoreCriticalDamageBasisPoints) / 10_000);
         if (value > 0 && enemy.Rarity is EnemyRarity.Rare or EnemyRarity.Boss && request.VirtueVice is { } oathState)
@@ -1332,13 +1377,29 @@ public sealed class P4SpatialCombatRunner
         }
 
         string hitDetail = damage.Critical ? "critical" : damage.Hit ? "hit" : "miss";
-        SkillSupport supports = SupportsFor(request.Build, kind);
         events.Add(Event(tick, kind, "hero", enemy.EntityId, value, source, enemy.Position,
-            $"{hitDetail}|supports:{(int)supports}"));
+            $"{hitDetail}|damage:physical:{physicalDamage},fire:{localDamage.Fire},cold:{localDamage.Cold}," +
+            $"lightning:{localDamage.Lightning},void:{localDamage.Void}|supports:{(int)supports}"));
         if (enemy.Life == 0)
         {
             events.Add(Event(tick, P4SpatialEventKind.EnemyDefeated, "hero", enemy.EntityId, 0,
                 source, enemy.Position, enemy.Profile.StableId));
+        }
+
+        int ScaleLocal(int value)
+        {
+            if (value <= 0) return 0;
+            value = checked(value * (10_000 + increased) / 10_000);
+            foreach (int multiplier in more) value = checked(value * multiplier / 10_000);
+            if (damage.Critical) value = checked(value * request.Build.CriticalMultiplierBasisPoints / 10_000);
+            return value;
+        }
+
+        int Roll(LocalDamageRange range)
+        {
+            if (!range.HasDamage) return 0;
+            int span = range.Maximum - range.Minimum + 1;
+            return range.Minimum + (int)(random.NextUInt() % (uint)Math.Max(1, span));
         }
     }
 

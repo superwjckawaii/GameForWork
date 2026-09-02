@@ -72,7 +72,8 @@ public sealed class P1MercenaryProfile
             HasShield: build.Equipment.HasShield,
             BlockChanceBasisPoints: checked(build.Equipment.BaseBlockChanceBasisPoints +
                 build.Equipment.Modifiers.BlockChanceBasisPoints),
-            HasUsableWeapon: build.HasUsableWeapon);
+            HasUsableWeapon: build.HasUsableWeapon,
+            LocalWeaponStats: build.Equipment.LocalWeapon);
     }
 }
 

@@ -16,10 +16,13 @@ public sealed record P16BatchPreview(
     IReadOnlyDictionary<ItemRarity, int> Counts,
     int Proceeds,
     int Excluded,
+    IReadOnlyDictionary<string, int> ExcludedReasons,
     int BuybackEvictions)
 {
     public int Total => Targets.Count;
 }
+
+public sealed record P16BatchExecution(int Completed, int Failed);
 
 public static class P16BatchItems
 {
@@ -34,17 +37,13 @@ public static class P16BatchItems
             _ => EnumerateStorage(session).Concat(EnumerateSorting(session)),
         };
         P16BatchTarget[] all = candidates.ToArray();
-        P16BatchTarget[] eligible = all.Where(target => target.Item.Rarity <= maximumRarity &&
-            !target.Item.IsLocked && !target.Item.IsCraftingBase && !target.Item.IsKeyItem && !IsMythic(target.Item)).ToArray();
-        var targets = new List<P16BatchTarget>();
-        targets.AddRange(eligible.Where(target => target.Item.LegendaryRule is null));
-        foreach (IGrouping<string, P16BatchTarget> group in eligible.Where(target => target.Item.LegendaryRule is not null)
-                     .GroupBy(target => target.Item.LegendaryRule!.StableId, StringComparer.Ordinal))
-        {
-            int removable = Math.Max(0, LegendaryCopies(session, group.Key) - 1);
-            targets.AddRange(group.Take(removable));
-        }
-        P16BatchTarget[] selected = targets.OrderBy(target => target.Container).ThenBy(target => target.Index).ToArray();
+        P16BatchTarget[] withinRarity = all.Where(target => target.Item.Rarity <= maximumRarity).ToArray();
+        P16BatchTarget[] selected = withinRarity.Where(target => IsSafe(target.Item))
+            .OrderBy(target => target.Container).ThenBy(target => target.Index).ToArray();
+        IReadOnlyDictionary<string, int> excludedReasons = withinRarity
+            .Where(target => !IsSafe(target.Item))
+            .GroupBy(target => ProtectionReason(target.Item), StringComparer.Ordinal)
+            .ToDictionary(group => group.Key, group => group.Count(), StringComparer.Ordinal);
         int proceeds = action == P16BatchAction.Sell
             ? selected.Sum(target => P2ManagementState.SalePrice(target.Item))
             : selected.Sum(target => DismantleYield(target.Item));
@@ -53,10 +52,10 @@ public static class P16BatchItems
             : 0;
         return new(action, scope, maximumRarity, selected,
             selected.GroupBy(target => target.Item.Rarity).ToDictionary(group => group.Key, group => group.Count()),
-            proceeds, all.Count(target => target.Item.Rarity <= maximumRarity) - selected.Length, evictions);
+            proceeds, withinRarity.Length - selected.Length, excludedReasons, evictions);
     }
 
-    public static int Execute(P1GameSession session, P16BatchPreview preview)
+    public static P16BatchExecution Execute(P1GameSession session, P16BatchPreview preview)
     {
         ArgumentNullException.ThrowIfNull(session);
         ArgumentNullException.ThrowIfNull(preview);
@@ -72,7 +71,7 @@ public static class P16BatchItems
                 if (result.Succeeded) completed++;
             }
         }
-        return completed;
+        return new(completed, preview.Targets.Count - completed);
     }
 
     public static int DismantleYield(ItemInstance item) => item.Rarity switch
@@ -84,24 +83,23 @@ public static class P16BatchItems
         _ => 0,
     };
 
-    public static bool IsSafe(P1GameSession session, ItemInstance item)
+    public static bool IsSafe(ItemInstance item)
     {
         if (item.IsLocked || item.IsCraftingBase || item.IsKeyItem || IsMythic(item)) return false;
-        if (item.LegendaryRule is null) return true;
-        return LegendaryCopies(session, item.LegendaryRule.StableId) > 1;
+        return true;
     }
 
     private static bool IsMythic(ItemInstance item) =>
         item.LegendaryRule?.StableId.StartsWith("core.mythic.", StringComparison.Ordinal) == true;
 
-    private static int LegendaryCopies(P1GameSession session, string ruleId)
+    private static string ProtectionReason(ItemInstance item) => item switch
     {
-        IEnumerable<ItemInstance> equipped = session.HeroEquipment.Items.Values
-            .Concat(session.MercenaryEquipment.Items.Values)
-            .Concat(session.Town.Roster.SelectMany(member => member.Equipment.Items.Values));
-        return session.World.Storage.Items.Concat(session.Management.SortingBag).Concat(equipped)
-            .Count(item => item.LegendaryRule?.StableId == ruleId);
-    }
+        { IsLocked: true } => "已锁定",
+        { IsCraftingBase: true } => "制作底材",
+        { IsKeyItem: true } => "关键物品",
+        _ when IsMythic(item) => "神话装备",
+        _ => "其他保护",
+    };
 
     private static IEnumerable<P16BatchTarget> EnumerateStorage(P1GameSession session) =>
         session.World.Storage.Items.Select((item, index) => new P16BatchTarget(ItemContainerKind.Storage, index, item));

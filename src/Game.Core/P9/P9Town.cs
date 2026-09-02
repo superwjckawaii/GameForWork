@@ -341,7 +341,8 @@ public sealed class P9TownState
             FrontlineCount: frontline,
             HasShield: assembled.Equipment.HasShield,
             BlockChanceBasisPoints: assembled.Equipment.HasShield ? 2_000 : 0,
-            HasUsableWeapon: assembled.HasUsableWeapon);
+            HasUsableWeapon: assembled.HasUsableWeapon,
+            LocalWeaponStats: assembled.Equipment.LocalWeapon);
     }
 
     private void CompactParty()

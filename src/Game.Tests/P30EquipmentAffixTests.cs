@@ -5,6 +5,8 @@ using GameForWork.Core.P14;
 using GameForWork.Core.P19;
 using GameForWork.Core.P24;
 using GameForWork.Core.P30;
+using GameForWork.Core.P17;
+using GameForWork.Core.P1.Combat;
 
 namespace GameForWork.Tests;
 
@@ -59,11 +61,25 @@ public sealed class P30EquipmentAffixTests
             new(ItemModifierKind.IncreasedPhysicalDamageBasisPoints, 10_000, ItemModifierScope.LocalWeapon),
             new(ItemModifierKind.IncreasedAttackSpeedBasisPoints, 2_000, ItemModifierScope.LocalWeapon),
             new(ItemModifierKind.IncreasedCriticalChanceBasisPoints, 4_000, ItemModifierScope.LocalWeapon),
+            new(ItemModifierKind.AddedMinimumFireDamage, 10, ItemModifierScope.LocalWeapon),
+            new(ItemModifierKind.AddedMaximumFireDamage, 20, ItemModifierScope.LocalWeapon),
+            new(ItemModifierKind.AddedMinimumColdDamage, 20, ItemModifierScope.LocalWeapon),
+            new(ItemModifierKind.AddedMaximumColdDamage, 30, ItemModifierScope.LocalWeapon),
+            new(ItemModifierKind.AddedMinimumLightningDamage, 30, ItemModifierScope.LocalWeapon),
+            new(ItemModifierKind.AddedMaximumLightningDamage, 40, ItemModifierScope.LocalWeapon),
+            new(ItemModifierKind.AddedMinimumVoidDamage, 40, ItemModifierScope.LocalWeapon),
+            new(ItemModifierKind.AddedMaximumVoidDamage, 50, ItemModifierScope.LocalWeapon),
         ], quality: 20);
-        var profile = EquipmentLoadout.CalculateWeapon(weapon);
+        LocalWeaponStats localWeapon = EquipmentLoadout.CalculateLocalWeapon(weapon);
+        WeaponProfile profile = localWeapon.Physical;
         Assert.Equal((288, 576), (profile.MinimumPhysicalDamage, profile.MaximumPhysicalDamage));
         Assert.Equal(1_200, profile.AttacksPerSecondMilli);
         Assert.Equal(700, profile.CriticalChanceBasisPoints);
+        Assert.Equal(new LocalDamageRange(12, 24), localWeapon.Fire);
+        Assert.Equal(new LocalDamageRange(24, 36), localWeapon.Cold);
+        Assert.Equal(new LocalDamageRange(36, 48), localWeapon.Lightning);
+        Assert.Equal(new LocalDamageRange(48, 60), localWeapon.Void);
+        Assert.Equal(691.2, localWeapon.TotalDamagePerSecond, .01);
 
         var armourBase = new ItemBaseDefinition("test.armour", "测试盾", ItemCategory.Shield, EquipmentSlot.OffHand,
             Armor: 100, Evasion: 100, Shield: 100, Tags: ["shield"], BlockChanceBasisPoints: 2_500, SpiritBarrier: 100);
@@ -80,6 +96,18 @@ public sealed class P30EquipmentAffixTests
         ], quality: 20);
         var defense = EquipmentLoadout.CalculateLocalDefense(armour);
         Assert.Equal((360, 360, 360, 360, 4_500), defense);
+    }
+
+    [Fact]
+    public void MixedWeaponDamageKeepsLocalElementalAndVoidChannels()
+    {
+        P17DamageBreakdown damage = P17DamageRules.ResolveMixed(100, P17DamageType.Physical,
+            new P17AddedWeaponDamage(Fire: 20, Cold: 30, Lightning: 40, Void: 50), SkillSupport.None,
+            targetArmor: 0, fireResistance: 0, coldResistance: 0, lightningResistance: 0,
+            voidResistance: 0);
+
+        Assert.Equal((100, 20, 30, 40, 50, 240),
+            (damage.Physical, damage.Fire, damage.Cold, damage.Lightning, damage.Void, damage.Total));
     }
 
     [Fact]

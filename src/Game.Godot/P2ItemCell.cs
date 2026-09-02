@@ -197,6 +197,13 @@ public partial class P2ItemTooltipPanel : PanelContainer
 
     private static string FormatTooltipLine(string line)
     {
+        const string legendaryMarker = "[LEGENDARY]";
+        if (line.StartsWith(legendaryMarker, StringComparison.Ordinal))
+        {
+            return $"[color=#{P1UiText.LegendaryAffixColor.ToHtml(false)}]" +
+                   $"{EscapeBbCode(line[legendaryMarker.Length..])}[/color]";
+        }
+
         const string marker = "[TIER:";
         if (!line.StartsWith(marker, StringComparison.Ordinal))
         {

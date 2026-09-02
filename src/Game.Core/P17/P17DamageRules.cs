@@ -10,11 +10,26 @@ public sealed record P17DamageBreakdown(
     public string Compact => $"physical:{Physical},fire:{Fire},cold:{Cold},lightning:{Lightning},void:{Void}";
 }
 
+public readonly record struct P17AddedWeaponDamage(int Fire = 0, int Cold = 0, int Lightning = 0, int Void = 0);
+
 public static class P17DamageRules
 {
     public static P17DamageBreakdown Resolve(
         int rawDamage,
         P17DamageType baseType,
+        SkillSupport supports,
+        int targetArmor,
+        int fireResistance,
+        int coldResistance,
+        int lightningResistance,
+        int voidResistance,
+        int physicalResistance = 0) => ResolveMixed(rawDamage, baseType, default, supports, targetArmor,
+        fireResistance, coldResistance, lightningResistance, voidResistance, physicalResistance);
+
+    public static P17DamageBreakdown ResolveMixed(
+        int rawDamage,
+        P17DamageType baseType,
+        P17AddedWeaponDamage addedWeaponDamage,
         SkillSupport supports,
         int targetArmor,
         int fireResistance,
@@ -49,7 +64,19 @@ public static class P17DamageRules
         if (supports.HasFlag(SkillSupport.AddedLightning))
             extras.Add(new(type, P30DamageType.Lightning, 1_700, "support.added_lightning"));
 
-        P30DamagePacket packet = P30CombatRules.ConvertAndScale(rawDamage, type, conversions, extras);
+        var packets = new List<P30DamagePacket>
+        {
+            P30CombatRules.ConvertAndScale(rawDamage, type, conversions, extras),
+        };
+        AddWeaponPacket(addedWeaponDamage.Fire, P30DamageType.Fire);
+        AddWeaponPacket(addedWeaponDamage.Cold, P30DamageType.Cold);
+        AddWeaponPacket(addedWeaponDamage.Lightning, P30DamageType.Lightning);
+        AddWeaponPacket(addedWeaponDamage.Void, P30DamageType.Void);
+        P30DamagePacket packet = new(
+            packets.Sum(value => value.Physical), packets.Sum(value => value.Fire),
+            packets.Sum(value => value.Cold), packets.Sum(value => value.Lightning),
+            packets.Sum(value => value.Void), packets.SelectMany(value => value.Branches).ToArray(),
+            packets.SelectMany(value => value.Trace).ToArray());
         if (supports.HasFlag(SkillSupport.Brutality))
             packet = packet with
             {
@@ -60,5 +87,11 @@ public static class P17DamageRules
             new P30ResistanceProfile(physicalResistance, fireResistance, coldResistance, lightningResistance, voidResistance));
         int total = packet.Total;
         return new(packet.Physical, packet.Fire, packet.Cold, packet.Lightning, packet.Void, total, packet.Trace);
+
+        void AddWeaponPacket(int damage, P30DamageType damageType)
+        {
+            if (damage > 0)
+                packets.Add(P30CombatRules.ConvertAndScale(damage, damageType, conversions, []));
+        }
     }
 }

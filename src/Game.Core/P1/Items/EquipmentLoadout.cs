@@ -54,7 +54,29 @@ public sealed record EquipmentSummary(
     LegendaryRule? WeaponLegendaryRule,
     bool HasShield = false,
     int BaseBlockChanceBasisPoints = 0,
-    int SpiritBarrier = 0);
+    int SpiritBarrier = 0,
+    LocalWeaponStats? LocalWeapon = null);
+
+public readonly record struct LocalDamageRange(int Minimum, int Maximum)
+{
+    public double Average => (Minimum + Maximum) / 2.0;
+    public bool HasDamage => Maximum > 0;
+}
+
+public sealed record LocalWeaponStats(
+    WeaponProfile Physical,
+    LocalDamageRange Fire,
+    LocalDamageRange Cold,
+    LocalDamageRange Lightning,
+    LocalDamageRange Void)
+{
+    public double PhysicalDamagePerSecond =>
+        (Physical.MinimumPhysicalDamage + Physical.MaximumPhysicalDamage) / 2.0 * Physical.AttacksPerSecondMilli / 1_000.0;
+    public double ElementalDamagePerSecond =>
+        (Fire.Average + Cold.Average + Lightning.Average) * Physical.AttacksPerSecondMilli / 1_000.0;
+    public double VoidDamagePerSecond => Void.Average * Physical.AttacksPerSecondMilli / 1_000.0;
+    public double TotalDamagePerSecond => PhysicalDamagePerSecond + ElementalDamagePerSecond + VoidDamagePerSecond;
+}
 
 public sealed class EquipmentLoadout
 {
@@ -189,19 +211,23 @@ public sealed class EquipmentLoadout
             sums[(int)ItemModifierKind.SupportSkillGemLevels],
             Enum.GetValues<ItemModifierKind>().ToDictionary(kind => kind, kind => sums[(int)kind]));
         ItemInstance? weaponItem = _items.GetValueOrDefault(EquipmentSlot.MainHand);
+        LocalWeaponStats? localWeapon = weaponItem?.Base.Category is ItemCategory.TwoHandWeapon or ItemCategory.OneHandWeapon
+            ? CalculateLocalWeapon(weaponItem)
+            : null;
         return new EquipmentSummary(
             new DefensiveEquipment(armor, evasion, shield),
             modifiers,
             equipped.Sum(item => item.Base.CoreSkillCapacity) + sums[(int)ItemModifierKind.AdditionalCoreSkillCapacity],
             equipped.Sum(item => item.Base.SupportLinkCapacity) + sums[(int)ItemModifierKind.ExtraSupportLinkCapacity],
-            weaponItem?.Base.Category is ItemCategory.TwoHandWeapon or ItemCategory.OneHandWeapon ? CalculateWeapon(weaponItem) : null,
+            localWeapon?.Physical,
             weaponItem?.LegendaryRule,
             _items.GetValueOrDefault(EquipmentSlot.OffHand)?.Base.ItemTags.Contains("shield", StringComparer.Ordinal) == true,
             equipped.Sum(LocalBlock),
-            spiritBarrier);
+            spiritBarrier,
+            localWeapon);
     }
 
-    public static WeaponProfile CalculateWeapon(ItemInstance item)
+    public static LocalWeaponStats CalculateLocalWeapon(ItemInstance item)
     {
         WeaponProfile weapon = item.Base.ToWeaponProfile();
         int addedMinimum = LocalValue(item, ItemModifierKind.AddedMinimumPhysicalDamage) + LocalValue(item, ItemModifierKind.AddedPhysicalDamage);
@@ -209,14 +235,22 @@ public sealed class EquipmentLoadout
         int physicalIncrease = LocalValue(item, ItemModifierKind.IncreasedPhysicalDamageBasisPoints);
         int attackSpeedIncrease = LocalValue(item, ItemModifierKind.IncreasedAttackSpeedBasisPoints);
         int criticalIncrease = LocalValue(item, ItemModifierKind.IncreasedCriticalChanceBasisPoints);
-        return weapon with
+        weapon = weapon with
         {
             MinimumPhysicalDamage = LocalWeaponDamage(weapon.MinimumPhysicalDamage, addedMinimum, physicalIncrease, item.Quality),
             MaximumPhysicalDamage = LocalWeaponDamage(weapon.MaximumPhysicalDamage, addedMaximum, physicalIncrease, item.Quality),
             AttacksPerSecondMilli = checked(weapon.AttacksPerSecondMilli * (10_000 + attackSpeedIncrease) / 10_000),
             CriticalChanceBasisPoints = checked(weapon.CriticalChanceBasisPoints * (10_000 + criticalIncrease) / 10_000),
         };
+        return new LocalWeaponStats(
+            weapon,
+            LocalElementalRange(item, ItemModifierKind.AddedMinimumFireDamage, ItemModifierKind.AddedMaximumFireDamage),
+            LocalElementalRange(item, ItemModifierKind.AddedMinimumColdDamage, ItemModifierKind.AddedMaximumColdDamage),
+            LocalElementalRange(item, ItemModifierKind.AddedMinimumLightningDamage, ItemModifierKind.AddedMaximumLightningDamage),
+            LocalElementalRange(item, ItemModifierKind.AddedMinimumVoidDamage, ItemModifierKind.AddedMaximumVoidDamage));
     }
+
+    public static WeaponProfile CalculateWeapon(ItemInstance item) => CalculateLocalWeapon(item).Physical;
 
     public static (int Armor, int Evasion, int Shield, int SpiritBarrier, int BlockChanceBasisPoints) CalculateLocalDefense(ItemInstance item) =>
         (LocalDefense(item, item.Base.Armor, ItemModifierKind.FlatArmor, ItemModifierKind.IncreasedArmorBasisPoints),
@@ -227,6 +261,11 @@ public sealed class EquipmentLoadout
 
     private static int LocalWeaponDamage(int baseValue, int flat, int increasedBasisPoints, int quality) => checked(
         (baseValue + flat) * (10_000 + increasedBasisPoints) / 10_000 * (100 + Math.Clamp(quality, 0, 40)) / 100);
+
+    private static LocalDamageRange LocalElementalRange(ItemInstance item, ItemModifierKind minimumKind,
+        ItemModifierKind maximumKind) => new(
+        LocalWeaponDamage(0, LocalValue(item, minimumKind), 0, item.Quality),
+        LocalWeaponDamage(0, LocalValue(item, maximumKind), 0, item.Quality));
 
     private static int LocalDefense(ItemInstance item, int baseValue, ItemModifierKind flatKind, ItemModifierKind increasedKind)
     {

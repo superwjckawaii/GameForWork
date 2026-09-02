@@ -30,8 +30,38 @@ public static class P14Flasks
     ];
 }
 
-public sealed record P14UniqueDefinition(
-    string StableId, string DisplayName, string BaseStableId, string RuleText, bool Mythic = false);
+public sealed record P14LegendaryAffixDefinition(string StableId, string Text);
+
+public sealed record P14UniqueDefinition
+{
+    public P14UniqueDefinition(string stableId, string displayName, string baseStableId,
+        string ruleText, bool mythic = false)
+        : this(stableId, displayName, baseStableId, BuildAffixes(stableId, ruleText), mythic)
+    {
+    }
+
+    public P14UniqueDefinition(string stableId, string displayName, string baseStableId,
+        IReadOnlyList<P14LegendaryAffixDefinition> legendaryAffixes, bool mythic = false)
+    {
+        StableId = stableId;
+        DisplayName = displayName;
+        BaseStableId = baseStableId;
+        LegendaryAffixes = legendaryAffixes;
+        Mythic = mythic;
+    }
+
+    public string StableId { get; init; }
+    public string DisplayName { get; init; }
+    public string BaseStableId { get; init; }
+    public IReadOnlyList<P14LegendaryAffixDefinition> LegendaryAffixes { get; init; }
+    public bool Mythic { get; init; }
+    public string RuleText => string.Join("；", LegendaryAffixes.Select(affix => affix.Text));
+
+    private static IReadOnlyList<P14LegendaryAffixDefinition> BuildAffixes(string stableId, string ruleText) =>
+        ruleText.Split('；', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
+            .Select((text, index) => new P14LegendaryAffixDefinition($"{stableId}.legendary.{index + 1}", text))
+            .ToArray();
+}
 
 public static class P14UniqueItems
 {

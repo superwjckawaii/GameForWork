@@ -106,12 +106,18 @@ public sealed class P25FeatureTests
     public void EveryLegendaryHasConcreteRuleAffixesAndRuntimeHandler()
     {
         Assert.Equal(41, P14UniqueItems.All.Count);
+        Assert.Contains(P14UniqueItems.All, definition => definition.LegendaryAffixes.Count > 1);
+        Assert.Equal(P14UniqueItems.All.SelectMany(definition => definition.LegendaryAffixes).Count(),
+            P14UniqueItems.All.SelectMany(definition => definition.LegendaryAffixes)
+                .Select(affix => affix.StableId).Distinct(StringComparer.Ordinal).Count());
         Assert.All(P14UniqueItems.All, definition =>
         {
             Assert.Contains(definition.RuleText, character => char.IsDigit(character));
+            Assert.NotEmpty(definition.LegendaryAffixes);
             Assert.True(P25LegendaryRules.HasImplementation(definition.StableId));
             ItemInstance item = P14UniqueItems.Create(definition.StableId, 94, "p25-test-" + definition.StableId);
             Assert.InRange(item.Affixes.Count, 4, 6);
+            Assert.All(item.Affixes, affix => Assert.Equal("传奇固定", affix.Definition.Source));
             Assert.Contains(item.Affixes, affix => affix.Definition.Position == AffixPosition.Prefix);
             Assert.Contains(item.Affixes, affix => affix.Definition.Position == AffixPosition.Suffix);
             Assert.Equal(item.Base.ImplicitMaximumValue, item.EffectiveImplicitValue);

@@ -75,6 +75,25 @@ public sealed class P17FeatureTests
     }
 
     [Fact]
+    public void LocalElementalWeaponDamageEntersLiveAttackPacket()
+    {
+        var weapon = new WeaponProfile("p17.local-elemental", 80, 80, 1_500, 0);
+        var local = new LocalWeaponStats(weapon, new LocalDamageRange(120, 120), default, default, default);
+        var skill = new SkillConfiguration(P1SkillIds.HeavyStrike, SkillSupport.None);
+        var build = new P1TeamBuild(
+            new CharacterSheet(30, new CharacterAttributes(200, 150, 150, 150),
+                new DefensiveEquipment(600, 150, 200), FlatMaximumLife: 1_200),
+            weapon, skill, FlatAccuracy: 5_000, ActiveSkills: [skill], LocalWeaponStats: local);
+
+        P4NodeCombatResult result = new P4SpatialCombatRunner().Run(new P4NodeCombatRequest(
+            build, 1, 4, 1, false, false, false, 0, MaximumTicks: 300), 1_718);
+
+        Assert.Contains(result.Events, item => item.Kind == P4SpatialEventKind.HeavyStrike &&
+            item.Detail.Contains("fire:", StringComparison.Ordinal) &&
+            !item.Detail.Contains("fire:0", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void ShieldRequiredSkillIsNotUsedWithoutShield()
     {
         var build = new P1TeamBuild(

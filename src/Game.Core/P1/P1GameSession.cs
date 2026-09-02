@@ -1487,7 +1487,8 @@ public sealed class P1GameSession
         MoreSpellDamageBasisPoints: build.MoreSpellDamageBasisPoints,
         MoreDamageOverTimeBasisPoints: build.MoreDamageOverTimeBasisPoints,
         IncreasedActionSpeedBasisPoints: build.IncreasedActionSpeedBasisPoints,
-        InstantLifeLeechBasisPoints: build.InstantLifeLeechBasisPoints) with
+        InstantLifeLeechBasisPoints: build.InstantLifeLeechBasisPoints,
+        LocalWeaponStats: build.Equipment.LocalWeapon) with
         {
             AiSummary = $"{ai.Preset} · {(ai.MatchMode == AiRuleMatchMode.All ? "全部满足" : "任一满足")}：" +
                 $"敌人≥{ai.MinimumEnemyCount}、稀有度 {ai.EnemyRarity}、距离≤{ai.MaximumEnemyDistance}、" +

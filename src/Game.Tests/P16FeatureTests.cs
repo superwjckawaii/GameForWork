@@ -74,7 +74,7 @@ public sealed class P16FeatureTests
     }
 
     [Fact]
-    public void BatchPreviewProtectsSafetyItemsAndKeepsOneLegendaryCopy()
+    public void BatchPreviewProcessesAllOrdinaryLegendariesAndProtectsSafetyItems()
     {
         P1GameSession session = Session();
         session.World.Storage.TryStore(Item("basic", ItemRarity.Basic, 0, 1));
@@ -90,8 +90,30 @@ public sealed class P16FeatureTests
             P16BatchScope.Storage, ItemRarity.Legendary);
 
         Assert.Contains(preview.Targets, target => target.Item.InstanceId == "basic");
-        Assert.Single(preview.Targets, target => target.Item.LegendaryRule?.StableId == "core.unique.red_vow");
+        Assert.Equal(2, preview.Targets.Count(target => target.Item.LegendaryRule?.StableId == "core.unique.red_vow"));
         Assert.DoesNotContain(preview.Targets, target => target.Item.InstanceId is "locked" or "craft" or "mythic");
+        Assert.Equal(3, preview.Excluded);
+        Assert.Equal(1, preview.ExcludedReasons["已锁定"]);
+        Assert.Equal(1, preview.ExcludedReasons["制作底材"]);
+        Assert.Equal(1, preview.ExcludedReasons["神话装备"]);
+    }
+
+    [Fact]
+    public void BatchSellHandlesStorageFullOfDistinctOrdinaryLegendaries()
+    {
+        P1GameSession session = Session();
+        string[] ids = P14UniqueItems.All.Where(item => !item.Mythic).Take(10)
+            .Select(item => item.StableId).ToArray();
+        foreach ((string id, int index) in ids.Select((id, index) => (id, index)))
+            Assert.True(session.World.Storage.TryStore(P14UniqueItems.Create(id, 100, $"save-one-{index}")));
+
+        P16BatchPreview preview = P16BatchItems.Preview(session, P16BatchAction.Sell,
+            P16BatchScope.Storage, ItemRarity.Legendary);
+        P16BatchExecution execution = P16BatchItems.Execute(session, preview);
+
+        Assert.Equal(10, preview.Total);
+        Assert.Equal(new P16BatchExecution(10, 0), execution);
+        Assert.Empty(session.World.Storage.Items);
     }
 
     [Fact]

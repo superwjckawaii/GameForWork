@@ -1232,7 +1232,9 @@ public partial class P2Dashboard : VBoxContainer
         P16BatchPreview preview = P16BatchItems.Preview(session, action, scope, maximum);
         if (preview.Total == 0)
         {
-            Changed($"没有符合“{RarityLabel(maximum)}及以下”的安全物品；锁定、关键、神话、唯一传奇和制作底材已排除。");
+            string reasons = preview.ExcludedReasons.Count == 0 ? string.Empty :
+                $"（{string.Join("、", preview.ExcludedReasons.Select(pair => $"{pair.Key} {pair.Value}"))}）";
+            Changed($"没有符合“{RarityLabel(maximum)}及以下”的可处理物品；锁定、关键、神话和制作底材已排除{reasons}。");
             return;
         }
 
@@ -1241,19 +1243,21 @@ public partial class P2Dashboard : VBoxContainer
             .Where(rarity => preview.Counts.ContainsKey(rarity))
             .Select(rarity => $"{RarityLabel(rarity)} {preview.Counts[rarity]}"));
         string warning = maximum == ItemRarity.Legendary
-            ? "\n⚠ 已选择传奇及以下：仅重复普通传奇可处理，神话与唯一一件传奇仍受保护。"
+            ? "\n⚠ 已选择传奇及以下：普通传奇会被处理，神话装备仍受保护。"
             : string.Empty;
+        string protectedItems = preview.ExcludedReasons.Count == 0 ? string.Empty :
+            $"（{string.Join("、", preview.ExcludedReasons.Select(pair => $"{pair.Key} {pair.Value}"))}）";
         string buyback = sell && preview.BuybackEvictions > 0
             ? $"\n⚠ 回购栏将挤出最早的 {preview.BuybackEvictions} 件物品。"
             : string.Empty;
         _confirmDialog!.DialogText =
             $"将{(sell ? "出售" : "分解")} {preview.Total} 件物品：{counts}。\n" +
-            $"预计获得 {preview.Proceeds} {(sell ? "金币" : "铁屑")}；另有 {preview.Excluded} 件受保护。" +
+            $"预计获得 {preview.Proceeds} {(sell ? "金币" : "铁屑")}；另有 {preview.Excluded} 件受保护{protectedItems}。" +
             warning + buyback + "\n确认执行？";
         _pendingConfirmation = () =>
         {
-            int completed = P16BatchItems.Execute(session, preview);
-            Changed($"批量{(sell ? "出售" : "分解")}完成：{completed} 件。");
+            P16BatchExecution result = P16BatchItems.Execute(session, preview);
+            Changed($"批量{(sell ? "出售" : "分解")}完成：成功 {result.Completed} 件，失败 {result.Failed} 件，受保护 {preview.Excluded} 件。");
         };
         _confirmDialog.PopupCentered();
     }

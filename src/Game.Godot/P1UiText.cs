@@ -30,9 +30,21 @@ internal static class P1UiText
         if (requirementText.Length > 0) text.AppendLine($"需求：{requirementText}");
         if (item.Base.Category is ItemCategory.TwoHandWeapon or ItemCategory.OneHandWeapon)
         {
-            WeaponProfile weapon = EquipmentLoadout.CalculateWeapon(item);
+            LocalWeaponStats local = EquipmentLoadout.CalculateLocalWeapon(item);
+            WeaponProfile weapon = local.Physical;
             text.AppendLine($"物理伤害 {weapon.MinimumPhysicalDamage}–{weapon.MaximumPhysicalDamage}");
+            AppendDamageRange(text, "火焰伤害", local.Fire);
+            AppendDamageRange(text, "冰霜伤害", local.Cold);
+            AppendDamageRange(text, "闪电伤害", local.Lightning);
+            AppendDamageRange(text, "虚空伤害", local.Void);
             text.AppendLine($"攻击频率 {weapon.AttacksPerSecondMilli / 1000.0:0.00}/秒 · 暴击 {weapon.CriticalChanceBasisPoints / 100.0:0.0}%");
+            string[] dpsParts =
+            [
+                $"物理 {local.PhysicalDamagePerSecond:0.0}",
+                local.ElementalDamagePerSecond > 0 ? $"元素 {local.ElementalDamagePerSecond:0.0}" : string.Empty,
+                local.VoidDamagePerSecond > 0 ? $"虚空 {local.VoidDamagePerSecond:0.0}" : string.Empty,
+            ];
+            text.AppendLine($"武器秒伤 {local.TotalDamagePerSecond:0.0}（{string.Join(" · ", dpsParts.Where(part => part.Length > 0))}）");
         }
 
         var localDefense = EquipmentLoadout.CalculateLocalDefense(item);
@@ -74,11 +86,24 @@ internal static class P1UiText
         {
             P14UniqueDefinition? unique = P14UniqueItems.All.FirstOrDefault(definition =>
                 definition.StableId == item.LegendaryRule.StableId);
-            text.AppendLine($"（传奇效果）{unique?.RuleText ?? item.LegendaryRule.DisplayText}");
+            if (unique is not null)
+            {
+                foreach (P14LegendaryAffixDefinition affix in unique.LegendaryAffixes)
+                    text.AppendLine($"[LEGENDARY]{affix.Text}");
+            }
+            else
+            {
+                text.AppendLine($"[LEGENDARY]{item.LegendaryRule.DisplayText}");
+            }
         }
 
         foreach (AffixRoll affix in item.Affixes.OrderBy(affix => affix.Definition.Position).ThenBy(affix => affix.Definition.Tier))
         {
+            if (string.Equals(affix.Definition.Source, "传奇固定", StringComparison.Ordinal))
+            {
+                text.AppendLine($"[LEGENDARY]{AffixEffects(affix)}");
+                continue;
+            }
             int tier = P1Affixes.TierFor(item.Base, affix.Definition);
             string markers = (affix.Crafted ? "（工匠）" : string.Empty) + (item.IsFractured(affix) ? "（破溃）" : string.Empty);
             string details = includeAffixDetails && tier > 0
@@ -114,6 +139,11 @@ internal static class P1UiText
         text.AppendLine();
         text.Append($"出售 {P20ItemValue.SalePrice(item)} 金币");
         return text.ToString();
+    }
+
+    private static void AppendDamageRange(StringBuilder text, string label, LocalDamageRange range)
+    {
+        if (range.HasDamage) text.AppendLine($"{label} {range.Minimum}–{range.Maximum}");
     }
 
     public static string PassiveTooltip(
@@ -199,6 +229,8 @@ internal static class P1UiText
             0.87f - 0.11f * strength,
             0.87f - 0.56f * strength);
     }
+
+    public static Color LegendaryAffixColor => new("d7a8ff");
 
     public static string ItemGlyph(ItemCategory category) => category switch
     {
