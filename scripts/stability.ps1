@@ -45,6 +45,16 @@ if ($Seconds -ge 60 -and [double]$report.WorkingSetGrowthBytes -gt 80 * $megabyt
 if ($Mode -eq 'Tray' -and $Seconds -ge 60 -and [double]$report.AverageCpuPercent -gt 2.0) {
     throw "Tray CPU exceeded 2%: $([math]::Round($report.AverageCpuPercent, 2))%"
 }
-Write-Host ("[stability] PASS mode={0} seconds={1} peakMB={2:N1} growthMB={3:N1} cpu={4:N2}% tickPeakMs={5:N2}" -f `
+if ($Mode -eq 'Visible' -and [double]$report.PeakFrameMilliseconds -gt 40) {
+    throw "Visible frame hitch exceeded 40 ms after warmup: $([math]::Round($report.PeakFrameMilliseconds, 2)) ms"
+}
+if ([double]$report.PeakSimulationMilliseconds -gt 10) {
+    throw "Simulation tick exceeded 10 ms: $([math]::Round($report.PeakSimulationMilliseconds, 2)) ms"
+}
+if ([double]$report.PeakUiRefreshMilliseconds -gt 16) {
+    throw "UI refresh exceeded 16 ms: $([math]::Round($report.PeakUiRefreshMilliseconds, 2)) ms"
+}
+Write-Host ("[stability] PASS mode={0} seconds={1} peakMB={2:N1} growthMB={3:N1} cpu={4:N2}% framePeakMs={5:N2} tickPeakMs={6:N2} uiPeakMs={7:N2}" -f `
     $Mode, $Seconds, ($report.PeakWorkingSetBytes / $megabyte), ($report.WorkingSetGrowthBytes / $megabyte), `
-    $report.AverageCpuPercent, $report.PeakSimulationMilliseconds)
+    $report.AverageCpuPercent, $report.PeakFrameMilliseconds, $report.PeakSimulationMilliseconds, `
+    $report.PeakUiRefreshMilliseconds)

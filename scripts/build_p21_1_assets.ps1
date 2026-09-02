@@ -1,5 +1,8 @@
 [CmdletBinding()]
-param([string]$RepositoryRoot = (Split-Path -Parent $PSScriptRoot))
+param(
+    [string]$RepositoryRoot = (Split-Path -Parent $PSScriptRoot),
+    [switch]$TreeArtOnly
+)
 
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Drawing
@@ -162,17 +165,17 @@ function Build-TreeArt {
     }
 
     $passive=New-Bitmap 2048 2048;$graphics=New-Graphics $passive
-    Draw-TreeLayer $graphics $layout.passive ([System.Drawing.Rectangle]::new(0,0,2048,2048)) 820 '#c39344'
+    Draw-TreeLayer $graphics $layout.passive ([System.Drawing.Rectangle]::new(0,0,2048,2048)) ([float]$layout.passive.extent) '#c39344'
     $graphics.Dispose();$passive.Save((Join-Path $treeRoot 'p21-passive-backdrop.png'),[System.Drawing.Imaging.ImageFormat]::Png);$passive.Dispose()
 
     $atlasTree=New-Bitmap 2048 2048;$graphics=New-Graphics $atlasTree
-    Draw-TreeLayer $graphics $layout.atlas ([System.Drawing.Rectangle]::new(0,0,2048,2048)) 820 '#6ab2c4'
+    Draw-TreeLayer $graphics $layout.atlas ([System.Drawing.Rectangle]::new(0,0,2048,2048)) ([float]$layout.atlas.extent) '#6ab2c4'
     $graphics.Dispose();$atlasTree.Save((Join-Path $treeRoot 'p21-atlas-backdrop.png'),[System.Drawing.Imaging.ImageFormat]::Png);$atlasTree.Dispose()
 
     $ascendancyAtlas=New-Bitmap 3072 1024;$graphics=New-Graphics $ascendancyAtlas
     $accents=@('#b95743','#5e9ab8','#c29048')
     for($index=0;$index -lt 3;$index++){
-        Draw-TreeLayer $graphics $layout.ascendancies[$index] ([System.Drawing.Rectangle]::new($index*1024,0,1024,1024)) 240 $accents[$index] $true
+        Draw-TreeLayer $graphics $layout.ascendancies[$index] ([System.Drawing.Rectangle]::new($index*1024,0,1024,1024)) ([float]$layout.ascendancies[$index].extent) $accents[$index] $true
     }
     $graphics.Dispose();$ascendancyAtlas.Save((Join-Path $treeRoot 'p21-ascendancy-backdrops.png'),[System.Drawing.Imaging.ImageFormat]::Png);$ascendancyAtlas.Dispose()
 }
@@ -202,8 +205,12 @@ function Build-Brand {
     $icon.Dispose();$source.Dispose()
 }
 
-Build-SkillAtlas
-Build-UiSkin
+if (-not $TreeArtOnly) {
+    Build-SkillAtlas
+    Build-UiSkin
+}
 Build-TreeArt
-Build-Brand
+if (-not $TreeArtOnly) {
+    Build-Brand
+}
 Write-Host '[p21.1-assets] Generated deterministic icons, tree art, UI skin and application branding.'

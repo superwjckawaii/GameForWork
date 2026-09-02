@@ -105,6 +105,8 @@ public partial class P2Dashboard : VBoxContainer
     private string _selectedMercenaryId = string.Empty;
     private string _characterSelectorSignature = string.Empty;
     private double _refreshAccumulator;
+    public double LastRefreshMilliseconds { get; private set; }
+    public double PeakRefreshMilliseconds { get; private set; }
     private bool _miniMode;
     private Label? _journeyStatus;
     private Button? _journeyGo;
@@ -177,7 +179,10 @@ public partial class P2Dashboard : VBoxContainer
         if (_refreshAccumulator >= 0.25)
         {
             _refreshAccumulator = 0;
+            long started = System.Diagnostics.Stopwatch.GetTimestamp();
             Refresh();
+            LastRefreshMilliseconds = System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds;
+            PeakRefreshMilliseconds = Math.Max(PeakRefreshMilliseconds, LastRefreshMilliseconds);
         }
     }
 
@@ -398,10 +403,19 @@ public partial class P2Dashboard : VBoxContainer
         _storyLog = new RichTextLabel
         {
             BbcodeEnabled = true,
-            CustomMinimumSize = new Vector2(0, 90),
+            CustomMinimumSize = new Vector2(0, 82),
             ScrollActive = true,
+            ScrollFollowing = true,
         };
-        page.AddChild(_storyLog);
+        var storyLogFrame = new PanelContainer { CustomMinimumSize = new Vector2(0, 92) };
+        storyLogFrame.AddThemeStyleboxOverride("panel", new StyleBoxFlat
+        {
+            BgColor = new Color("0d1219"), BorderColor = new Color("4b5665"),
+            BorderWidthLeft = 1, BorderWidthTop = 1, BorderWidthRight = 1, BorderWidthBottom = 1,
+            ContentMarginLeft = 5, ContentMarginTop = 3, ContentMarginRight = 7, ContentMarginBottom = 5,
+        });
+        storyLogFrame.AddChild(_storyLog);
+        page.AddChild(storyLogFrame);
         return page;
     }
 

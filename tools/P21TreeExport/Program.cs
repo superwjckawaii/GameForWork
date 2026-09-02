@@ -22,7 +22,7 @@ var ascendancies = Enum.GetValues<P18Ascendancy>().Where(value => value != P18As
             .ToArray();
         TreeEdge[] edges = P18AscendancyCatalog.For(value)
             .Select(node => new TreeEdge(node.PrerequisiteId ?? $"center:{value}", node.StableId)).ToArray();
-        return new NamedTree(value.ToString(), nodes, edges);
+        return new NamedTree(value.ToString(), nodes, edges, 240);
     }).ToArray();
 
 TreeNode[] atlasNodes = P10AtlasTree.Nodes.OrderBy(node => node.StableId, StringComparer.Ordinal)
@@ -31,9 +31,9 @@ TreeEdge[] atlasEdges = P10AtlasTree.Nodes.Where(node => node.PrerequisiteId is 
     .Select(node => new TreeEdge(node.PrerequisiteId!, node.StableId)).ToArray();
 
 var document = new TreeDocument(
-    new NamedTree("Passive", passiveNodes, passiveEdges),
+    new NamedTree("Passive", passiveNodes, passiveEdges, P1PassiveTree.LayoutExtent),
     ascendancies,
-    new NamedTree("Atlas", atlasNodes, atlasEdges));
+    new NamedTree("Atlas", atlasNodes, atlasEdges, 820));
 var options = new JsonSerializerOptions { WriteIndented = true, PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
 options.Converters.Add(new JsonStringEnumConverter());
 string destination = Path.GetFullPath(args[0]);
@@ -43,5 +43,5 @@ Console.WriteLine(destination);
 
 internal sealed record TreeNode(string Id, float X, float Y, string Kind, bool Major);
 internal sealed record TreeEdge(string From, string To);
-internal sealed record NamedTree(string Name, IReadOnlyList<TreeNode> Nodes, IReadOnlyList<TreeEdge> Edges);
+internal sealed record NamedTree(string Name, IReadOnlyList<TreeNode> Nodes, IReadOnlyList<TreeEdge> Edges, float Extent);
 internal sealed record TreeDocument(NamedTree Passive, IReadOnlyList<NamedTree> Ascendancies, NamedTree Atlas);

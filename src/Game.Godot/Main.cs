@@ -66,6 +66,8 @@ public partial class Main : Node
     private string _stabilityMode = string.Empty;
     private string _stabilityReportPath = string.Empty;
     private double _peakSimulationMilliseconds;
+    private double _peakFrameMilliseconds;
+    private double _intervalPeakFrameMilliseconds;
     private static bool DeveloperFeaturesEnabled => OS.HasFeature("editor") || OS.HasFeature("debug");
 
     public override void _Ready()
@@ -146,6 +148,11 @@ public partial class Main : Node
 
     public override void _Process(double delta)
     {
+        double frameMilliseconds = delta * 1_000.0;
+        _intervalPeakFrameMilliseconds = Math.Max(_intervalPeakFrameMilliseconds, frameMilliseconds);
+        if (_stabilityStartTimestamp > 0 &&
+            System.Diagnostics.Stopwatch.GetElapsedTime(_stabilityStartTimestamp).TotalSeconds >= 2.0)
+            _peakFrameMilliseconds = Math.Max(_peakFrameMilliseconds, frameMilliseconds);
         if (_stabilityDeadlineTimestamp > 0 &&
             System.Diagnostics.Stopwatch.GetTimestamp() >= _stabilityDeadlineTimestamp)
         {
@@ -218,7 +225,10 @@ public partial class Main : Node
         if (_performanceAccumulator >= 0.5 && _performanceLabel is not null)
         {
             _performanceAccumulator = 0;
-            _performanceLabel.Text = $"P7 性能：{Engine.GetFramesPerSecond()} FPS · 模拟 {_lastSimulationMilliseconds:0.00} ms · 后台存档 {_lastSaveMilliseconds} ms";
+            _performanceLabel.Text = $"P7 性能：{Engine.GetFramesPerSecond()} FPS · 帧峰 {_intervalPeakFrameMilliseconds:0.0} ms · " +
+                                     $"模拟 {_lastSimulationMilliseconds:0.00} ms · UI刷新 {_dashboard?.LastRefreshMilliseconds ?? 0:0.00} ms · " +
+                                     $"后台存档 {_lastSaveMilliseconds} ms";
+            _intervalPeakFrameMilliseconds = 0;
         }
 
         if (_autoSaveAccumulator >= 10.0)
@@ -252,7 +262,9 @@ public partial class Main : Node
                 FinalWorkingSetBytes = finalWorkingSet,
                 WorkingSetGrowthBytes = finalWorkingSet - _stabilityInitialWorkingSet,
                 AverageCpuPercent = cpuPercent,
+                PeakFrameMilliseconds = _peakFrameMilliseconds,
                 PeakSimulationMilliseconds = _peakSimulationMilliseconds,
+                PeakUiRefreshMilliseconds = _dashboard?.PeakRefreshMilliseconds ?? 0,
                 LastBackgroundSaveMilliseconds = _lastSaveMilliseconds,
             }, SaveJsonOptions));
             return true;

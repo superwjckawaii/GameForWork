@@ -16,6 +16,7 @@ public partial class P1PassiveTreeView : Control
     private readonly Dictionary<string, Vector2> _centers = new(StringComparer.Ordinal);
     private readonly Dictionary<Vector2I, List<PassiveNodeDefinition>> _spatial = [];
     private readonly HashSet<string> _planned = new(StringComparer.Ordinal);
+    private Texture2D? _backdrop;
     private PassiveNodeDefinition[] _nodes = [];
     private IReadOnlySet<string> _allocated = new HashSet<string>();
     private IReadOnlyDictionary<string, string> _socketedJewels = new Dictionary<string, string>();
@@ -39,6 +40,8 @@ public partial class P1PassiveTreeView : Control
     public override void _Ready()
     {
         MouseFilter = MouseFilterEnum.Stop;
+        const string backdropPath = "res://assets/p21/trees/p21-passive-backdrop.png";
+        _backdrop = ResourceLoader.Exists(backdropPath) ? GD.Load<Texture2D>(backdropPath) : null;
         _nodes = P1PassiveTree.Nodes.OrderBy(node => node.StableId, StringComparer.Ordinal).ToArray();
         BuildLayoutAndIndex();
         Resized += () => { ClampView(); QueueRedraw(); };
@@ -306,6 +309,15 @@ public partial class P1PassiveTreeView : Control
 
     private void DrawBackdrop()
     {
+        if (_backdrop is not null)
+        {
+            float backdropExtent = P1PassiveTree.LayoutExtent;
+            Vector2 topLeft = ToScreen(new Vector2(-backdropExtent, -backdropExtent));
+            Vector2 bottomRight = ToScreen(new Vector2(backdropExtent, backdropExtent));
+            DrawTextureRect(_backdrop, new Rect2(topLeft, bottomRight - topLeft), false);
+            return;
+        }
+
         Vector2 center = ToScreen(Vector2.Zero);
         float extent = P1PassiveTree.LayoutExtent;
         DrawCircle(center, extent * _zoom, new Color("202936"), false, Math.Max(1, 2 * _zoom));

@@ -16,10 +16,13 @@ public partial class P10AtlasTreeView : Control
     private float _zoom = .22f;
     private bool _dragging;
     private Vector2 _press;
+    private Texture2D? _backdrop;
 
     public void Initialize(Func<P1GameSession> session, Action<string> changed)
     {
         _session = session; _changed = changed; MouseFilter = MouseFilterEnum.Stop;
+        const string backdropPath = "res://assets/p21/trees/p21-atlas-backdrop.png";
+        _backdrop = ResourceLoader.Exists(backdropPath) ? GD.Load<Texture2D>(backdropPath) : null;
         Resized += () => { ClampView(); QueueRedraw(); };
         QueueRedraw();
     }
@@ -28,7 +31,13 @@ public partial class P10AtlasTreeView : Control
     {
         DrawRect(new Rect2(Vector2.Zero, Size), new Color("10151d"), true);
         Vector2 origin = Size / 2 + _pan;
-        for (int lane = 0; lane < 10; lane++)
+        if (_backdrop is not null)
+        {
+            float extent = P10AtlasTree.LayoutExtent;
+            Vector2 topLeft = origin + new Vector2(-extent, -extent) * _zoom;
+            DrawTextureRect(_backdrop, new Rect2(topLeft, Vector2.One * extent * 2 * _zoom), false);
+        }
+        else for (int lane = 0; lane < 10; lane++)
         {
             float x = origin.X + (-630 + lane * 140) * _zoom;
             DrawRect(new Rect2(x - 48 * _zoom, origin.Y - 610 * _zoom, 96 * _zoom, 1_220 * _zoom),
