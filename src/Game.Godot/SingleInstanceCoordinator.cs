@@ -4,8 +4,8 @@ namespace GameForWork.GodotClient;
 
 public sealed class SingleInstanceCoordinator : IDisposable
 {
-    private const string MutexName = "GameForWork.P0.SingleInstance";
-    private const string PipeName = "GameForWork.P0.Activate";
+    private const string MutexName = "GameForWork.SingleInstance";
+    private const string PipeName = "GameForWork.Activate";
     private readonly Mutex _mutex;
     private readonly CancellationTokenSource _cancellation = new();
     private Task? _listenerTask;

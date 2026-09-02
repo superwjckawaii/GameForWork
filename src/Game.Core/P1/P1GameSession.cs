@@ -486,7 +486,7 @@ public sealed class P1GameSession
             }
             if (run.Succeeded) RollP30Jewels(run.Map, seed);
             if (rewards.Encounters.Any(e => e.Kills > 0)) Management.AddHistory(
-                $"P28 T{run.Map.Tier} {run.Route}：命能+{rewards.LifeForce} 战功+{rewards.Merit} 声望+{rewards.Reputation}；" +
+                $"T{run.Map.Tier} {run.Route}：命能+{rewards.LifeForce} 战功+{rewards.Merit} 声望+{rewards.Reputation}；" +
                 (run.Succeeded ? "已完成" : "保留已击败怪物与已兑现奖励；未完成/苍誓承诺不发放"));
             if (run.Succeeded) Endgame.RecordMapCompletion(run.Map, run.Route, seed);
         }

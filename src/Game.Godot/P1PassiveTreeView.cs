@@ -40,7 +40,7 @@ public partial class P1PassiveTreeView : Control
     public override void _Ready()
     {
         MouseFilter = MouseFilterEnum.Stop;
-        const string backdropPath = "res://assets/p21/trees/p21-passive-backdrop.png";
+        const string backdropPath = "res://assets/p31/trees/p31-passive-backdrop.png";
         _backdrop = ResourceLoader.Exists(backdropPath) ? GD.Load<Texture2D>(backdropPath) : null;
         _nodes = P1PassiveTree.Nodes.OrderBy(node => node.StableId, StringComparer.Ordinal).ToArray();
         BuildLayoutAndIndex();

@@ -284,30 +284,6 @@ function Build-MetalAtlas {
     $atlas.Dispose()
 }
 
-function Build-JewelAtlas {
-    param([string]$Destination)
-    $colors = @('#d45f52', '#60b57a', '#5c9ed8')
-    $atlas = New-TransparentBitmap -Width 96 -Height 32
-    $graphics = New-PixelGraphics -Image $atlas
-    for ($index = 0; $index -lt 3; $index++) {
-        $x = $index * 32
-        $color = [System.Drawing.ColorTranslator]::FromHtml($colors[$index])
-        $brush = [System.Drawing.SolidBrush]::new($color)
-        $dark = [System.Drawing.SolidBrush]::new([System.Drawing.Color]::FromArgb(255, 31, 27, 35))
-        $graphics.FillPolygon($dark, [System.Drawing.Point[]]@(
-            [System.Drawing.Point]::new($x + 16, 2), [System.Drawing.Point]::new($x + 29, 16),
-            [System.Drawing.Point]::new($x + 16, 30), [System.Drawing.Point]::new($x + 3, 16)))
-        $graphics.FillPolygon($brush, [System.Drawing.Point[]]@(
-            [System.Drawing.Point]::new($x + 16, 6), [System.Drawing.Point]::new($x + 25, 16),
-            [System.Drawing.Point]::new($x + 16, 26), [System.Drawing.Point]::new($x + 7, 16)))
-        $graphics.FillRectangle([System.Drawing.Brushes]::White, $x + 14, 9, 3, 8)
-        $brush.Dispose(); $dark.Dispose()
-    }
-    $graphics.Dispose()
-    $atlas.Save($Destination, [System.Drawing.Imaging.ImageFormat]::Png)
-    $atlas.Dispose()
-}
-
 function Build-TownPreview {
     param([System.Drawing.Bitmap]$Source, [string]$Destination)
     $output = New-TransparentBitmap -Width 480 -Height 270
@@ -347,11 +323,6 @@ Build-GridAtlas -Source $skillSource -SourceColumns 10 -SourceRows 8 -SourceIndi
     -Destination (Join-Path $assetRoot 'ui\p21-skill-gems.png') -Columns 10 -CellWidth 32 -CellHeight 32 -Padding 1
 $skillSource.Dispose()
 
-$vfxSource = [System.Drawing.Bitmap]::FromFile((Join-Path $sourceRoot 'vfx-master.png'))
-Build-GridAtlas -Source $vfxSource -SourceColumns 8 -SourceRows 6 -SourceIndices (0..47) `
-    -Destination (Join-Path $assetRoot 'vfx\p21-combat-vfx.png') -Columns 8 -CellWidth 64 -CellHeight 64 -Padding 2
-$vfxSource.Dispose()
-
 $regionSource = [System.Drawing.Bitmap]::FromFile((Join-Path $sourceRoot 'region-master.png'))
 Build-RegionAtlas -Source $regionSource -Destination (Join-Path $assetRoot 'regions\p21-region-atlas.png')
 $regionSource.Dispose()
@@ -363,7 +334,6 @@ Build-GridAtlas -Source $townSource -SourceColumns 4 -SourceRows 2 -SourceIndice
 $townSource.Dispose()
 
 Build-MetalAtlas -Destination (Join-Path $assetRoot 'ui\p21-metal-atlas.png')
-Build-JewelAtlas -Destination (Join-Path $assetRoot 'ui\p21-jewel-atlas.png')
 & (Join-Path $PSScriptRoot 'build_p21_1_assets.ps1') -RepositoryRoot $RepositoryRoot
 if ($LASTEXITCODE -ne 0) { throw "P21.1 asset build failed with exit code $LASTEXITCODE." }
 
@@ -387,13 +357,11 @@ $manifest = [ordered]@{
         bosses = 24
         skillGems = 78
         metalCurrencies = 19
-        jewels = 3
         regions = 12
         buildings = 7
-        vfx = 48
     }
-    sources = @('actor-master.png', 'boss-master.png', 'skill-gem-master.png', 'vfx-master.png', 'region-master.png', 'town-master.png',
-        'app-icon-master.png', 'ui-skin-master.png', 'passive-tree-master.png', 'ascendancy-master.png', 'atlas-tree-master.png',
+    sources = @('actor-master.png', 'boss-master.png', 'skill-gem-master.png', 'region-master.png', 'town-master.png',
+        'app-icon-master.png', 'ui-skin-master.png',
         'p27/p27-monster-family-master.png')
 }
 $manifest | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $assetRoot 'p21-assets.json') -Encoding utf8

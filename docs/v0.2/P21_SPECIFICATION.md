@@ -101,7 +101,7 @@ P21 不改变战斗命中、伤害、移动、掉落或离线模拟结果。动�
 
 - `art-source/p21/imagegen/` 保存内置 imagegen 生成的原创视觉母版；`assets/p21/` 保存生产图集。
 - `scripts/build_p21_assets.ps1` 负责透明包围盒提取、像素化缩放、固定格打包、锚点校准、动画派生和清单生成。
-- `scripts/build_p21_1_assets.ps1` 负责确定性物品/技能图标、由核心数据导出的天赋背景、像素 UI 皮肤、应用图标和托盘状态资产；`tools/P21TreeExport` 是三类天赋坐标与连接的唯一导出源。
+- `scripts/build_p21_1_assets.ps1` 负责确定性技能图标、像素 UI 皮肤、应用图标和托盘状态资产；天赋背景现由 `scripts/build_p31_tree_assets.ps1` 读取 `tools/P21TreeExport` 的真实坐标独立生成。
 - `scripts/verify_p21_assets.ps1` 检查文件、尺寸、格边透明安全区、稳定数量、重复图标与清单版本；失败时禁止提交。
 - 自动验收覆盖 `384 px` 小窗、`960×640`、标准窗口、`1920×1280` 和字体 80%～150%。
 - 标准窗口目标 60 FPS，小窗至少 30 FPS；纹理预加载并缓存，不允许每帧加载纹理或创建图标资源。

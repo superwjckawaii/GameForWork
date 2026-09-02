@@ -257,7 +257,7 @@ public static partial class P30PassiveTreeCatalog
             (float x, float y) = Offset(anchorX, anchorY, angle, forward, sideways);
             string id = $"p30.jewel.v{vertex}.{suffixes[index]}";
             nodes.Add(new(id, "记忆棱孔", Branches[vertex], PassiveNodeKind.JewelSocket, anchor, [], [anchor],
-                x, y, vertex, SpecialRule: "可镶嵌一枚棱晶或传奇珠宝；半径、塑形与腐化读取 P30 珠宝规则"));
+                x, y, vertex, SpecialRule: "可镶嵌一枚棱晶或传奇珠宝；半径、塑形与腐化读取当前珠宝规则"));
             positions[id] = (x, y);
         }
     }

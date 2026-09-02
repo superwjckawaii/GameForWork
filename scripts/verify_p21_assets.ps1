@@ -18,12 +18,7 @@ $expected = [ordered]@{
     'town\p21-building-atlas.png' = @(640, 240)
     'ui\p21-skill-gems.png' = @(320, 256)
     'ui\p21-metal-atlas.png' = @(160, 128)
-    'ui\p21-jewel-atlas.png' = @(96, 32)
     'ui\p21-ui-skin.png' = @(256, 64)
-    'vfx\p21-combat-vfx.png' = @(512, 384)
-    'trees\p21-passive-backdrop.png' = @(2048, 2048)
-    'trees\p21-ascendancy-backdrops.png' = @(3072, 1024)
-    'trees\p21-atlas-backdrop.png' = @(2048, 2048)
     'brand\p21-app-icon.png' = @(256, 256)
     'brand\p21-tray-normal.png' = @(32, 32)
     'brand\p21-tray-waiting.png' = @(32, 32)
@@ -43,8 +38,8 @@ foreach ($entry in $expected.GetEnumerator()) {
 }
 
 foreach ($source in @('actor-master.png', 'boss-master.png', 'skill-gem-master.png',
-        'vfx-master.png', 'region-master.png', 'town-master.png', 'visual-direction-board.png', 'app-icon-master.png',
-        'ui-skin-master.png', 'passive-tree-master.png', 'ascendancy-master.png', 'atlas-tree-master.png')) {
+        'region-master.png', 'town-master.png', 'visual-direction-board.png', 'app-icon-master.png',
+        'ui-skin-master.png')) {
     if (-not (Test-Path -LiteralPath (Join-Path $sourceRoot $source))) { throw "Missing P21 editable source: $source" }
 }
 if (-not (Test-Path -LiteralPath (Join-Path $RepositoryRoot 'src\Game.Godot\art-source\p27\imagegen\p27-monster-family-master.png'))) {
@@ -137,8 +132,6 @@ Assert-TransparentGutters 'enemies\p21-enemy-animation.png' 31 104 48 64
 Assert-TransparentGutters 'enemies\p21-boss-animation.png' 31 48 72 80
 Assert-TransparentGutters 'ui\p21-skill-gems.png' 10 8 32 32
 Assert-TransparentGutters 'ui\p21-metal-atlas.png' 5 4 32 32
-Assert-TransparentGutters 'ui\p21-jewel-atlas.png' 3 1 32 32
-Assert-TransparentGutters 'vfx\p21-combat-vfx.png' 8 6 64 64
 
 Assert-UniqueCells 'ui\p21-skill-gems.png' 10 78 32
 Assert-UniqueCells 'ui\p21-metal-atlas.png' 5 19 32

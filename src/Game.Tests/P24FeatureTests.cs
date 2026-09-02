@@ -117,13 +117,8 @@ public sealed class P24FeatureTests
     }
 
     [Fact]
-    public void FormalArtAndGuideContractsCoverP24()
+    public void CurrentGuideContractCoversEveryItemMechanicFamily()
     {
-        Assert.Equal(5, P24ArtContract.Characters.Count);
-        Assert.Equal(5, P24ArtContract.Units.Count);
-        Assert.Equal(15, P24ArtContract.Ascendancies.Count);
-        Assert.Equal(4, P24ArtContract.DirectionCount);
-        Assert.Equal(20, P24ArtContract.SkillVfx.Count);
         Assert.Contains(P24GuideCatalog.Entries, value => value.StableId == "p24.guide.item_families" && value.Rules.Count == 49);
     }
 

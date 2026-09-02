@@ -31,12 +31,7 @@ public partial class P1WorldView : Control
     private string? _lastObservedScene;
     private Texture2D? _townBackground;
     private Texture2D? _combatBackground;
-    private Texture2D? _characterAtlas;
-    private Texture2D? _mercenaryTexture;
-    private Texture2D? _enemyAtlas;
-    private Texture2D? _bossAtlas;
     private Texture2D? _regionAtlas;
-    private Texture2D? _vfxAtlas;
     private Texture2D? _p31VfxAtlas;
     private Texture2D? _actorAnimationAtlas;
     private Texture2D? _enemyAnimationAtlas;
@@ -74,19 +69,9 @@ public partial class P1WorldView : Control
     public override void _Ready()
     {
         MouseFilter = MouseFilterEnum.Ignore;
-        _townBackground = LoadOptional("res://assets/p21/town/p21-town-district.png") ??
-                          LoadOptional("res://assets/p2/town/military-town.png");
-        _combatBackground = LoadOptional("res://assets/p21/regions/act-1.png") ??
-                            LoadOptional("res://assets/p2/combat/gate-ruins.png");
-        _characterAtlas = LoadOptional("res://assets/p15/characters/p15-character-directions.png") ??
-                          LoadOptional("res://assets/p2/characters/p2-character-grid.png");
-        _mercenaryTexture = null;
-        _enemyAtlas = LoadOptional("res://assets/p15/enemies/p15-enemy-elite-atlas.png");
-        _bossAtlas = LoadOptional("res://assets/p15/enemies/p15-boss-atlas.png");
-        _regionAtlas = LoadOptional("res://assets/p21/regions/p21-region-atlas.png") ??
-                       LoadOptional("res://assets/p15/regions/p15-region-atlas.png");
-        _vfxAtlas = LoadOptional("res://assets/p21/vfx/p21-combat-vfx.png") ??
-                    LoadOptional("res://assets/p15/vfx/p15-skill-mechanic-atlas.png");
+        _townBackground = LoadOptional("res://assets/p21/town/p21-town-district.png");
+        _combatBackground = LoadOptional("res://assets/p21/regions/act-1.png");
+        _regionAtlas = LoadOptional("res://assets/p21/regions/p21-region-atlas.png");
         _p31VfxAtlas = LoadOptional("res://assets/p31/vfx/p31-combat-vfx.png");
         _actorAnimationAtlas = LoadOptional("res://assets/p21/characters/p21-actor-animation.png");
         _enemyAnimationAtlas = LoadOptional("res://assets/p21/enemies/p21-enemy-animation.png");
@@ -219,35 +204,28 @@ public partial class P1WorldView : Control
             return;
         }
 
-        float attackCycle = (float)(_visualClock * (hero ? 2.2 : 1.9) % 1.0);
         float bob = MathF.Sin((float)_visualClock * 5) * 1.8f;
         Vector2 actor = bounds.Position + new Vector2(bounds.Size.X * 0.36f, bounds.Size.Y * 0.64f + bob);
         Vector2 enemy = bounds.Position + new Vector2(bounds.Size.X * 0.67f, bounds.Size.Y * 0.61f);
         DrawShadow(actor, 19);
         DrawShadow(enemy, 23);
-        if (_characterAtlas is null)
-        {
-            DrawActor(actor, hero ? new Color("6da9c0") : new Color("a885bd"), hero, attackCycle);
-            DrawEnemy(enemy, attackCycle);
-        }
-        else
-        {
-            DrawAtlasActor(actor, hero, attackCycle);
-            DrawAtlasEnemy(enemy, sceneProgress, attackCycle);
-        }
+        DrawP21Sprite(_actorAnimationAtlas, hero ? 0 : 1, P21Facing.Right,
+            P21SpriteAction.Attack, (long)_visualElapsedMilliseconds, actor, new Vector2(44, 56),
+            P21ArtContract.ActorRigCount, P21ArtContract.ActorCellWidth, P21ArtContract.ActorCellHeight);
+        bool boss = sceneProgress > .82f;
+        Texture2D? enemyAnimation = boss ? _bossAnimationAtlas : _enemyAnimationAtlas;
+        DrawP21Sprite(enemyAnimation,
+            boss ? P21ArtContract.BossRig(timeline.StableId) : P21ArtContract.EnemyRig(timeline.StableId),
+            P21Facing.Left, P21SpriteAction.Attack, (long)_visualElapsedMilliseconds, enemy,
+            boss ? new Vector2(62, 70) : new Vector2(40, 50),
+            boss ? P21ArtContract.BossRigCount : P21ArtContract.EnemyBodyRigCount,
+            boss ? P21ArtContract.BossCellWidth : P21ArtContract.ActorCellWidth,
+            boss ? P21ArtContract.BossCellHeight : P21ArtContract.ActorCellHeight);
 
         IReadOnlyList<P3SceneEvent> recent = timeline?.Events
             .Where(item => item.AtMilliseconds <= elapsed && item.AtMilliseconds >= elapsed - 1_100)
             .ToArray() ?? [];
-        if (recent.Any(item => item.Kind == P3SceneEventKind.HeavyStrike))
-        {
-            float reach = Math.Clamp(attackCycle * 2, 0, 1);
-            Vector2 slashCenter = actor.Lerp(enemy, 0.45f + reach * 0.35f);
-            DrawArc(slashCenter, 18 + reach * 18, -1.2f, 1.1f, 14, new Color(0.95f, 0.78f, 0.42f, 1 - reach * 0.4f), 4);
-            DrawCircle(enemy + new Vector2(-6, -12), 6 * (1 - reach), new Color("a83838"));
-        }
-
-        DrawSkillShapes(actor, enemy, recent);
+        DrawCompactSkillEffects(actor, enemy, recent);
         DrawFloatingNumbers(enemy, actor, recent, elapsed);
 
         float heroLife = state is null || state.HeroMaximumLife <= 0
@@ -406,7 +384,6 @@ public partial class P1WorldView : Control
             actor, new Vector2(44, 56), P21ArtContract.ActorRigCount,
             P21ArtContract.ActorCellWidth, P21ArtContract.ActorCellHeight,
             loop: heroAction != P21SpriteAction.Death);
-        if (hero) DrawHeroEquipmentOverlay(actor, heroFacing);
         DrawBar(new Rect2(actor + new Vector2(-30, 11), new Vector2(60, 5)),
             current.HeroMaximumLife <= 0 ? 0 : (float)current.HeroLife / current.HeroMaximumLife, new Color("a73737"));
         DrawBar(new Rect2(actor + new Vector2(-30, 18), new Vector2(60, 4)),
@@ -468,18 +445,6 @@ public partial class P1WorldView : Control
             if (targeted) DrawArc(position, radius + 10, 0, MathF.Tau, 20, new Color(1, .85f, .35f, .9f), 2);
             return;
         }
-        Texture2D? atlas = enemy.Boss ? _bossAtlas : _enemyAtlas;
-        if (atlas is not null)
-        {
-            int count = enemy.Boss ? 10 : 24;
-            int index = StableVisualIndex(enemy.EnemyStableId, count);
-            DrawGridSprite(atlas, index, enemy.Boss ? 5 : 6, enemy.Boss ? 2 : 5, position,
-                enemy.Boss ? new Vector2(46, 54) : enemy.Elite ? new Vector2(35, 42) : new Vector2(29, 35));
-            if (enemy.Elite || enemy.Boss)
-                DrawArc(position, radius + 7, 0, MathF.Tau, 16, new Color("e2b85d"), enemy.Boss ? 3 : 2);
-            if (targeted) DrawArc(position, radius + 10, 0, MathF.Tau, 20, new Color(1, .85f, .35f, .9f), 2);
-            return;
-        }
         Color color = enemy.Role switch
         {
             P4UnitRole.Melee => new Color("91434b"),
@@ -533,8 +498,6 @@ public partial class P1WorldView : Control
                 DrawArc(target, radius, 0, MathF.Tau, 32, new Color(ground ? "dc772aaa" : "ffb050dd"), 2);
                 continue;
             }
-            int vfxIndex = VfxIndex(item.Kind);
-            if (vfxIndex >= 0 && age < .58f) DrawVfx(vfxIndex, target, item.Kind == P3SceneEventKind.BossPhase ? 54 : 38);
             if (visual is not null && age < .86f)
             {
                 float size = 38f * visual.ScaleBasisPoints / 10_000f * (visual.Signature ? 1.12f : 1f);
@@ -552,64 +515,6 @@ public partial class P1WorldView : Control
             else if (item.Kind == P3SceneEventKind.BossPhase && age < .9f)
             {
                 DrawP31Vfx((int)P31SkillVisualFamily.BossWarning, target, 58 + age * 24, age * .35f);
-            }
-            if (item.Kind == P3SceneEventKind.WarCry)
-            {
-                DrawArc(actor, 14 + age * 38, 0, MathF.Tau, 24, new Color(0.95f, 0.62f, 0.2f, 1 - age), 3);
-            }
-            else if (item.Kind == P3SceneEventKind.EarthCleave)
-            {
-                DrawArc(actor, 20 + age * 48, -2.7f, -0.25f, 22, new Color(0.83f, 0.55f, 0.24f, 1 - age), 5);
-            }
-            else if (item.Kind == P3SceneEventKind.SeismicCharge)
-            {
-                DrawLine(source, target, new Color(0.92f, 0.55f, 0.2f, 1 - age), 6);
-                DrawArc(target, 10 + age * 34, 0, MathF.Tau, 18, new Color(0.9f, 0.45f, 0.18f, 1 - age), 4);
-            }
-            else if (item.Kind == P3SceneEventKind.BloodTideSpin)
-            {
-                DrawArc(actor, 22 + age * 22, 0, MathF.Tau, 28, new Color(0.76f, 0.12f, 0.18f, 1 - age), 5);
-            }
-            else if (item.Kind == P3SceneEventKind.Banner)
-            {
-                DrawLine(actor + new Vector2(-12, 5), actor + new Vector2(-12, -45), new Color("d7c07b"), 3);
-                DrawColoredPolygon([actor + new Vector2(-10, -44), actor + new Vector2(18, -37), actor + new Vector2(-10, -27)],
-                    new Color(0.58f, 0.12f, 0.16f, 1 - age * 0.35f));
-            }
-            else if (item.Kind is P3SceneEventKind.SpiritBlade or P3SceneEventKind.Chain)
-            {
-                DrawLine(source, target, new Color(0.43f, 0.86f, 0.92f, 1 - age * 0.8f), item.Kind == P3SceneEventKind.Chain ? 2 : 4);
-                DrawCircle(source.Lerp(target, age), 4, new Color(0.75f, 0.96f, 1, 1 - age * 0.5f));
-            }
-            else if (item.Kind == P3SceneEventKind.AshJavelin)
-            {
-                DrawLine(source, target, new Color(1, .38f, .08f, 1 - age * .65f), 4);
-                Vector2 projectile = source.Lerp(target, age);
-                DrawColoredPolygon([projectile + new Vector2(7, 0), projectile + new Vector2(-5, -3),
-                    projectile + new Vector2(-5, 3)], new Color(1, .72f, .18f, 1 - age * .45f));
-            }
-            else if (item.Kind == P3SceneEventKind.EmberNova)
-            {
-                DrawArc(source, 10 + age * 55, 0, MathF.Tau, 30, new Color(1, .28f, .06f, 1 - age), 6);
-                DrawArc(source, 5 + age * 38, 0, MathF.Tau, 24, new Color(1, .78f, .22f, 1 - age), 2);
-            }
-            else if (item.Kind == P3SceneEventKind.StormBrand)
-            {
-                Vector2 middle = source.Lerp(target, .5f) + new Vector2(0, age < .5f ? -10 : 10);
-                DrawPolyline([source, middle, target], new Color(.32f, .82f, 1, 1 - age * .75f), 4);
-                DrawArc(target, 7 + age * 16, 0, MathF.Tau, 12, new Color(.62f, .92f, 1, 1 - age), 2);
-            }
-            else if (item.Kind == P3SceneEventKind.HeavyStrike)
-            {
-                DrawArc(target, 8 + age * 20, -1.8f, 0.8f, 12, new Color(1, 0.78f, 0.34f, 1 - age), 4);
-            }
-            else if (item.Kind == P3SceneEventKind.BossPhase)
-            {
-                DrawArc(target, 18 + age * 34, 0, MathF.Tau, 24,
-                    new Color(1, .25f + age * .25f, .12f, 1 - age * .45f), 3);
-                DrawLine(source, target, new Color(1, .7f, .25f, 1 - age), 2);
-                DrawRect(new Rect2(target - new Vector2(22, 22), new Vector2(44, 44)),
-                    new Color(1, .35f, .15f, 1 - age), false, 2);
             }
         }
         DrawCombatFeedback(field, positions, recent, elapsed);
@@ -677,7 +582,7 @@ public partial class P1WorldView : Control
     {
         if (atlas is null)
         {
-            DrawCharacterSprite(feetPosition, Math.Clamp(rig, 0, 4), (int)facing, maximumSize);
+            DrawActor(feetPosition, rig == 0 ? new Color("6da9c0") : new Color("a885bd"), rig == 0, 0);
             return;
         }
         int column = P21ArtContract.AnimationColumn(action, Math.Max(0, elapsed), loop);
@@ -801,91 +706,6 @@ public partial class P1WorldView : Control
         EliteAffix.IronSkin or EliteAffix.FortifiedAura or EliteAffix.Massive => new Color("aeb6bd"),
         _ => new Color("d6a85a"),
     };
-
-    private void DrawHeroEquipmentOverlay(Vector2 actor, P21Facing facing)
-    {
-        if (_session is null) return;
-        if (_session.HeroEquipment.Items.TryGetValue(EquipmentSlot.MainHand, out ItemInstance? weapon))
-        {
-            Color color = EquipmentOverlayColor(weapon);
-            float side = facing == P21Facing.Left ? -1 : 1;
-            float length = weapon.Base.Category == ItemCategory.TwoHandWeapon ? 24 : 17;
-            float width = weapon.Base.WeaponFamily is WeaponFamily.Mace or WeaponFamily.Axe ? 4 : 2;
-            Vector2 grip = actor + new Vector2(side * 7, -27);
-            Vector2 tip = actor + new Vector2(side * length, -43);
-            DrawLine(grip, tip, color.Lightened(Math.Min(.35f, weapon.Quality / 100f)), width);
-            if (weapon.Base.WeaponFamily == WeaponFamily.Axe)
-                DrawLine(tip, tip + new Vector2(-side * 7, -2), color, 4);
-            else if (weapon.Base.WeaponFamily == WeaponFamily.Mace)
-                DrawRect(new Rect2(tip - new Vector2(4, 3), new Vector2(8, 6)), color, true);
-            else if (weapon.Base.WeaponFamily == WeaponFamily.Bow)
-                DrawArc(grip + new Vector2(side * 7, -7), 12, -1.5f, 1.5f, 10, color, 2);
-            Color? elemental = ElementalOverlayColor(weapon);
-            if (elemental is { } glow)
-                DrawArc(tip, 5 + MathF.Sin((float)_visualClock * 5) * 1.2f, 0, MathF.Tau, 10,
-                    new Color(glow.R, glow.G, glow.B, .62f), 2);
-        }
-        if (_session.HeroEquipment.Items.ContainsKey(EquipmentSlot.OffHand))
-        {
-            float side = facing == P21Facing.Right ? -1 : 1;
-            DrawArc(actor + new Vector2(side * 10, -23), 6, -.8f, 2.2f, 8, new Color("a7b0b7"), 2);
-        }
-        if (_session.HeroEquipment.Items.TryGetValue(EquipmentSlot.Helmet, out ItemInstance? helmet))
-        {
-            Color color = EquipmentOverlayColor(helmet);
-            DrawLine(actor + new Vector2(-6, -47), actor + new Vector2(6, -47), color, 2);
-            DrawLine(actor + new Vector2(0, -47), actor + new Vector2(0, -53), color.Darkened(.15f), 2);
-        }
-        if (_session.HeroEquipment.Items.TryGetValue(EquipmentSlot.Chest, out ItemInstance? chest))
-        {
-            Color color = EquipmentOverlayColor(chest).Darkened(.22f);
-            DrawRect(new Rect2(actor + new Vector2(-6, -34), new Vector2(12, 7)), color, true);
-        }
-        if (_session.HeroEquipment.Items.TryGetValue(EquipmentSlot.Gloves, out ItemInstance? gloves))
-        {
-            Color color = EquipmentOverlayColor(gloves).Darkened(.1f);
-            DrawCircle(actor + new Vector2(-9, -25), 2.2f, color);
-            DrawCircle(actor + new Vector2(9, -25), 2.2f, color);
-        }
-        if (_session.HeroEquipment.Items.TryGetValue(EquipmentSlot.Boots, out ItemInstance? boots))
-        {
-            Color color = EquipmentOverlayColor(boots).Darkened(.18f);
-            DrawLine(actor + new Vector2(-6, -4), actor + new Vector2(-10, 0), color, 3);
-            DrawLine(actor + new Vector2(6, -4), actor + new Vector2(10, 0), color, 3);
-        }
-    }
-
-    private void DrawVfx(int index, Vector2 center, float size)
-    {
-        if (_vfxAtlas is null) return;
-        Rect2 source = new((index % 8) * 64, (index / 8) * 64, 64, 64);
-        DrawTextureRectRegion(_vfxAtlas, new Rect2(center - new Vector2(size / 2, size / 2), new Vector2(size, size)), source);
-    }
-
-    private static Color EquipmentOverlayColor(ItemInstance item)
-    {
-        Color color;
-        if (item.Rarity == ItemRarity.Legendary)
-        {
-            Color[] legendary = [new("c68cff"), new("ef8f5b"), new("7bd1cb"), new("e4c05d"), new("d7779f")];
-            string identity = item.LegendaryRule?.StableId ?? item.DisplayName;
-            color = legendary[StableVisualIndex(identity, legendary.Length)];
-        }
-        else color = P1UiText.RarityColor(item.Rarity);
-        float tierLight = Math.Clamp((item.Base.RequiredLevel - 40) / 160f, 0, .32f);
-        return color.Lightened(tierLight);
-    }
-
-    private static Color? ElementalOverlayColor(ItemInstance item)
-    {
-        string combined = string.Join('|', item.Affixes.SelectMany(affix => affix.Effects)
-            .Select(effect => effect.Kind.ToString()));
-        if (combined.Contains("Void", StringComparison.Ordinal)) return new Color("a269e1");
-        if (combined.Contains("Lightning", StringComparison.Ordinal)) return new Color("ead34e");
-        if (combined.Contains("Cold", StringComparison.Ordinal)) return new Color("62c8e4");
-        if (combined.Contains("Fire", StringComparison.Ordinal)) return new Color("ed6538");
-        return null;
-    }
 
     private void DrawP31Vfx(int index, Vector2 center, float size, float rotation)
     {
@@ -1029,36 +849,13 @@ public partial class P1WorldView : Control
         _ => new Color("70c96d"),
     };
 
-    private static int VfxIndex(P3SceneEventKind kind) => kind switch
-    {
-        P3SceneEventKind.HeavyStrike => 0,
-        P3SceneEventKind.EarthCleave => 2,
-        P3SceneEventKind.Aftershock => 4,
-        P3SceneEventKind.BloodTideSpin => 5,
-        P3SceneEventKind.SpiritBlade => 7,
-        P3SceneEventKind.Chain => 8,
-        P3SceneEventKind.AshJavelin => 9,
-        P3SceneEventKind.EmberNova => 10,
-        P3SceneEventKind.StormBrand => 11,
-        P3SceneEventKind.SeismicCharge => 14,
-        P3SceneEventKind.WarCry => 16,
-        P3SceneEventKind.Banner => 17,
-        P3SceneEventKind.Guard => 18,
-        P3SceneEventKind.Block => 19,
-        P3SceneEventKind.Bleed => 22,
-        P3SceneEventKind.Ailment => 24,
-        P3SceneEventKind.Flask => 32,
-        P3SceneEventKind.EnemyDefeated => 42,
-        P3SceneEventKind.BossPhase => 40,
-        _ => -1,
-    };
-
     private static P31SkillVisualDescriptor? VisualForEvent(P3SceneEvent item)
     {
         string skillId = ReadDetailValue(item.Detail, "skill:") ?? item.Kind switch
         {
             P3SceneEventKind.HeavyStrike => P1SkillIds.HeavyStrike,
             P3SceneEventKind.EarthCleave => P1SkillIds.EarthCleave,
+            P3SceneEventKind.Aftershock => P1SkillIds.SeismicCharge,
             P3SceneEventKind.SpiritBlade or P3SceneEventKind.Chain => P1SkillIds.SpiritBlade,
             P3SceneEventKind.SeismicCharge => P1SkillIds.SeismicCharge,
             P3SceneEventKind.BloodTideSpin => P1SkillIds.BloodTideSpin,
@@ -1268,29 +1065,22 @@ public partial class P1WorldView : Control
         _lastObservedElapsed = -1;
     }
 
-    private void DrawSkillShapes(Vector2 actor, Vector2 enemy, IEnumerable<P3SceneEvent> recent)
+    private void DrawCompactSkillEffects(Vector2 actor, Vector2 enemy, IEnumerable<P3SceneEvent> recent)
     {
         foreach (P3SceneEvent item in recent)
         {
-            float age = Math.Clamp((float)((_visualElapsedMilliseconds - item.AtMilliseconds) / 1_100), 0, 1);
-            if (item.Kind == P3SceneEventKind.WarCry)
-            {
-                DrawArc(actor + new Vector2(0, -12), 18 + age * 42, 0, MathF.Tau, 28,
-                    new Color(0.94f, 0.62f, 0.23f, 0.8f * (1 - age)), 3);
-            }
-            else if (item.Kind == P3SceneEventKind.Aftershock)
-            {
-                DrawArc(enemy, 12 + age * 55, 0, MathF.Tau, 24,
-                    new Color(0.62f, 0.43f, 0.22f, 0.75f * (1 - age)), 5);
-            }
-            else if (item.Kind == P3SceneEventKind.Bleed)
-            {
-                for (int index = 0; index < 4; index++)
-                {
-                    DrawCircle(enemy + new Vector2(index * 6 - 9, -28 + age * 24 + index * 2), 2,
-                        new Color(0.72f, 0.08f, 0.12f, 1 - age));
-                }
-            }
+            P31SkillVisualDescriptor? visual = VisualForEvent(item);
+            if (visual is null) continue;
+            float age = Math.Clamp((float)((_visualElapsedMilliseconds - item.AtMilliseconds) /
+                                           visual.LifetimeMilliseconds), 0, 1);
+            if (age >= .86f) continue;
+            Vector2 center = visual.UsesSourceToTarget
+                ? actor.Lerp(enemy, Math.Clamp(age * 1.25f, 0, 1))
+                : item.Kind is P3SceneEventKind.WarCry or P3SceneEventKind.Banner ? actor : enemy;
+            float size = 44f * visual.ScaleBasisPoints / 10_000f;
+            DrawP31Vfx(visual.AtlasCell, center, size,
+                visual.UsesSourceToTarget ? actor.AngleToPoint(enemy) : 0);
+            DrawSupportLayers(actor, enemy, center, age, ReadSupportLayers(item.Detail));
         }
     }
 
@@ -1349,49 +1139,6 @@ public partial class P1WorldView : Control
         DrawLine(position + new Vector2(5, -15), weaponEnd, hero ? new Color("d9c08b") : new Color("b9a8cf"), 4);
     }
 
-    private void DrawAtlasActor(Vector2 position, bool hero, float attackCycle)
-    {
-        if (!hero && _mercenaryTexture is not null)
-        {
-            float height = 116;
-            float width = height * _mercenaryTexture.GetWidth() / _mercenaryTexture.GetHeight();
-            DrawTextureRect(_mercenaryTexture,
-                new Rect2(position + new Vector2(-width / 2, -height), new Vector2(width, height)), false);
-            return;
-        }
-
-        int column = attackCycle is > .18f and < .38f ? 2 : 0;
-        float lean = attackCycle is > 0.18f and < 0.38f ? 6 : 0;
-        DrawCharacterSprite(position + new Vector2(lean, 0), hero ? 0 : 1, column, new Vector2(92, 112));
-    }
-
-    private void DrawAtlasEnemy(Vector2 position, float mapProgress, float attackCycle)
-    {
-        float recoil = attackCycle is > 0.25f and < 0.45f ? 4 : 0;
-        Texture2D? atlas = mapProgress > .82f ? _bossAtlas : _enemyAtlas;
-        if (atlas is not null)
-        {
-            int index = Math.Clamp((int)(mapProgress * (mapProgress > .82f ? 10 : 24)), 0, mapProgress > .82f ? 9 : 23);
-            DrawGridSprite(atlas, index, mapProgress > .82f ? 5 : 6, mapProgress > .82f ? 2 : 5,
-                position + new Vector2(recoil, 0), mapProgress > .82f ? new Vector2(148, 152) : new Vector2(104, 116));
-        }
-        else DrawEnemy(position, attackCycle);
-    }
-
-    private void DrawCharacterSprite(Vector2 feetPosition, int row, int column, Vector2 maximumSize)
-    {
-        if (_characterAtlas is null) return;
-        DrawGridSprite(_characterAtlas, row * 4 + column, 4, 5, feetPosition, maximumSize);
-    }
-
-    private void DrawGridSprite(Texture2D texture, int index, int columns, int rows, Vector2 feetPosition, Vector2 maximumSize)
-    {
-        Rect2 source = GridCell(texture, index, columns, rows);
-        float scale = Math.Min(maximumSize.X / source.Size.X, maximumSize.Y / source.Size.Y);
-        Vector2 size = source.Size * scale;
-        DrawTextureRectRegion(texture, new Rect2(feetPosition + new Vector2(-size.X / 2, -size.Y), size), source);
-    }
-
     private static Rect2 GridCell(Texture2D texture, int index, int columns, int rows)
     {
         float width = texture.GetWidth() / (float)columns;
@@ -1413,44 +1160,6 @@ public partial class P1WorldView : Control
         for (int index = 0; index < P12MapCatalog.Areas.Count; index++)
             if (stableId.Contains($":{P12MapCatalog.Areas[index].StableId}:", StringComparison.Ordinal)) return index;
         return StableVisualIndex(stableId, P12MapCatalog.Areas.Count);
-    }
-
-    private Rect2 AtlasCell(int column, int row)
-    {
-        float[] starts = row == 0
-            ? [0, 280, 575, 850, 1_190]
-            : [0, 275, 595, 855, 1_145];
-        float[] widths = row == 0
-            ? [270, 270, 275, 335, 346]
-            : [265, 310, 250, 280, 391];
-        float scaleX = _characterAtlas!.GetWidth() / 1_536f;
-        float height = _characterAtlas.GetHeight() / 2f;
-        return new Rect2(starts[column] * scaleX, row * height, widths[column] * scaleX, height);
-    }
-
-    private void DrawAtlasSprite(Vector2 feetPosition, Rect2 source, Vector2 maximumSize)
-    {
-        float scale = Math.Min(maximumSize.X / source.Size.X, maximumSize.Y / source.Size.Y);
-        Vector2 size = source.Size * scale;
-        Rect2 destination = new(feetPosition + new Vector2(-size.X / 2, -size.Y), size);
-        DrawTextureRectRegion(_characterAtlas!, destination, source);
-    }
-
-    private void DrawEnemy(Vector2 position, float attackCycle)
-    {
-        float recoil = attackCycle is > 0.25f and < 0.45f ? 4 : 0;
-        Color flesh = new("8d4144");
-        DrawCircle(position + new Vector2(recoil, -24), 10, flesh);
-        DrawColoredPolygon(
-        [
-            position + new Vector2(-13 + recoil, -17),
-            position + new Vector2(14 + recoil, -17),
-            position + new Vector2(18, 10),
-            position + new Vector2(-18, 10),
-        ], flesh.Darkened(0.18f));
-        DrawLine(position + new Vector2(-9, 8), position + new Vector2(-13, 22), new Color("332b2f"), 6);
-        DrawLine(position + new Vector2(9, 8), position + new Vector2(13, 22), new Color("332b2f"), 6);
-        DrawCircle(position + new Vector2(-4 + recoil, -26), 2, new Color("f07a62"));
     }
 
     private void DrawShadow(Vector2 position, float radius)

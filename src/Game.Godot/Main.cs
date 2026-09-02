@@ -88,7 +88,7 @@ public partial class Main : Node
         TaskScheduler.UnobservedTaskException += OnUnobservedTaskException;
         _settingsStore = new SettingsStore(Path.Combine(userDirectory, "settings.json"));
         ApplyVisualPreferences(_settingsStore.Load());
-        _logger.Write(GameLogLevel.Information, "p1a.start", "application", "P1A application started.");
+        _logger.Write(GameLogLevel.Information, "application.start", "application", "Application started.");
         string[] userArguments = OS.GetCmdlineUserArgs();
         bool stabilityRun = userArguments.Any(argument =>
             argument is "--p22-stability-visible" or "--p22-stability-tray");
@@ -216,7 +216,7 @@ public partial class Main : Node
             }
             catch (Exception exception)
             {
-                ReportError("p1a.tick_failed", "P1A simulation tick failed.", exception);
+                ReportError("simulation.tick_failed", "Simulation tick failed.", exception);
                 _battlePaused = true;
                 break;
             }
@@ -227,7 +227,7 @@ public partial class Main : Node
         if (_performanceAccumulator >= 0.5 && _performanceLabel is not null)
         {
             _performanceAccumulator = 0;
-            _performanceLabel.Text = $"P7 性能：{Engine.GetFramesPerSecond()} FPS · 帧峰 {_intervalPeakFrameMilliseconds:0.0} ms · " +
+            _performanceLabel.Text = $"性能：{Engine.GetFramesPerSecond()} FPS · 帧峰 {_intervalPeakFrameMilliseconds:0.0} ms · " +
                                      $"模拟 {_lastSimulationMilliseconds:0.00} ms · UI刷新 {_dashboard?.LastRefreshMilliseconds ?? 0:0.00} ms · " +
                                      $"后台存档 {_lastSaveMilliseconds} ms";
             _intervalPeakFrameMilliseconds = 0;
@@ -273,7 +273,7 @@ public partial class Main : Node
         }
         catch (Exception exception)
         {
-            ReportError("p22.stability_report_failed", "Writing the P22 stability report failed.", exception);
+            ReportError("stability.report_failed", "Writing the stability report failed.", exception);
             return false;
         }
     }
@@ -299,7 +299,7 @@ public partial class Main : Node
         }
 
         _saveRepository?.Dispose();
-        _logger?.Write(GameLogLevel.Information, "p1a.stop", "application", "P1A application stopped.");
+        _logger?.Write(GameLogLevel.Information, "application.stop", "application", "Application stopped.");
         AppDomain.CurrentDomain.UnhandledException -= OnUnhandledException;
         TaskScheduler.UnobservedTaskException -= OnUnobservedTaskException;
         _logger?.Dispose();
@@ -437,7 +437,7 @@ public partial class Main : Node
 
         _noticeLabel = new Label
         {
-            Text = "P2 主线与构筑管理 · 20 Hz 确定性模拟 / 60 FPS 画面",
+            Text = "主线与构筑管理 · 20 Hz 确定性模拟 / 60 FPS 画面",
             AutowrapMode = TextServer.AutowrapMode.WordSmart,
         };
         root.AddChild(_noticeLabel);
@@ -445,12 +445,12 @@ public partial class Main : Node
         _testHarness.Visible = DeveloperFeaturesEnabled;
         _testHarness.CustomMinimumSize = new Vector2(0, 32);
         _testHarness.SizeFlagsVertical = Control.SizeFlags.ShrinkBegin;
-        AddButton(_testHarness, "P2: 模拟48h", RunOfflineBenchmark);
-        AddButton(_testHarness, "P2: 备份", CreateBackup);
+        AddButton(_testHarness, "模拟48h", RunOfflineBenchmark);
+        AddButton(_testHarness, "备份", CreateBackup);
         AddButton(_testHarness, "打开日志", OpenLogs);
         AddButton(_testHarness, "复制日志路径", CopyLogPath);
         AddButton(_testHarness, "重置关闭询问", ResetCloseChoice);
-        _performanceLabel = new Label { Text = "P7 性能：等待采样…", TooltipText = "仅测试栏显示；正式小窗自动隐藏" };
+        _performanceLabel = new Label { Text = "性能：等待采样…", TooltipText = "仅测试栏显示；正式小窗自动隐藏" };
         _testHarness.AddChild(_performanceLabel);
 
         _dashboard = new P2Dashboard();
@@ -724,12 +724,12 @@ public partial class Main : Node
             watch.Stop();
             SaveP1State(showNotice: false);
             ShowNotice(
-                $"48h P1 结算完成：成功 {result.TotalMapsCompleted}，失败 {result.TotalMapsFailed}，" +
+                $"48h离线结算完成：成功 {result.TotalMapsCompleted}，失败 {result.TotalMapsFailed}，" +
                 $"耗时 {watch.ElapsedMilliseconds} ms，哈希 {result.FinalHash[..12]}…");
         }
         catch (Exception exception)
         {
-            ReportError("p1a.offline_benchmark_failed", "P1A offline benchmark failed.", exception);
+            ReportError("offline.benchmark_failed", "Offline benchmark failed.", exception);
         }
     }
 
@@ -739,7 +739,7 @@ public partial class Main : Node
         {
             if (showNotice)
             {
-                ShowNotice("尚未创建角色，没有可保存的 P1 状态。");
+                ShowNotice("尚未创建角色，没有可保存的游戏状态。");
             }
 
             return;
@@ -804,9 +804,9 @@ public partial class Main : Node
             notice = _saveNoticePending && !_saveWorkerRunning;
             if (notice) _saveNoticePending = false;
         }
-        if (failure is not null) ReportError("p1a.save_failed", "P1A background save failed.", failure);
+        if (failure is not null) ReportError("persistence.save_failed", "Background save failed.", failure);
         else if (notice && _saveRepository is not null)
-            ShowNotice($"P1 状态已保存（Schema {_saveRepository.GetSchemaVersion()}）。");
+            ShowNotice($"游戏状态已保存（Schema {_saveRepository.GetSchemaVersion()}）。");
     }
 
     private void FlushPendingSave()
@@ -831,7 +831,7 @@ public partial class Main : Node
                     ? null
                     : P1GameSession.Restore(
                         JsonSerializer.Deserialize<P1GameSessionSnapshot>(json, SaveJsonOptions) ??
-                        throw new InvalidDataException("P1 save JSON was empty."));
+                        throw new InvalidDataException("Save JSON was empty."));
             }
             catch (Exception exception) when (exception is JsonException or InvalidDataException or NotSupportedException)
             {
@@ -850,7 +850,7 @@ public partial class Main : Node
             _saveRepository?.Dispose();
             _saveRepository = null;
             _session = null;
-            ReportError("p1a.save_initialize_failed", "Save initialization failed; no replacement save was created.", exception);
+            ReportError("persistence.initialize_failed", "Save initialization failed; no replacement save was created.", exception);
         }
     }
 
@@ -880,7 +880,7 @@ public partial class Main : Node
         Exception? failure = Interlocked.Exchange(ref _startupBackupFailure, null);
         if (failure is not null)
         {
-            ReportError("p1a.startup_backup_failed", "Background startup backup failed.", failure);
+            ReportError("persistence.startup_backup_failed", "Background startup backup failed.", failure);
         }
     }
 
@@ -909,9 +909,9 @@ public partial class Main : Node
 
         _logger?.Write(
             elapsed.ClockMovedBackward ? GameLogLevel.Warning : GameLogLevel.Information,
-            "p1a.offline_startup_settled",
+            "offline.startup_settled",
             "offline",
-            "P1A startup offline interval was committed before presentation.",
+            "Startup offline interval was committed before presentation.",
             new Dictionary<string, object?>
             {
                 ["effective_ms"] = elapsed.EffectiveMilliseconds,
@@ -948,7 +948,7 @@ public partial class Main : Node
         }
         catch (Exception exception)
         {
-            ReportError("p1a.backup_failed", "Backup failed.", exception);
+            ReportError("persistence.backup_failed", "Backup failed.", exception);
         }
     }
 
@@ -1077,7 +1077,7 @@ public partial class Main : Node
 
         _toast?.ShowMessage(message);
 
-        _logger?.Write(GameLogLevel.Information, "p1a.notice", "ui", message);
+        _logger?.Write(GameLogLevel.Information, "ui.notice", "ui", message);
     }
 
     private void OnUnhandledException(object sender, UnhandledExceptionEventArgs eventArgs)

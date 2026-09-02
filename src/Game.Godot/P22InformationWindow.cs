@@ -28,7 +28,7 @@ public partial class P22InformationWindow : P30IndependentWindow
         _journey = GuidePage("旅程路线", "切换到本页时读取当前存档的完整旅程状态。");
         tabs.AddChild(_journey);
         tabs.AddChild(GuidePage("系统与操作", SystemGuide));
-        tabs.AddChild(GuidePage("P24 构筑", P24Guide()));
+        tabs.AddChild(GuidePage("构筑机制", BuildGuide()));
         tabs.AddChild(new P19AffixPanel
         {
             Name = "词缀库",
@@ -80,7 +80,7 @@ public partial class P22InformationWindow : P30IndependentWindow
         SizeFlagsVertical = Control.SizeFlags.ExpandFill,
     };
 
-    private static string P24Guide() => string.Join("\n\n", P24GuideCatalog.Entries.Select(entry =>
+    private static string BuildGuide() => string.Join("\n\n", P24GuideCatalog.Entries.Select(entry =>
         $"{entry.Title}\n{entry.Summary}\n{string.Join('\n', entry.Rules.Select(rule => $"· {rule}"))}"));
 
     private const string QuickGuide =

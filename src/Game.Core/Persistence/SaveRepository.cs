@@ -18,7 +18,7 @@ public sealed class SaveRepository : IDisposable
         ArgumentException.ThrowIfNullOrWhiteSpace(savesRoot);
         if (slot is < 1 or > 3)
         {
-            throw new ArgumentOutOfRangeException(nameof(slot), "P0 supports slots 1 through 3.");
+            throw new ArgumentOutOfRangeException(nameof(slot), "Save slots range from 1 through 3.");
         }
 
         _slotDirectory = Path.Combine(savesRoot, $"slot_{slot:00}");

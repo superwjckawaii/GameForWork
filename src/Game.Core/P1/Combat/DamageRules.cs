@@ -61,7 +61,7 @@ public static class DamageRules
 
         int clamped = P30CombatRules.HitChance(accuracy, targetEvasion);
         var trace = new FormulaTraceBuilder();
-        trace.Add("P30 命中率", $"clamp((命中 / (命中 + (闪避 / 4)^0.8)) / 0.98, 5%, 100%)", clamped);
+        trace.Add("命中率", $"clamp((命中 / (命中 + (闪避 / 4)^0.8)) / 0.98, 5%, 100%)", clamped);
         return trace.Build(clamped);
     }
 
@@ -74,7 +74,7 @@ public static class DamageRules
 
         int clamped = P30CombatRules.ArmorReduction(armor, physicalHitDamage);
         var trace = new FormulaTraceBuilder();
-        trace.Add("P30 护甲减伤率", $"min(90%, {armor} / ({armor} + 5 × {physicalHitDamage}))", clamped);
+        trace.Add("护甲减伤率", $"min(90%, {armor} / ({armor} + 5 × {physicalHitDamage}))", clamped);
         return trace.Build(clamped);
     }
 

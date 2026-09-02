@@ -1,7 +1,6 @@
 [CmdletBinding()]
 param(
-    [string]$RepositoryRoot = (Split-Path -Parent $PSScriptRoot),
-    [switch]$TreeArtOnly
+    [string]$RepositoryRoot = (Split-Path -Parent $PSScriptRoot)
 )
 
 $ErrorActionPreference = 'Stop'
@@ -10,9 +9,8 @@ Add-Type -AssemblyName System.Drawing
 $sourceRoot = Join-Path $RepositoryRoot 'src\Game.Godot\art-source\p21\imagegen'
 $assetRoot = Join-Path $RepositoryRoot 'src\Game.Godot\assets\p21'
 $uiRoot = Join-Path $assetRoot 'ui'
-$treeRoot = Join-Path $assetRoot 'trees'
 $brandRoot = Join-Path $assetRoot 'brand'
-foreach ($directory in @($uiRoot, $treeRoot, $brandRoot)) {
+foreach ($directory in @($uiRoot, $brandRoot)) {
     New-Item -ItemType Directory -Force -Path $directory | Out-Null
 }
 
@@ -98,88 +96,6 @@ function Build-Crop {
     $graphics.Dispose();$output.Save($Destination,[System.Drawing.Imaging.ImageFormat]::Png);$output.Dispose();$input.Dispose()
 }
 
-function Build-TreeArt {
-    $layoutPath = Join-Path ([System.IO.Path]::GetTempPath()) 'gameforwork-p21-tree-layout.json'
-    $exportProject = Join-Path $RepositoryRoot 'tools\P21TreeExport\P21TreeExport.csproj'
-    & dotnet run --project $exportProject --configuration Release --no-launch-profile -- $layoutPath | Out-Null
-    if ($LASTEXITCODE -ne 0) { throw 'P21 tree layout export failed.' }
-    $layout = Get-Content -LiteralPath $layoutPath -Raw | ConvertFrom-Json
-
-    function Draw-TreeLayer {
-        param(
-            [System.Drawing.Graphics]$Graphics,
-            [object]$Tree,
-            [System.Drawing.Rectangle]$Bounds,
-            [float]$Extent,
-            [string]$Accent,
-            [bool]$CenterNode = $false)
-        $background = [System.Drawing.SolidBrush]::new((Get-Color '#080d15'))
-        $Graphics.FillRectangle($background, $Bounds); $background.Dispose()
-        $centerX = $Bounds.X + $Bounds.Width / 2.0
-        $centerY = $Bounds.Y + $Bounds.Height / 2.0
-        $scale = $Bounds.Width / (2.0 * $Extent)
-        $ringPen = New-Pen (Get-Color '#182536') ([math]::Max(1, [int]($scale * 1.2)))
-        foreach($radius in @(0.18,0.34,0.50,0.66,0.82,0.96)) {
-            $diameter = [float]($Bounds.Width * $radius)
-            $Graphics.DrawEllipse($ringPen, [float]($centerX-$diameter/2), [float]($centerY-$diameter/2), $diameter, $diameter)
-        }
-        for($ray=0;$ray -lt 12;$ray++){
-            $angle=-[math]::PI/2+$ray*[math]::PI*2/12
-            $endX=$centerX+[math]::Cos($angle)*$Bounds.Width*.48
-            $endY=$centerY+[math]::Sin($angle)*$Bounds.Height*.48
-            $Graphics.DrawLine($ringPen,[float]$centerX,[float]$centerY,[float]$endX,[float]$endY)
-        }
-        $ringPen.Dispose()
-        $nodeMap=@{}
-        foreach($node in @($Tree.nodes)){$nodeMap[[string]$node.id]=$node}
-        $edgeShadow=New-Pen (Get-Color '#0a0f18') ([math]::Max(3,[int]($scale*3.2)))
-        $edgePen=New-Pen (Get-Color '#38485b') ([math]::Max(1,[int]($scale*1.25)))
-        foreach($edge in @($Tree.edges)){
-            $from=$nodeMap[[string]$edge.from];$to=$nodeMap[[string]$edge.to]
-            if($null -eq $to){continue}
-            $fromX=if($null -eq $from){$centerX}else{$centerX+[float]$from.x*$scale}
-            $fromY=if($null -eq $from){$centerY}else{$centerY+[float]$from.y*$scale}
-            $toX=$centerX+[float]$to.x*$scale;$toY=$centerY+[float]$to.y*$scale
-            $Graphics.DrawLine($edgeShadow,[float]$fromX,[float]$fromY,[float]$toX,[float]$toY)
-            $Graphics.DrawLine($edgePen,[float]$fromX,[float]$fromY,[float]$toX,[float]$toY)
-        }
-        $edgeShadow.Dispose();$edgePen.Dispose()
-        $accentColor=Get-Color $Accent;$minorBorder=Get-Color '#65758a';$fill=Get-Color '#101823'
-        foreach($node in @($Tree.nodes)){
-            $worldRadius=switch([string]$node.kind){'Core'{24};'Rule'{15};'Mastery'{13};'JewelSocket'{12};'Notable'{11};default{7}}
-            if([bool]$node.major){$worldRadius=[math]::Max($worldRadius,11)}
-            $radius=[math]::Max(3,[float]$worldRadius*$scale)
-            $x=$centerX+[float]$node.x*$scale;$y=$centerY+[float]$node.y*$scale
-            $nodeFill=[System.Drawing.SolidBrush]::new($fill)
-            $border=New-Pen $(if([bool]$node.major -or [string]$node.kind -in @('Mastery','Rule','JewelSocket')){$accentColor}else{$minorBorder}) ([math]::Max(1,[int]($scale*1.4)))
-            $Graphics.FillEllipse($nodeFill,[float]($x-$radius),[float]($y-$radius),[float]($radius*2),[float]($radius*2))
-            $Graphics.DrawEllipse($border,[float]($x-$radius),[float]($y-$radius),[float]($radius*2),[float]($radius*2))
-            if([bool]$node.major){$inner=New-Pen $accentColor 1;$Graphics.DrawEllipse($inner,[float]($x-$radius+3),[float]($y-$radius+3),[float]($radius*2-6),[float]($radius*2-6));$inner.Dispose()}
-            $nodeFill.Dispose();$border.Dispose()
-        }
-        if($CenterNode){
-            $centerBrush=[System.Drawing.SolidBrush]::new((Get-Color '#171f2b'));$centerPen=New-Pen $accentColor ([math]::Max(2,[int]($scale*2)))
-            $radius=29*$scale;$Graphics.FillEllipse($centerBrush,[float]($centerX-$radius),[float]($centerY-$radius),[float]($radius*2),[float]($radius*2));$Graphics.DrawEllipse($centerPen,[float]($centerX-$radius),[float]($centerY-$radius),[float]($radius*2),[float]($radius*2));$centerBrush.Dispose();$centerPen.Dispose()
-        }
-        $frame=New-Pen (Get-Color '#b08a49') 4;$Graphics.DrawRectangle($frame,$Bounds.X+3,$Bounds.Y+3,$Bounds.Width-7,$Bounds.Height-7);$frame.Dispose()
-    }
-
-    $passive=New-Bitmap 2048 2048;$graphics=New-Graphics $passive
-    Draw-TreeLayer $graphics $layout.passive ([System.Drawing.Rectangle]::new(0,0,2048,2048)) ([float]$layout.passive.extent) '#c39344'
-    $graphics.Dispose();$passive.Save((Join-Path $treeRoot 'p21-passive-backdrop.png'),[System.Drawing.Imaging.ImageFormat]::Png);$passive.Dispose()
-
-    $atlasTree=New-Bitmap 2048 2048;$graphics=New-Graphics $atlasTree
-    Draw-TreeLayer $graphics $layout.atlas ([System.Drawing.Rectangle]::new(0,0,2048,2048)) ([float]$layout.atlas.extent) '#6ab2c4'
-    $graphics.Dispose();$atlasTree.Save((Join-Path $treeRoot 'p21-atlas-backdrop.png'),[System.Drawing.Imaging.ImageFormat]::Png);$atlasTree.Dispose()
-
-    $ascendancyAtlas=New-Bitmap 3072 1024;$graphics=New-Graphics $ascendancyAtlas
-    $accents=@('#b95743','#5e9ab8','#c29048')
-    for($index=0;$index -lt 3;$index++){
-        Draw-TreeLayer $graphics $layout.ascendancies[$index] ([System.Drawing.Rectangle]::new($index*1024,0,1024,1024)) ([float]$layout.ascendancies[$index].extent) $accents[$index] $true
-    }
-    $graphics.Dispose();$ascendancyAtlas.Save((Join-Path $treeRoot 'p21-ascendancy-backdrops.png'),[System.Drawing.Imaging.ImageFormat]::Png);$ascendancyAtlas.Dispose()
-}
-
 function Get-AlphaBounds([System.Drawing.Bitmap]$bitmap) {
     $left=$bitmap.Width;$top=$bitmap.Height;$right=-1;$bottom=-1
     for($y=0;$y -lt $bitmap.Height;$y++){for($x=0;$x -lt $bitmap.Width;$x++){if($bitmap.GetPixel($x,$y).A -le 8){continue};$left=[math]::Min($left,$x);$top=[math]::Min($top,$y);$right=[math]::Max($right,$x);$bottom=[math]::Max($bottom,$y)}}
@@ -205,12 +121,7 @@ function Build-Brand {
     $icon.Dispose();$source.Dispose()
 }
 
-if (-not $TreeArtOnly) {
-    Build-SkillAtlas
-    Build-UiSkin
-}
-Build-TreeArt
-if (-not $TreeArtOnly) {
-    Build-Brand
-}
-Write-Host '[p21.1-assets] Generated deterministic icons, tree art, UI skin and application branding.'
+Build-SkillAtlas
+Build-UiSkin
+Build-Brand
+Write-Host '[p21.1-assets] Generated deterministic icons, UI skin and application branding.'

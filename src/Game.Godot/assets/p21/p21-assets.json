@@ -39,23 +39,17 @@
     "bosses": 24,
     "skillGems": 78,
     "metalCurrencies": 19,
-    "jewels": 3,
     "regions": 12,
-    "buildings": 7,
-    "vfx": 48
+    "buildings": 7
   },
   "sources": [
     "actor-master.png",
     "boss-master.png",
     "skill-gem-master.png",
-    "vfx-master.png",
     "region-master.png",
     "town-master.png",
     "app-icon-master.png",
     "ui-skin-master.png",
-    "passive-tree-master.png",
-    "ascendancy-master.png",
-    "atlas-tree-master.png",
     "p27/p27-monster-family-master.png"
   ]
 }

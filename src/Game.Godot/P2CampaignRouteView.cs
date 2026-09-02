@@ -19,19 +19,9 @@ public partial class P2CampaignRouteView : VBoxContainer
     {
         _session = session;
         _selected = selected;
-        string[] actPaths = Enumerable.Range(1, 5).Select(index =>
-        {
-            string p21 = $"res://assets/p21/regions/act-{index}.png";
-            if (ResourceLoader.Exists(p21)) return p21;
-            return index switch
-            {
-                1 => "res://assets/p3/campaign/act-1-ash-camp.png",
-                2 => "res://assets/p3/campaign/act-2-frost-town.png",
-                3 => "res://assets/p3/campaign/act-3-drowned-crypt.png",
-                4 => "res://assets/p3/campaign/act-4-crimson-foundry.png",
-                _ => "res://assets/p3/campaign/act-5-void-citadel.png",
-            };
-        }).ToArray();
+        string[] actPaths = Enumerable.Range(1, 5)
+            .Select(index => $"res://assets/p21/regions/act-{index}.png")
+            .ToArray();
         for (int index = 0; index < actPaths.Length; index++)
         {
             _actTextures[index] = ResourceLoader.Exists(actPaths[index])

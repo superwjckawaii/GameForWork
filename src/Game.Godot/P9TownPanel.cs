@@ -17,7 +17,6 @@ public partial class P9TownPanel : VBoxContainer
     private Label? _tavernRefresh;
     private Texture2D? _mercenaryAtlas;
     private Texture2D? _buildingAtlas;
-    private bool _p21MercenaryAtlas;
     private string _signature = string.Empty;
 
     public void Initialize(Func<P1GameSession> session, Action<string> changed)
@@ -25,10 +24,7 @@ public partial class P9TownPanel : VBoxContainer
         _session = session;
         _changed = changed;
         const string p21Actors = "res://assets/p21/characters/p21-actor-animation.png";
-        _p21MercenaryAtlas = ResourceLoader.Exists(p21Actors);
-        _mercenaryAtlas = GD.Load<Texture2D>(_p21MercenaryAtlas
-            ? p21Actors
-            : "res://assets/p9/characters/p9-mercenary-atlas.png");
+        _mercenaryAtlas = ResourceLoader.Exists(p21Actors) ? GD.Load<Texture2D>(p21Actors) : null;
         const string p21Buildings = "res://assets/p21/town/p21-building-atlas.png";
         _buildingAtlas = ResourceLoader.Exists(p21Buildings) ? GD.Load<Texture2D>(p21Buildings) : null;
         var top = new HBoxContainer();
@@ -250,17 +246,8 @@ public partial class P9TownPanel : VBoxContainer
         AtlasTexture? texture = null;
         if (_mercenaryAtlas is not null)
         {
-            Rect2 region;
-            if (_p21MercenaryAtlas)
-            {
-                int rig = (int)archetype + 1;
-                region = P21ArtAtlas.AnimationCell(0, rig * 4, 48, 64);
-            }
-            else
-            {
-                float width = _mercenaryAtlas.GetWidth() / 4f;
-                region = new Rect2((int)archetype * width, 0, width, _mercenaryAtlas.GetHeight());
-            }
+            int rig = (int)archetype + 1;
+            Rect2 region = P21ArtAtlas.AnimationCell(0, rig * 4, 48, 64);
             texture = new AtlasTexture
             {
                 Atlas = _mercenaryAtlas,

@@ -325,7 +325,7 @@ public static class P30SkillCatalog
         (int one, int twentyOne, int cost, string quality) = Tuning(legacy.DisplayName);
         return new(legacy.StoneId, legacy.DisplayName, MechanicKey(legacy.DisplayName), legacy.RequiredAll,
             legacy.RequiredAny, legacy.Excluded, one, twentyOne, cost,
-            $"{legacy.Description} P30 核心数值 {one}%→{twentyOne}%。", quality, legacy.Support,
+            $"{legacy.Description} 1～21级核心数值 {one}%→{twentyOne}%。", quality, legacy.Support,
             ProvidesConflict: legacy.ProvidesConflict, ConflictsWith: legacy.ConflictsWith,
             StarterGranted: legacy.StarterGranted);
     }
@@ -335,7 +335,7 @@ public static class P30SkillCatalog
         (int one, int twentyOne, int cost, string quality) = Tuning(legacy.DisplayName);
         return new(legacy.StoneId, legacy.DisplayName, MechanicKey(legacy.DisplayName), legacy.RequiredAll,
             legacy.RequiredAny, legacy.Excluded, one, twentyOne, cost,
-            $"{legacy.Description} P30 核心数值 {one}%→{twentyOne}%。", quality,
+            $"{legacy.Description} 1～21级核心数值 {one}%→{twentyOne}%。", quality,
             LegacyP24Support: legacy.Mechanic);
     }
 

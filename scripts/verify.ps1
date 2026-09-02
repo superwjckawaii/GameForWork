@@ -19,6 +19,7 @@ Write-Host "[verify] configuration=$Configuration"
 Write-Host "[verify] dotnet=$dotnetBinary"
 Write-Host "[verify] godot=$godotBinary"
 
+& (Join-Path $repositoryRoot 'scripts\verify_release_hygiene.ps1') -RepositoryRoot $repositoryRoot
 & (Join-Path $repositoryRoot 'scripts\verify_p21_assets.ps1') -RepositoryRoot $repositoryRoot
 & (Join-Path $repositoryRoot 'scripts\verify_p31_assets.ps1') -RepositoryRoot $repositoryRoot
 

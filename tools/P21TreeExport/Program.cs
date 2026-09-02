@@ -33,7 +33,7 @@ TreeEdge[] atlasEdges = P10AtlasTree.Nodes.Where(node => node.PrerequisiteId is 
 var document = new TreeDocument(
     new NamedTree("Passive", passiveNodes, passiveEdges, P1PassiveTree.LayoutExtent),
     ascendancies,
-    new NamedTree("Atlas", atlasNodes, atlasEdges, 820));
+    new NamedTree("Atlas", atlasNodes, atlasEdges, P10AtlasTree.LayoutExtent));
 var options = new JsonSerializerOptions { WriteIndented = true, PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
 options.Converters.Add(new JsonStringEnumConverter());
 string destination = Path.GetFullPath(args[0]);

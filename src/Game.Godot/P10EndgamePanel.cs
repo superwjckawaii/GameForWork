@@ -21,7 +21,7 @@ public partial class P10AtlasTreeView : Control
     public void Initialize(Func<P1GameSession> session, Action<string> changed)
     {
         _session = session; _changed = changed; MouseFilter = MouseFilterEnum.Stop;
-        const string backdropPath = "res://assets/p21/trees/p21-atlas-backdrop.png";
+        const string backdropPath = "res://assets/p31/trees/p31-atlas-backdrop.png";
         _backdrop = ResourceLoader.Exists(backdropPath) ? GD.Load<Texture2D>(backdropPath) : null;
         Resized += () => { ClampView(); QueueRedraw(); };
         QueueRedraw();

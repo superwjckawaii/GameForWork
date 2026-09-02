@@ -77,7 +77,7 @@ public partial class P18AscendancyPanel : Control
         foreach (P18Ascendancy value in available)
             _path.AddItem(P18AscendancyCatalog.DisplayName(value), (int)value);
         if (available.Length == 0)
-            _path.AddItem("P23.1 开放", (int)P18Ascendancy.None);
+            _path.AddItem("暂无可用升华", (int)P18Ascendancy.None);
         _path.Disabled = available.Length == 0;
         _select!.Disabled = available.Length == 0;
     }
@@ -106,14 +106,20 @@ public partial class P18AscendancyTreeView : Control
     private float _zoom = .82f;
     private bool _dragging;
     private Vector2 _press;
-    private Texture2D? _backdrops;
+    private Texture2D? _backdrop;
+    private P18Ascendancy _backdropAscendancy;
+
+    private static readonly string[] BackdropNames =
+    [
+        "blood-fighter", "iron-guardian", "warbreaker", "marksman", "shadowblade", "venomist",
+        "soul-shepherd", "spirit-cantor", "hexbinder", "elementalist", "void-scholar", "aegis-mage",
+        "martial-monk", "beast-keeper", "phantom-master", "runecarver", "spellarmor", "idol-forger",
+    ];
 
     public void Initialize(Func<P1GameSession> session, Action<string> changed)
     {
         _session = session; _changed = changed;
         MouseFilter = MouseFilterEnum.Stop;
-        const string backdrops = "res://assets/p21/trees/p21-ascendancy-backdrops.png";
-        if (ResourceLoader.Exists(backdrops)) _backdrops = GD.Load<Texture2D>(backdrops);
         Resized += () => { ClampView(); QueueRedraw(); };
     }
 
@@ -123,15 +129,13 @@ public partial class P18AscendancyTreeView : Control
         if (_session is null) return;
         P18Ascendancy selected = _session().Endgame.SelectedAscendancy;
         Vector2 origin = Size / 2 + _pan;
-        if (_backdrops is not null && selected != P18Ascendancy.None)
+        Texture2D? backdrop = BackdropFor(selected);
+        if (backdrop is not null)
         {
-            int index = (int)selected - 1;
-            float sourceSide = _backdrops.GetWidth() / 3f;
             const float extent = 240f;
             float side = extent * 2 * _zoom;
-            DrawTextureRectRegion(_backdrops,
-                new Rect2(origin - new Vector2(side, side) / 2, new Vector2(side, side)),
-                new Rect2(index * sourceSide, 0, sourceSide, _backdrops.GetHeight()));
+            DrawTextureRect(backdrop,
+                new Rect2(origin - new Vector2(side, side) / 2, new Vector2(side, side)), false);
         }
         DrawCircle(origin, 29 * _zoom, new Color("6b5434"));
         DrawString(ThemeDB.FallbackFont, origin + new Vector2(-42, 5),
@@ -141,7 +145,7 @@ public partial class P18AscendancyTreeView : Control
             P18Ascendancy[] available = P23ClassCatalog.Get(_session().Player.BaseClass).Ascendancies
                 .Where(P18AscendancyCatalog.IsImplemented).ToArray();
             string prompt = available.Length == 0
-                ? "该职业的三套升华将在 P23.1 开放"
+                ? "该职业暂未配置可用升华"
                 : $"先在上方选择{string.Join('、', available.Select(P18AscendancyCatalog.DisplayName))}";
             DrawString(ThemeDB.FallbackFont, origin + new Vector2(-190, 65), prompt,
                 HorizontalAlignment.Center, 380, 15, new Color("a8b0ba"));
@@ -225,4 +229,16 @@ public partial class P18AscendancyTreeView : Control
 
     private Vector2 Point(P18AscendancyNode node, Vector2 origin) =>
         origin + new Vector2(node.X, node.Y) * _zoom;
+
+    private Texture2D? BackdropFor(P18Ascendancy selected)
+    {
+        if (selected == P18Ascendancy.None) return null;
+        if (_backdropAscendancy == selected) return _backdrop;
+        int index = (int)selected - 1;
+        if (index < 0 || index >= BackdropNames.Length) return null;
+        string path = $"res://assets/p31/trees/ascendancy/p31-ascendancy-{index + 1:D2}-{BackdropNames[index]}.png";
+        _backdrop = ResourceLoader.Exists(path) ? GD.Load<Texture2D>(path) : null;
+        _backdropAscendancy = selected;
+        return _backdrop;
+    }
 }

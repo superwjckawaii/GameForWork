@@ -7,15 +7,9 @@ namespace GameForWork.GodotClient;
 
 internal sealed class P21ArtAtlas
 {
-    public Texture2D? Actors { get; } = Load("res://assets/p21/characters/p21-actor-animation.png");
-    public Texture2D? Enemies { get; } = Load("res://assets/p21/enemies/p21-enemy-animation.png");
-    public Texture2D? Bosses { get; } = Load("res://assets/p21/enemies/p21-boss-animation.png");
-    public Texture2D? Regions { get; } = Load("res://assets/p21/regions/p21-region-atlas.png");
-    public Texture2D? Vfx { get; } = Load("res://assets/p21/vfx/p21-combat-vfx.png");
     public Texture2D? UniqueItems { get; } = Load("res://assets/p25/ui/p25-legendary-atlas.png");
     public Texture2D? P25Equipment { get; } = Load("res://assets/p25/ui/p25-equipment-atlas.png");
     public Texture2D? SkillGems { get; } = Load("res://assets/p25/ui/p25-skill-stones.png");
-    public Texture2D? Jewels { get; } = Load("res://assets/p21/ui/p21-jewel-atlas.png");
 
     public Texture2D? ItemIcon(ItemInstance item)
     {
@@ -30,8 +24,6 @@ internal sealed class P21ArtAtlas
     public Texture2D? SkillIcon(string stableId) => SkillGems is null
         ? null
         : Icon(SkillGems, P21ArtContract.SkillStoneIndex(stableId), P25SkillStoneArt.Columns);
-
-    public Texture2D? JewelIcon(int index) => Jewels is null ? null : Icon(Jewels, index, 3);
 
     public static AtlasTexture Icon(Texture2D atlas, int index, int columns)
     {

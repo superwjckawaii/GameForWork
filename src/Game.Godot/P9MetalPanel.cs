@@ -35,7 +35,7 @@ public partial class P9MetalPanel : VBoxContainer
         _target = target;
         _changed = changed;
         const string p21 = "res://assets/p21/ui/p21-metal-atlas.png";
-        _metalAtlas = GD.Load<Texture2D>(ResourceLoader.Exists(p21) ? p21 : "res://assets/p9/ui/p9-metal-atlas.png");
+        _metalAtlas = ResourceLoader.Exists(p21) ? GD.Load<Texture2D>(p21) : null;
         Name = "打造";
         SizeFlagsVertical = SizeFlags.ExpandFill;
         var outerScroll = new ScrollContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill, SizeFlagsVertical = SizeFlags.ExpandFill };
