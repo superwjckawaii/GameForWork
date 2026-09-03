@@ -20,8 +20,8 @@ public sealed class P2ManagementTests
         {
             int expected = category switch
             {
-                ItemCategory.Gloves => 11,
-                ItemCategory.Boots => 6,
+                ItemCategory.Gloves => 19,
+                ItemCategory.Boots => 10,
                 ItemCategory.Belt => 11,
                 _ => 16,
             };

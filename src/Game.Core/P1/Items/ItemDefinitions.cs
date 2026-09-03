@@ -1,8 +1,5 @@
 using GameForWork.Core.P1.Combat;
-using GameForWork.Core.P19;
-using GameForWork.Core.P24;
-using GameForWork.Core.P25;
-using GameForWork.Core.P29;
+using GameForWork.Core.Equipment;
 
 namespace GameForWork.Core.P1.Items;
 
@@ -96,7 +93,9 @@ public sealed record ItemBaseDefinition(
     string ImplicitText = "",
     IReadOnlyList<ItemBaseImplicit>? AdditionalImplicits = null,
     int SpiritBarrier = 0,
-    ItemModifierScope ImplicitScope = ItemModifierScope.Global)
+    ItemModifierScope ImplicitScope = ItemModifierScope.Global,
+    int SpiritBarrierMinimum = 0,
+    int SpiritBarrierMaximum = 0)
 {
     public IReadOnlyList<string> ItemTags => Tags ?? Array.Empty<string>();
     public IReadOnlyList<ItemBaseImplicit> ExtraImplicits => AdditionalImplicits ?? Array.Empty<ItemBaseImplicit>();
@@ -147,18 +146,9 @@ public sealed record ItemBaseDefinition(
 
 public static class P1ItemBases
 {
-    private static readonly IReadOnlyDictionary<string, ItemBaseDefinition> BaseMap = Build()
-        .ToDictionary(item => item.StableId, StringComparer.Ordinal);
+    public static IReadOnlyCollection<ItemBaseDefinition> All => EquipmentCatalog.Bases;
 
-    public static IReadOnlyCollection<ItemBaseDefinition> All => BaseMap.Values.ToArray();
-
-    public static ItemBaseDefinition Get(string stableId) =>
-        BaseMap.TryGetValue(stableId, out ItemBaseDefinition? definition)
-            ? definition
-            : throw new KeyNotFoundException($"Unknown item base: {stableId}");
-
-    private static IReadOnlyList<ItemBaseDefinition> Build() => P19Catalog.Bases.Concat(P24ItemCatalog.Bases).Concat(P29WarfrontBases.All)
-        .Select(P25ItemBaseIdentity.Normalize).Select(P25ItemImplicitCatalog.Ensure).ToArray();
+    public static ItemBaseDefinition Get(string stableId) => EquipmentCatalog.GetBase(stableId);
 }
 
 public enum ItemModifierScope
@@ -363,6 +353,28 @@ public enum ItemModifierKind
     FlaskBuffEvasionBasisPoints,
     FlaskBuffCriticalChanceBasisPoints,
     FlaskBuffMovementSpeedBasisPoints,
+    MoreSpellDamageBasisPoints,
+    MoreElementalDamageBasisPoints,
+    MoreVoidDamageBasisPoints,
+    MoreLocalShieldBasisPoints,
+    AttackBlockChanceBasisPoints,
+    SpellBlockChanceBasisPoints,
+    MaximumVoidResistanceBonusBasisPoints,
+    ReturnProjectiles,
+    TrapRearm,
+    MinionAutomaticResummon,
+    AdditionalCurseMaximum,
+    CompanionCheatDeath,
+    ConstructExplodeAndRebuild,
+    UnarmedDefenseToMoreDamage,
+    RunebladeAttackSpellBridge,
+    FlaskCleanseBleedPoison,
+    FlaskCleanseElementalAilments,
+    FlaskCleanseCurses,
+    FlaskOverflowCharges,
+    FlaskRepeatEffect,
+    VirtueViceGainChanceBasisPoints,
+    BaseImplicitRule,
 }
 
 public sealed record AffixModifierComponent(
@@ -506,7 +518,17 @@ public sealed record ItemInstance(
     string CorruptionOutcome = "",
     bool IsKeyItem = false,
     string RolledName = "",
-    string DropSource = "")
+    string DropSource = "",
+    int RolledBaseArmor = 0,
+    int RolledBaseEvasion = 0,
+    int RolledBaseShield = 0,
+    int RolledBaseSpiritBarrier = 0,
+    IReadOnlyList<RolledAffixComponent>? RolledImplicitComponents = null,
+    bool ProtectPrefixesNextCraft = false,
+    bool ProtectSuffixesNextCraft = false,
+    long CraftSequence = 0,
+    string LegendaryCatalogId = "",
+    string CorruptionImplicitId = "")
 {
     public string DisplayName => string.IsNullOrWhiteSpace(RolledName) ? Base.DisplayName : RolledName;
     public int PrefixCount => Affixes.Count(affix => affix.Definition.Position == AffixPosition.Prefix);
@@ -520,6 +542,15 @@ public sealed record ItemInstance(
     public int EffectiveImplicitValue => Base.ImplicitModifier == ItemModifierKind.None
         ? 0
         : ImplicitValue > 0 ? ImplicitValue : Base.ImplicitMinimumValue;
+    public int EffectiveBaseArmor => RolledBaseArmor > 0 ? RolledBaseArmor : Base.Armor;
+    public int EffectiveBaseEvasion => RolledBaseEvasion > 0 ? RolledBaseEvasion : Base.Evasion;
+    public int EffectiveBaseShield => RolledBaseShield > 0 ? RolledBaseShield : Base.Shield;
+    public int EffectiveBaseSpiritBarrier => RolledBaseSpiritBarrier > 0 ? RolledBaseSpiritBarrier : Base.SpiritBarrier;
+    public IReadOnlyList<RolledAffixComponent> EffectiveImplicitComponents => RolledImplicitComponents is { Count: > 0 }
+        ? RolledImplicitComponents
+        : Base.ImplicitModifier == ItemModifierKind.None
+            ? []
+            : [new RolledAffixComponent(Base.ImplicitModifier, EffectiveImplicitValue, Base.ImplicitScope, Base.ImplicitText)];
 
     public ItemInstance WithLocked(bool locked) => this with { IsLocked = locked };
 
@@ -539,14 +570,12 @@ public static class P1Legendary
         AftershockDamageMultiplierBasisPoints: 7_000,
         DisplayText: "重击攻击速度总降30%；命中后产生一次造成原伤害70%的余震");
 
-    public static ItemInstance Create(int itemLevel) => new(
-        $"legendary-{itemLevel}-echoing-oathbreaker",
-        P1ItemBases.Get("core.base.heavy_battleaxe"),
-        Math.Clamp(itemLevel, 1, 10),
-        ItemRarity.Legendary,
-        P25LegendaryCatalog.CreateAffixes(P1ItemBases.Get("core.base.heavy_battleaxe")),
-        EchoingOathbreakerRule,
-        ImplicitValue: P1ItemBases.Get("core.base.heavy_battleaxe").ImplicitMaximumValue,
-        LinkedSocketCount: 5,
-        RolledName: "回响破誓者");
+    public static ItemInstance Create(int itemLevel) =>
+        EquipmentLegendaryFactory.CreateByName(
+            "回响破誓者",
+            itemLevel,
+            $"legendary-{itemLevel}-echoing-oathbreaker") with
+        {
+            LegendaryRule = EchoingOathbreakerRule,
+        };
 }

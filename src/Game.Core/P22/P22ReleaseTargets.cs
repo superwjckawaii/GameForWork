@@ -11,7 +11,7 @@ namespace GameForWork.Core.P22;
 public static class P22ReleaseTargets
 {
     public const string Version = "0.3.0";
-    public const int SaveFormatVersion = 22;
+    public const int SaveFormatVersion = 23;
     public const long MaximumWorkingSetBytes = 700L * 1024 * 1024;
     public const long MaximumTwoHourGrowthBytes = 80L * 1024 * 1024;
     public const double MaximumTrayCpuPercent = 2.0;

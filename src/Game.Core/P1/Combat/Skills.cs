@@ -275,7 +275,7 @@ public static class SkillRules
         var moreMultipliers = new List<int> { 14_000 };
         if (configuration.Level > 1)
         {
-            moreMultipliers.Add(checked(10_000 + (Math.Clamp(configuration.Level, 1, 21) - 1) * 250));
+            moreMultipliers.Add(checked(10_000 + (Math.Clamp(configuration.Level, 1, 40) - 1) * 250));
         }
 
         if (configuration.Supports.HasFlag(SkillSupport.IncreasedArea))

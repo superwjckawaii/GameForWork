@@ -39,7 +39,7 @@ public sealed class P29FeatureTests
     [Fact]
     public void LegendaryAndMechanicPoolsIncludeP30VirtueViceItems()
     {
-        Assert.Equal(40, P14UniqueItems.All.Count(item => !item.Mythic));
+        Assert.Equal(50, P14UniqueItems.All.Count(item => !item.Mythic));
         foreach (string pool in new[] { "warden", "citadel", "abyss", "garden", "red", "blue", "warfront" })
         {
             IReadOnlyList<P14UniqueDefinition> items = P20LegendaryDrops.Pool(pool);
@@ -76,7 +76,7 @@ public sealed class P29FeatureTests
         Assert.True(red.Succeeded);
         P29ResourceCraftResult blue = P29ResourceCrafting.RerollQuality(item, 12);
         Assert.True(blue.Succeeded);
-        Assert.InRange(blue.Result!.Quality, 0, 40);
+        Assert.InRange(blue.Result!.Quality, 20, 40);
         Assert.Equal(blue, P29ResourceCrafting.RerollQuality(item, 12));
     }
 
@@ -99,7 +99,7 @@ public sealed class P29FeatureTests
             .Where(item => P29DropCatalog.BaseTier(item) == P29BaseTier.Pinnacle)
             .ToArray();
         Assert.NotEmpty(pinnacleSwords);
-        Assert.Contains(pinnacleSwords, item => item.StableId == "p19.base.ezomyte_blade");
+        Assert.Contains(pinnacleSwords, item => item.StableId == "equipment.base.ezomyte_blade");
 
         var filter = new LootFilter([
             new LootFilterRule("save1.keep.pinnacle.twohand", LootDisposition.Keep,

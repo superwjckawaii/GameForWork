@@ -78,8 +78,8 @@ public sealed class P18FeatureTests
     public void StarterReceivesLifeAndManaFlasks()
     {
         P1GameSession session = NewSession();
-        Assert.Equal("core.base.life_flask", session.HeroEquipment.Items[EquipmentSlot.Flask1].Base.StableId);
-        Assert.Equal("core.base.mana_flask", session.HeroEquipment.Items[EquipmentSlot.Flask2].Base.StableId);
+        Assert.Equal("equipment.base.life_flask", session.HeroEquipment.Items[EquipmentSlot.Flask1].Base.StableId);
+        Assert.Equal("equipment.base.mana_flask", session.HeroEquipment.Items[EquipmentSlot.Flask2].Base.StableId);
     }
 
     [Fact]

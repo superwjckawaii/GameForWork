@@ -1,4 +1,5 @@
 using GameForWork.Core.P1.Combat;
+using GameForWork.Core.Equipment;
 
 namespace GameForWork.Core.P1.Items;
 
@@ -6,15 +7,21 @@ public enum P1FlaskKind { Life, Mana, Armor, Movement, Resistance }
 
 public static class P1FlaskRules
 {
-    public static P1FlaskKind? KindForBase(string stableId) => stableId switch
+    public static P1FlaskKind? KindForBase(string stableId)
     {
-        "core.base.life_flask" => P1FlaskKind.Life,
-        "core.base.mana_flask" => P1FlaskKind.Mana,
-        "core.base.armor_flask" => P1FlaskKind.Armor,
-        "core.base.movement_flask" => P1FlaskKind.Movement,
-        "core.base.resistance_flask" => P1FlaskKind.Resistance,
-        _ => null,
-    };
+        ItemBaseDefinition itemBase;
+        try { itemBase = EquipmentCatalog.GetBase(stableId); }
+        catch (KeyNotFoundException) { return null; }
+        return itemBase.DisplayName switch
+        {
+            "生命药剂" => P1FlaskKind.Life,
+            "法力药剂" => P1FlaskKind.Mana,
+            "玄铁药剂" => P1FlaskKind.Armor,
+            "疾行药剂" => P1FlaskKind.Movement,
+            "棱彩药剂" => P1FlaskKind.Resistance,
+            _ => null,
+        };
+    }
 }
 
 public sealed class P1UtilityFlaskState

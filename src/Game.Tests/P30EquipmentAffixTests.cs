@@ -163,7 +163,7 @@ public sealed class P30EquipmentAffixTests
     {
         ItemBaseDefinition itemBase = P1ItemBases.Get("p19.base.broad_sword");
         AffixDefinition global = P30EquipmentAffixes.Ordinary.First(affix => affix.StableFamilyId == "p30.affix.attack.damage");
-        AffixDefinition local = P1Affixes.All.First(affix => affix.StableFamilyId == "p19.affix.localphysicaldamage" && affix.Supports(itemBase));
+        AffixDefinition local = P1Affixes.All.First(affix => affix.StableFamilyId == "equipment.affix.localphysicaldamage" && affix.Supports(itemBase));
         var item = new ItemInstance("legacy-global-weapon", itemBase, 100, ItemRarity.Rare,
             [new AffixRoll(global, global.MinimumValue), new AffixRoll(local, local.MinimumValue)]);
 
@@ -222,7 +222,7 @@ public sealed class P30EquipmentAffixTests
             Assert.All(item.Affixes, affix =>
             {
                 Assert.Equal("传奇固定", affix.Definition.Source);
-                Assert.Equal(definition.StableId, affix.Definition.SourceId);
+                Assert.Equal(item.LegendaryCatalogId, affix.Definition.SourceId);
                 Assert.NotEmpty(affix.Effects);
             });
         });

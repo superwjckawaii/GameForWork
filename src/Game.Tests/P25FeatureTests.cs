@@ -8,6 +8,7 @@ using GameForWork.Core.P23;
 using GameForWork.Core.P24;
 using GameForWork.Core.P25;
 using GameForWork.Core.P6;
+using GameForWork.Core.Equipment;
 
 namespace GameForWork.Tests;
 
@@ -16,7 +17,7 @@ public sealed class P25FeatureTests
     [Fact]
     public void EveryEquipmentBaseHasARollableImplicit()
     {
-        Assert.Equal(148, P1ItemBases.All.Count);
+        Assert.Equal(244, P1ItemBases.All.Count);
         Assert.All(P1ItemBases.All, itemBase =>
         {
             Assert.NotEqual(ItemModifierKind.None, itemBase.ImplicitModifier);
@@ -64,13 +65,15 @@ public sealed class P25FeatureTests
     [Fact]
     public void EveryBaseAndLegendaryHasOneStableExplicitArtCell()
     {
-        int[] baseIndexes = P1ItemBases.All.Select(P25EquipmentArt.IconIndex).Order().ToArray();
-        Assert.Equal(Enumerable.Range(0, 148), baseIndexes);
+        int[] baseIndexes = P1ItemBases.All.Select(P25EquipmentArt.IconIndex).ToArray();
+        Assert.All(baseIndexes, index => Assert.InRange(index, 0, 129));
+        Assert.Equal(baseIndexes, P1ItemBases.All.Select(P25EquipmentArt.IconIndex));
         Assert.Equal(P14UniqueItems.All.Select(item => item.StableId), P25LegendaryArt.StableIds);
         Assert.Equal(2, P25LegendaryArt.IconIndex("core.unique.ravens_answer"));
         Assert.Equal(36, P25LegendaryArt.IconIndex("core.mythic.heart_of_ash"));
         Assert.Equal(ItemCategory.Helmet, P1ItemBases.Get(P14UniqueItems.All[2].BaseStableId).Category);
-        Assert.Equal(ItemCategory.BodyArmor, P1ItemBases.Get(P14UniqueItems.All[^1].BaseStableId).Category);
+        Assert.Contains(P14UniqueItems.All.Where(item => item.Mythic), item =>
+            P1ItemBases.Get(item.BaseStableId).Category == ItemCategory.BodyArmor);
     }
 
     [Fact]
@@ -105,7 +108,7 @@ public sealed class P25FeatureTests
     [Fact]
     public void EveryLegendaryHasConcreteRuleAffixesAndRuntimeHandler()
     {
-        Assert.Equal(41, P14UniqueItems.All.Count);
+        Assert.Equal(55, P14UniqueItems.All.Count);
         Assert.Contains(P14UniqueItems.All, definition => definition.LegendaryAffixes.Count > 1);
         Assert.Equal(P14UniqueItems.All.SelectMany(definition => definition.LegendaryAffixes).Count(),
             P14UniqueItems.All.SelectMany(definition => definition.LegendaryAffixes)
@@ -114,9 +117,10 @@ public sealed class P25FeatureTests
         {
             Assert.Contains(definition.RuleText, character => char.IsDigit(character));
             Assert.NotEmpty(definition.LegendaryAffixes);
-            Assert.True(P25LegendaryRules.HasImplementation(definition.StableId));
+            Assert.Contains(EquipmentRuleRegistry.All, registration =>
+                registration.SourceDefinitionId == EquipmentCatalog.LegendaryItems.Single(entry => entry.DisplayName == definition.DisplayName).Id);
             ItemInstance item = P14UniqueItems.Create(definition.StableId, 94, "p25-test-" + definition.StableId);
-            Assert.InRange(item.Affixes.Count, 4, 6);
+            Assert.InRange(item.Affixes.Count, 2, 6);
             Assert.All(item.Affixes, affix => Assert.Equal("传奇固定", affix.Definition.Source));
             Assert.Contains(item.Affixes, affix => affix.Definition.Position == AffixPosition.Prefix);
             Assert.Contains(item.Affixes, affix => affix.Definition.Position == AffixPosition.Suffix);

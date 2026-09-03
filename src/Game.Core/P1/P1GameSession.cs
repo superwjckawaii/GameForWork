@@ -123,7 +123,7 @@ public sealed record P1GameSessionSnapshot(
 
 public sealed class P1GameSession
 {
-    public const int CurrentFormatVersion = 22;
+    public const int CurrentFormatVersion = 23;
     private readonly P1WorldSimulator _simulator = new(new P1MapAttemptResolver());
     private readonly P2CampaignSimulator _campaignSimulator = new();
     private AssembledCharacterBuild _heroBuild;
@@ -253,7 +253,8 @@ public sealed class P1GameSession
         bool migratingV19 = snapshot.FormatVersion == 19;
         bool migratingV20 = snapshot.FormatVersion == 20;
         bool migratingV21 = snapshot.FormatVersion == 21;
-        if ((!migratingV18 && !migratingV19 && !migratingV20 && !migratingV21 && snapshot.FormatVersion != CurrentFormatVersion) || snapshot.SimulationSequence < 0)
+        bool migratingV22 = snapshot.FormatVersion == 22;
+        if ((!migratingV18 && !migratingV19 && !migratingV20 && !migratingV21 && !migratingV22 && snapshot.FormatVersion != CurrentFormatVersion) || snapshot.SimulationSequence < 0)
         {
             throw new InvalidDataException(
                 $"P1 session snapshot version {snapshot.FormatVersion} is unsupported; expected {CurrentFormatVersion}.");

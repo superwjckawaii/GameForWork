@@ -5,6 +5,7 @@ using GameForWork.Core.P1.World;
 using GameForWork.Core.P4;
 using GameForWork.Core.P6;
 using GameForWork.Core.Simulation;
+using GameForWork.Core.Equipment;
 
 namespace GameForWork.Core.P9;
 
@@ -296,42 +297,17 @@ public static class P9CraftingRules
 
 public static class P9EnchantmentCatalog
 {
-    private static readonly ItemEnchantment[] Entries =
-    [
-        new("core.enchant.precision", "精准刻印", ItemModifierKind.FlatAccuracy, 100, 2, 250,
-            ApplicableCategories: [ItemCategory.OneHandWeapon, ItemCategory.TwoHandWeapon, ItemCategory.Gloves, ItemCategory.Ring, ItemCategory.Amulet, ItemCategory.Belt]),
-        new("core.enchant.vigor", "坚生命纹", ItemModifierKind.FlatMaximumLife, 60, 2, 250,
-            ApplicableCategories: [ItemCategory.BodyArmor, ItemCategory.Helmet, ItemCategory.Gloves, ItemCategory.Boots, ItemCategory.Shield, ItemCategory.Belt, ItemCategory.Ring, ItemCategory.Amulet]),
-        new("core.enchant.attack_tempo", "迅击刻印", ItemModifierKind.IncreasedAttackSpeedBasisPoints, 1_200, 2, 250,
-            ApplicableCategories: [ItemCategory.OneHandWeapon, ItemCategory.TwoHandWeapon, ItemCategory.Gloves]),
-        new("core.enchant.cast_tempo", "疾咏刻印", ItemModifierKind.IncreasedCastSpeedBasisPoints, 1_200, 2, 250,
-            ApplicableCategories: [ItemCategory.OneHandWeapon, ItemCategory.Shield, ItemCategory.Gloves]),
-        new("core.enchant.execution", "处刑铭文", ItemModifierKind.IncreasedPhysicalDamageBasisPoints, 5_500, 3, 2_500,
-            ItemModifierScope.LocalWeapon, ApplicableCategories: [ItemCategory.OneHandWeapon, ItemCategory.TwoHandWeapon]),
-        new("core.enchant.bulwark", "壁垒铭文", ItemModifierKind.IncreasedArmorBasisPoints, 5_000, 3, 2_500,
-            ItemModifierScope.LocalDefense, ApplicableCategories: [ItemCategory.BodyArmor, ItemCategory.Helmet, ItemCategory.Gloves, ItemCategory.Boots, ItemCategory.Shield]),
-        new("core.enchant.sovereign", "断界王印", ItemModifierKind.IncreasedPhysicalDamageBasisPoints, 12_000, 4, 25_000,
-            ItemModifierScope.LocalWeapon, ApplicableCategories: [ItemCategory.OneHandWeapon, ItemCategory.TwoHandWeapon]),
-        new("core.enchant.immortal", "不灭王印", ItemModifierKind.FlatMaximumLife, 160, 4, 25_000,
-            ApplicableCategories: [ItemCategory.BodyArmor, ItemCategory.Shield, ItemCategory.Belt]),
-        new("core.enchant.perfect_chain", "完美链印", ItemModifierKind.ExtraSupportLinkCapacity, 1, 4, 25_000,
-            ApplicableCategories: [ItemCategory.OneHandWeapon, ItemCategory.TwoHandWeapon, ItemCategory.BodyArmor, ItemCategory.Helmet, ItemCategory.Gloves, ItemCategory.Boots, ItemCategory.Shield]),
-        new("core.enchant.humility", "谦逊足印", ItemModifierKind.HumilityMaximum, 1, 4, 25_000,
-            Components: [new(ItemModifierKind.HoldHumilityAtMaximum, 1, 1, ItemModifierScope.Rule, "获得谦逊"), new(ItemModifierKind.HumilityMaximum, 1, 1, ItemModifierScope.Rule, "谦逊上限 +1")],
-            ApplicableCategories: [ItemCategory.Boots]),
-    ];
+    public static IReadOnlyList<ItemEnchantment> All => EquipmentEnchantmentCatalog.All;
 
-    public static IReadOnlyList<ItemEnchantment> All => Entries;
-
-    public static ItemEnchantment Get(string stableId) => Entries.Single(entry => entry.StableId == stableId);
+    public static ItemEnchantment Get(string stableId) => EquipmentEnchantmentCatalog.Get(stableId);
 
     public static P9CraftResult Preview(ItemInstance item, string stableId, int workshopLevel)
     {
         ItemEnchantment enchantment = Get(stableId);
         if (item.IsLocked || item.IsCorrupted) return new(false, "item_locked", "锁定或腐化装备不能附魔。", item, MetalCurrencyKind.TemperingIron, 0);
         if (workshopLevel < enchantment.WorkshopLevel) return new(false, "workshop_level", $"需要工坊 Lv.{enchantment.WorkshopLevel}。", item, MetalCurrencyKind.TemperingIron, 0);
-        if (!enchantment.Supports(item.Base)) return new(false, "incompatible_base", "该附魔不支持此装备类型。", item, MetalCurrencyKind.TemperingIron, 0);
-        if (stableId == "core.enchant.perfect_chain" && (!P6SocketRules.ProvidesSockets(item.Base.Category) || item.LinkedSocketCount >= P6SocketRules.Maximum(item.Base.Category, item.ItemLevel)))
+        if (!EquipmentEnchantmentCatalog.Supports(enchantment, item.Base)) return new(false, "incompatible_base", "该附魔不支持此装备类型。", item, MetalCurrencyKind.TemperingIron, 0);
+        if (enchantment.DisplayName == "完美链印" && (!P6SocketRules.ProvidesSockets(item.Base.Category) || item.LinkedSocketCount >= P6SocketRules.Maximum(item.Base.Category, item.ItemLevel)))
             return new(false, "maximum_links", "该装备没有可提升的连接容量。", item, MetalCurrencyKind.TemperingIron, 0);
         return new(true, string.Empty, $"附魔：{enchantment.DisplayName}（覆盖现有附魔）", item with { Enchantment = enchantment }, MetalCurrencyKind.TemperingIron, 0);
     }

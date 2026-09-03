@@ -1,6 +1,7 @@
 using GameForWork.Core.P1;
 using GameForWork.Core.P1.Items;
 using GameForWork.Core.P2;
+using GameForWork.Core.Equipment;
 
 namespace GameForWork.Core.P16;
 
@@ -90,7 +91,8 @@ public static class P16BatchItems
     }
 
     private static bool IsMythic(ItemInstance item) =>
-        item.LegendaryRule?.StableId.StartsWith("core.mythic.", StringComparison.Ordinal) == true;
+        item.LegendaryRule?.StableId.StartsWith("core.mythic.", StringComparison.Ordinal) == true ||
+        EquipmentCatalog.LegendaryItems.Any(value => value.Id == item.LegendaryCatalogId && value.Rarity == "Mythic");
 
     private static string ProtectionReason(ItemInstance item) => item switch
     {

@@ -13,7 +13,7 @@ public static class P29ResourceCrafting
     public static P29ResourceCraftResult ShiftAffixTier(ItemInstance item, string affixFamilyId, ulong seed)
     {
         if (!item.CanModify || item.Rarity != ItemRarity.Rare) return Fail("赤誓升降要求可修改的稀有装备。", RedFavorCost);
-        AffixRoll? current = item.Affixes.FirstOrDefault(affix => !affix.Crafted && affix.Definition.StableFamilyId == affixFamilyId);
+        AffixRoll? current = item.Affixes.FirstOrDefault(affix => !affix.Crafted && !item.IsFractured(affix) && affix.Definition.StableFamilyId == affixFamilyId);
         if (current is null) return Fail("请选择一条非制作词缀。", RedFavorCost);
         AffixDefinition[] family = P1Affixes.For(item.Base, item.ItemLevel)
             .Where(definition => definition.StableFamilyId == current.Definition.StableFamilyId && definition.Position == current.Definition.Position)
@@ -46,7 +46,7 @@ public static class P29ResourceCrafting
     public static P29ResourceCraftResult RerollQuality(ItemInstance item, ulong seed)
     {
         if (!item.CanModify) return Fail("苍誓品质加工要求未锁定且未腐化的装备。", BlueFavorCost);
-        int quality = (int)(new Pcg32(seed).NextUInt() % 41);
+        int quality = 20 + (int)(new Pcg32(seed).NextUInt() % 21);
         return new(true, $"苍誓将装备品质从 {item.Quality}% 重置为 {quality}%。", item with { Quality = quality }, BlueFavorCost);
     }
 

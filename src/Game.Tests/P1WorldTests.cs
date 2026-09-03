@@ -158,7 +158,7 @@ public sealed class P1WorldTests
     {
         ItemBaseDefinition itemBase = P1ItemBases.Get("core.base.life_ring");
         AffixDefinition affix = P1Affixes.For(itemBase, 120).First(definition =>
-            definition.StableFamilyId == "p30.affix.maximum.life" && definition.Tier == 1);
+            definition.StableFamilyId == "equipment.affix.maximum.life" && definition.Tier == 1);
         var ring = new ItemInstance(
             "filtered-ring",
             itemBase,

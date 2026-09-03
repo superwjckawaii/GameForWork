@@ -2,6 +2,7 @@ using System.Numerics;
 using GameForWork.Core.P1.Combat;
 using GameForWork.Core.P6;
 using GameForWork.Core.P30;
+using GameForWork.Core.Equipment;
 
 namespace GameForWork.Core.P1.Items;
 
@@ -56,7 +57,8 @@ public sealed record EquipmentSummary(
     bool HasShield = false,
     int BaseBlockChanceBasisPoints = 0,
     int SpiritBarrier = 0,
-    LocalWeaponStats? LocalWeapon = null);
+    LocalWeaponStats? LocalWeapon = null,
+    EquipmentEffectSnapshot? Effects = null);
 
 public readonly record struct LocalDamageRange(int Minimum, int Maximum)
 {
@@ -156,24 +158,30 @@ public sealed class EquipmentLoadout
     public EquipmentSummary CalculateSummary()
     {
         ItemInstance[] equipped = _items.Values.ToArray();
-        int armor = equipped.Sum(item => LocalDefense(item, item.Base.Armor, ItemModifierKind.FlatArmor, ItemModifierKind.IncreasedArmorBasisPoints));
-        int evasion = equipped.Sum(item => LocalDefense(item, item.Base.Evasion, ItemModifierKind.FlatEvasion, ItemModifierKind.IncreasedEvasionBasisPoints));
-        int shield = equipped.Sum(item => LocalDefense(item, item.Base.Shield, ItemModifierKind.FlatShield, ItemModifierKind.IncreasedShieldBasisPoints));
-        int spiritBarrier = equipped.Sum(item => LocalDefense(item, item.Base.SpiritBarrier, ItemModifierKind.FlatSpiritBarrier, ItemModifierKind.IncreasedSpiritBarrierBasisPoints));
+        int armor = equipped.Sum(item => LocalDefense(item, item.EffectiveBaseArmor, ItemModifierKind.FlatArmor, ItemModifierKind.IncreasedArmorBasisPoints));
+        int evasion = equipped.Sum(item => LocalDefense(item, item.EffectiveBaseEvasion, ItemModifierKind.FlatEvasion, ItemModifierKind.IncreasedEvasionBasisPoints));
+        int shield = equipped.Sum(item => LocalDefense(item, item.EffectiveBaseShield, ItemModifierKind.FlatShield, ItemModifierKind.IncreasedShieldBasisPoints));
+        int spiritBarrier = equipped.Sum(item => LocalDefense(item, item.EffectiveBaseSpiritBarrier, ItemModifierKind.FlatSpiritBarrier, ItemModifierKind.IncreasedSpiritBarrierBasisPoints));
         int[] sums = new int[Enum.GetValues<ItemModifierKind>().Length];
         foreach (ItemInstance item in equipped)
         {
-            AddGlobal(sums, item.Base.ImplicitModifier, item.EffectiveImplicitValue, item.Base.ImplicitScope);
-            foreach (ItemBaseImplicit implicitModifier in item.Base.ExtraImplicits)
-                AddGlobal(sums, implicitModifier.ModifierKind, implicitModifier.Value, implicitModifier.Scope);
+            foreach (RolledAffixComponent implicitModifier in item.EffectiveImplicitComponents)
+                AddGlobal(sums, implicitModifier.Kind, implicitModifier.Value, implicitModifier.Scope);
             foreach (AffixRoll affix in item.Affixes)
             foreach (RolledAffixComponent effect in affix.Effects)
                 AddGlobal(sums, effect.Kind, effect.Value, effect.Scope);
             if (item.Enchantment is not null)
+            {
             foreach (AffixModifierComponent effect in item.Enchantment.EffectComponents)
                 AddGlobal(sums, effect.Kind, effect.MinimumValue, effect.Scope);
+                if (item.Enchantment.DisplayName == "不灭王印")
+                    sums[(int)ItemModifierKind.FlatMaximumLife] = checked(sums[(int)ItemModifierKind.FlatMaximumLife] +
+                        EquipmentRuleEngine.ImmortalMaximumLife(LocalDefense(item, item.EffectiveBaseArmor,
+                            ItemModifierKind.FlatArmor, ItemModifierKind.IncreasedArmorBasisPoints)));
+            }
         }
 
+        IReadOnlyDictionary<ItemModifierKind, int> extended = Enum.GetValues<ItemModifierKind>().ToDictionary(kind => kind, kind => sums[(int)kind]);
         var modifiers = new EquipmentModifiers(
             sums[(int)ItemModifierKind.AddedPhysicalDamage],
             sums[(int)ItemModifierKind.IncreasedPhysicalDamageBasisPoints],
@@ -210,7 +218,7 @@ public sealed class EquipmentLoadout
             sums[(int)ItemModifierKind.MoreRareBossDamageBasisPoints],
             sums[(int)ItemModifierKind.ActiveSkillGemLevels],
             sums[(int)ItemModifierKind.SupportSkillGemLevels],
-            Enum.GetValues<ItemModifierKind>().ToDictionary(kind => kind, kind => sums[(int)kind]));
+            extended);
         ItemInstance? weaponItem = _items.GetValueOrDefault(EquipmentSlot.MainHand);
         LocalWeaponStats? localWeapon = weaponItem?.Base.Category is ItemCategory.TwoHandWeapon or ItemCategory.OneHandWeapon
             ? CalculateLocalWeapon(weaponItem)
@@ -225,7 +233,8 @@ public sealed class EquipmentLoadout
             _items.GetValueOrDefault(EquipmentSlot.OffHand)?.Base.ItemTags.Contains("shield", StringComparer.Ordinal) == true,
             equipped.Sum(LocalBlock),
             spiritBarrier,
-            localWeapon);
+            localWeapon,
+            EquipmentEffectCompiler.Compile(extended));
     }
 
     public static LocalWeaponStats CalculateLocalWeapon(ItemInstance item)
@@ -243,21 +252,31 @@ public sealed class EquipmentLoadout
             AttacksPerSecondMilli = checked(weapon.AttacksPerSecondMilli * (10_000 + attackSpeedIncrease) / 10_000),
             CriticalChanceBasisPoints = checked(weapon.CriticalChanceBasisPoints * (10_000 + criticalIncrease) / 10_000),
         };
+        LocalDamageRange fire = LocalElementalRange(item, ItemModifierKind.AddedMinimumFireDamage, ItemModifierKind.AddedMaximumFireDamage);
+        LocalDamageRange cold = LocalElementalRange(item, ItemModifierKind.AddedMinimumColdDamage, ItemModifierKind.AddedMaximumColdDamage);
+        LocalDamageRange lightning = LocalElementalRange(item, ItemModifierKind.AddedMinimumLightningDamage, ItemModifierKind.AddedMaximumLightningDamage);
+        if (item.Enchantment?.DisplayName == "奥术王印")
+        {
+            var copied = EquipmentRuleEngine.CopyHighestElementalRange((fire.Minimum, fire.Maximum), (cold.Minimum, cold.Maximum), (lightning.Minimum, lightning.Maximum));
+            fire = new LocalDamageRange(copied.fireMinimum, copied.fireMaximum);
+            cold = new LocalDamageRange(copied.coldMinimum, copied.coldMaximum);
+            lightning = new LocalDamageRange(copied.lightningMinimum, copied.lightningMaximum);
+        }
         return new LocalWeaponStats(
             weapon,
-            LocalElementalRange(item, ItemModifierKind.AddedMinimumFireDamage, ItemModifierKind.AddedMaximumFireDamage),
-            LocalElementalRange(item, ItemModifierKind.AddedMinimumColdDamage, ItemModifierKind.AddedMaximumColdDamage),
-            LocalElementalRange(item, ItemModifierKind.AddedMinimumLightningDamage, ItemModifierKind.AddedMaximumLightningDamage),
+            fire,
+            cold,
+            lightning,
             LocalElementalRange(item, ItemModifierKind.AddedMinimumVoidDamage, ItemModifierKind.AddedMaximumVoidDamage));
     }
 
     public static WeaponProfile CalculateWeapon(ItemInstance item) => CalculateLocalWeapon(item).Physical;
 
     public static (int Armor, int Evasion, int Shield, int SpiritBarrier, int BlockChanceBasisPoints) CalculateLocalDefense(ItemInstance item) =>
-        (LocalDefense(item, item.Base.Armor, ItemModifierKind.FlatArmor, ItemModifierKind.IncreasedArmorBasisPoints),
-         LocalDefense(item, item.Base.Evasion, ItemModifierKind.FlatEvasion, ItemModifierKind.IncreasedEvasionBasisPoints),
-         LocalDefense(item, item.Base.Shield, ItemModifierKind.FlatShield, ItemModifierKind.IncreasedShieldBasisPoints),
-         LocalDefense(item, item.Base.SpiritBarrier, ItemModifierKind.FlatSpiritBarrier, ItemModifierKind.IncreasedSpiritBarrierBasisPoints),
+        (LocalDefense(item, item.EffectiveBaseArmor, ItemModifierKind.FlatArmor, ItemModifierKind.IncreasedArmorBasisPoints),
+         LocalDefense(item, item.EffectiveBaseEvasion, ItemModifierKind.FlatEvasion, ItemModifierKind.IncreasedEvasionBasisPoints),
+         LocalDefense(item, item.EffectiveBaseShield, ItemModifierKind.FlatShield, ItemModifierKind.IncreasedShieldBasisPoints),
+         LocalDefense(item, item.EffectiveBaseSpiritBarrier, ItemModifierKind.FlatSpiritBarrier, ItemModifierKind.IncreasedSpiritBarrierBasisPoints),
          LocalBlock(item));
 
     private static int LocalWeaponDamage(int baseValue, int flat, int increasedBasisPoints, int quality) => checked(
@@ -272,7 +291,10 @@ public sealed class EquipmentLoadout
     {
         int flat = LocalValue(item, flatKind);
         int increased = LocalValue(item, increasedKind);
-        return checked((baseValue + flat) * (10_000 + increased) / 10_000 * (100 + Math.Clamp(item.Quality, 0, 40)) / 100);
+        int result = checked((baseValue + flat) * (10_000 + increased) / 10_000 * (100 + Math.Clamp(item.Quality, 0, 40)) / 100);
+        if (flatKind == ItemModifierKind.FlatShield && item.Enchantment?.DisplayName == "晶心铭文")
+            result = checked(result * 13_500 / 10_000);
+        return result;
     }
 
     private static int LocalBlock(ItemInstance item)
@@ -283,9 +305,7 @@ public sealed class EquipmentLoadout
 
     private static int LocalValue(ItemInstance item, ItemModifierKind kind)
     {
-        int value = item.Base.ImplicitModifier == kind && item.Base.ImplicitScope is ItemModifierScope.LocalWeapon or ItemModifierScope.LocalDefense or ItemModifierScope.LocalBlock
-            ? item.EffectiveImplicitValue : 0;
-        value += item.Base.ExtraImplicits.Where(effect => effect.ModifierKind == kind && effect.Scope is ItemModifierScope.LocalWeapon or ItemModifierScope.LocalDefense or ItemModifierScope.LocalBlock)
+        int value = item.EffectiveImplicitComponents.Where(effect => effect.Kind == kind && effect.Scope is ItemModifierScope.LocalWeapon or ItemModifierScope.LocalDefense or ItemModifierScope.LocalBlock)
             .Sum(effect => effect.Value);
         value += item.Affixes.SelectMany(affix => affix.Effects)
             .Where(effect => effect.Kind == kind && effect.Scope is ItemModifierScope.LocalWeapon or ItemModifierScope.LocalDefense or ItemModifierScope.LocalBlock)

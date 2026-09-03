@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using System.Text;
 using GameForWork.Core.P1.Items;
 using GameForWork.Core.Simulation;
+using GameForWork.Core.Equipment;
 
 namespace GameForWork.Core.P6;
 
@@ -78,8 +79,7 @@ public static class P6SocketRules
     public static ItemInstance Ensure(ItemInstance item)
     {
         ArgumentNullException.ThrowIfNull(item);
-        ItemBaseDefinition canonicalBase = P1ItemBases.Get(item.Base.StableId);
-        item = item with { Base = canonicalBase };
+        item = EquipmentItemRebinder.Rebind(item);
         if (!ProvidesSockets(item.Base.Category) || item.LinkedSocketCount > 0)
         {
             return item;

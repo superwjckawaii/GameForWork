@@ -3,6 +3,7 @@ using GameForWork.Core.P1.Items;
 using GameForWork.Core.P12;
 using GameForWork.Core.P2;
 using GameForWork.Core.P28;
+using GameForWork.Core.Equipment;
 
 namespace GameForWork.Core.P29;
 
@@ -128,7 +129,9 @@ public static class P29WarfrontRewards
         ItemCategory wanted = category switch { 0 => ItemCategory.Ring, 1 => ItemCategory.Amulet, _ => ItemCategory.Belt };
         ItemBaseDefinition[] pair = pool.Where(item => item.Category == wanted).ToArray();
         ItemBaseDefinition selected = pair[(int)((seed >> 8) % 2)];
-        if (selected.StableId == previousBaseId) selected = pair.First(item => item.StableId != previousBaseId);
+        string previous = EquipmentCatalog.ResolveBaseId(previousBaseId);
+        if (EquipmentCatalog.ResolveBaseId(selected.StableId) == previous)
+            selected = pair.First(item => EquipmentCatalog.ResolveBaseId(item.StableId) != previous);
         int requiredCount = tier switch { 1 => 4, 2 => 5, _ => 6 };
         int requiredBestTier = tier switch { 2 => 3, 3 => 2, _ => int.MaxValue };
         for (int attempt = 0; attempt < 256; attempt++)

@@ -140,7 +140,7 @@ public sealed class P26FeatureTests
         P1GameSession restored = P1GameSession.Restore(old);
 
         Assert.Equal(12_000, restored.World.Economy.Gold);
-        Assert.Equal(22, restored.Capture().FormatVersion);
+        Assert.Equal(23, restored.Capture().FormatVersion);
     }
 
     private static P1MapItem Formal(string id, int tier, ulong seed) => new P1MapItem(id, tier).EnsureFormal(seed);

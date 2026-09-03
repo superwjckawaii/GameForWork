@@ -1,0 +1,67 @@
+using System.Security.Cryptography;
+using System.Text;
+using GameForWork.Core.P1.Items;
+
+namespace GameForWork.Core.Equipment;
+
+public static class EquipmentItemRebinder
+{
+    public static ItemInstance Rebind(ItemInstance item)
+    {
+        ArgumentNullException.ThrowIfNull(item);
+        ItemBaseDefinition itemBase = EquipmentCatalog.GetBase(item.Base.StableId);
+        AffixRoll[] affixes = item.Affixes.Select(affix => RebindAffix(item, itemBase, affix)).ToArray();
+        string fractured = affixes.Any(affix => affix.Definition.StableFamilyId == EquipmentCatalog.ResolveAffixId(item.FracturedAffixFamilyId))
+            ? EquipmentCatalog.ResolveAffixId(item.FracturedAffixFamilyId) : string.Empty;
+        ItemEnchantment? enchantment = item.Enchantment;
+        if (enchantment is not null)
+        {
+            try { enchantment = EquipmentEnchantmentCatalog.Get(enchantment.StableId); }
+            catch (InvalidOperationException)
+            {
+                enchantment = EquipmentEnchantmentCatalog.All.FirstOrDefault(value => value.DisplayName == enchantment.DisplayName);
+            }
+        }
+        return item with
+        {
+            Base = itemBase,
+            Affixes = affixes,
+            FracturedAffixFamilyId = fractured,
+            Enchantment = enchantment,
+            RolledBaseArmor = item.RolledBaseArmor > 0 ? item.RolledBaseArmor : itemBase.Armor,
+            RolledBaseEvasion = item.RolledBaseEvasion > 0 ? item.RolledBaseEvasion : itemBase.Evasion,
+            RolledBaseShield = item.RolledBaseShield > 0 ? item.RolledBaseShield : itemBase.Shield,
+            RolledBaseSpiritBarrier = item.RolledBaseSpiritBarrier > 0 ? item.RolledBaseSpiritBarrier : itemBase.SpiritBarrier,
+        };
+    }
+
+    private static AffixRoll RebindAffix(ItemInstance item, ItemBaseDefinition itemBase, AffixRoll roll)
+    {
+        if (roll.Crafted || roll.Definition.Source is "LegendaryFixed" or "传奇固定") return roll;
+        string canonical = EquipmentCatalog.ResolveAffixId(roll.Definition.StableFamilyId);
+        AffixDefinition? definition = EquipmentCatalog.Affixes.FirstOrDefault(value =>
+            value.StableFamilyId == canonical && value.Tier == roll.Definition.Tier && value.Supports(itemBase));
+        if (definition is not null) return roll with { Definition = definition };
+
+        AffixDefinition[] replacements = EquipmentCatalog.Affixes.Where(value => value.Position == roll.Definition.Position &&
+            value.Tier == roll.Definition.Tier && value.MinimumItemLevel <= item.ItemLevel && value.Supports(itemBase) &&
+            SharesTag(value, roll.Definition)).ToArray();
+        if (replacements.Length == 0)
+            replacements = EquipmentCatalog.Affixes.Where(value => value.Position == roll.Definition.Position &&
+                value.MinimumItemLevel <= item.ItemLevel && value.Supports(itemBase)).ToArray();
+        if (replacements.Length == 0) throw new InvalidDataException($"No legal replacement for {roll.Definition.StableFamilyId} on {itemBase.StableId}.");
+        byte[] digest = SHA256.HashData(Encoding.UTF8.GetBytes($"{item.InstanceId}|{roll.Definition.StableFamilyId}|{roll.Definition.Position}|{roll.Definition.Tier}"));
+        definition = replacements[BitConverter.ToUInt32(digest, 0) % replacements.Length];
+        RolledAffixComponent[] effects = definition.EffectComponents.Select(component => new RolledAffixComponent(
+            component.Kind, component.MinimumValue + (int)(BitConverter.ToUInt32(digest, 4) % (uint)Math.Max(1, component.MaximumValue - component.MinimumValue + 1)),
+            component.Scope, component.DisplayText)).ToArray();
+        return new AffixRoll(definition, effects[0].Value, roll.Crafted, effects);
+    }
+
+    private static bool SharesTag(AffixDefinition left, AffixDefinition right)
+    {
+        string[] leftTags = left.ModTags?.ToArray() ?? [];
+        string[] rightTags = right.ModTags?.ToArray() ?? [];
+        return leftTags.Length == 0 || rightTags.Length == 0 || leftTags.Intersect(rightTags, StringComparer.Ordinal).Any();
+    }
+}

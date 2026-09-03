@@ -83,7 +83,7 @@ public sealed class P19FeatureTests
     {
         IReadOnlyList<P19AffixView> all = P19AffixBrowser.Query(new());
         Assert.Equal(P1Affixes.All.Count(affix => affix.SourceId.Length > 0), all.Count);
-        Assert.Contains(all, row => row.Definition.Source == "P30" && row.Definition.StableFamilyId == "p30.affix.attack.damage");
+        Assert.Contains(all, row => row.Definition.Source == "Natural" && row.Definition.StableFamilyId == "equipment.affix.attack.damage");
 
         ItemBaseDefinition sword = P1ItemBases.Get("p19.base.ezomyte_blade");
         IReadOnlyList<P19AffixView> swordRows = P19AffixBrowser.Query(new(BaseStableId: sword.StableId));

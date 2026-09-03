@@ -24,6 +24,11 @@ public static class ItemGenerator
             random,
             itemBase.ImplicitMinimumValue,
             itemBase.ImplicitMaximumValue);
+        int rolledArmor = RollInclusive(random, itemBase.ArmorMinimum, itemBase.ArmorMaximum);
+        int rolledEvasion = RollInclusive(random, itemBase.EvasionMinimum, itemBase.EvasionMaximum);
+        int rolledShield = RollInclusive(random, itemBase.ShieldMinimum, itemBase.ShieldMaximum);
+        int barrierMinimum = itemBase.SpiritBarrierMinimum > 0 ? itemBase.SpiritBarrierMinimum : itemBase.SpiritBarrier;
+        int barrierMaximum = itemBase.SpiritBarrierMaximum > 0 ? itemBase.SpiritBarrierMaximum : itemBase.SpiritBarrier;
         IReadOnlyList<AffixRoll> affixes = rarity switch
         {
             ItemRarity.Basic => Array.Empty<AffixRoll>(),
@@ -36,7 +41,10 @@ public static class ItemGenerator
         int sockets = P6SocketRules.Roll(itemBase.Category, clampedLevel, seed);
         return new ItemInstance(id, itemBase, clampedLevel, rarity, affixes,
             ImplicitValue: implicitValue, LinkedSocketCount: sockets,
-            RolledName: GenerateName(itemBase, rarity, affixes, seed));
+            RolledName: GenerateName(itemBase, rarity, affixes, seed),
+            RolledBaseArmor: rolledArmor, RolledBaseEvasion: rolledEvasion, RolledBaseShield: rolledShield,
+            RolledBaseSpiritBarrier: RollInclusive(random, barrierMinimum, barrierMaximum),
+            RolledImplicitComponents: RollImplicits(itemBase, implicitValue, random));
     }
 
     private static IReadOnlyList<AffixRoll> RollAffixes(
@@ -101,6 +109,16 @@ public static class ItemGenerator
         return new AffixRoll(definition, primary, Components: components);
     }
 
+    private static IReadOnlyList<RolledAffixComponent> RollImplicits(ItemBaseDefinition itemBase, int primaryValue, Pcg32 random)
+    {
+        var values = new List<RolledAffixComponent>();
+        if (itemBase.ImplicitModifier != ItemModifierKind.None)
+            values.Add(new RolledAffixComponent(itemBase.ImplicitModifier, primaryValue, itemBase.ImplicitScope, itemBase.ImplicitText));
+        values.AddRange(itemBase.ExtraImplicits.Select(component => new RolledAffixComponent(
+            component.ModifierKind, component.Value, component.Scope, component.DisplayText)));
+        return values;
+    }
+
     private static AffixDefinition WeightedPick(
         IReadOnlyList<AffixDefinition> candidates,
         ItemBaseDefinition itemBase,
@@ -134,6 +152,7 @@ public static class ItemGenerator
 
     private static int RollInclusive(Pcg32 random, int minimum, int maximum)
     {
+        if (minimum == 0 && maximum == 0) return 0;
         if (maximum < minimum)
         {
             throw new ArgumentOutOfRangeException(nameof(maximum));

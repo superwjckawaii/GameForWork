@@ -281,7 +281,7 @@ public sealed class P30SystemsTests
         P1GameSession restored = P1GameSession.Restore(snapshot);
         Assert.Contains(restored.Jewels.Items, item => item.InstanceId == "saved-jewel");
         Assert.Contains(restored.Jewels.Items, item => item.InstanceId == "saved-rare-jewel" && item.Affixes.Count == 4);
-        Assert.Equal(22, P1GameSession.CurrentFormatVersion);
+        Assert.Equal(23, P1GameSession.CurrentFormatVersion);
     }
 
     [Theory]

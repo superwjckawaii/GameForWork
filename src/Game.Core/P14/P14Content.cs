@@ -1,5 +1,6 @@
 using GameForWork.Core.P1.Combat;
 using GameForWork.Core.P1.Items;
+using GameForWork.Core.Equipment;
 using GameForWork.Core.P1.World;
 using GameForWork.Core.P10;
 using GameForWork.Core.P12;
@@ -65,65 +66,47 @@ public sealed record P14UniqueDefinition
 
 public static class P14UniqueItems
 {
-    public static IReadOnlyList<P14UniqueDefinition> All { get; } =
-    [
-        new("core.unique.echoing_oathbreaker", "回响破誓者", "core.base.heavy_battleaxe", "重击攻击速度总降30%；命中后产生一次造成原伤害70%的余震"),
-        new("core.unique.march_without_end", "无尽行军", "core.base.march_boots", "移动时每秒护甲提高8%，最多80%；停止移动2秒后清空"),
-        new("core.unique.ravens_answer", "鸦群答卷", "core.base.raven_mask", "投射物额外连锁2次并返回；返回命中造成30%更多伤害"),
-        new("core.unique.red_vow", "赤誓之环", "core.base.ember_ring", "赤誓祭坛奖励提高25%；承担祭坛代价时流血造成60%更多伤害"),
-        new("core.unique.blue_vow", "苍誓之环", "core.base.focus_ring", "苍誓延迟奖励翻倍；Boss最大生命和伤害各提高25%"),
-        new("core.unique.gardeners_sinew", "园丁筋络", "core.base.chain_belt", "命能加工额外保留1条随机词缀，命能消耗降低30%"),
-        new("core.unique.warden_shell", "监守甲壳", "core.base.bastion_plate", "格挡重击后释放一次等于盾牌护甲250%的震波，冷却1秒"),
-        new("core.unique.glass_horizon", "琉璃地平线", "core.base.glass_greatblade", "每2米攻击距离获得1%基础暴击率，最多6%；远距命中造成35%更多伤害"),
-        new("core.unique.funeral_bell", "葬钟", "core.base.oracle_crown", "战吼使附近敌人6秒内承受30%更多伤害"),
-        new("core.unique.black_tide", "黑潮披挂", "core.base.gloom_raiment", "击败敌人获得4秒20%移动速度，最多叠加3层"),
-        new("core.unique.starless_prayer", "无星祷衣", "core.base.starweave_robe", "法术压制成功时恢复8%最大能量护盾，冷却1秒"),
-        new("core.unique.last_banner", "末旗护符", "core.base.ember_amulet", "旗帜不再保留资源，旗帜效果提高80%"),
-        new("core.unique.iron_moon", "铁月", "core.base.rusted_greatsword", "满生命时猛击造成70%更多伤害"),
-        new("core.unique.hollow_guard", "空洞守卫", "core.base.ash_iron_shield", "格挡后2秒内法术压制率提高100%，冷却3秒"),
-        new("core.unique.thorn_procession", "荆棘行列", "core.base.ritual_gloves", "流血敌人被击败时，将最强剩余流血的150%扩散给附近最多5个敌人"),
-        new("core.unique.pilgrims_debt", "朝圣者之债", "core.base.shadow_treads", "每个未消耗的药剂使用次数使移动速度提高3%，最多45%"),
-        new("core.unique.cinder_chain", "余烬锁链", "core.base.ration_belt", "药剂充能获取提高100%、效果提高30%，持续时间总降25%"),
-        new("core.unique.fourth_testament", "第四圣约", "core.base.spirit_amulet", "精神与能量各有20%转化为额外最大能量护盾"),
-        new("core.unique.silent_anvil", "沉默铁砧", "core.base.rusted_warhammer", "攻击频率低于1.50/秒时，每少0.10获得8%更多攻击伤害，最多80%"),
-        new("core.unique.hunters_eclipse", "猎手蚀影", "core.base.hunter_hood", "闪避后下一次攻击必定暴击，且该次暴击造成50%更多伤害"),
-        new("core.unique.ashes_memory", "灰烬记忆", "core.base.ash_circlet", "护盾开始充能时每秒恢复10%最大法力，护盾充能速度提高60%"),
-        new("core.unique.grave_plate", "墓门重甲", "core.base.crude_chainmail", "护甲的20%同时用于降低法术击中伤害"),
-        new("core.unique.famine_ring", "饥馑指环", "core.base.iron_ring", "击杀获得的药剂充能翻倍，药剂效果提高50%，生命恢复总降30%"),
-        new("core.unique.last_watch", "终夜守望", "core.base.warlord_helm", "受到未格挡击中获得1层壁垒，最多5层；每层受到击中伤害降低5%"),
-        new("p29.unique.rift_fang", "裂渊獠牙", "p19.base.karui_axe", "近战命中稀有或首领时造成55%更多伤害；击败普通敌人不触发"),
-        new("p29.unique.deep_echo", "深层回音", "core.base.oracle_crown", "每次连锁使该技能造成12%更多伤害，最多叠加4次"),
-        new("p29.unique.seed_of_rebirth", "复生之种", "core.base.spirit_amulet", "生命低于35%时每秒恢复4%最大生命，满生命时伤害提高25%"),
-        new("p29.unique.thorned_bark", "荆生树皮", "core.base.bastion_plate", "受到未格挡击中后获得20%总伤害减免，持续2秒"),
-        new("p29.unique.executioners_due", "行刑者之偿", "p19.base.headman_s_sword", "流血敌人低于20%生命时受到100%更多伤害"),
-        new("p29.unique.blood_tithe", "血税契据", "core.base.ember_ring", "消耗生命的技能造成60%更多伤害；生命恢复总降20%"),
-        new("p29.unique.frozen_moment", "凝滞一刻", "core.base.focus_ring", "对首领的首次命中冻结其行动1秒，并造成40%更多伤害"),
-        new("p29.unique.starfall_lens", "坠星透镜", "core.base.ember_amulet", "法术暴击后下一次法术额外连锁3次并造成35%更多伤害"),
-        new("p29.unique.commanders_burden", "统帅之负", "core.base.ration_belt", "附近每名敌人使护甲提高15%，最多75%；仅一名敌人时伤害提高45%"),
-        new("p29.unique.broken_standard", "折断军旗", "core.base.ritual_gloves", "击败稀有敌人后8秒内攻击和施法速度提高35%"),
-        new("p29.unique.wayfarers_compass", "界行罗盘", "core.base.march_boots", "移动速度提高30%；移动后3秒内受到的击中伤害降低15%"),
-        new("p29.unique.void_balance", "虚空天平", "core.base.iron_ring", "四元素抗性相同时造成35%更多伤害，否则受到的元素伤害降低12%"),
-        new("p30.unique.humility_crown", "无名谦冠", "core.base.raven_mask", "常驻1种谦逊至最大层数；普通随机词缀不能生成美德或恶德"),
-        new("p30.unique.arrogance_grasp", "傲慢之握", "core.base.ritual_gloves", "常驻1种傲慢至最大层数；普通随机词缀不能生成美德或恶德"),
-        new("p30.unique.rage_temperance_carapace", "怒节同契", "core.base.gloom_raiment", "常驻最大层数的暴怒与节制；技能资源消耗总增20%"),
-        new("p30.unique.paired_virtue_girdle", "两极德印", "core.base.ration_belt", "掉落时等权选择1种美德与1种恶德，并令二者常驻最大层数"),
-        new("core.mythic.heart_of_ash", "灰烬之心", "core.base.triune_carapace", "三阶段继承药剂与战吼状态；每场战斗首次濒死以50%生命和护盾重燃，随后8秒造成30%更多伤害", true),
-    ];
+    private static IReadOnlyDictionary<string, string> LegacyIds { get; } = new Dictionary<string, string>(StringComparer.Ordinal)
+    {
+        ["回响破誓者"] = "core.unique.echoing_oathbreaker", ["无尽行军"] = "core.unique.march_without_end",
+        ["鸦群答卷"] = "core.unique.ravens_answer", ["赤誓之环"] = "core.unique.red_vow",
+        ["苍誓之环"] = "core.unique.blue_vow", ["园丁筋络"] = "core.unique.gardeners_sinew",
+        ["监守甲壳"] = "core.unique.warden_shell", ["琉璃地平线"] = "core.unique.glass_horizon",
+        ["葬钟"] = "core.unique.funeral_bell", ["黑潮披挂"] = "core.unique.black_tide",
+        ["无星祷衣"] = "core.unique.starless_prayer", ["末旗护符"] = "core.unique.last_banner",
+        ["铁月"] = "core.unique.iron_moon", ["空洞守卫"] = "core.unique.hollow_guard",
+        ["荆棘行列"] = "core.unique.thorn_procession", ["朝圣者之债"] = "core.unique.pilgrims_debt",
+        ["余烬锁链"] = "core.unique.cinder_chain", ["第四圣约"] = "core.unique.fourth_testament",
+        ["沉默铁砧"] = "core.unique.silent_anvil", ["猎手蚀影"] = "core.unique.hunters_eclipse",
+        ["灰烬记忆"] = "core.unique.ashes_memory", ["墓门重甲"] = "core.unique.grave_plate",
+        ["饥馑指环"] = "core.unique.famine_ring", ["终夜守望"] = "core.unique.last_watch",
+        ["裂渊獠牙"] = "p29.unique.rift_fang", ["深层回音"] = "p29.unique.deep_echo",
+        ["复生之种"] = "p29.unique.seed_of_rebirth", ["荆生树皮"] = "p29.unique.thorned_bark",
+        ["行刑者之偿"] = "p29.unique.executioners_due", ["血税契据"] = "p29.unique.blood_tithe",
+        ["凝滞一刻"] = "p29.unique.frozen_moment", ["坠星透镜"] = "p29.unique.starfall_lens",
+        ["统帅之负"] = "p29.unique.commanders_burden", ["折断军旗"] = "p29.unique.broken_standard",
+        ["界行罗盘"] = "p29.unique.wayfarers_compass", ["虚空天平"] = "p29.unique.void_balance",
+        ["无名谦冠"] = "p30.unique.humility_crown", ["傲慢之握"] = "p30.unique.arrogance_grasp",
+        ["怒节同契"] = "p30.unique.rage_temperance_carapace", ["两极德印"] = "p30.unique.paired_virtue_girdle",
+        ["灰烬之心"] = "core.mythic.heart_of_ash",
+    };
+
+    public static IReadOnlyList<P14UniqueDefinition> All { get; } = BuildFormal();
 
     public static ItemInstance Create(string stableId, int itemLevel, string instanceId)
     {
         P14UniqueDefinition definition = All.Single(item => item.StableId == stableId);
-        ItemBaseDefinition itemBase = P1ItemBases.Get(definition.BaseStableId);
-        var rule = new LegendaryRule(definition.StableId,
-            definition.StableId == "core.unique.echoing_oathbreaker" ? 7_000 : 10_000,
-            definition.StableId == "core.unique.echoing_oathbreaker" ? 7_000 : definition.Mythic ? 15_000 : 10_000,
-            definition.RuleText);
-        return new ItemInstance(instanceId, itemBase, Math.Clamp(itemLevel, 1, 120),
-            ItemRarity.Legendary, GameForWork.Core.P25.P25LegendaryCatalog.CreateAffixes(definition.StableId, itemBase), rule,
-            ImplicitValue: itemBase.ImplicitMaximumValue, LinkedSocketCount: definition.Mythic ? 6 : 5,
-            Quality: definition.Mythic ? 20 : 10,
-            RolledName: definition.DisplayName);
+        return EquipmentLegendaryFactory.CreateByName(definition.DisplayName, itemLevel, instanceId);
     }
+
+    private static IReadOnlyList<P14UniqueDefinition> BuildFormal() => EquipmentCatalog.LegendaryItems.Select(entry =>
+    {
+        string baseName = entry.BaseAndSource.Split('；', StringSplitOptions.TrimEntries)[0]
+            .Replace("（新增）", string.Empty, StringComparison.Ordinal);
+        string baseId = EquipmentCatalog.Bases.Single(value => value.DisplayName == baseName).StableId;
+        return new P14UniqueDefinition(LegacyIds.GetValueOrDefault(entry.DisplayName, entry.Id), entry.DisplayName, baseId,
+            entry.FixedAffixesText + "；" + entry.RuleText, entry.Rarity == "Mythic");
+    }).ToArray();
 }
 
 public enum P14MapNodeKind

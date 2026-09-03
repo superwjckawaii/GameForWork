@@ -209,7 +209,7 @@ public static class P30SkillCatalog
 
     public static int Interpolate(int one, int twentyOne, int level, bool geometric)
     {
-        int clamped = Math.Clamp(level, 1, 21);
+        int clamped = Math.Clamp(level, 1, 40);
         if (clamped == 1 || one == twentyOne) return one;
         if (clamped == 21) return twentyOne;
         double ratio = (clamped - 1) / 20d;

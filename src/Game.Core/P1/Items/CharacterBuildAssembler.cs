@@ -138,7 +138,7 @@ public static class CharacterBuildAssembler
             checked(item.Value(ItemModifierKind.IncreasedCriticalMultiplierBasisPoints) +
                 advanced.IncreasedCriticalMultiplierBasisPoints + jewel.IncreasedCriticalMultiplierBasisPoints),
             jewel.MoreAttackDamageBasisPoints,
-            jewel.MoreSpellDamageBasisPoints,
+            checked(jewel.MoreSpellDamageBasisPoints + (equipment.Effects?.Value(ItemModifierKind.MoreSpellDamageBasisPoints) ?? 0)),
             jewel.MoreDamageOverTimeBasisPoints,
             jewel.IncreasedActionSpeedBasisPoints,
             jewel.InstantLifeLeechBasisPoints,
