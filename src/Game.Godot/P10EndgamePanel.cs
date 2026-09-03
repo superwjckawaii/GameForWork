@@ -4,6 +4,7 @@ using GameForWork.Core.P14;
 using GameForWork.Core.P1.World;
 using GameForWork.Core.P18;
 using GameForWork.Core.P26;
+using GameForWork.Core.P31;
 using Godot;
 
 namespace GameForWork.GodotClient;
@@ -33,9 +34,9 @@ public partial class P10AtlasTreeView : Control
         Vector2 origin = Size / 2 + _pan;
         if (_backdrop is not null)
         {
-            float extent = P10AtlasTree.LayoutExtent;
-            Vector2 topLeft = origin + new Vector2(-extent, -extent) * _zoom;
-            DrawTextureRect(_backdrop, new Rect2(topLeft, Vector2.One * extent * 2 * _zoom), false);
+            P31ProjectedSquare square = P31TreeProjection.BackdropSquare(origin.X, origin.Y,
+                P10AtlasTree.LayoutExtent, _zoom);
+            DrawTextureRect(_backdrop, new Rect2(square.X, square.Y, square.Side, square.Side), false);
         }
         else for (int lane = 0; lane < 10; lane++)
         {
@@ -113,7 +114,11 @@ public partial class P10AtlasTreeView : Control
         .Select(node => (node, distance: NodePosition(node, Size / 2 + _pan).DistanceTo(screen)))
         .Where(entry => entry.distance <= (entry.node.Notable ? 13 : 9) * Math.Clamp(_zoom * 2.4f, .55f, 1.3f))
         .OrderBy(entry => entry.distance).Select(entry => entry.node).FirstOrDefault();
-    private Vector2 NodePosition(P10AtlasNode node, Vector2 origin) => origin + new Vector2(node.X, node.Y) * _zoom;
+    private Vector2 NodePosition(P10AtlasNode node, Vector2 origin)
+    {
+        P31ProjectedPoint point = P31TreeProjection.WorldToScreen(node.X, node.Y, origin.X, origin.Y, _zoom);
+        return new Vector2(point.X, point.Y);
+    }
     private static string ThemeName(P10AtlasTheme theme) => theme switch
     {
         P10AtlasTheme.MapBasics => "地图基础", P10AtlasTheme.MapSupply => "地图续航", P10AtlasTheme.Crafting => "地图打造",

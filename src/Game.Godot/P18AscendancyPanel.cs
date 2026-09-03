@@ -1,6 +1,7 @@
 using GameForWork.Core.P1;
 using GameForWork.Core.P18;
 using GameForWork.Core.P23;
+using GameForWork.Core.P31;
 using Godot;
 
 namespace GameForWork.GodotClient;
@@ -133,9 +134,8 @@ public partial class P18AscendancyTreeView : Control
         if (backdrop is not null)
         {
             const float extent = 240f;
-            float side = extent * 2 * _zoom;
-            DrawTextureRect(backdrop,
-                new Rect2(origin - new Vector2(side, side) / 2, new Vector2(side, side)), false);
+            P31ProjectedSquare square = P31TreeProjection.BackdropSquare(origin.X, origin.Y, extent, _zoom);
+            DrawTextureRect(backdrop, new Rect2(square.X, square.Y, square.Side, square.Side), false);
         }
         DrawCircle(origin, 29 * _zoom, new Color("6b5434"));
         DrawString(ThemeDB.FallbackFont, origin + new Vector2(-42, 5),
@@ -227,8 +227,11 @@ public partial class P18AscendancyTreeView : Control
             .OrderBy(item => item.distance).Select(item => item.node).FirstOrDefault();
     }
 
-    private Vector2 Point(P18AscendancyNode node, Vector2 origin) =>
-        origin + new Vector2(node.X, node.Y) * _zoom;
+    private Vector2 Point(P18AscendancyNode node, Vector2 origin)
+    {
+        P31ProjectedPoint point = P31TreeProjection.WorldToScreen(node.X, node.Y, origin.X, origin.Y, _zoom);
+        return new Vector2(point.X, point.Y);
+    }
 
     private Texture2D? BackdropFor(P18Ascendancy selected)
     {

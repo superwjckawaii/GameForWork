@@ -1,4 +1,5 @@
 using GameForWork.Core.P1.Progression;
+using GameForWork.Core.P31;
 using Godot;
 
 namespace GameForWork.GodotClient;
@@ -278,8 +279,19 @@ public partial class P1PassiveTreeView : Control
         _allocated.Count < Math.Min(_earnedPoints, PassiveTreeAllocation.MaximumAllocatedPoints);
     private bool SearchMatch(PassiveNodeDefinition node) => _search.Length > 0 &&
         (node.DisplayName.Contains(_search, StringComparison.OrdinalIgnoreCase) || node.Effects.Any(effect => P1UiText.PassiveEffect(effect).Contains(_search, StringComparison.OrdinalIgnoreCase)));
-    private Vector2 ToScreen(Vector2 world) => Size / 2 + world * _zoom + _pan;
-    private Vector2 ToWorld(Vector2 screen) => (screen - Size / 2 - _pan) / _zoom;
+    private Vector2 ToScreen(Vector2 world)
+    {
+        Vector2 center = Size / 2 + _pan;
+        P31ProjectedPoint point = P31TreeProjection.WorldToScreen(world.X, world.Y, center.X, center.Y, _zoom);
+        return new Vector2(point.X, point.Y);
+    }
+
+    private Vector2 ToWorld(Vector2 screen)
+    {
+        Vector2 center = Size / 2 + _pan;
+        P31ProjectedPoint point = P31TreeProjection.ScreenToWorld(screen.X, screen.Y, center.X, center.Y, _zoom);
+        return new Vector2(point.X, point.Y);
+    }
     private bool VisibleWithMargin(Vector2 point, float margin) => point.X >= -margin && point.Y >= -margin && point.X <= Size.X + margin && point.Y <= Size.Y + margin;
     private static float NodeRadius(PassiveNodeDefinition node) => node.Kind switch
     { PassiveNodeKind.Start => 16, PassiveNodeKind.Small => 7, PassiveNodeKind.Notable => 11, PassiveNodeKind.Mastery => 13, PassiveNodeKind.Rule => 15, _ => 12 };
@@ -311,10 +323,10 @@ public partial class P1PassiveTreeView : Control
     {
         if (_backdrop is not null)
         {
-            float backdropExtent = P1PassiveTree.LayoutExtent;
-            Vector2 topLeft = ToScreen(new Vector2(-backdropExtent, -backdropExtent));
-            Vector2 bottomRight = ToScreen(new Vector2(backdropExtent, backdropExtent));
-            DrawTextureRect(_backdrop, new Rect2(topLeft, bottomRight - topLeft), false);
+            Vector2 backdropCenter = Size / 2 + _pan;
+            P31ProjectedSquare square = P31TreeProjection.BackdropSquare(backdropCenter.X, backdropCenter.Y,
+                P1PassiveTree.LayoutExtent, _zoom);
+            DrawTextureRect(_backdrop, new Rect2(square.X, square.Y, square.Side, square.Side), false);
             return;
         }
 

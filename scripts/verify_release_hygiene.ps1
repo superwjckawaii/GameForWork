@@ -1,9 +1,12 @@
-[CmdletBinding()]
+﻿[CmdletBinding()]
 param(
-    [string]$RepositoryRoot = (Split-Path -Parent $PSScriptRoot)
+    [string]$RepositoryRoot = ''
 )
 
 $ErrorActionPreference = 'Stop'
+if ([string]::IsNullOrWhiteSpace($RepositoryRoot)) {
+    $RepositoryRoot = Split-Path -Parent $PSScriptRoot
+}
 
 $removedPaths = @(
     'src\Game.Godot\assets\p1b',
@@ -50,7 +53,7 @@ $runtimeFiles = Get-ChildItem (Join-Path $RepositoryRoot 'src') -Recurse -File |
 foreach ($file in $runtimeFiles) {
     $content = Get-Content -LiteralPath $file.FullName -Raw
     foreach ($marker in $retiredRuntimeMarkers) {
-        if ($content.Contains($marker, [StringComparison]::Ordinal)) {
+        if ($content.IndexOf($marker, [StringComparison]::Ordinal) -ge 0) {
             throw "Retired runtime marker '$marker' remains in $($file.FullName)"
         }
     }
