@@ -1,9 +1,23 @@
+using GameForWork.Core.Equipment;
+
 namespace GameForWork.Core.P24;
 
 public sealed record P24GuideEntry(string StableId, string Title, string Summary, IReadOnlyList<string> Rules);
 
 public static class P24GuideCatalog
 {
+    private static readonly HashSet<string> AddedP24Families =
+    [
+        "equipment.affix.minion.maximum",
+        "equipment.affix.construct.maximum",
+        "equipment.affix.phantom.maximum",
+    ];
+
+    public static IReadOnlyList<IReadOnlyList<EquipmentAffixEntry>> SpecialAffixFamilies { get; } =
+        EquipmentCatalog.Snapshot.AffixFamilies.Where(family =>
+            family[0].LegacyIds.Any(id => id.StartsWith("p24.affix.", StringComparison.Ordinal)) ||
+            AddedP24Families.Contains(family[0].Id)).ToArray();
+
     public static IReadOnlyList<P24GuideEntry> Entries { get; } =
     [
         new("p24.guide.skill_stones", "技能石与连接", "所有技能石全职业共享；装备只决定连接孔，不绑定职业。",
@@ -18,7 +32,8 @@ public static class P24GuideCatalog
             ["佣兵不占召唤或伙伴上限。", "只有主角与附属佣兵均倒下才判定失败。", "光环只作用于实际参战单位。"]),
         new("p24.guide.modifiers", "提高、更多与总降", "提高位于同一加法乘区；每个更多独立相乘；总降按乘法降低。",
             ["多个提高先相加。", "多个更多依次相乘。", "总降不会与提高相减。"]),
-        new("p24.guide.item_families", "装备与词缀库", "现有目录包含50个底材和49个机制词缀族；法武共鸣不属于当前词缀库。",
-            P24ItemCatalog.Families.Select(family => $"{family.DisplayName}：{family.RuleText}").ToArray()),
+        new("p24.guide.item_families", "装备与词缀库", "正式目录包含244个底材和212个自然词缀族，其中49个来自特殊装备体系；法武共鸣不属于当前词缀库。",
+            SpecialAffixFamilies.Select(family => family[0])
+                .Select(affix => $"{affix.DisplayName}：{affix.RawText}").ToArray()),
     ];
 }

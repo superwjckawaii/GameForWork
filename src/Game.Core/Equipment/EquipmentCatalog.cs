@@ -112,7 +112,7 @@ public static class EquipmentCatalog
             ?? value.ImplicitComponents.FirstOrDefault();
         IReadOnlyList<ItemBaseImplicit> extras = value.ImplicitComponents.Where(component => !ReferenceEquals(component, primary))
             .Select(component => new ItemBaseImplicit(ParseEnum(component.Kind, ItemModifierKind.None), component.MinimumValue,
-                component.DisplayText, ParseEnum(component.Scope, ItemModifierScope.Global)))
+                component.DisplayText, ParseEnum(component.Scope, ItemModifierScope.Global), component.MaximumValue))
             .ToArray();
         return new ItemBaseDefinition(
             value.Id, value.DisplayName, category, slot,
@@ -123,8 +123,12 @@ public static class EquipmentCatalog
             value.RequiredLevel, value.RequiredPhysique, value.RequiredDexterity, value.RequiredSpirit, value.RequiredEnergy,
             "equipment.catalog", value.Tags, value.ArmorMinimum, value.ArmorMaximum, value.EvasionMinimum, value.EvasionMaximum,
             value.ShieldMinimum, value.ShieldMaximum, value.BlockChanceBasisPoints, value.MovementPenaltyBasisPoints,
-            value.SocketLimit, value.ImplicitText, extras, Midpoint(value.SpiritBarrierMinimum, value.SpiritBarrierMaximum), implicitScope,
-            value.SpiritBarrierMinimum, value.SpiritBarrierMaximum);
+            value.SocketLimit, value.ImplicitText, extras, Midpoint(value.SpiritBarrierMinimum, value.SpiritBarrierMaximum),
+            primary is null ? implicitScope : ParseEnum(primary.Scope, implicitScope),
+            value.SpiritBarrierMinimum, value.SpiritBarrierMaximum,
+            value.ImplicitComponents.Select(component => new ItemBaseImplicit(
+                ParseEnum(component.Kind, ItemModifierKind.None), component.MinimumValue, component.DisplayText,
+                ParseEnum(component.Scope, ItemModifierScope.Global), component.MaximumValue)).ToArray());
     }
 
     private static AffixDefinition ToAffixDefinition(EquipmentAffixEntry value)
@@ -183,4 +187,10 @@ public sealed record EquipmentLegendaryEntry(
 public sealed record EquipmentCraftingOperationEntry(
     string Id, string DisplayName, string CostText, string TargetText, string RuleText, string Kind);
 
-public sealed record EquipmentCorruptionImplicitEntry(string Id, string DisplayName, string ApplicableEquipment, string EffectText);
+public sealed record EquipmentCorruptionImplicitEntry(string Id, string DisplayName, string ApplicableEquipment, string EffectText)
+{
+    // Schema v1 accidentally emitted these two textual columns in reverse. Keep the on-disk
+    // compatibility names, but expose unambiguous semantic accessors to every runtime caller.
+    public string ModifierText => ApplicableEquipment;
+    public string ApplicabilityText => EffectText;
+}

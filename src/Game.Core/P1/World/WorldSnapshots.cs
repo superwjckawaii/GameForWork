@@ -111,7 +111,7 @@ public static class P1WorldSnapshots
         var storage = new EquipmentStorage(snapshot.Storage.Capacity);
         foreach (ItemInstance item in snapshot.Storage.Items)
         {
-            if (!storage.TryStore(P6SocketRules.Ensure(P30EquipmentAffixes.RemoveForbiddenGlobalWeaponAffixes(item))))
+            if (!storage.TryStore(P6SocketRules.Ensure(item)))
             {
                 throw new InvalidDataException("Storage snapshot exceeds its capacity.");
             }

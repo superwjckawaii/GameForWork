@@ -6,9 +6,8 @@ using GameForWork.Core.P18;
 using GameForWork.Core.P21;
 using GameForWork.Core.P23;
 using GameForWork.Core.P24;
-using GameForWork.Core.P25;
-using GameForWork.Core.P6;
 using GameForWork.Core.Equipment;
+using GameForWork.Core.P6;
 
 namespace GameForWork.Tests;
 
@@ -47,14 +46,17 @@ public sealed class P25FeatureTests
     [Fact]
     public void P24EquipmentUsesExplicitCategoryArtAndSkillStonesUseSemanticRows()
     {
-        int bow = P25EquipmentArt.IconIndex(P1ItemBases.Get("p24.base.bow.1"));
-        int dagger = P25EquipmentArt.IconIndex(P1ItemBases.Get("p24.base.dagger.1"));
-        int quiver = P25EquipmentArt.IconIndex(P1ItemBases.Get("p24.base.quiver.1"));
+        int bow = EquipmentBaseArt.IconIndex(P1ItemBases.Get("p24.base.bow.1"));
+        int dagger = EquipmentBaseArt.IconIndex(P1ItemBases.Get("p24.base.dagger.1"));
+        int quiver = EquipmentBaseArt.IconIndex(P1ItemBases.Get("p24.base.quiver.1"));
         Assert.NotEqual(bow, dagger);
         Assert.NotEqual(bow, quiver);
         Assert.NotEqual(dagger, quiver);
-        int[] equipmentIndexes = P24ItemCatalog.Bases.Select(P25EquipmentArt.IconIndex).ToArray();
-        Assert.Equal(P24ItemCatalog.Bases.Count, equipmentIndexes.Distinct().Count());
+        ItemBaseDefinition[] p24Bases = EquipmentCatalog.Snapshot.Bases
+            .Where(value => value.LegacyIds.Any(id => id.StartsWith("p24.base.", StringComparison.Ordinal)))
+            .Select(value => EquipmentCatalog.GetBase(value.Id)).ToArray();
+        int[] equipmentIndexes = p24Bases.Select(EquipmentBaseArt.IconIndex).ToArray();
+        Assert.Equal(p24Bases.Length, equipmentIndexes.Distinct().Count());
         Assert.All(equipmentIndexes, index => Assert.InRange(index, 0, 129));
         int[] skillIndexes = P24SkillCatalog.Active.Select(skill => P21ArtContract.SkillStoneIndex(skill.Combat.StoneId))
             .Concat(P24SkillCatalog.Supports.Select(skill => P21ArtContract.SkillStoneIndex(skill.StoneId))).ToArray();
@@ -65,12 +67,12 @@ public sealed class P25FeatureTests
     [Fact]
     public void EveryBaseAndLegendaryHasOneStableExplicitArtCell()
     {
-        int[] baseIndexes = P1ItemBases.All.Select(P25EquipmentArt.IconIndex).ToArray();
+        int[] baseIndexes = P1ItemBases.All.Select(EquipmentBaseArt.IconIndex).ToArray();
         Assert.All(baseIndexes, index => Assert.InRange(index, 0, 129));
-        Assert.Equal(baseIndexes, P1ItemBases.All.Select(P25EquipmentArt.IconIndex));
-        Assert.Equal(P14UniqueItems.All.Select(item => item.StableId), P25LegendaryArt.StableIds);
-        Assert.Equal(2, P25LegendaryArt.IconIndex("core.unique.ravens_answer"));
-        Assert.Equal(36, P25LegendaryArt.IconIndex("core.mythic.heart_of_ash"));
+        Assert.Equal(baseIndexes, P1ItemBases.All.Select(EquipmentBaseArt.IconIndex));
+        Assert.Equal(P14UniqueItems.All.Select(item => item.StableId), EquipmentLegendaryArt.StableIds);
+        Assert.Equal(2, EquipmentLegendaryArt.IconIndex("core.unique.ravens_answer"));
+        Assert.Equal(36, EquipmentLegendaryArt.IconIndex("core.mythic.heart_of_ash"));
         Assert.Equal(ItemCategory.Helmet, P1ItemBases.Get(P14UniqueItems.All[2].BaseStableId).Category);
         Assert.Contains(P14UniqueItems.All.Where(item => item.Mythic), item =>
             P1ItemBases.Get(item.BaseStableId).Category == ItemCategory.BodyArmor);

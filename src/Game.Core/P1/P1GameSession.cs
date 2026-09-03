@@ -1052,16 +1052,7 @@ public sealed class P1GameSession
             return new P2WorkshopPreview(false, "item_required", null, 0, 0, "请先选择仓库物品。");
         }
 
-        ItemInstance item = World.Storage.Items[storageIndex];
-        P2WorkshopPreview result = P2Workshop.Craft(World.Economy, item, recipe);
-        if (result.Succeeded)
-        {
-            World.Storage.TryReplaceAt(storageIndex, result.Result!);
-            Management.AddHistory($"工坊完成：{result.Summary}。");
-            RecordJourneyEvent(P8JourneyEvent.CraftedItem);
-        }
-
-        return result;
+        return new P2ItemCommandService(this).Craft(ItemContainerKind.Storage, storageIndex, recipe);
     }
 
     public bool TryExchangeLegendary(string? stableId = null)
@@ -1071,8 +1062,7 @@ public sealed class P1GameSession
             return false;
         }
         string selected = stableId ?? P20.P20LegendaryDrops.ExchangePool[0].StableId;
-        return World.Economy.TryExchangeLegendary(selected, out ItemInstance? item) && item is not null &&
-            World.Storage.TryStore(item);
+        return World.Economy.TryExchangeLegendary(selected, out ItemInstance? item) && item is not null && World.Storage.TryStore(item);
     }
 
     public int EnqueueInventoryMaps()

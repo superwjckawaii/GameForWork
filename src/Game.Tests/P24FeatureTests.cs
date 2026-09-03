@@ -7,6 +7,7 @@ using GameForWork.Core.P6;
 using GameForWork.Core.P17;
 using GameForWork.Core.P23;
 using GameForWork.Core.P24;
+using GameForWork.Core.Equipment;
 
 namespace GameForWork.Tests;
 
@@ -20,10 +21,9 @@ public sealed class P24FeatureTests
         Assert.Equal(86, P1Skills.All.Count);
         Assert.Equal(98, P2SkillStones.All.Count(value => value.Kind == SkillStoneKind.Support));
         Assert.Equal(244, P1ItemBases.All.Count);
-        Assert.Equal(50, P24ItemCatalog.Bases.Count);
-        Assert.Equal(49, P24ItemCatalog.Families.Count);
-        Assert.Equal(147, P24ItemCatalog.Affixes.Count);
-        Assert.DoesNotContain(P24ItemCatalog.Families, value => value.StableId == "p24.affix.rune.spellblade");
+        Assert.Equal(50, EquipmentCatalog.Snapshot.Bases.Count(value => value.LegacyIds.Any(id => id.StartsWith("p24.base.", StringComparison.Ordinal))));
+        Assert.Equal(49, P24GuideCatalog.SpecialAffixFamilies.Count);
+        Assert.DoesNotContain(EquipmentCatalog.Affixes, value => value.StableFamilyId == "p24.affix.rune.spellblade");
         Assert.All(Enum.GetValues<P23BaseClass>().Where(value => value != P23BaseClass.Fighter), theme =>
             Assert.Equal(10, P24SkillCatalog.Active.Count(value => value.Theme == theme)));
     }
@@ -58,8 +58,8 @@ public sealed class P24FeatureTests
     [Fact]
     public void BowCanUseQuiverButOtherTwoHandWeaponsCannot()
     {
-        ItemInstance bow = Item("bow", P24ItemCatalog.Bases.First(value => value.ItemTags.Contains("bow")));
-        ItemInstance quiver = Item("quiver", P24ItemCatalog.Bases.First(value => value.ItemTags.Contains("quiver")));
+        ItemInstance bow = Item("bow", P1ItemBases.All.First(value => value.ItemTags.Contains("bow")));
+        ItemInstance quiver = Item("quiver", P1ItemBases.All.First(value => value.ItemTags.Contains("quiver")));
         var loadout = new EquipmentLoadout();
         Assert.True(loadout.TryEquip(EquipmentSlot.MainHand, bow));
         Assert.True(loadout.TryEquip(EquipmentSlot.OffHand, quiver));

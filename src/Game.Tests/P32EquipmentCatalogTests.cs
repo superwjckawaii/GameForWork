@@ -7,6 +7,18 @@ namespace GameForWork.Tests;
 public sealed class P32EquipmentCatalogTests
 {
     [Fact]
+    public void FixedSeedAuditCoversAllBasesAndOneHundredThousandItems()
+    {
+        P32EquipmentAuditResult result = P32EquipmentAudit.Run();
+        Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Failures));
+        Assert.Equal(P32EquipmentAudit.RequiredSampleCount, result.SampleCount);
+        Assert.Equal(244, result.CoveredBaseCount);
+        Assert.Equal(result.CatalogBaseCount, result.CoveredBaseCount);
+        Assert.Equal(212, result.CatalogAffixFamilyCount);
+        Assert.Matches("^[0-9a-f]{64}$", result.DeterministicDigest);
+    }
+
+    [Fact]
     public void FormalSnapshotHasEverySealedCatalogAndPermanentUniqueIds()
     {
         Assert.Equal(1, EquipmentCatalog.Snapshot.SchemaVersion);
@@ -60,12 +72,70 @@ public sealed class P32EquipmentCatalogTests
     }
 
     [Fact]
+    public void EveryLegendaryFixedAffixHasExecutableComponents()
+    {
+        foreach ((EquipmentLegendaryEntry entry, int index) in EquipmentCatalog.LegendaryItems.Select((value, index) => (value, index)))
+        {
+            ItemInstance item = EquipmentLegendaryFactory.Create(entry.Id, 100, $"legendary-audit-{index}", (ulong)index + 1);
+            Assert.NotEmpty(item.Affixes);
+            Assert.All(item.Affixes, affix =>
+            {
+                Assert.NotEmpty(affix.Effects);
+                Assert.DoesNotContain(affix.Effects, component => component.Kind == ItemModifierKind.None);
+            });
+        }
+    }
+
+    [Fact]
     public void ArcaneSealCopiesAttackElementalRangeWithoutCrossingDamageSets()
     {
         var copied = EquipmentRuleEngine.CopyHighestElementalRange((0, 0), (0, 0), (150, 250));
         Assert.Equal((150, 250, 150, 250, 150, 250), copied);
         Assert.Equal(600, EquipmentRuleEngine.ImmortalMaximumLife(3_499));
         Assert.Equal(3_000, EquipmentRuleEngine.UnarmedMoreDamageBasisPoints(345));
+    }
+
+    [Fact]
+    public void EveryCorruptionImplicitHasExecutableEffectsAndEveryBaseHasAnOutcome()
+    {
+        Assert.All(EquipmentCatalog.CorruptionImplicits, entry =>
+        {
+            IReadOnlyList<AffixModifierComponent> components = EquipmentCorruptionCatalog.Components(entry);
+            Assert.NotEmpty(components);
+            Assert.DoesNotContain(components, component => component.Kind == ItemModifierKind.None);
+            Assert.Contains(EquipmentCatalog.Bases, itemBase => EquipmentCorruptionCatalog.Supports(entry, itemBase));
+        });
+        Assert.All(EquipmentCatalog.Bases, itemBase =>
+            Assert.Contains(EquipmentCatalog.CorruptionImplicits, entry => EquipmentCorruptionCatalog.Supports(entry, itemBase)));
+    }
+
+    [Fact]
+    public void CorruptionComponentsAffectLocalWeaponDefenseAndGlobalSummary()
+    {
+        ItemBaseDefinition swordBase = EquipmentCatalog.Bases.First(value => value.Category == ItemCategory.OneHandWeapon && value.CriticalChanceBasisPoints > 0);
+        ItemInstance cleanSword = ItemGenerator.Generate(swordBase.StableId, 100, ItemRarity.Basic, 1);
+        int cleanCriticalChance = EquipmentLoadout.CalculateLocalWeapon(cleanSword).Physical.CriticalChanceBasisPoints;
+        ItemInstance sword = cleanSword with
+        {
+            IsCorrupted = true,
+            CorruptionImplicitId = "test",
+            RolledCorruptionComponents = [new(ItemModifierKind.BaseCriticalChanceBasisPoints, 100, ItemModifierScope.LocalWeapon)],
+        };
+        Assert.True(EquipmentLoadout.CalculateLocalWeapon(sword).Physical.CriticalChanceBasisPoints > cleanCriticalChance);
+
+        ItemBaseDefinition armorBase = EquipmentCatalog.Bases.First(value => value.ArmorMaximum > 0);
+        ItemInstance cleanArmor = ItemGenerator.Generate(armorBase.StableId, 100, ItemRarity.Basic, 2) with { Quality = 0 };
+        int cleanValue = EquipmentLoadout.CalculateLocalDefense(cleanArmor).Armor;
+        ItemInstance armor = cleanArmor with
+        {
+            Quality = 0,
+            RolledCorruptionComponents = [new(ItemModifierKind.MoreLocalArmorBasisPoints, 2_000, ItemModifierScope.LocalDefense),
+                new(ItemModifierKind.PhysicalResistanceBasisPoints, 500, ItemModifierScope.Global)],
+        };
+        Assert.Equal(cleanValue * 12_000 / 10_000, EquipmentLoadout.CalculateLocalDefense(armor).Armor);
+        var loadout = new EquipmentLoadout();
+        Assert.True(loadout.TryEquip(EquipmentSlot.Chest, armor) || loadout.TryEquip(EquipmentSlot.Helmet, armor) || loadout.TryEquip(EquipmentSlot.Gloves, armor) || loadout.TryEquip(EquipmentSlot.Boots, armor));
+        Assert.Equal(500, loadout.CalculateSummary().Modifiers.Value(ItemModifierKind.PhysicalResistanceBasisPoints));
     }
 
     [Fact]
@@ -91,6 +161,42 @@ public sealed class P32EquipmentCatalogTests
         Assert.True(crafted.Succeeded);
         Assert.False(crafted.Item!.ProtectPrefixesNextCraft);
         Assert.Equal(oldPrefixes.Select(Signature), crafted.Item.Affixes.Where(value => value.Definition.Position == AffixPosition.Prefix).Select(Signature));
+    }
+
+    [Fact]
+    public void EveryFormalCraftingOperationReachesAConcreteExecutor()
+    {
+        ItemInstance rare = ItemGenerator.Generate("core.base.life_ring", 100, ItemRarity.Rare, 0x321, "all-crafts");
+        foreach (EquipmentCraftingOperationEntry operation in EquipmentCatalog.CraftingOperations)
+        {
+            EquipmentCraftingRequest request = new(operation.Id,
+                SelectedDefinitionId: operation.Kind == "Enchantment" ? EquipmentCatalog.Enchantments.First().Id :
+                    operation.Kind == "LegendaryExchange" ? EquipmentCatalog.LegendaryItems.First(value => value.Rarity == "Legendary").Id : string.Empty,
+                SelectedAffixFamilyId: rare.Affixes.FirstOrDefault()?.Definition.StableFamilyId ?? string.Empty,
+                Seed: 0x322);
+            EquipmentCraftingPreview preview = EquipmentCraftingService.Preview(rare, request);
+            var wallet = new EquipmentCraftingWallet();
+            wallet.Credit(preview.Resource, preview.Cost);
+            EquipmentCraftingResult result = EquipmentCraftingService.Execute(wallet, rare, request);
+            Assert.NotEqual("operation_not_implemented", result.FailureReason);
+        }
+    }
+
+    [Fact]
+    public void FormalNamesExecuteDivineBlessedQualityCorruptionAndBothLinkCrafts()
+    {
+        string[] names = ["神铸重掷", "祝铸重掷", "精磨品质", "赤蚀腐化", "连接重铸", "稳固增连"];
+        ItemInstance rare = ItemGenerator.Generate("core.base.rusted_greatsword", 100, ItemRarity.Rare, 0x400, "formal-metal") with { LinkedSocketCount = 1 };
+        foreach (string name in names)
+        {
+            EquipmentCraftingOperationEntry operation = EquipmentCatalog.CraftingOperations.Single(value => value.DisplayName == name);
+            EquipmentCraftingPreview preview = EquipmentCraftingService.Preview(rare, new(operation.Id, Seed: 0x401));
+            var wallet = new EquipmentCraftingWallet();
+            wallet.Credit(preview.Resource, preview.Cost);
+            EquipmentCraftingResult result = EquipmentCraftingService.Execute(wallet, rare, new(operation.Id, Seed: 0x401));
+            Assert.True(result.Succeeded, $"{name}: {result.FailureReason}");
+            Assert.NotNull(result.Item);
+        }
     }
 
     [Fact]

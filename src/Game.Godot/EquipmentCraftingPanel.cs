@@ -6,17 +6,18 @@ using GameForWork.Core.P6;
 using GameForWork.Core.P9;
 using GameForWork.Core.P14;
 using GameForWork.Core.P29;
+using GameForWork.Core.Equipment;
 using Godot;
 
 namespace GameForWork.GodotClient;
 
-public sealed record P9CraftTarget(ItemContainerKind Container, int Index, ItemInstance Item,
+public sealed record EquipmentCraftTarget(ItemContainerKind Container, int Index, ItemInstance Item,
     P2CharacterKind Character, string MercenaryId);
 
-public partial class P9MetalPanel : VBoxContainer
+public partial class EquipmentCraftingPanel : VBoxContainer
 {
     private Func<P1GameSession>? _session;
-    private Func<P9CraftTarget?>? _target;
+    private Func<EquipmentCraftTarget?>? _target;
     private Action<string>? _changed;
     private GridContainer? _grid;
     private VBoxContainer? _body;
@@ -29,7 +30,7 @@ public partial class P9MetalPanel : VBoxContainer
     private Action? _pending;
     private string _signature = string.Empty;
 
-    public void Initialize(Func<P1GameSession> session, Func<P9CraftTarget?> target, Action<string> changed)
+    public void Initialize(Func<P1GameSession> session, Func<EquipmentCraftTarget?> target, Action<string> changed)
     {
         _session = session;
         _target = target;
@@ -66,7 +67,7 @@ public partial class P9MetalPanel : VBoxContainer
     {
         if (_session is null) return;
         P1GameSession session = _session();
-        P9CraftTarget? target = _target?.Invoke();
+        EquipmentCraftTarget? target = _target?.Invoke();
         string signature = string.Join('|', P4MetalCurrencies.All.Select(metal => session.World.Economy.MetalAmount(metal.Kind))) +
             $"|{session.World.Economy.Gold}|{session.Endgame.LifeForce}|{session.Town.Level(P9BuildingKind.Workshop)}|{session.Town.Level(P9BuildingKind.Alchemy)}|{target?.Item.InstanceId}|{target?.Item.Affixes.Count}|{target?.Item.Quality}";
         if (!force && signature == _signature) return;
@@ -107,45 +108,25 @@ public partial class P9MetalPanel : VBoxContainer
 
     private void UseMetal(MetalCurrencyKind kind)
     {
-        P9CraftTarget? target = _target?.Invoke();
+        EquipmentCraftTarget? target = _target?.Invoke();
         if (target is null) return;
-        if (kind is MetalCurrencyKind.TemperingIron or MetalCurrencyKind.WardSteel or MetalCurrencyKind.VitalSilver)
-        {
-            P2WorkshopRecipe recipe = kind switch
-            { MetalCurrencyKind.TemperingIron => P2WorkshopRecipe.WeaponPhysical, MetalCurrencyKind.WardSteel => P2WorkshopRecipe.ReinforceDefense, _ => P2WorkshopRecipe.VitalityEtching };
-            Confirm($"{P4MetalCurrencies.Get(kind).DisplayName}\n\n{P4MetalCurrencies.Get(kind).Description}\n消耗：1", () =>
-            {
-                P2WorkshopPreview result = new P2ItemCommandService(_session!(), target.Character, target.MercenaryId).Craft(target.Container, target.Index, recipe);
-                _changed?.Invoke(result.Summary);
-            });
-            return;
-        }
-        if (kind == MetalCurrencyKind.ChainSteel)
-        {
-            bool rerollRequested = Input.IsKeyPressed(Key.Shift);
-            P6CraftOperation linkOperation = rerollRequested ? P6CraftOperation.RerollLinks : P6CraftOperation.UpgradeLinks;
-            P6CraftPreview preview = P6CraftingRules.Preview(target.Item, linkOperation);
-            if (!preview.Succeeded) { _changed?.Invoke(preview.Summary); return; }
-            Confirm($"{preview.Summary}\n消耗：{preview.Cost} 链铸钢\n\n默认保证升连；按住 Shift 点击金属可重铸连接。", () =>
-            {
-                P6CraftPreview result = new P2ItemCommandService(_session!(), target.Character, target.MercenaryId).CraftP6(target.Container, target.Index, linkOperation);
-                _changed?.Invoke(result.Summary);
-            });
-            return;
-        }
-        P9CraftOperation? operation = OperationFor(kind);
-        if (operation is null) { _changed?.Invoke("该金属没有可用操作。"); return; }
-        P9CraftResult p9 = P9CraftingRules.Preview(target.Item, operation.Value);
-        if (!p9.Succeeded) { _changed?.Invoke(p9.Summary); return; }
+        string? operationName = OperationNameFor(kind, Input.IsKeyPressed(Key.Shift));
+        EquipmentCraftingOperationEntry? operation = EquipmentCatalog.CraftingOperations
+            .FirstOrDefault(value => value.DisplayName == operationName);
+        if (operation is null) { _changed?.Invoke("该金属没有正式做装操作。"); return; }
+        EquipmentCraftingPreview preview = EquipmentCraftingService.Preview(target.Item, new(operation.Id));
+        if (!preview.Available) { _changed?.Invoke(preview.Summary); return; }
         string danger = kind == MetalCurrencyKind.CorruptionIron ? "\n\n警告：10% 概率彻底摧毁装备，此操作不可撤销。" : string.Empty;
-        Confirm($"{p9.Summary}\n消耗：{p9.Cost} {P4MetalCurrencies.Get(kind).DisplayName}{danger}", () =>
+        string linkHint = kind == MetalCurrencyKind.ChainSteel ? "\n\n默认保证升连；按住 Shift 点击金属可重铸连接。" : string.Empty;
+        Confirm($"{preview.Summary}\n消耗：{preview.Cost} {preview.Resource}{danger}{linkHint}", () =>
         {
-            P9CraftResult result = new P2ItemCommandService(_session!(), target.Character, target.MercenaryId).CraftP9(target.Container, target.Index, operation.Value);
+            EquipmentCraftingResult result = new P2ItemCommandService(_session!(), target.Character, target.MercenaryId)
+                .CraftEquipment(target.Container, target.Index, operation.DisplayName);
             _changed?.Invoke(result.Summary);
         });
     }
 
-    private void RebuildEnchantments(P1GameSession session, P9CraftTarget? target)
+    private void RebuildEnchantments(P1GameSession session, EquipmentCraftTarget? target)
     {
         foreach (Node child in _enchants!.GetChildren()) child.QueueFree();
         foreach (ItemEnchantment enchantment in P9EnchantmentCatalog.All)
@@ -159,13 +140,18 @@ public partial class P9MetalPanel : VBoxContainer
             };
             button.Pressed += () =>
             {
-                P9CraftTarget? current = _target?.Invoke();
+                EquipmentCraftTarget? current = _target?.Invoke();
                 if (current is null) return;
-                P9CraftResult preview = P9EnchantmentCatalog.Preview(current.Item, enchantment.StableId, session.Town.Level(P9BuildingKind.Workshop));
-                if (!preview.Succeeded) { _changed?.Invoke(preview.Summary); return; }
-                Confirm($"{preview.Summary}\n消耗：{enchantment.GoldCost:N0} 金币", () =>
+                EquipmentCraftingOperationEntry operation = EquipmentCatalog.CraftingOperations.Single(value =>
+                    value.Kind == "Enchantment" && value.DisplayName == $"附魔：{enchantment.DisplayName}");
+                var request = new EquipmentCraftingRequest(operation.Id, enchantment.StableId,
+                    WorkshopLevel: session.Town.Level(P9BuildingKind.Workshop));
+                EquipmentCraftingPreview preview = EquipmentCraftingService.Preview(current.Item, request);
+                if (!preview.Available) { _changed?.Invoke(preview.Summary); return; }
+                Confirm($"{preview.Summary}\n消耗：{preview.Cost:N0} {preview.Resource}", () =>
                 {
-                    P9CraftResult result = new P2ItemCommandService(_session!(), current.Character, current.MercenaryId).EnchantP9(current.Container, current.Index, enchantment.StableId);
+                    EquipmentCraftingResult result = new P2ItemCommandService(_session!(), current.Character, current.MercenaryId)
+                        .CraftEquipment(current.Container, current.Index, operation.DisplayName, enchantment.StableId);
                     _changed?.Invoke(result.Summary);
                 });
             };
@@ -195,83 +181,74 @@ public partial class P9MetalPanel : VBoxContainer
         }
     }
 
-    private void RebuildGarden(P1GameSession session, P9CraftTarget? target)
+    private void RebuildGarden(P1GameSession session, EquipmentCraftTarget? target)
     {
         foreach (Node child in _garden!.GetChildren()) child.QueueFree();
-        foreach (P14GardenCraft craft in Enum.GetValues<P14GardenCraft>())
+        foreach (EquipmentCraftingOperationEntry operation in EquipmentCatalog.CraftingOperations
+                     .Where(value => value.Kind is "LifeEnergy" or "Oath"))
         {
-            int cost = P14GardenCrafting.Cost(craft);
+            if (operation.DisplayName == "赤誓升降")
+            {
+                if (target is null) continue;
+                foreach (AffixRoll affix in target.Item.Affixes.Where(value => !value.Crafted))
+                    AddOperation(operation, affix.Definition.StableFamilyId, $"{operation.DisplayName}：{affix.Definition.DisplayName}");
+                continue;
+            }
+            AddOperation(operation, string.Empty, operation.DisplayName);
+        }
+        return;
+
+        void AddOperation(EquipmentCraftingOperationEntry operation, string familyId, string title)
+        {
+            EquipmentCraftingPreview? preview = target is null ? null : EquipmentCraftingService.Preview(target.Item,
+                new EquipmentCraftingRequest(operation.Id, SelectedAffixFamilyId: familyId));
+            string resource = preview?.Resource ?? CostResource(operation.CostText);
+            int cost = preview?.Cost ?? CostAmount(operation.CostText);
             var button = new Button
             {
-                Text = $"{GardenName(craft)}\n{cost} 命能",
-                TooltipText = craft is P14GardenCraft.KeepPrefixes or P14GardenCraft.KeepSuffixes ? "保留侧词缀逐条不变，仅重铸另一侧，最多三前缀三后缀。" : "重铸并保证至少一条合法目标标签词缀；无合法候选不扣费。每次成功加工使用独立且可复现的结果。",
-                Disabled = target is null || !P14GardenCrafting.CanApply(target.Item, craft) || session.Endgame.LifeForce < cost,
+                Text = $"{title}\n{cost:N0} {resource}",
+                TooltipText = $"{operation.RuleText}\n失败不扣费；随机结果只在确认执行后产生。",
+                Disabled = target is null || preview?.Available != true || !HasResource(session, resource, cost),
             };
             button.Pressed += () =>
             {
-                P9CraftTarget? current = _target?.Invoke();
+                EquipmentCraftTarget? current = _target?.Invoke();
                 if (current is null) return;
-                Confirm($"{GardenName(craft)}\n消耗：{cost} 命能", () =>
+                Confirm($"{title}\n消耗：{cost:N0} {resource}", () =>
                 {
-                    P14GardenCraftResult result = new P2ItemCommandService(_session!(), current.Character, current.MercenaryId)
-                        .CraftP14(current.Container, current.Index, craft);
+                    EquipmentCraftingResult result = new P2ItemCommandService(_session!(), current.Character, current.MercenaryId)
+                        .CraftEquipment(current.Container, current.Index, operation.DisplayName,
+                            selectedAffixFamilyId: familyId);
                     _changed?.Invoke(result.Summary);
                 });
             };
             _garden.AddChild(button);
         }
-        if (target is not null)
-        {
-            foreach (AffixRoll affix in target.Item.Affixes.Where(affix => !affix.Crafted))
-            {
-                string family = affix.Definition.StableFamilyId;
-                var red = new Button
-                {
-                    Text = $"赤誓升降：{affix.Definition.DisplayName}\n{P29ResourceCrafting.RedFavorCost} 赤誓",
-                    TooltipText = "选择该非制作词缀，50%随机提升一级或降低一级；边界档位会向合法方向变化。",
-                    Disabled = session.Endgame.RedFavor < P29ResourceCrafting.RedFavorCost || !target.Item.CanModify,
-                };
-                red.Pressed += () => Confirm($"随机升降 {affix.Definition.DisplayName} 的词缀档位？\n消耗：{P29ResourceCrafting.RedFavorCost} 赤誓", () =>
-                {
-                    P9CraftTarget? current = _target?.Invoke(); if (current is null) return;
-                    P29ResourceCraftResult result = new P2ItemCommandService(_session!(), current.Character, current.MercenaryId)
-                        .CraftP29Red(current.Container, current.Index, family); _changed?.Invoke(result.Summary);
-                });
-                _garden.AddChild(red);
-            }
-            var blue = new Button
-            {
-                Text = $"苍誓随机品质 0–40%\n{P29ResourceCrafting.BlueFavorCost} 苍誓",
-                TooltipText = "覆盖当前品质，结果在 0–40% 间均匀随机，可能降低。",
-                Disabled = session.Endgame.BlueFavor < P29ResourceCrafting.BlueFavorCost || !target.Item.CanModify,
-            };
-            blue.Pressed += () => Confirm($"随机重置品质为 0–40%？\n消耗：{P29ResourceCrafting.BlueFavorCost} 苍誓", () =>
-            {
-                P9CraftTarget? current = _target?.Invoke(); if (current is null) return;
-                P29ResourceCraftResult result = new P2ItemCommandService(_session!(), current.Character, current.MercenaryId)
-                    .CraftP29Blue(current.Container, current.Index); _changed?.Invoke(result.Summary);
-            });
-            _garden.AddChild(blue);
-        }
     }
 
-    private static string GardenName(P14GardenCraft craft) => craft switch
+    private static bool HasResource(P1GameSession session, string resource, int cost)
     {
-        P14GardenCraft.KeepPrefixes => "保留前缀重铸",
-        P14GardenCraft.KeepSuffixes => "保留后缀重铸",
-        P14GardenCraft.BiasLife => "生命偏向重铸",
-        P14GardenCraft.BiasDefense => "防御偏向重铸",
-        P14GardenCraft.BiasSpell => "法术偏向重铸",
-        P14GardenCraft.BiasSpeed => "速度偏向重铸",
-        P14GardenCraft.BiasCritical => "暴击偏向重铸",
-        P14GardenCraft.ReplaceLife => "生命偏向替换",
-        P14GardenCraft.ReplaceDefense => "防御偏向替换",
-        P14GardenCraft.ReplaceAttack => "攻击偏向替换",
-        P14GardenCraft.ReplaceSpell => "法术偏向替换",
-        P14GardenCraft.ReplaceSpeed => "速度偏向替换",
-        P14GardenCraft.ReplaceCritical => "暴击偏向替换",
-        _ => "攻击偏向重铸",
-    };
+        MetalCurrencyDefinition? metal = P4MetalCurrencies.All.FirstOrDefault(value => value.DisplayName == resource);
+        if (metal is not null) return session.World.Economy.MetalAmount(metal.Kind) >= cost;
+        return resource switch
+        {
+            "金币" => session.World.Economy.Gold >= cost, "命能" => session.Endgame.LifeForce >= cost,
+            "赤誓收益" => session.Endgame.RedFavor >= cost, "苍誓收益" => session.Endgame.BlueFavor >= cost,
+            "监守印记" => session.World.Economy.WardenMarks >= cost, _ => cost == 0,
+        };
+    }
+
+    private static int CostAmount(string text)
+    {
+        string token = new(text.Reverse().SkipWhile(character => !char.IsDigit(character)).TakeWhile(char.IsDigit).Reverse().ToArray());
+        return int.TryParse(token, out int value) ? value : 0;
+    }
+
+    private static string CostResource(string text)
+    {
+        string tail = text.Contains('；') ? text.Split('；')[1] : text;
+        return new string(tail.TakeWhile(character => !char.IsDigit(character) && character != '×').ToArray()).Trim();
+    }
 
     private void Confirm(string text, Action action)
     {
@@ -280,23 +257,18 @@ public partial class P9MetalPanel : VBoxContainer
         _confirm.PopupCentered(new Vector2I(520, 260));
     }
 
-    private static P9CraftOperation? OperationFor(MetalCurrencyKind kind) => kind switch
+    private static string? OperationNameFor(MetalCurrencyKind kind, bool rerollLinks) => kind switch
     {
-        MetalCurrencyKind.AwakeningCopper => P9CraftOperation.AwakenMagic,
-        MetalCurrencyKind.AugmentingTin => P9CraftOperation.AugmentMagic,
-        MetalCurrencyKind.MutableMercury => P9CraftOperation.RerollMagic,
-        MetalCurrencyKind.FatefulGold => P9CraftOperation.FatefulUpgrade,
-        MetalCurrencyKind.AlchemicalGold => P9CraftOperation.AlchemicalRare,
-        MetalCurrencyKind.RegalGold => P9CraftOperation.RegalUpgrade,
-        MetalCurrencyKind.ChaosGold => P9CraftOperation.ChaosReroll,
-        MetalCurrencyKind.ExaltedGold => P9CraftOperation.ExaltedAdd,
-        MetalCurrencyKind.DissolutionSilver => P9CraftOperation.DissolveAffix,
-        MetalCurrencyKind.ScouringLead => P9CraftOperation.Scour,
-        MetalCurrencyKind.DivineSilver => P9CraftOperation.DivineReroll,
-        MetalCurrencyKind.BlessedSilver => P9CraftOperation.BlessedReroll,
-        MetalCurrencyKind.FractureSteel => P9CraftOperation.Fracture,
-        MetalCurrencyKind.PolishingCobalt => P9CraftOperation.PolishQuality,
-        MetalCurrencyKind.CorruptionIron => P9CraftOperation.Corrupt,
+        MetalCurrencyKind.TemperingIron => "淬刃打造", MetalCurrencyKind.WardSteel => "守壁打造",
+        MetalCurrencyKind.VitalSilver => "活血打造", MetalCurrencyKind.AwakeningCopper => "启灵",
+        MetalCurrencyKind.AugmentingTin => "添铸", MetalCurrencyKind.MutableMercury => "易变重铸",
+        MetalCurrencyKind.FatefulGold => "命铸", MetalCurrencyKind.AlchemicalGold => "炼真",
+        MetalCurrencyKind.RegalGold => "王铸", MetalCurrencyKind.ChaosGold => "混沌重铸",
+        MetalCurrencyKind.ExaltedGold => "崇高增附", MetalCurrencyKind.DissolutionSilver => "消解",
+        MetalCurrencyKind.ScouringLead => "洗炼", MetalCurrencyKind.DivineSilver => "神铸重掷",
+        MetalCurrencyKind.BlessedSilver => "祝铸重掷", MetalCurrencyKind.FractureSteel => "破裂",
+        MetalCurrencyKind.ChainSteel => rerollLinks ? "连接重铸" : "稳固增连",
+        MetalCurrencyKind.PolishingCobalt => "精磨品质", MetalCurrencyKind.CorruptionIron => "赤蚀腐化",
         _ => null,
     };
 

@@ -2,9 +2,9 @@ using GameForWork.Core.P1.Items;
 using GameForWork.Core.P9;
 using GameForWork.Core.P6;
 using GameForWork.Core.P14;
-using GameForWork.Core.P19;
 using GameForWork.Core.P24;
 using GameForWork.Core.P30;
+using GameForWork.Core.Equipment;
 using GameForWork.Core.P17;
 using GameForWork.Core.P1.Combat;
 
@@ -25,24 +25,20 @@ public sealed class P30EquipmentAffixTests
     [Fact]
     public void ImportedCompoundAffixesKeepEveryNumericComponent()
     {
-        AffixDefinition oneHand = P19Catalog.Affixes.Single(affix =>
-            affix.StableFamilyId == "p19.affix.localphysicaldamage" && affix.Tier == 1);
+        AffixDefinition oneHand = EquipmentCatalog.GetAffix("p19.affix.localphysicaldamage", 1);
         Assert.Collection(oneHand.EffectComponents,
             low => { Assert.Equal(ItemModifierKind.AddedMinimumPhysicalDamage, low.Kind); Assert.Equal((22, 29), (low.MinimumValue, low.MaximumValue)); },
             high => { Assert.Equal(ItemModifierKind.AddedMaximumPhysicalDamage, high.Kind); Assert.Equal((45, 52), (high.MinimumValue, high.MaximumValue)); });
 
-        AffixDefinition armourLife = P19Catalog.Affixes.Single(affix =>
-            affix.StableFamilyId == "p19.affix.localbasearmourandlife" && affix.Tier == 1);
+        AffixDefinition armourLife = EquipmentCatalog.GetAffix("p19.affix.localbasearmourandlife", 1);
         Assert.Contains(armourLife.EffectComponents, component => component.Kind == ItemModifierKind.FlatArmor && component.MinimumValue == 97 && component.MaximumValue == 144);
         Assert.Contains(armourLife.EffectComponents, component => component.Kind == ItemModifierKind.FlatMaximumLife && component.MinimumValue == 34 && component.MaximumValue == 38);
 
-        AffixDefinition regeneration = P19Catalog.Affixes.Single(affix =>
-            affix.StableFamilyId == "p19.affix.liferegeneration" && affix.Tier == 1);
+        AffixDefinition regeneration = EquipmentCatalog.GetAffix("p19.affix.liferegeneration", 1);
         Assert.Equal((180, 200), (regeneration.MinimumValue, regeneration.MaximumValue));
         Assert.Equal(ItemModifierKind.MaximumLifeRegenerationBasisPoints, regeneration.ModifierKind);
 
-        AffixDefinition instantFlask = P19Catalog.Affixes.Single(affix =>
-            affix.StableFamilyId == "p19.affix.flaskpartialinstantrecovery" && affix.Tier == 1);
+        AffixDefinition instantFlask = EquipmentCatalog.GetAffix("p19.affix.flaskpartialinstantrecovery", 1);
         Assert.Collection(instantFlask.EffectComponents,
             amount => { Assert.Equal(ItemModifierKind.IncreasedFlaskRecoveryAmountBasisPoints, amount.Kind); Assert.True(amount.MaximumValue < 0); },
             speed => { Assert.Equal(ItemModifierKind.IncreasedFlaskRecoveryRateBasisPoints, speed.Kind); Assert.Equal(13_500, speed.MinimumValue); },
@@ -113,18 +109,20 @@ public sealed class P30EquipmentAffixTests
     [Fact]
     public void P30OrdinaryTiersAndSpecialSourcesAreSealed()
     {
-        AffixDefinition[] attack = P30EquipmentAffixes.Ordinary.Where(affix => affix.StableFamilyId == "p30.affix.attack.damage").ToArray();
+        AffixDefinition[] attack = EquipmentCatalog.Affixes.Where(affix => affix.StableFamilyId == "equipment.affix.attack.damage").ToArray();
         Assert.Equal(6, attack.Length);
         Assert.Equal([1, 20, 40, 60, 75, 85], attack.OrderByDescending(affix => affix.Tier).Select(affix => affix.MinimumItemLevel));
         AffixDefinition top = attack.Single(affix => affix.Tier == 1);
         Assert.Equal((3_500, 4_500), (top.MinimumValue, top.MaximumValue));
 
-        Assert.Equal(49, P24ItemCatalog.Families.Count);
-        Assert.All(P24ItemCatalog.Affixes, affix =>
+        AffixDefinition[] special = P24GuideCatalog.SpecialAffixFamilies
+            .SelectMany(family => family).Select(value => EquipmentCatalog.GetAffix(value.Id, value.Tier)).ToArray();
+        Assert.Equal(49, special.Select(value => value.StableFamilyId).Distinct(StringComparer.Ordinal).Count());
+        Assert.All(special, affix =>
         {
-            Assert.Equal("P24Special", affix.Source);
+            Assert.Equal("Natural", affix.Source);
             Assert.Equal(affix.ModifierKind, affix.EffectComponents[0].Kind);
-            Assert.NotEmpty(affix.RequiredBaseTags!);
+            Assert.Contains(P1ItemBases.All, affix.Supports);
         });
     }
 
@@ -152,22 +150,26 @@ public sealed class P30EquipmentAffixTests
         ItemBaseDefinition[] weapons = P1ItemBases.All.Where(item =>
             item.Category is ItemCategory.OneHandWeapon or ItemCategory.TwoHandWeapon).ToArray();
 
-        Assert.DoesNotContain(P30EquipmentAffixes.Ordinary, affix =>
-            globalDamageIncreases.Contains(affix.ModifierKind) && weapons.Any(affix.Supports));
-        Assert.Contains(P30EquipmentAffixes.Ordinary, affix =>
-            affix.StableFamilyId == "p30.affix.attack.damage" && affix.ApplicableCategories!.Contains(ItemCategory.Ring));
+        AffixDefinition[] illegal = EquipmentCatalog.Affixes.Where(affix =>
+            !new[] { "equipment.affix.occult.wither", "equipment.affix.projectile.far_damage", "equipment.affix.spell.elemental", "equipment.affix.spell.void" }.Contains(affix.StableFamilyId, StringComparer.Ordinal) &&
+            affix.EffectComponents.Any(component => component.Scope == ItemModifierScope.Global && globalDamageIncreases.Contains(component.Kind)) &&
+            weapons.Any(affix.Supports)).ToArray();
+        Assert.True(illegal.Length == 0, string.Join(Environment.NewLine,
+            illegal.Select(affix => $"{affix.StableFamilyId}/T{affix.Tier}")));
+        Assert.Contains(EquipmentCatalog.Affixes, affix =>
+            affix.StableFamilyId == "equipment.affix.attack.damage" && affix.ApplicableCategories!.Contains(ItemCategory.Ring));
     }
 
     [Fact]
     public void RestoringLegacyWeaponsRemovesGlobalDamageButKeepsLocalPhysicalDamage()
     {
         ItemBaseDefinition itemBase = P1ItemBases.Get("p19.base.broad_sword");
-        AffixDefinition global = P30EquipmentAffixes.Ordinary.First(affix => affix.StableFamilyId == "p30.affix.attack.damage");
+        AffixDefinition global = EquipmentCatalog.Affixes.First(affix => affix.StableFamilyId == "equipment.affix.attack.damage");
         AffixDefinition local = P1Affixes.All.First(affix => affix.StableFamilyId == "equipment.affix.localphysicaldamage" && affix.Supports(itemBase));
         var item = new ItemInstance("legacy-global-weapon", itemBase, 100, ItemRarity.Rare,
             [new AffixRoll(global, global.MinimumValue), new AffixRoll(local, local.MinimumValue)]);
 
-        ItemInstance normalized = P30EquipmentAffixes.RemoveForbiddenGlobalWeaponAffixes(item);
+        ItemInstance normalized = EquipmentItemRebinder.Rebind(item);
 
         AffixRoll kept = Assert.Single(normalized.Affixes);
         Assert.Equal(local.StableFamilyId, kept.Definition.StableFamilyId);
@@ -183,7 +185,7 @@ public sealed class P30EquipmentAffixTests
             new(ItemModifierKind.PhysicalToColdConversionBasisPoints, 4_000),
             new(ItemModifierKind.PhysicalToVoidConversionBasisPoints, 3_000),
         ];
-        P30ConversionAllocation result = P30ConversionRules.NormalizePhysical(effects);
+        EquipmentConversionAllocation result = EquipmentConversionRules.NormalizePhysical(effects);
         Assert.Equal(10_000, result.TotalBasisPoints);
         Assert.True(result.ToFireBasisPoints > result.ToColdBasisPoints);
         Assert.True(result.ToColdBasisPoints > result.ToVoidBasisPoints);
@@ -193,8 +195,7 @@ public sealed class P30EquipmentAffixTests
     public void DivineRerollPreservesCompoundShapeAndNaturalPoolCannotGrantVirtueVice()
     {
         ItemBaseDefinition itemBase = P1ItemBases.Get("p19.base.broad_sword");
-        AffixDefinition definition = P19Catalog.Affixes.Single(affix =>
-            affix.StableFamilyId == "p19.affix.localphysicaldamage" && affix.Tier == 1);
+        AffixDefinition definition = EquipmentCatalog.GetAffix("p19.affix.localphysicaldamage", 1);
         ItemInstance item = new("compound-divine", itemBase, 100, ItemRarity.Rare,
             [new AffixRoll(definition, 22, Components:
             [

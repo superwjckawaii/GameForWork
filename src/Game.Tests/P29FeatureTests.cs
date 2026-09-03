@@ -7,6 +7,7 @@ using GameForWork.Core.P20;
 using GameForWork.Core.P28;
 using GameForWork.Core.P29;
 using GameForWork.Core.Simulation;
+using GameForWork.Core.Equipment;
 
 namespace GameForWork.Tests;
 
@@ -44,7 +45,11 @@ public sealed class P29FeatureTests
         {
             IReadOnlyList<P14UniqueDefinition> items = P20LegendaryDrops.Pool(pool);
             Assert.Equal(4, items.Count);
-            Assert.All(items, item => Assert.True(GameForWork.Core.P25.P25LegendaryRules.HasImplementation(item.StableId)));
+            Assert.All(items, item =>
+            {
+                EquipmentLegendaryEntry entry = EquipmentCatalog.LegendaryItems.Single(value => value.DisplayName == item.DisplayName);
+                Assert.Equal(entry.Id, EquipmentRuleRegistry.Get(entry.RuleId).SourceDefinitionId);
+            });
         }
         Assert.Equal(12, P20LegendaryDrops.Pool("common").Count);
     }

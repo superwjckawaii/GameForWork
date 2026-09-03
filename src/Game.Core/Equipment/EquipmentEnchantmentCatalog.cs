@@ -39,10 +39,10 @@ public static class EquipmentEnchantmentCatalog
         if (text.Contains("药剂", StringComparison.Ordinal) && itemBase.Category == ItemCategory.LifeFlask) return true;
         if (text.Contains("箭袋", StringComparison.Ordinal) && itemBase.ItemTags.Contains("quiver", StringComparer.Ordinal)) return true;
         if (text.Contains("元素法器", StringComparison.Ordinal) && itemBase.ItemTags.Contains("focus", StringComparer.Ordinal)) return true;
-        if (text.Contains("召唤法器", StringComparison.Ordinal) && itemBase.ItemTags.Contains("summon_focus", StringComparer.Ordinal)) return true;
-        if (text.Contains("灵障法器", StringComparison.Ordinal) && itemBase.ItemTags.Contains("spirit_barrier", StringComparer.Ordinal)) return true;
-        if (text.Contains("构装圣物", StringComparison.Ordinal) && itemBase.ItemTags.Contains("construct", StringComparer.Ordinal)) return true;
-        if (text.Contains("灵兽护符", StringComparison.Ordinal) && itemBase.ItemTags.Contains("companion", StringComparer.Ordinal)) return true;
+        if (text.Contains("召唤法器", StringComparison.Ordinal) && itemBase.ItemTags.Contains("summoning_focus", StringComparer.Ordinal)) return true;
+        if (text.Contains("灵障法器", StringComparison.Ordinal) && (itemBase.ItemTags.Contains("spirit_barrier_focus", StringComparer.Ordinal) || itemBase.DisplayName.Contains("灵障法器", StringComparison.Ordinal))) return true;
+        if (text.Contains("构装圣物", StringComparison.Ordinal) && itemBase.ItemTags.Contains("construct_idol", StringComparer.Ordinal)) return true;
+        if (text.Contains("灵兽护符", StringComparison.Ordinal) && (itemBase.ItemTags.Contains("beast_talisman", StringComparer.Ordinal) || itemBase.ItemTags.Contains("companion", StringComparer.Ordinal))) return true;
         if (text.Contains("徒手拳套", StringComparison.Ordinal) && itemBase.ItemTags.Contains("unarmed", StringComparer.Ordinal)) return true;
         if (text.Contains("匕首", StringComparison.Ordinal) && itemBase.WeaponFamily == WeaponFamily.Dagger) return true;
         if (text.Contains("法杖", StringComparison.Ordinal) && itemBase.WeaponFamily == WeaponFamily.Wand) return true;
@@ -115,7 +115,7 @@ public static class EquipmentEnchantmentCatalog
         "节制之印" => Virtue(ItemModifierKind.TemperanceMaximum),
         "慈悲之印" => Virtue(ItemModifierKind.MercyMaximum),
         "懒惰之印" => Virtue(ItemModifierKind.SlothMaximum),
-        _ => [C(ItemModifierKind.None, 1, ItemModifierScope.Rule)],
+        _ => throw new InvalidDataException($"Missing enchantment implementation: {name}"),
     };
 
     private static AffixModifierComponent[] Virtue(ItemModifierKind maximum) => [C(ItemModifierKind.VirtueViceGainChanceBasisPoints, 1_000, ItemModifierScope.Rule), C(maximum, 1, ItemModifierScope.Rule)];

@@ -49,8 +49,9 @@ public static class EquipmentCraftingService
     {
         ArgumentNullException.ThrowIfNull(item);
         EquipmentCraftingOperationEntry operation = Get(request.OperationId);
-        (string resource, int cost) = ParseCost(operation.CostText);
+        (string resource, int cost) = ParseCost(operation.CostText, item);
         string failure = ValidateCommon(item, operation);
+        if (failure.Length == 0) failure = ValidateRequest(item, operation, request);
         return failure.Length > 0
             ? new(false, failure, FailureText(failure), resource, cost, [])
             : new(true, string.Empty, operation.RuleText, resource, cost,
@@ -95,9 +96,9 @@ public static class EquipmentCraftingService
             "炼真" => P9CraftOperation.AlchemicalRare, "王铸" => P9CraftOperation.RegalUpgrade,
             "混沌重铸" => P9CraftOperation.ChaosReroll, "崇高增附" => P9CraftOperation.ExaltedAdd,
             "消解" => P9CraftOperation.DissolveAffix, "洗炼" => P9CraftOperation.Scour,
-            "神铸" => P9CraftOperation.DivineReroll, "祝铸" => P9CraftOperation.BlessedReroll,
-            "破裂" => P9CraftOperation.Fracture, "精磨" => P9CraftOperation.PolishQuality,
-            "赤蚀" => P9CraftOperation.Corrupt,
+            "神铸重掷" => P9CraftOperation.DivineReroll, "祝铸重掷" => P9CraftOperation.BlessedReroll,
+            "破裂" => P9CraftOperation.Fracture, "精磨品质" => P9CraftOperation.PolishQuality,
+            "赤蚀腐化" => P9CraftOperation.Corrupt,
             _ => null,
         };
         if (legacy is not null)
@@ -110,13 +111,14 @@ public static class EquipmentCraftingService
             return new(true, string.Empty, result.Summary, protectedResult, resource, cost, result.Destroyed);
         }
 
-        var random = new Pcg32(seed);
-        ItemInstance changed = operation.DisplayName switch
+        if (operation.DisplayName == "连接重铸") return RerollLinks(item, seed, resource, cost);
+        if (operation.DisplayName == "稳固增连")
         {
-            var name when name.Contains("连接", StringComparison.Ordinal) => item with { LinkedSocketCount = Math.Min(item.Base.SocketLimit, Math.Max(item.LinkedSocketCount, 1 + (int)(random.NextUInt() % (uint)Math.Max(1, item.Base.SocketLimit)))) },
-            _ => item,
-        };
-        return Ok(changed with { CraftSequence = item.CraftSequence + 1 }, operation.DisplayName, resource, cost);
+            if (item.Base.SocketLimit <= 0) return Fail("no_sockets", "此底材没有连接孔。", resource, cost);
+            if (item.LinkedSocketCount >= item.Base.SocketLimit) return Fail("links_full", "连接数已经达到底材上限。", resource, cost);
+            return Ok(item with { LinkedSocketCount = item.LinkedSocketCount + 1, CraftSequence = item.CraftSequence + 1 }, operation.DisplayName, resource, cost);
+        }
+        return Fail("operation_not_implemented", $"未实现做装操作：{operation.DisplayName}", resource, cost);
     }
 
     private static EquipmentCraftingResult ApplyLifeEnergy(ItemInstance item, EquipmentCraftingOperationEntry operation,
@@ -184,8 +186,34 @@ public static class EquipmentCraftingService
         var definition = new AffixDefinition($"equipment.crafted.{operation.Id.Split('.').Last()}", operation.DisplayName,
             item.Base.Category, position, 0, 1, value, value, 0, kind, Source: "Crafted",
             Components: [new AffixModifierComponent(kind, value, value, scope, operation.RuleText)]);
-        ItemInstance changed = item with { Affixes = retained.Append(new AffixRoll(definition, value, true)).ToArray() };
+        RolledAffixComponent[] effects = definition.EffectComponents.Select(component =>
+            new RolledAffixComponent(component.Kind, component.MinimumValue, component.Scope, component.DisplayText)).ToArray();
+        ItemInstance changed = item with { Affixes = retained.Append(new AffixRoll(definition, value, true, effects)).ToArray() };
         return Ok(ApplyProtections(item, changed, true), operation.DisplayName, resource, cost);
+    }
+
+    private static EquipmentCraftingResult RerollLinks(ItemInstance item, ulong seed, string resource, int cost)
+    {
+        int maximum = item.Base.SocketLimit;
+        if (maximum <= 0) return Fail("no_sockets", "此底材没有连接孔。", resource, cost);
+        var random = new Pcg32(seed);
+        int fullChance = maximum switch { 3 => 3_000, 4 => 1_500, 5 => 500, 6 => 100, _ => 10_000 };
+        int roll = random.NextBasisPoints();
+        int links = roll < fullChance ? maximum : 1 + WeightedLowLink(random, maximum - 1);
+        return Ok(item with { LinkedSocketCount = links, CraftSequence = item.CraftSequence + 1 }, $"连接重铸为 {links}", resource, cost);
+    }
+
+    private static int WeightedLowLink(Pcg32 random, int outcomes)
+    {
+        int total = outcomes * (outcomes + 1) / 2;
+        int roll = (int)(random.NextUInt() % (uint)total);
+        for (int link = 0; link < outcomes; link++)
+        {
+            int weight = outcomes - link;
+            if (roll < weight) return link;
+            roll -= weight;
+        }
+        return outcomes - 1;
     }
 
     private static EquipmentCraftingResult Fateful(ItemInstance item, ulong seed, string resource, int cost)
@@ -211,14 +239,30 @@ public static class EquipmentCraftingService
         ItemInstance cleared = item with { ProtectPrefixesNextCraft = false, ProtectSuffixesNextCraft = false };
         if (roll < 3_500)
         {
-            EquipmentCorruptionImplicitEntry[] candidates = EquipmentCatalog.CorruptionImplicits.Where(value => CorruptionSupports(value, item.Base)).ToArray();
+            EquipmentCorruptionImplicitEntry[] candidates = EquipmentCatalog.CorruptionImplicits.Where(value => EquipmentCorruptionCatalog.Supports(value, item.Base)).ToArray();
             if (candidates.Length == 0) return Fail("no_corruption_candidate", "此底材没有合法腐化词缀。", resource, cost);
             EquipmentCorruptionImplicitEntry selected = candidates[(int)(random.NextUInt() % (uint)candidates.Length)];
-            return Ok(cleared with { IsCorrupted = true, CorruptionOutcome = "implicit", CorruptionImplicitId = selected.Id, CraftSequence = item.CraftSequence + 1 }, $"腐化：{selected.DisplayName}", resource, cost);
+            return Ok(cleared with
+            {
+                IsCorrupted = true,
+                CorruptionOutcome = "implicit",
+                CorruptionImplicitId = selected.Id,
+                RolledCorruptionComponents = EquipmentCorruptionCatalog.Roll(selected, random),
+                CraftSequence = item.CraftSequence + 1,
+            }, $"腐化：{selected.DisplayName}", resource, cost);
         }
         if (roll < 6_000) return Ok(cleared with { IsCorrupted = true, CorruptionOutcome = "sealed", CraftSequence = item.CraftSequence + 1 }, "腐化锁定", resource, cost);
-        if (roll < 8_000) return Ok(cleared with { IsCorrupted = true, Quality = Math.Min(30, item.Quality + 5), CorruptionOutcome = "quality", CraftSequence = item.CraftSequence + 1 }, "腐化品质", resource, cost);
-        if (roll < 9_000) return Ok(cleared with { IsCorrupted = true, Affixes = item.Affixes.Take(Math.Max(0, item.Affixes.Count - 1)).ToArray(), CorruptionOutcome = "scarred", CraftSequence = item.CraftSequence + 1 }, "腐化损伤", resource, cost);
+        if (roll < 8_000)
+        {
+            int qualityGain = 5 + (int)(random.NextUInt() % 6);
+            return Ok(cleared with { IsCorrupted = true, Quality = Math.Min(30, item.Quality + qualityGain), CorruptionOutcome = "quality", CraftSequence = item.CraftSequence + 1 }, "腐化品质", resource, cost);
+        }
+        if (roll < 9_000)
+        {
+            AffixRoll[] removable = item.Affixes.Where(value => !item.IsFractured(value)).ToArray();
+            AffixRoll[] kept = removable.Length == 0 ? item.Affixes.ToArray() : item.Affixes.Where(value => !ReferenceEquals(value, removable[(int)(random.NextUInt() % (uint)removable.Length)])).ToArray();
+            return Ok(cleared with { IsCorrupted = true, Quality = 0, Affixes = kept, CorruptionOutcome = "scarred", CraftSequence = item.CraftSequence + 1 }, "腐化损伤", resource, cost);
+        }
         return new(true, string.Empty, "腐化失控：装备被摧毁", null, resource, cost, true);
     }
 
@@ -320,22 +364,6 @@ public static class EquipmentCraftingService
         return new AffixRoll(definition, components[0].Value, Components: components);
     }
 
-    private static bool CorruptionSupports(EquipmentCorruptionImplicitEntry entry, ItemBaseDefinition itemBase)
-    {
-        string text = entry.ApplicableEquipment;
-        if (itemBase.Category is ItemCategory.OneHandWeapon or ItemCategory.TwoHandWeapon && text.Contains("武器", StringComparison.Ordinal)) return true;
-        if (itemBase.Category == ItemCategory.BodyArmor && text.Contains("胸甲", StringComparison.Ordinal)) return true;
-        if (itemBase.Category == ItemCategory.Helmet && text.Contains("头盔", StringComparison.Ordinal)) return true;
-        if (itemBase.Category == ItemCategory.Gloves && text.Contains("手套", StringComparison.Ordinal)) return true;
-        if (itemBase.Category == ItemCategory.Boots && text.Contains("鞋", StringComparison.Ordinal)) return true;
-        if (itemBase.Category == ItemCategory.Ring && text.Contains("戒指", StringComparison.Ordinal)) return true;
-        if (itemBase.Category == ItemCategory.Amulet && text.Contains("护符", StringComparison.Ordinal)) return true;
-        if (itemBase.Category == ItemCategory.Belt && text.Contains("腰带", StringComparison.Ordinal)) return true;
-        if (itemBase.Category == ItemCategory.LifeFlask && text.Contains("药剂", StringComparison.Ordinal)) return true;
-        if (itemBase.ItemTags.Contains("true_shield", StringComparer.Ordinal) && text.Contains("真盾", StringComparison.Ordinal)) return true;
-        return text.Contains("任何至少具有一种", StringComparison.Ordinal) && itemBase.Armor + itemBase.Evasion + itemBase.Shield + itemBase.SpiritBarrier > 0;
-    }
-
     private static string ValidateCommon(ItemInstance item, EquipmentCraftingOperationEntry operation)
     {
         if (operation.Kind == "LegendaryExchange") return string.Empty;
@@ -344,10 +372,32 @@ public static class EquipmentCraftingService
         return string.Empty;
     }
 
+    private static string ValidateRequest(ItemInstance item, EquipmentCraftingOperationEntry operation,
+        EquipmentCraftingRequest request)
+    {
+        if (operation.Kind == "Enchantment")
+        {
+            ItemEnchantment? enchantment = EquipmentEnchantmentCatalog.All.FirstOrDefault(value => value.StableId == request.SelectedDefinitionId);
+            if (enchantment is null) return "enchantment_required";
+            if (request.WorkshopLevel < enchantment.WorkshopLevel) return "workshop_level";
+            if (!EquipmentEnchantmentCatalog.Supports(enchantment, item.Base)) return "incompatible_base";
+        }
+        if (operation.Kind == "LegendaryExchange" && !EquipmentCatalog.LegendaryItems.Any(value =>
+                value.Id == request.SelectedDefinitionId && value.Rarity == "Legendary")) return "exchange_target_invalid";
+        if (operation.Kind == "LifeEnergy" && item.Rarity != ItemRarity.Rare) return "rare_required";
+        if (operation.DisplayName == "淬刃打造" && item.Base.Category is not (ItemCategory.OneHandWeapon or ItemCategory.TwoHandWeapon)) return "incompatible_base";
+        if (operation.DisplayName == "守壁打造" && item.Base.ArmorMaximum + item.Base.EvasionMaximum + item.Base.ShieldMaximum + item.Base.SpiritBarrierMaximum == 0) return "incompatible_base";
+        if (operation.DisplayName is "连接重铸" or "稳固增连" && item.Base.SocketLimit <= 0) return "no_sockets";
+        if (operation.DisplayName == "稳固增连" && item.LinkedSocketCount >= item.Base.SocketLimit) return "links_full";
+        return string.Empty;
+    }
+
     private static EquipmentCraftingOperationEntry Get(string id) => EquipmentCatalog.CraftingOperations.Single(value => value.Id == id);
 
-    private static (string resource, int cost) ParseCost(string text)
+    private static (string resource, int cost) ParseCost(string text, ItemInstance item)
     {
+        if (text.Contains("×1/1/1/2/4/8", StringComparison.Ordinal))
+            return ("链铸钢", new[] { 1, 1, 1, 2, 4, 8 }[Math.Clamp(item.LinkedSocketCount, 0, 5)]);
         MatchCollection matches = Regex.Matches(text, @"\d[\d,]*");
         int cost = matches.Count == 0 ? 0 : int.Parse(matches[^1].Value.Replace(",", string.Empty, StringComparison.Ordinal), CultureInfo.InvariantCulture);
         string resource = text.Contains('；') ? text.Split('；')[1].Trim() : text;
@@ -362,7 +412,14 @@ public static class EquipmentCraftingService
         byte[] digest = SHA256.HashData(Encoding.UTF8.GetBytes($"{item.InstanceId}\n{item.CraftSequence}\n{operation}"));
         return BitConverter.ToUInt64(digest, 0);
     }
-    private static string FailureText(string reason) => reason == "item_locked" ? "锁定装备不能加工。" : "腐化装备不能继续加工。";
+    private static string FailureText(string reason) => reason switch
+    {
+        "item_locked" => "锁定装备不能加工。", "item_corrupted" => "腐化装备不能继续加工。",
+        "enchantment_required" => "请选择附魔。", "workshop_level" => "工坊等级不足。",
+        "incompatible_base" => "该操作不适用于此装备。", "exchange_target_invalid" => "请选择可兑换的普通传奇。",
+        "rare_required" => "该操作要求稀有装备。", "no_sockets" => "此底材没有连接孔。",
+        "links_full" => "连接数已经达到底材上限。", _ => reason,
+    };
     private static EquipmentCraftingResult Ok(ItemInstance item, string summary, string resource, int cost) => new(true, string.Empty, summary, item, resource, cost);
     private static EquipmentCraftingResult Fail(string reason, string summary, string resource, int cost) => new(false, reason, summary, null, resource, cost);
 }

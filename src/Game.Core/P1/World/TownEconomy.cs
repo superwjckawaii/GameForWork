@@ -2,6 +2,7 @@ using GameForWork.Core.P1.Items;
 using GameForWork.Core.P4;
 using GameForWork.Core.P14;
 using GameForWork.Core.P20;
+using GameForWork.Core.Equipment;
 
 namespace GameForWork.Core.P1.World;
 
@@ -102,6 +103,14 @@ public sealed class TownEconomyState
         return true;
     }
 
+    public bool TrySpendWardenMarks(int amount)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(amount);
+        if (WardenMarks < amount) return false;
+        WardenMarks -= amount;
+        return true;
+    }
+
     public bool TryPay(int gold, int ironScraps)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(gold);
@@ -138,9 +147,21 @@ public sealed class TownEconomyState
             return false;
         }
 
-        WardenMarks -= P20LegendaryDrops.PityMarkCost;
-        legendary = P14UniqueItems.Create(selected.StableId, 100,
-            $"pity-{selected.StableId.Split('.')[^1]}-{WardenMarks}");
+        EquipmentLegendaryEntry entry = EquipmentCatalog.LegendaryItems.Single(value =>
+            value.DisplayName == selected.DisplayName && value.Rarity == "Legendary");
+        EquipmentCraftingOperationEntry operation = EquipmentCatalog.CraftingOperations.Single(value => value.Kind == "LegendaryExchange");
+        ItemInstance context = ItemGenerator.Generate(EquipmentCatalog.Bases.First().StableId, 100, ItemRarity.Basic,
+            (ulong)WardenMarks, "legendary-exchange-context");
+        var wallet = new EquipmentCraftingWallet();
+        wallet.Credit("监守印记", WardenMarks);
+        EquipmentCraftingResult result = EquipmentCraftingService.Execute(wallet, context,
+            new EquipmentCraftingRequest(operation.Id, entry.Id, Seed: (ulong)WardenMarks));
+        if (!result.Succeeded || result.Item is null || !TrySpendWardenMarks(result.Cost))
+        {
+            legendary = null;
+            return false;
+        }
+        legendary = result.Item;
         return true;
     }
 

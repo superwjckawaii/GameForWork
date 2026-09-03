@@ -213,11 +213,11 @@ public sealed class P2ManagementState
         {
             if (snapshot.SkillStones.Any(s => s.Quality is < 0 or > 20 || s.Level is < 1 or > 20))
                 throw new InvalidDataException("技能石品质或等级无效。");
-            state._sortingBag.AddRange(snapshot.SortingBag.Take(SortingBagCapacity).Select(P30EquipmentAffixes.RemoveForbiddenGlobalWeaponAffixes).Select(P6SocketRules.Ensure));
-            state._recovery.AddRange(snapshot.Recovery.Select(P30EquipmentAffixes.RemoveForbiddenGlobalWeaponAffixes).Select(P6SocketRules.Ensure));
-            state._recovery.AddRange(snapshot.SortingBag.Skip(SortingBagCapacity).Select(P30EquipmentAffixes.RemoveForbiddenGlobalWeaponAffixes).Select(P6SocketRules.Ensure));
+            state._sortingBag.AddRange(snapshot.SortingBag.Take(SortingBagCapacity).Select(P6SocketRules.Ensure));
+            state._recovery.AddRange(snapshot.Recovery.Select(P6SocketRules.Ensure));
+            state._recovery.AddRange(snapshot.SortingBag.Skip(SortingBagCapacity).Select(P6SocketRules.Ensure));
             state._buyback.AddRange(snapshot.Buyback.TakeLast(BuybackCapacity)
-                .Select(entry => entry with { Item = P6SocketRules.Ensure(P30EquipmentAffixes.RemoveForbiddenGlobalWeaponAffixes(entry.Item)) }));
+                .Select(entry => entry with { Item = P6SocketRules.Ensure(entry.Item) }));
             state._skillStones.AddRange(snapshot.SkillStones);
             state._skillLinks.AddRange(snapshot.SkillLinks);
             state._operationHistory.AddRange(snapshot.OperationHistory.TakeLast(HistoryCapacity));

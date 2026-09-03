@@ -29,7 +29,7 @@ public partial class P22InformationWindow : P30IndependentWindow
         tabs.AddChild(_journey);
         tabs.AddChild(GuidePage("系统与操作", SystemGuide));
         tabs.AddChild(GuidePage("构筑机制", BuildGuide()));
-        tabs.AddChild(new P19AffixPanel
+        tabs.AddChild(new EquipmentAffixPanel
         {
             Name = "词缀库",
             SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,

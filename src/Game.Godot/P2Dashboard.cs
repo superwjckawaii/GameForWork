@@ -88,7 +88,7 @@ public partial class P2Dashboard : VBoxContainer
     private P2LootFilterPanel? _filterPanel;
     private P2SkillStonePanel? _skillStonePanel;
     private P5ExpeditionPanel? _expeditionPanel;
-    private P9MetalPanel? _metalPanel;
+    private EquipmentCraftingPanel? _metalPanel;
     private P9TownPanel? _townPanel;
     private P10EndgamePanel? _endgamePanel;
     private P18AscendancyPanel? _ascendancyPanel;
@@ -622,7 +622,7 @@ public partial class P2Dashboard : VBoxContainer
 
     private Control BuildMetalMode()
     {
-        _metalPanel = new P9MetalPanel { Name = "打造", SizeFlagsHorizontal = SizeFlags.ExpandFill, SizeFlagsVertical = SizeFlags.ExpandFill };
+        _metalPanel = new EquipmentCraftingPanel { Name = "打造", SizeFlagsHorizontal = SizeFlags.ExpandFill, SizeFlagsVertical = SizeFlags.ExpandFill };
         _metalPanel.Initialize(RequireSession, CurrentCraftTarget, Changed);
         return _metalPanel;
     }
@@ -886,7 +886,7 @@ public partial class P2Dashboard : VBoxContainer
         return page;
     }
 
-    private P9CraftTarget? CurrentCraftTarget()
+    private EquipmentCraftTarget? CurrentCraftTarget()
     {
         if (_craftIndex < 0) return null;
         ItemInstance? item = _craftContainer switch
@@ -897,7 +897,7 @@ public partial class P2Dashboard : VBoxContainer
                 .Items.GetValueOrDefault((EquipmentSlot)_craftIndex),
             _ => null,
         };
-        return item is null ? null : new P9CraftTarget(_craftContainer, _craftIndex, item, _selectedCharacter, _selectedMercenaryId);
+        return item is null ? null : new EquipmentCraftTarget(_craftContainer, _craftIndex, item, _selectedCharacter, _selectedMercenaryId);
     }
 
     private VBoxContainer BuildMiniPanel()

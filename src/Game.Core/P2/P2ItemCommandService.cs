@@ -7,6 +7,7 @@ using GameForWork.Core.P4;
 using GameForWork.Core.P9;
 using GameForWork.Core.P14;
 using GameForWork.Core.P29;
+using GameForWork.Core.Equipment;
 
 namespace GameForWork.Core.P2;
 
@@ -151,37 +152,51 @@ public sealed class P2ItemCommandService(
         return item.Base.MeetsRequirements(member.Level, member.Identity.FinalAttributes);
     }
 
-    public P2WorkshopPreview Craft(ItemContainerKind source, int index, P2WorkshopRecipe recipe)
+    public EquipmentCraftingResult CraftEquipment(
+        ItemContainerKind source,
+        int index,
+        string operationName,
+        string selectedDefinitionId = "",
+        string selectedAffixFamilyId = "")
     {
         ItemInstance? item = PeekIncludingEquipped(source, index);
-        if (item is null)
-        {
-            return new P2WorkshopPreview(false, "item_missing", null, 0, 0, "物品不存在。");
-        }
+        if (item is null) return new(false, "item_missing", "物品不存在。", null, string.Empty, 0);
+        EquipmentCraftingOperationEntry? operation = EquipmentCatalog.CraftingOperations
+            .FirstOrDefault(value => value.DisplayName == operationName);
+        if (operation is null) return new(false, "unknown_operation", $"未知做装操作：{operationName}。", null, string.Empty, 0);
 
-        P2WorkshopPreview result = P2Workshop.Craft(session.World.Economy, item, recipe);
-        if (!result.Succeeded)
-        {
-            return result;
-        }
+        var request = new EquipmentCraftingRequest(operation.Id, selectedDefinitionId, selectedAffixFamilyId,
+            session.Town.Level(P9BuildingKind.Workshop));
+        EquipmentCraftingPreview preview = EquipmentCraftingService.Preview(item, request);
+        if (!preview.Available) return new(false, preview.FailureReason, preview.Summary, null, preview.Resource, preview.Cost);
+        var wallet = new EquipmentCraftingWallet();
+        wallet.Credit(preview.Resource, ResourceBalance(preview.Resource));
+        EquipmentCraftingResult result = EquipmentCraftingService.Execute(wallet, item, request);
+        if (!result.Succeeded) return result;
 
-        bool replaced = Replace(source, index, result.Result!);
-        if (!replaced)
-        {
-            if (result.MetalCostKind is GameForWork.Core.P4.MetalCurrencyKind metal)
-            {
-                session.World.Economy.AddMetal(metal, result.MetalCost);
-            }
-            return result with { Succeeded = false, FailureReason = "replace_failed", Summary = "物品位置已变化，制作已回滚。" };
-        }
-
-        if (source == ItemContainerKind.Equipped)
-        {
-            session.NotifyEquipmentChanged(character);
-        }
-        session.Management.AddHistory($"已对 {item.Base.DisplayName} 完成制作：{result.Summary}。");
+        bool applied = result.Destroyed
+            ? RemoveIncludingEquipped(source, index) is not null
+            : result.Item is not null && Replace(source, index, result.Item);
+        if (!applied) return result with { Succeeded = false, FailureReason = "replace_failed", Summary = "物品位置变化，制作与材料均未改变。", Item = null };
+        if (!TrySpendResource(result.Resource, result.Cost)) throw new InvalidOperationException($"Crafting resource changed: {result.Resource}.");
+        session.Endgame.CompleteGameplayOperation();
+        if (source == ItemContainerKind.Equipped) session.NotifyEquipmentChanged(character);
+        session.Management.AddHistory($"装备打造：{result.Summary}。 ");
         session.RecordJourneyEvent(P8JourneyEvent.CraftedItem);
         return result;
+    }
+
+    public P2WorkshopPreview Craft(ItemContainerKind source, int index, P2WorkshopRecipe recipe)
+    {
+        string name = recipe switch
+        {
+            P2WorkshopRecipe.WeaponPhysical => "淬刃打造",
+            P2WorkshopRecipe.ReinforceDefense => "守壁打造",
+            _ => "活血打造",
+        };
+        EquipmentCraftingResult result = CraftEquipment(source, index, name);
+        MetalCurrencyKind? metal = MetalFor(result.Resource);
+        return new(result.Succeeded, result.FailureReason, result.Item, 0, 0, result.Summary, metal, result.Cost);
     }
 
     public P6CraftPreview CraftP6(
@@ -190,115 +205,108 @@ public sealed class P2ItemCommandService(
         P6CraftOperation operation,
         string fractureFamilyId = "")
     {
-        ItemInstance? item = PeekIncludingEquipped(source, index);
-        if (item is null)
+        ItemInstance? before = PeekIncludingEquipped(source, index);
+        string name = operation switch
         {
-            return new P6CraftPreview(false, "item_missing", "物品不存在。", null,
-                MetalCurrencyKind.ChainSteel, 0, 0, 0);
-        }
-        P6CraftPreview result = P6CraftingRules.Craft(session.World.Economy, item, operation, fractureFamilyId);
-        if (!result.Succeeded) return result;
-        if (!Replace(source, index, result.Result!))
-        {
-            session.World.Economy.AddMetal(result.Currency, result.Cost);
-            return result with { Succeeded = false, FailureReason = "replace_failed", Summary = "物品位置变化，制作与材料已回滚。" };
-        }
-        if (source == ItemContainerKind.Equipped)
-        {
-            session.NotifyEquipmentChanged(character);
-        }
-        session.Management.AddHistory($"制作完成：{result.Summary}。 ");
-        session.RecordJourneyEvent(P8JourneyEvent.CraftedItem);
-        return result;
+            P6CraftOperation.RerollLinks => "连接重铸", P6CraftOperation.UpgradeLinks => "稳固增连",
+            P6CraftOperation.ChaosReroll => "混沌重铸", P6CraftOperation.DivineReroll => "神铸重掷",
+            _ => "破裂",
+        };
+        EquipmentCraftingResult result = CraftEquipment(source, index, name, selectedAffixFamilyId: fractureFamilyId);
+        return new(result.Succeeded, result.FailureReason, result.Summary, result.Item,
+            MetalFor(result.Resource) ?? MetalCurrencyKind.ChainSteel, result.Cost,
+            before?.LinkedSocketCount ?? 0, result.Item?.LinkedSocketCount ?? before?.LinkedSocketCount ?? 0);
     }
 
     public P9CraftResult CraftP9(ItemContainerKind source, int index, P9CraftOperation operation)
     {
-        ItemInstance? item = PeekIncludingEquipped(source, index);
-        if (item is null)
-            return new(false, "item_missing", "物品不存在。", null, MetalCurrencyKind.AwakeningCopper, 0);
-        P9CraftResult result = P9CraftingRules.Craft(session.World.Economy, item, operation);
-        if (!result.Succeeded) return result;
-        bool applied = result.Destroyed ? RemoveIncludingEquipped(source, index) is not null : Replace(source, index, result.Result!);
-        if (!applied)
-        {
-            session.World.Economy.AddMetal(result.Currency, result.Cost);
-            return result with { Succeeded = false, FailureReason = "replace_failed", Summary = "物品位置变化，制作与材料已回滚。" };
-        }
-        if (source == ItemContainerKind.Equipped) session.NotifyEquipmentChanged(character);
-        session.Management.AddHistory($"金属加工：{result.Summary}。 ");
-        session.RecordJourneyEvent(P8JourneyEvent.CraftedItem);
-        return result;
+        EquipmentCraftingResult result = CraftEquipment(source, index, MetalOperationName(operation));
+        return new(result.Succeeded, result.FailureReason, result.Summary, result.Item,
+            MetalFor(result.Resource) ?? MetalCurrencyKind.AwakeningCopper, result.Cost, result.Destroyed);
     }
 
     public P9CraftResult EnchantP9(ItemContainerKind source, int index, string enchantmentId)
     {
-        ItemInstance? item = PeekIncludingEquipped(source, index);
-        if (item is null)
-            return new(false, "item_missing", "物品不存在。", null, MetalCurrencyKind.TemperingIron, 0);
-        P9CraftResult result = P9EnchantmentCatalog.Craft(session.World.Economy, item, enchantmentId,
-            session.Town.Level(P9BuildingKind.Workshop));
-        if (!result.Succeeded) return result;
-        if (!Replace(source, index, result.Result!))
-        {
-            ItemEnchantment enchantment = P9EnchantmentCatalog.Get(enchantmentId);
-            session.World.Economy.AddDispositionProceeds(enchantment.GoldCost, 0);
-            return result with { Succeeded = false, FailureReason = "replace_failed", Summary = "物品位置变化，金币已返还。" };
-        }
-        if (source == ItemContainerKind.Equipped) session.NotifyEquipmentChanged(character);
-        session.Management.AddHistory(result.Summary);
-        return result;
+        ItemEnchantment enchantment = P9EnchantmentCatalog.Get(enchantmentId);
+        EquipmentCraftingResult result = CraftEquipment(source, index, $"附魔：{enchantment.DisplayName}", enchantment.StableId);
+        return new(result.Succeeded, result.FailureReason, result.Summary, result.Item,
+            MetalCurrencyKind.TemperingIron, result.Cost, result.Destroyed);
     }
 
     public P14GardenCraftResult CraftP14(ItemContainerKind source, int index, P14GardenCraft craft)
     {
-        ItemInstance? item = PeekIncludingEquipped(source, index);
         int cost = P14GardenCrafting.Cost(craft);
-        if (item is null) return new(false, "物品不存在。", null, cost);
-        if (!item.CanModify || item.Rarity != ItemRarity.Rare)
-            return new(false, "命能加工要求未锁定、未腐化的稀有装备。", null, cost);
-        if (session.Endgame.LifeForce < cost) return new(false, $"命能不足，需要 {cost}。", null, cost);
-        if (!P14GardenCrafting.CanApply(item, craft)) return new(false, "当前底材没有合法的目标词缀，未消耗命能。", null, cost);
-        ItemInstance result = P14GardenCrafting.Apply(item, craft,
-            session.Seed ^ (ulong)session.Endgame.GameplayOperationSequence * 0x9e3779b97f4a7c15UL ^ (ulong)index);
-        if (!Replace(source, index, result)) return new(false, "物品位置变化，命能未消耗。", null, cost);
-        if (!session.Endgame.TrySpendLifeForce(cost)) throw new InvalidOperationException("Life force changed during crafting.");
-        session.Endgame.CompleteGameplayOperation();
-        if (source == ItemContainerKind.Equipped) session.NotifyEquipmentChanged(character);
-        session.Management.AddHistory($"命能加工：{craft}，消耗 {cost} 命能。");
-        session.RecordJourneyEvent(P8JourneyEvent.CraftedItem);
-        return new(true, $"{craft} 完成，消耗 {cost} 命能。", result, cost);
+        EquipmentCraftingResult result = CraftEquipment(source, index, GardenOperationName(craft));
+        return new(result.Succeeded, result.Summary, result.Item, result.Cost == 0 ? cost : result.Cost);
     }
 
     public P29ResourceCraftResult CraftP29Red(ItemContainerKind source, int index, string affixFamilyId)
     {
-        ItemInstance? item = PeekIncludingEquipped(source, index);
-        if (item is null) return new(false, "物品不存在。", null, P29ResourceCrafting.RedFavorCost);
-        if (session.Endgame.RedFavor < P29ResourceCrafting.RedFavorCost) return new(false, "赤誓收益不足。", null, P29ResourceCrafting.RedFavorCost);
-        P29ResourceCraftResult result = P29ResourceCrafting.ShiftAffixTier(item, affixFamilyId, CraftSeed(index));
-        if (!result.Succeeded || !Replace(source, index, result.Result!)) return result with { Succeeded = false };
-        if (!session.Endgame.TrySpendRedFavor(result.Cost)) throw new InvalidOperationException("Red favor changed during crafting.");
-        FinishResourceCraft(source, result.Summary); return result;
+        EquipmentCraftingResult result = CraftEquipment(source, index, "赤誓升降", selectedAffixFamilyId: affixFamilyId);
+        return new(result.Succeeded, result.Summary, result.Item, result.Cost == 0 ? P29ResourceCrafting.RedFavorCost : result.Cost);
     }
 
     public P29ResourceCraftResult CraftP29Blue(ItemContainerKind source, int index)
     {
-        ItemInstance? item = PeekIncludingEquipped(source, index);
-        if (item is null) return new(false, "物品不存在。", null, P29ResourceCrafting.BlueFavorCost);
-        if (session.Endgame.BlueFavor < P29ResourceCrafting.BlueFavorCost) return new(false, "苍誓收益不足。", null, P29ResourceCrafting.BlueFavorCost);
-        P29ResourceCraftResult result = P29ResourceCrafting.RerollQuality(item, CraftSeed(index));
-        if (!result.Succeeded || !Replace(source, index, result.Result!)) return result with { Succeeded = false };
-        if (!session.Endgame.TrySpendBlueFavor(result.Cost)) throw new InvalidOperationException("Blue favor changed during crafting.");
-        FinishResourceCraft(source, result.Summary); return result;
+        EquipmentCraftingResult result = CraftEquipment(source, index, "苍誓品质重置");
+        return new(result.Succeeded, result.Summary, result.Item, result.Cost == 0 ? P29ResourceCrafting.BlueFavorCost : result.Cost);
     }
 
-    private ulong CraftSeed(int index) => session.Seed ^ (ulong)session.Endgame.GameplayOperationSequence * 0x9e3779b97f4a7c15UL ^ (ulong)index;
-    private void FinishResourceCraft(ItemContainerKind source, string summary)
+    private int ResourceBalance(string resource)
     {
-        session.Endgame.CompleteGameplayOperation();
-        if (source == ItemContainerKind.Equipped) session.NotifyEquipmentChanged(character);
-        session.Management.AddHistory(summary); session.RecordJourneyEvent(P8JourneyEvent.CraftedItem);
+        MetalCurrencyKind? metal = MetalFor(resource);
+        if (metal is not null) return session.World.Economy.MetalAmount(metal.Value);
+        return resource switch
+        {
+            "金币" => session.World.Economy.Gold,
+            "命能" => session.Endgame.LifeForce,
+            "赤誓收益" => session.Endgame.RedFavor,
+            "苍誓收益" => session.Endgame.BlueFavor,
+            "监守印记" => session.World.Economy.WardenMarks,
+            _ => 0,
+        };
     }
+
+    private bool TrySpendResource(string resource, int cost)
+    {
+        MetalCurrencyKind? metal = MetalFor(resource);
+        if (metal is not null) return session.World.Economy.TrySpendMetal(metal.Value, cost);
+        return resource switch
+        {
+            "金币" => session.World.Economy.TrySpendGold(cost),
+            "命能" => session.Endgame.TrySpendLifeForce(cost),
+            "赤誓收益" => session.Endgame.TrySpendRedFavor(cost),
+            "苍誓收益" => session.Endgame.TrySpendBlueFavor(cost),
+            "监守印记" => session.World.Economy.TrySpendWardenMarks(cost),
+            _ => cost == 0,
+        };
+    }
+
+    private static MetalCurrencyKind? MetalFor(string resource) => P4MetalCurrencies.All
+        .FirstOrDefault(value => value.DisplayName == resource)?.Kind;
+
+    private static string MetalOperationName(P9CraftOperation operation) => operation switch
+    {
+        P9CraftOperation.AwakenMagic => "启灵", P9CraftOperation.AugmentMagic => "添铸",
+        P9CraftOperation.RerollMagic => "易变重铸", P9CraftOperation.FatefulUpgrade => "命铸",
+        P9CraftOperation.AlchemicalRare => "炼真", P9CraftOperation.RegalUpgrade => "王铸",
+        P9CraftOperation.ChaosReroll => "混沌重铸", P9CraftOperation.ExaltedAdd => "崇高增附",
+        P9CraftOperation.DissolveAffix => "消解", P9CraftOperation.Scour => "洗炼",
+        P9CraftOperation.DivineReroll => "神铸重掷", P9CraftOperation.BlessedReroll => "祝铸重掷",
+        P9CraftOperation.Fracture => "破裂", P9CraftOperation.PolishQuality => "精磨品质",
+        _ => "赤蚀腐化",
+    };
+
+    private static string GardenOperationName(P14GardenCraft craft) => craft switch
+    {
+        P14GardenCraft.KeepPrefixes => "保留前缀重铸", P14GardenCraft.KeepSuffixes => "保留后缀重铸",
+        P14GardenCraft.BiasLife => "生命偏向重铸", P14GardenCraft.BiasDefense => "防御偏向重铸",
+        P14GardenCraft.BiasAttack => "攻击偏向重铸", P14GardenCraft.BiasSpell => "法术偏向重铸",
+        P14GardenCraft.BiasSpeed => "速度偏向重铸", P14GardenCraft.BiasCritical => "暴击偏向重铸",
+        P14GardenCraft.ReplaceLife => "生命偏向打造", P14GardenCraft.ReplaceDefense => "防御偏向打造",
+        P14GardenCraft.ReplaceAttack => "攻击偏向打造", P14GardenCraft.ReplaceSpell => "法术偏向打造",
+        P14GardenCraft.ReplaceSpeed => "速度偏向打造", _ => "暴击偏向打造",
+    };
 
     public P2ItemCommandResult TryUnequip(EquipmentSlot slot)
     {

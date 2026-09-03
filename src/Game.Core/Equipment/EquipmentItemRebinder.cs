@@ -1,16 +1,37 @@
 using System.Security.Cryptography;
 using System.Text;
 using GameForWork.Core.P1.Items;
+using GameForWork.Core.Simulation;
 
 namespace GameForWork.Core.Equipment;
 
 public static class EquipmentItemRebinder
 {
+    private static readonly HashSet<ItemModifierKind> ForbiddenGlobalWeaponDamageIncreases =
+    [
+        ItemModifierKind.IncreasedAttackDamageBasisPoints, ItemModifierKind.IncreasedSpellDamageBasisPoints,
+        ItemModifierKind.IncreasedElementalDamageBasisPoints, ItemModifierKind.IncreasedPhysicalDamageBasisPoints,
+        ItemModifierKind.IncreasedFireDamageBasisPoints, ItemModifierKind.IncreasedColdDamageBasisPoints,
+        ItemModifierKind.IncreasedLightningDamageBasisPoints, ItemModifierKind.IncreasedVoidDamageBasisPoints,
+        ItemModifierKind.IncreasedMeleeDamageBasisPoints, ItemModifierKind.IncreasedProjectileDamageBasisPoints,
+        ItemModifierKind.IncreasedAreaDamageBasisPoints, ItemModifierKind.IncreasedDamageOverTimeBasisPoints,
+        ItemModifierKind.IncreasedBleedDamageBasisPoints, ItemModifierKind.IncreasedPoisonDamageBasisPoints,
+        ItemModifierKind.IncreasedIgniteDamageBasisPoints,
+    ];
+    private static readonly HashSet<string> ConditionalWeaponDamageFamilies =
+    [
+        "equipment.affix.occult.wither",
+        "equipment.affix.projectile.far_damage",
+        "equipment.affix.spell.elemental",
+        "equipment.affix.spell.void",
+    ];
+
     public static ItemInstance Rebind(ItemInstance item)
     {
         ArgumentNullException.ThrowIfNull(item);
         ItemBaseDefinition itemBase = EquipmentCatalog.GetBase(item.Base.StableId);
-        AffixRoll[] affixes = item.Affixes.Select(affix => RebindAffix(item, itemBase, affix)).ToArray();
+        AffixRoll[] affixes = item.Affixes.Where(affix => !IsForbiddenLegacyWeaponAffix(itemBase, affix))
+            .Select(affix => RebindAffix(item, itemBase, affix)).ToArray();
         string fractured = affixes.Any(affix => affix.Definition.StableFamilyId == EquipmentCatalog.ResolveAffixId(item.FracturedAffixFamilyId))
             ? EquipmentCatalog.ResolveAffixId(item.FracturedAffixFamilyId) : string.Empty;
         ItemEnchantment? enchantment = item.Enchantment;
@@ -22,6 +43,7 @@ public static class EquipmentItemRebinder
                 enchantment = EquipmentEnchantmentCatalog.All.FirstOrDefault(value => value.DisplayName == enchantment.DisplayName);
             }
         }
+        IReadOnlyList<RolledAffixComponent> corruptionComponents = RestoreCorruptionComponents(item);
         return item with
         {
             Base = itemBase,
@@ -32,7 +54,18 @@ public static class EquipmentItemRebinder
             RolledBaseEvasion = item.RolledBaseEvasion > 0 ? item.RolledBaseEvasion : itemBase.Evasion,
             RolledBaseShield = item.RolledBaseShield > 0 ? item.RolledBaseShield : itemBase.Shield,
             RolledBaseSpiritBarrier = item.RolledBaseSpiritBarrier > 0 ? item.RolledBaseSpiritBarrier : itemBase.SpiritBarrier,
+            RolledCorruptionComponents = corruptionComponents,
         };
+    }
+
+    private static IReadOnlyList<RolledAffixComponent> RestoreCorruptionComponents(ItemInstance item)
+    {
+        if (item.CorruptionComponents.Count > 0 || string.IsNullOrWhiteSpace(item.CorruptionImplicitId))
+            return item.CorruptionComponents;
+        EquipmentCorruptionImplicitEntry? entry = EquipmentCatalog.CorruptionImplicits.FirstOrDefault(value => value.Id == item.CorruptionImplicitId);
+        if (entry is null) return [];
+        byte[] digest = SHA256.HashData(Encoding.UTF8.GetBytes($"{item.InstanceId}|{entry.Id}|corruption"));
+        return EquipmentCorruptionCatalog.Roll(entry, new Pcg32(BitConverter.ToUInt64(digest, 0)));
     }
 
     private static AffixRoll RebindAffix(ItemInstance item, ItemBaseDefinition itemBase, AffixRoll roll)
@@ -64,4 +97,9 @@ public static class EquipmentItemRebinder
         string[] rightTags = right.ModTags?.ToArray() ?? [];
         return leftTags.Length == 0 || rightTags.Length == 0 || leftTags.Intersect(rightTags, StringComparer.Ordinal).Any();
     }
+
+    private static bool IsForbiddenLegacyWeaponAffix(ItemBaseDefinition itemBase, AffixRoll affix) =>
+        itemBase.Category is ItemCategory.OneHandWeapon or ItemCategory.TwoHandWeapon &&
+        !ConditionalWeaponDamageFamilies.Contains(affix.Definition.StableFamilyId) &&
+        affix.Effects.Any(effect => effect.Scope == ItemModifierScope.Global && ForbiddenGlobalWeaponDamageIncreases.Contains(effect.Kind));
 }

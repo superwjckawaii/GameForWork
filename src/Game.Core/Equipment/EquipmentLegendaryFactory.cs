@@ -52,33 +52,82 @@ public static class EquipmentLegendaryFactory
 
     private static AffixRoll FixedAffix(EquipmentLegendaryEntry entry, ItemBaseDefinition itemBase, string text, int index)
     {
-        (ItemModifierKind kind, int value, ItemModifierScope scope) = ParseFixedStat(text, itemBase);
+        AffixModifierComponent[] components = ParseFixedStats(text, itemBase).ToArray();
+        AffixModifierComponent primary = components[0];
         string id = $"{entry.Id}.fixed.{index + 1}";
-        var component = new AffixModifierComponent(kind, value, value, scope, text);
         var definition = new AffixDefinition(id, text, itemBase.Category,
-            index % 2 == 0 ? AffixPosition.Prefix : AffixPosition.Suffix, 0, 1, value, value, 0, kind,
-            SourceId: entry.Id, RawText: text, Source: "传奇固定", Components: [component]);
-        return new AffixRoll(definition, value, Components: [new RolledAffixComponent(kind, value, scope, text)]);
+            index % 2 == 0 ? AffixPosition.Prefix : AffixPosition.Suffix, 0, 1, primary.MinimumValue, primary.MaximumValue, 0, primary.Kind,
+            SourceId: entry.Id, RawText: text, Source: "传奇固定", Components: components);
+        return new AffixRoll(definition, primary.MinimumValue, Components: components.Select(component =>
+            new RolledAffixComponent(component.Kind, component.MinimumValue, component.Scope, text)).ToArray());
     }
 
-    private static (ItemModifierKind kind, int value, ItemModifierScope scope) ParseFixedStat(string text, ItemBaseDefinition itemBase)
+    private static IReadOnlyList<AffixModifierComponent> ParseFixedStats(string text, ItemBaseDefinition itemBase)
     {
         int value = ParseLastNumber(text);
         ItemModifierScope local = itemBase.Category is ItemCategory.OneHandWeapon or ItemCategory.TwoHandWeapon
             ? ItemModifierScope.LocalWeapon : ItemModifierScope.LocalDefense;
-        if (text.Contains("局部物理", StringComparison.Ordinal)) return (ItemModifierKind.IncreasedPhysicalDamageBasisPoints, value, local);
-        if (text.Contains("局部攻击速度", StringComparison.Ordinal)) return (ItemModifierKind.IncreasedAttackSpeedBasisPoints, value, local);
-        if (text.Contains("局部护甲", StringComparison.Ordinal)) return (ItemModifierKind.IncreasedArmorBasisPoints, value, local);
-        if (text.Contains("局部闪避", StringComparison.Ordinal)) return (ItemModifierKind.IncreasedEvasionBasisPoints, value, local);
-        if (text.Contains("局部护盾", StringComparison.Ordinal)) return (ItemModifierKind.IncreasedShieldBasisPoints, value, local);
-        if (text.Contains("局部灵障", StringComparison.Ordinal)) return (ItemModifierKind.IncreasedSpiritBarrierBasisPoints, value, local);
-        if (text.Contains("最大生命", StringComparison.Ordinal) && text.Contains('+')) return (ItemModifierKind.FlatMaximumLife, value, ItemModifierScope.Global);
-        if (text.Contains("命中值", StringComparison.Ordinal)) return (ItemModifierKind.FlatAccuracy, value, ItemModifierScope.Global);
-        if (text.Contains("火焰抗性", StringComparison.Ordinal)) return (ItemModifierKind.FireResistanceBasisPoints, value, ItemModifierScope.Global);
-        if (text.Contains("冰霜抗性", StringComparison.Ordinal)) return (ItemModifierKind.ColdResistanceBasisPoints, value, ItemModifierScope.Global);
-        if (text.Contains("闪电抗性", StringComparison.Ordinal)) return (ItemModifierKind.LightningResistanceBasisPoints, value, ItemModifierScope.Global);
-        if (text.Contains("虚空抗性", StringComparison.Ordinal)) return (ItemModifierKind.VoidResistanceBasisPoints, value, ItemModifierScope.Global);
-        return (ItemModifierKind.None, value, ItemModifierScope.Rule);
+        AffixModifierComponent C(ItemModifierKind kind, ItemModifierScope scope = ItemModifierScope.Global) => new(kind, value, value, scope, text);
+        if (text.Contains("本装备现有局部防御", StringComparison.Ordinal))
+            return [C(ItemModifierKind.IncreasedArmorBasisPoints, ItemModifierScope.LocalDefense), C(ItemModifierKind.IncreasedEvasionBasisPoints, ItemModifierScope.LocalDefense), C(ItemModifierKind.IncreasedShieldBasisPoints, ItemModifierScope.LocalDefense), C(ItemModifierKind.IncreasedSpiritBarrierBasisPoints, ItemModifierScope.LocalDefense)];
+        if (text.Contains("局部护甲、闪避与护盾", StringComparison.Ordinal))
+            return [C(ItemModifierKind.IncreasedArmorBasisPoints, ItemModifierScope.LocalDefense), C(ItemModifierKind.IncreasedEvasionBasisPoints, ItemModifierScope.LocalDefense), C(ItemModifierKind.IncreasedShieldBasisPoints, ItemModifierScope.LocalDefense)];
+        if (text.Contains("局部护甲与护盾", StringComparison.Ordinal))
+            return text.Contains("总增", StringComparison.Ordinal)
+                ? [C(ItemModifierKind.MoreLocalArmorBasisPoints, ItemModifierScope.LocalDefense), C(ItemModifierKind.MoreLocalShieldBasisPoints, ItemModifierScope.LocalDefense)]
+                : [C(ItemModifierKind.IncreasedArmorBasisPoints, ItemModifierScope.LocalDefense), C(ItemModifierKind.IncreasedShieldBasisPoints, ItemModifierScope.LocalDefense)];
+        if (text.Contains("局部物理", StringComparison.Ordinal)) return [C(ItemModifierKind.IncreasedPhysicalDamageBasisPoints, local)];
+        if (text.Contains("局部攻击速度", StringComparison.Ordinal)) return [C(ItemModifierKind.IncreasedAttackSpeedBasisPoints, local)];
+        if (text.Contains("局部护甲", StringComparison.Ordinal)) return [C(ItemModifierKind.IncreasedArmorBasisPoints, ItemModifierScope.LocalDefense)];
+        if (text.Contains("局部闪避", StringComparison.Ordinal)) return [C(ItemModifierKind.IncreasedEvasionBasisPoints, ItemModifierScope.LocalDefense)];
+        if (text.Contains("局部护盾", StringComparison.Ordinal)) return [C(ItemModifierKind.IncreasedShieldBasisPoints, ItemModifierScope.LocalDefense)];
+        if (text.Contains("局部灵障", StringComparison.Ordinal)) return [C(text.Contains("总增", StringComparison.Ordinal) ? ItemModifierKind.MoreLocalSpiritBarrierBasisPoints : ItemModifierKind.IncreasedSpiritBarrierBasisPoints, ItemModifierScope.LocalDefense)];
+        if (text.Contains("固定灵障", StringComparison.Ordinal)) return [C(ItemModifierKind.FlatSpiritBarrier, ItemModifierScope.LocalDefense)];
+        if (text.Contains("四种最大抗性", StringComparison.Ordinal)) return [C(ItemModifierKind.MaximumFireResistanceBasisPoints), C(ItemModifierKind.MaximumColdResistanceBasisPoints), C(ItemModifierKind.MaximumLightningResistanceBasisPoints), C(ItemModifierKind.MaximumVoidResistanceBasisPoints)];
+        if (text.Contains("火焰、冰霜、闪电、虚空抗性", StringComparison.Ordinal)) return [C(ItemModifierKind.FireResistanceBasisPoints), C(ItemModifierKind.ColdResistanceBasisPoints), C(ItemModifierKind.LightningResistanceBasisPoints), C(ItemModifierKind.VoidResistanceBasisPoints)];
+        if (text.Contains("火焰、冰霜、闪电抗性", StringComparison.Ordinal)) return [C(ItemModifierKind.FireResistanceBasisPoints), C(ItemModifierKind.ColdResistanceBasisPoints), C(ItemModifierKind.LightningResistanceBasisPoints)];
+        if (text.Contains("体魄、灵巧、精神、能量", StringComparison.Ordinal)) return [C(ItemModifierKind.Physique), C(ItemModifierKind.Dexterity), C(ItemModifierKind.Spirit), C(ItemModifierKind.Energy)];
+        if (text.Contains("攻击与施法速度", StringComparison.Ordinal)) return [C(ItemModifierKind.IncreasedAttackSpeedBasisPoints), C(ItemModifierKind.IncreasedCastSpeedBasisPoints)];
+        if (text.Contains("最大生命", StringComparison.Ordinal) && text.Contains('+')) return [C(ItemModifierKind.FlatMaximumLife)];
+        if (text.Contains("角色最大生命提高", StringComparison.Ordinal)) return [C(ItemModifierKind.IncreasedMaximumLifeBasisPoints)];
+        if (text.Contains("最大法力", StringComparison.Ordinal)) return [C(ItemModifierKind.FlatMaximumMana)];
+        if (text.Contains("体魄", StringComparison.Ordinal)) return [C(ItemModifierKind.Physique)];
+        if (text.Contains("灵巧", StringComparison.Ordinal)) return [C(ItemModifierKind.Dexterity)];
+        if (text.Contains("精神", StringComparison.Ordinal)) return [C(ItemModifierKind.Spirit)];
+        if (text.Contains("能量", StringComparison.Ordinal)) return [C(ItemModifierKind.Energy)];
+        if (text.Contains("命中值", StringComparison.Ordinal)) return [C(ItemModifierKind.FlatAccuracy)];
+        if (text.Contains("火焰抗性", StringComparison.Ordinal)) return [C(ItemModifierKind.FireResistanceBasisPoints)];
+        if (text.Contains("冰霜抗性", StringComparison.Ordinal)) return [C(ItemModifierKind.ColdResistanceBasisPoints)];
+        if (text.Contains("闪电抗性", StringComparison.Ordinal)) return [C(ItemModifierKind.LightningResistanceBasisPoints)];
+        if (text.Contains("虚空抗性", StringComparison.Ordinal)) return [C(ItemModifierKind.VoidResistanceBasisPoints)];
+        if (text.Contains("移动速度", StringComparison.Ordinal)) return [C(ItemModifierKind.IncreasedMovementSpeedBasisPoints)];
+        if (text.Contains("攻击格挡", StringComparison.Ordinal)) return [C(ItemModifierKind.AttackBlockChanceBasisPoints)];
+        if (text.Contains("法术压制", StringComparison.Ordinal)) return [C(ItemModifierKind.SpellSuppressionBasisPoints)];
+        if (text.Contains("物理伤害减免", StringComparison.Ordinal)) return [C(ItemModifierKind.PhysicalResistanceBasisPoints)];
+        if (text.Contains("战吼效果", StringComparison.Ordinal)) return [C(ItemModifierKind.IncreasedWarcryEffectBasisPoints)];
+        if (text.Contains("流血持续时间", StringComparison.Ordinal)) return [C(ItemModifierKind.IncreasedBleedDurationBasisPoints)];
+        if (text.Contains("药剂充能获取", StringComparison.Ordinal)) return [C(ItemModifierKind.IncreasedFlaskChargeGainBasisPoints)];
+        if (text.Contains("暴击伤害倍率", StringComparison.Ordinal)) return [C(ItemModifierKind.IncreasedCriticalMultiplierBasisPoints)];
+        if (text.Contains("全局法术暴击率", StringComparison.Ordinal) || text.Contains("全局暴击率", StringComparison.Ordinal)) return [C(ItemModifierKind.IncreasedCriticalChanceBasisPoints)];
+        if (text.Contains("投射物额外连锁", StringComparison.Ordinal)) return [C(ItemModifierKind.AdditionalChain)];
+        if (text.Contains("投射物数量", StringComparison.Ordinal)) return [C(ItemModifierKind.AdditionalProjectile)];
+        if (text.Contains("生命恢复率", StringComparison.Ordinal) || text.Contains("法力恢复率", StringComparison.Ordinal)) return [C(ItemModifierKind.IncreasedResourceRecoveryRateBasisPoints)];
+        if (text.Contains("法术伤害总增", StringComparison.Ordinal)) return [C(ItemModifierKind.MoreSpellDamageBasisPoints)];
+        if (text.Contains("法术伤害提高", StringComparison.Ordinal)) return [C(ItemModifierKind.IncreasedSpellDamageBasisPoints)];
+        if (text.Contains("施法速度", StringComparison.Ordinal)) return [C(ItemModifierKind.IncreasedCastSpeedBasisPoints)];
+        if (text.Contains("护甲提高", StringComparison.Ordinal)) return [C(ItemModifierKind.IncreasedArmorBasisPoints)];
+        if (text.Contains("普通召唤物最大生命", StringComparison.Ordinal)) return [C(ItemModifierKind.IncreasedMinionLifeBasisPoints)];
+        if (text.Contains("普通召唤物伤害", StringComparison.Ordinal)) return [C(ItemModifierKind.IncreasedMinionDamageBasisPoints)];
+        if (text.Contains("徒手攻击速度", StringComparison.Ordinal)) return [C(ItemModifierKind.IncreasedAttackSpeedBasisPoints)];
+        if (text.Contains("灵兽最大生命", StringComparison.Ordinal)) return [C(text.Contains('+') ? ItemModifierKind.FlatCompanionMaximumLife : ItemModifierKind.IncreasedCompanionLifeBasisPoints)];
+        if (text.Contains("灵兽伤害总增", StringComparison.Ordinal)) return [C(ItemModifierKind.MoreCompanionDamageBasisPoints)];
+        if (text.Contains("灵兽伤害", StringComparison.Ordinal)) return [C(ItemModifierKind.IncreasedCompanionDamageBasisPoints)];
+        if (text.Contains("构装体最大生命总增", StringComparison.Ordinal)) return [C(ItemModifierKind.MoreConstructLifeBasisPoints)];
+        if (text.Contains("构装体伤害总增", StringComparison.Ordinal)) return [C(ItemModifierKind.MoreConstructDamageBasisPoints)];
+        if (text.Contains("构装体最大生命", StringComparison.Ordinal)) return [C(ItemModifierKind.IncreasedConstructLifeBasisPoints)];
+        if (text.Contains("构装体伤害", StringComparison.Ordinal)) return [C(ItemModifierKind.IncreasedConstructDamageBasisPoints)];
+        if (text.Contains("基础暴击率", StringComparison.Ordinal)) return [C(ItemModifierKind.BaseCriticalChanceBasisPoints, ItemModifierScope.LocalWeapon)];
+        throw new InvalidDataException($"Missing fixed legendary affix implementation: {text}");
     }
 
     private static int ParseLastNumber(string text)

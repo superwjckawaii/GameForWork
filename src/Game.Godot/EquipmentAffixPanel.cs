@@ -1,11 +1,11 @@
 using GameForWork.Core.P1.Items;
-using GameForWork.Core.P19;
+using GameForWork.Core.Equipment;
 using GameForWork.Core.P29;
 using Godot;
 
 namespace GameForWork.GodotClient;
 
-public partial class P19AffixPanel : VBoxContainer
+public partial class EquipmentAffixPanel : VBoxContainer
 {
     private OptionButton? _category;
     private OptionButton? _base;
@@ -63,13 +63,13 @@ public partial class P19AffixPanel : VBoxContainer
         string? baseId = _base.Selected <= 0 ? null : _baseIds[_base.Selected - 1];
         AffixPosition? position = _position.Selected switch { 1 => AffixPosition.Prefix, 2 => AffixPosition.Suffix, _ => null };
         string query = _search.Text.Trim();
-        IReadOnlyList<P19AffixView> rows = P19AffixBrowser.Query(new(level, category, baseId, position, query));
+        IReadOnlyList<EquipmentAffixView> rows = EquipmentAffixBrowser.Query(new(level, category, baseId, position, query));
         var lines = new List<string>
         {
             $"[color=#d5c79a]当前显示 {rows.Count} 个真实档位 / 实时目录总计 {P1Affixes.All.Count(affix => affix.SourceId.Length > 0)}" +
             $"{(baseId is null ? string.Empty : $" · {Escape(P1ItemBases.Get(baseId).DisplayName)}专用 T 级与权重")}[/color]"
         };
-        foreach (P19AffixView row in rows)
+        foreach (EquipmentAffixView row in rows)
         {
             AffixDefinition affix = row.Definition;
             string side = affix.Position == AffixPosition.Prefix ? "前" : "后";

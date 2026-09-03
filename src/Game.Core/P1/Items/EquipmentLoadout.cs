@@ -146,7 +146,7 @@ public sealed class EquipmentLoadout
         var result = new EquipmentLoadout();
         foreach ((EquipmentSlot slot, ItemInstance item) in items.OrderBy(pair => pair.Key == EquipmentSlot.MainHand ? 0 : 1))
         {
-            if (!result.TryEquip(slot, P6SocketRules.Ensure(P30EquipmentAffixes.RemoveForbiddenGlobalWeaponAffixes(item))))
+            if (!result.TryEquip(slot, P6SocketRules.Ensure(item)))
             {
                 throw new InvalidDataException($"Item {item.InstanceId} cannot be restored to {slot}.");
             }
@@ -169,6 +169,8 @@ public sealed class EquipmentLoadout
                 AddGlobal(sums, implicitModifier.Kind, implicitModifier.Value, implicitModifier.Scope);
             foreach (AffixRoll affix in item.Affixes)
             foreach (RolledAffixComponent effect in affix.Effects)
+                AddGlobal(sums, effect.Kind, effect.Value, effect.Scope);
+            foreach (RolledAffixComponent effect in item.CorruptionComponents)
                 AddGlobal(sums, effect.Kind, effect.Value, effect.Scope);
             if (item.Enchantment is not null)
             {
@@ -205,7 +207,7 @@ public sealed class EquipmentLoadout
             sums[(int)ItemModifierKind.LightningResistanceBasisPoints],
             sums[(int)ItemModifierKind.VoidResistanceBasisPoints],
             sums[(int)ItemModifierKind.IncreasedMovementSpeedBasisPoints],
-            sums[(int)ItemModifierKind.BlockChanceBasisPoints],
+            checked(sums[(int)ItemModifierKind.BlockChanceBasisPoints] + sums[(int)ItemModifierKind.AttackBlockChanceBasisPoints]),
             sums[(int)ItemModifierKind.SpellSuppressionBasisPoints],
             sums[(int)ItemModifierKind.FlatLifeRegeneration],
             sums[(int)ItemModifierKind.IncreasedCooldownRecoveryBasisPoints],
@@ -245,12 +247,13 @@ public sealed class EquipmentLoadout
         int physicalIncrease = LocalValue(item, ItemModifierKind.IncreasedPhysicalDamageBasisPoints);
         int attackSpeedIncrease = LocalValue(item, ItemModifierKind.IncreasedAttackSpeedBasisPoints);
         int criticalIncrease = LocalValue(item, ItemModifierKind.IncreasedCriticalChanceBasisPoints);
+        int baseCriticalChance = LocalValue(item, ItemModifierKind.BaseCriticalChanceBasisPoints);
         weapon = weapon with
         {
             MinimumPhysicalDamage = LocalWeaponDamage(weapon.MinimumPhysicalDamage, addedMinimum, physicalIncrease, item.Quality),
             MaximumPhysicalDamage = LocalWeaponDamage(weapon.MaximumPhysicalDamage, addedMaximum, physicalIncrease, item.Quality),
             AttacksPerSecondMilli = checked(weapon.AttacksPerSecondMilli * (10_000 + attackSpeedIncrease) / 10_000),
-            CriticalChanceBasisPoints = checked(weapon.CriticalChanceBasisPoints * (10_000 + criticalIncrease) / 10_000),
+            CriticalChanceBasisPoints = checked((weapon.CriticalChanceBasisPoints + baseCriticalChance) * (10_000 + criticalIncrease) / 10_000),
         };
         LocalDamageRange fire = LocalElementalRange(item, ItemModifierKind.AddedMinimumFireDamage, ItemModifierKind.AddedMaximumFireDamage);
         LocalDamageRange cold = LocalElementalRange(item, ItemModifierKind.AddedMinimumColdDamage, ItemModifierKind.AddedMaximumColdDamage);
@@ -291,10 +294,15 @@ public sealed class EquipmentLoadout
     {
         int flat = LocalValue(item, flatKind);
         int increased = LocalValue(item, increasedKind);
-        int result = checked((baseValue + flat) * (10_000 + increased) / 10_000 * (100 + Math.Clamp(item.Quality, 0, 40)) / 100);
-        if (flatKind == ItemModifierKind.FlatShield && item.Enchantment?.DisplayName == "晶心铭文")
-            result = checked(result * 13_500 / 10_000);
-        return result;
+        int more = LocalValue(item, flatKind switch
+        {
+            ItemModifierKind.FlatArmor => ItemModifierKind.MoreLocalArmorBasisPoints,
+            ItemModifierKind.FlatEvasion => ItemModifierKind.MoreLocalEvasionBasisPoints,
+            ItemModifierKind.FlatShield => ItemModifierKind.MoreLocalShieldBasisPoints,
+            ItemModifierKind.FlatSpiritBarrier => ItemModifierKind.MoreLocalSpiritBarrierBasisPoints,
+            _ => ItemModifierKind.None,
+        });
+        return checked((baseValue + flat) * (10_000 + increased) / 10_000 * (100 + Math.Clamp(item.Quality, 0, 40)) / 100 * (10_000 + more) / 10_000);
     }
 
     private static int LocalBlock(ItemInstance item)
@@ -314,6 +322,9 @@ public sealed class EquipmentLoadout
             value += item.Enchantment.EffectComponents
                 .Where(effect => effect.Kind == kind && effect.Scope is ItemModifierScope.LocalWeapon or ItemModifierScope.LocalDefense or ItemModifierScope.LocalBlock)
                 .Sum(effect => effect.MinimumValue);
+        value += item.CorruptionComponents
+            .Where(effect => effect.Kind == kind && effect.Scope is ItemModifierScope.LocalWeapon or ItemModifierScope.LocalDefense or ItemModifierScope.LocalBlock)
+            .Sum(effect => effect.Value);
         return value;
     }
 

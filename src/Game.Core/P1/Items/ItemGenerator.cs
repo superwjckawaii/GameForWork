@@ -111,12 +111,17 @@ public static class ItemGenerator
 
     private static IReadOnlyList<RolledAffixComponent> RollImplicits(ItemBaseDefinition itemBase, int primaryValue, Pcg32 random)
     {
-        var values = new List<RolledAffixComponent>();
-        if (itemBase.ImplicitModifier != ItemModifierKind.None)
-            values.Add(new RolledAffixComponent(itemBase.ImplicitModifier, primaryValue, itemBase.ImplicitScope, itemBase.ImplicitText));
-        values.AddRange(itemBase.ExtraImplicits.Select(component => new RolledAffixComponent(
-            component.ModifierKind, component.Value, component.Scope, component.DisplayText)));
-        return values;
+        IReadOnlyList<ItemBaseImplicit> definitions = itemBase.BaseImplicitComponents;
+        if (definitions.Count == 0) return [];
+        bool usedPrimary = false;
+        return definitions.Select(component =>
+        {
+            bool isPrimary = !usedPrimary && component.ModifierKind == itemBase.ImplicitModifier &&
+                component.Value == itemBase.ImplicitMinimumValue && component.EffectiveMaximumValue == itemBase.ImplicitMaximumValue;
+            if (isPrimary) usedPrimary = true;
+            int value = isPrimary ? primaryValue : RollInclusive(random, component.Value, component.EffectiveMaximumValue);
+            return new RolledAffixComponent(component.ModifierKind, value, component.Scope, component.DisplayText);
+        }).ToArray();
     }
 
     private static AffixDefinition WeightedPick(

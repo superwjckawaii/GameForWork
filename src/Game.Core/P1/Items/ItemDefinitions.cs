@@ -95,10 +95,15 @@ public sealed record ItemBaseDefinition(
     int SpiritBarrier = 0,
     ItemModifierScope ImplicitScope = ItemModifierScope.Global,
     int SpiritBarrierMinimum = 0,
-    int SpiritBarrierMaximum = 0)
+    int SpiritBarrierMaximum = 0,
+    IReadOnlyList<ItemBaseImplicit>? ImplicitComponents = null)
 {
     public IReadOnlyList<string> ItemTags => Tags ?? Array.Empty<string>();
     public IReadOnlyList<ItemBaseImplicit> ExtraImplicits => AdditionalImplicits ?? Array.Empty<ItemBaseImplicit>();
+    public IReadOnlyList<ItemBaseImplicit> BaseImplicitComponents => ImplicitComponents ??
+        (ImplicitModifier == ItemModifierKind.None
+            ? ExtraImplicits
+            : [new ItemBaseImplicit(ImplicitModifier, ImplicitMinimumValue, ImplicitText, ImplicitScope, ImplicitMaximumValue), .. ExtraImplicits]);
 
     public WeaponFamily WeaponFamily => ItemTags switch
     {
@@ -165,7 +170,11 @@ public sealed record ItemBaseImplicit(
     ItemModifierKind ModifierKind,
     int Value,
     string DisplayText,
-    ItemModifierScope Scope = ItemModifierScope.Global);
+    ItemModifierScope Scope = ItemModifierScope.Global,
+    int MaximumValue = 0)
+{
+    public int EffectiveMaximumValue => MaximumValue == 0 ? Value : MaximumValue;
+}
 
 public enum ItemModifierKind
 {
@@ -375,6 +384,21 @@ public enum ItemModifierKind
     FlaskRepeatEffect,
     VirtueViceGainChanceBasisPoints,
     BaseImplicitRule,
+    BaseCriticalChanceBasisPoints,
+    MoreAttackDamageBasisPoints,
+    MoreLocalArmorBasisPoints,
+    MoreLocalEvasionBasisPoints,
+    MoreLocalSpiritBarrierBasisPoints,
+    MaximumAttackBlockChanceBasisPoints,
+    MaximumSpellBlockChanceBasisPoints,
+    MoreFlaskEffectBasisPoints,
+    FlaskNoChargeConsumptionChanceBasisPoints,
+    FlaskDoesNotEndAtFullMana,
+    IncreasedBleedDurationBasisPoints,
+    FlatCompanionMaximumLife,
+    MoreCompanionDamageBasisPoints,
+    MoreConstructLifeBasisPoints,
+    MoreConstructDamageBasisPoints,
 }
 
 public sealed record AffixModifierComponent(
@@ -422,7 +446,6 @@ public sealed record AffixDefinition(
 
     public bool Supports(ItemBaseDefinition itemBase) =>
         (ApplicableCategories?.Contains(itemBase.Category) ?? Category == itemBase.Category) &&
-        (!string.Equals(Source, "P24Special", StringComparison.Ordinal) || string.Equals(itemBase.SourceId, "P24", StringComparison.Ordinal)) &&
         (RequiredBaseTags is null || RequiredBaseTags.Count == 0 || RequiredBaseTags.Any(tag => itemBase.ItemTags.Contains(tag, StringComparer.Ordinal))) &&
         WeightFor(itemBase) > 0;
 
@@ -528,7 +551,8 @@ public sealed record ItemInstance(
     bool ProtectSuffixesNextCraft = false,
     long CraftSequence = 0,
     string LegendaryCatalogId = "",
-    string CorruptionImplicitId = "")
+    string CorruptionImplicitId = "",
+    IReadOnlyList<RolledAffixComponent>? RolledCorruptionComponents = null)
 {
     public string DisplayName => string.IsNullOrWhiteSpace(RolledName) ? Base.DisplayName : RolledName;
     public int PrefixCount => Affixes.Count(affix => affix.Definition.Position == AffixPosition.Prefix);
@@ -551,6 +575,7 @@ public sealed record ItemInstance(
         : Base.ImplicitModifier == ItemModifierKind.None
             ? []
             : [new RolledAffixComponent(Base.ImplicitModifier, EffectiveImplicitValue, Base.ImplicitScope, Base.ImplicitText)];
+    public IReadOnlyList<RolledAffixComponent> CorruptionComponents => RolledCorruptionComponents ?? [];
 
     public ItemInstance WithLocked(bool locked) => this with { IsLocked = locked };
 

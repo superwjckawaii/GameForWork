@@ -1,6 +1,6 @@
 using GameForWork.Core.P1.Items;
 using GameForWork.Core.P21;
-using GameForWork.Core.P25;
+using GameForWork.Core.Equipment;
 using Godot;
 
 namespace GameForWork.GodotClient;
@@ -15,15 +15,15 @@ internal sealed class P21ArtAtlas
     {
         if (item.LegendaryRule is not null && UniqueItems is not null)
         {
-            try { return Icon(UniqueItems, P25LegendaryArt.IconIndex(item.LegendaryRule.StableId), P25LegendaryArt.Columns); }
+            try { return Icon(UniqueItems, EquipmentLegendaryArt.IconIndex(item.LegendaryRule.StableId), EquipmentLegendaryArt.Columns); }
             catch (KeyNotFoundException) { }
         }
-        return P25Equipment is null ? null : Icon(P25Equipment, P25EquipmentArt.IconIndex(item.Base), P25EquipmentArt.Columns);
+        return P25Equipment is null ? null : Icon(P25Equipment, EquipmentBaseArt.IconIndex(item.Base), EquipmentBaseArt.Columns);
     }
 
     public Texture2D? SkillIcon(string stableId) => SkillGems is null
         ? null
-        : Icon(SkillGems, P21ArtContract.SkillStoneIndex(stableId), P25SkillStoneArt.Columns);
+        : Icon(SkillGems, P21ArtContract.SkillStoneIndex(stableId), SkillStoneArt.Columns);
 
     public static AtlasTexture Icon(Texture2D atlas, int index, int columns)
     {

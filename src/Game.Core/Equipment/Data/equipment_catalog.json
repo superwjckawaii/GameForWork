@@ -12175,8 +12175,8 @@
       "id": "equipment.base.225.cb0d437084",
       "legacyIds": [],
       "displayName": "\u7C97\u6728\u6218\u5F13",
-      "category": "Shield",
-      "primarySlot": "OffHand",
+      "category": "TwoHandWeapon",
+      "primarySlot": "MainHand",
       "equipmentType": "\u5F13\uFF1B\u91CD\u5F26\u6218\u5F13\u7CFB",
       "requirementText": "\u666E\u901A\uFF1B1\uFF1B\u5DE710",
       "baseStatsText": "\u7269\u7406 10\uFF5E20\uFF1B\u653B\u901F 1.15\uFF1B\u66B4\u51FB 5.25%",
@@ -12225,8 +12225,8 @@
       "id": "equipment.base.226.c1ae8f2f8a",
       "legacyIds": [],
       "displayName": "\u91CD\u5F26\u89D2\u5F13",
-      "category": "Shield",
-      "primarySlot": "OffHand",
+      "category": "TwoHandWeapon",
+      "primarySlot": "MainHand",
       "equipmentType": "\u5F13\uFF1B\u91CD\u5F26\u6218\u5F13\u7CFB",
       "requirementText": "\u8FDB\u9636\uFF1B30\uFF1B\u5DE745",
       "baseStatsText": "\u7269\u7406 32\uFF5E58\uFF1B\u653B\u901F 1.18\uFF1B\u66B4\u51FB 5.5%",
@@ -12275,8 +12275,8 @@
       "id": "equipment.base.227.70dd6e47bc",
       "legacyIds": [],
       "displayName": "\u7834\u7532\u5F3A\u5F13",
-      "category": "Shield",
-      "primarySlot": "OffHand",
+      "category": "TwoHandWeapon",
+      "primarySlot": "MainHand",
       "equipmentType": "\u5F13\uFF1B\u91CD\u5F26\u6218\u5F13\u7CFB",
       "requirementText": "\u9AD8\u9636\uFF1B55\uFF1B\u5DE785",
       "baseStatsText": "\u7269\u7406 56\uFF5E98\uFF1B\u653B\u901F 1.20\uFF1B\u66B4\u51FB 5.75%",
@@ -12325,8 +12325,8 @@
       "id": "equipment.base.228.1b2753f9a3",
       "legacyIds": [],
       "displayName": "\u5929\u7A79\u6218\u4E89\u5F13",
-      "category": "Shield",
-      "primarySlot": "OffHand",
+      "category": "TwoHandWeapon",
+      "primarySlot": "MainHand",
       "equipmentType": "\u5F13\uFF1B\u91CD\u5F26\u6218\u5F13\u7CFB",
       "requirementText": "\u5DC5\u5CF0\uFF1B80\uFF1B\u5DE7130",
       "baseStatsText": "\u7269\u7406 82\uFF5E140\uFF1B\u653B\u901F 1.22\uFF1B\u66B4\u51FB 6%",
@@ -19213,8 +19213,8 @@
       }
     ],
     [
-      {
-        "id": "equipment.affix.construct.maximum",
+    {
+      "id": "equipment.affix.construct.maximum",
         "legacyIds": [],
         "displayName": "\u6784\u88C5\u4F53\u4E0A\u9650",
         "position": "Prefix",
@@ -19223,7 +19223,7 @@
         "minimumValue": 1,
         "maximumValue": 1,
         "weight": 50,
-        "modifierKind": "AdditionalUnitMaximum",
+      "modifierKind": "AdditionalConstructMaximum",
         "groupId": "equipment.group.unit.maximum",
         "applicableCategories": [
           "Helmet",
@@ -19234,7 +19234,7 @@
         "local": false,
         "components": [
           {
-            "kind": "AdditionalUnitMaximum",
+          "kind": "AdditionalConstructMaximum",
             "minimumValue": 1,
             "maximumValue": 1,
             "scope": "Global",
@@ -39862,8 +39862,8 @@
       }
     ],
     [
-      {
-        "id": "equipment.affix.minion.maximum",
+    {
+      "id": "equipment.affix.minion.maximum",
         "legacyIds": [],
         "displayName": "\u53EC\u5524\u7269\u4E0A\u9650",
         "position": "Prefix",
@@ -39872,7 +39872,7 @@
         "minimumValue": 1,
         "maximumValue": 1,
         "weight": 50,
-        "modifierKind": "AdditionalUnitMaximum",
+      "modifierKind": "AdditionalMinionMaximum",
         "groupId": "equipment.group.unit.maximum",
         "applicableCategories": [
           "Helmet",
@@ -39883,7 +39883,7 @@
         "local": false,
         "components": [
           {
-            "kind": "AdditionalUnitMaximum",
+          "kind": "AdditionalMinionMaximum",
             "minimumValue": 1,
             "maximumValue": 1,
             "scope": "Global",
@@ -40958,8 +40958,8 @@
       }
     ],
     [
-      {
-        "id": "equipment.affix.phantom.maximum",
+    {
+      "id": "equipment.affix.phantom.maximum",
         "legacyIds": [],
         "displayName": "\u5E7B\u8EAB\u4E0A\u9650",
         "position": "Prefix",
@@ -40968,7 +40968,7 @@
         "minimumValue": 1,
         "maximumValue": 1,
         "weight": 50,
-        "modifierKind": "AdditionalUnitMaximum",
+      "modifierKind": "AdditionalPhantomMaximum",
         "groupId": "equipment.group.unit.maximum",
         "applicableCategories": [
           "Helmet",
@@ -40979,7 +40979,7 @@
         "local": false,
         "components": [
           {
-            "kind": "AdditionalUnitMaximum",
+          "kind": "AdditionalPhantomMaximum",
             "minimumValue": 1,
             "maximumValue": 1,
             "scope": "Global",

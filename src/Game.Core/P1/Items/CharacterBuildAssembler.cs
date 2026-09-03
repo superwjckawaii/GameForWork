@@ -111,9 +111,12 @@ public static class CharacterBuildAssembler
             item.Value(ItemModifierKind.FlatSpiritBarrier),
             checked(item.Value(ItemModifierKind.IncreasedSpiritBarrierBasisPoints) + jewel.IncreasedSpiritBarrierBasisPoints),
             MaximumElementalResistanceBasisPoints: checked(7_500 + item.MaximumAllResistanceBasisPoints +
+                Math.Max(item.Value(ItemModifierKind.MaximumFireResistanceBasisPoints),
+                    Math.Max(item.Value(ItemModifierKind.MaximumColdResistanceBasisPoints), item.Value(ItemModifierKind.MaximumLightningResistanceBasisPoints))) +
                 jewel.MaximumElementalResistanceBasisPoints),
             MaximumVoidResistanceBasisPoints: checked(7_500 + item.MaximumAllResistanceBasisPoints +
-                jewel.MaximumVoidResistanceBasisPoints));
+                item.Value(ItemModifierKind.MaximumVoidResistanceBasisPoints) + jewel.MaximumVoidResistanceBasisPoints),
+            MaximumBlockChanceBasisPoints: checked(7_500 + item.Value(ItemModifierKind.MaximumAttackBlockChanceBasisPoints)));
         SkillUseProfile heavyStrike = SkillRules.BuildHeavyStrike(
             heavyStrikeConfiguration,
             weapon,
