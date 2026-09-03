@@ -497,11 +497,6 @@ public sealed class P1GameSession
         if (P10EndgameState.IsCitadel(run.Map))
         {
             Endgame.RecordCitadelVictory();
-            if (Endgame.TryClaimCitadelMythic())
-            {
-                ItemInstance mythic = P14UniqueItems.Create("core.mythic.heart_of_ash", 120, $"mythic-{run.Map.InstanceId}");
-                if (!World.Storage.TryStore(mythic)) Management.AddToRecovery(mythic, "灰烬天垒首杀奖励");
-            }
         }
         EnsureWarfrontDiscoveryMap(); SynchronizeWarfrontRouteCandidates();
         RefreshHeroTeamBuild(); RefreshMercenaryPartyBuild(); Journey.Synchronize(this);

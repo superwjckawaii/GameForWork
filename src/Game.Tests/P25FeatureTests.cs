@@ -57,7 +57,7 @@ public sealed class P25FeatureTests
             .Select(value => EquipmentCatalog.GetBase(value.Id)).ToArray();
         int[] equipmentIndexes = p24Bases.Select(EquipmentBaseArt.IconIndex).ToArray();
         Assert.Equal(p24Bases.Length, equipmentIndexes.Distinct().Count());
-        Assert.All(equipmentIndexes, index => Assert.InRange(index, 0, 129));
+        Assert.All(equipmentIndexes, index => Assert.InRange(index, 0, 243));
         int[] skillIndexes = P24SkillCatalog.Active.Select(skill => P21ArtContract.SkillStoneIndex(skill.Combat.StoneId))
             .Concat(P24SkillCatalog.Supports.Select(skill => P21ArtContract.SkillStoneIndex(skill.StoneId))).ToArray();
         Assert.Equal(90, skillIndexes.Length);
@@ -68,11 +68,13 @@ public sealed class P25FeatureTests
     public void EveryBaseAndLegendaryHasOneStableExplicitArtCell()
     {
         int[] baseIndexes = P1ItemBases.All.Select(EquipmentBaseArt.IconIndex).ToArray();
-        Assert.All(baseIndexes, index => Assert.InRange(index, 0, 129));
+        Assert.All(baseIndexes, index => Assert.InRange(index, 0, 243));
+        Assert.Equal(244, baseIndexes.Distinct().Count());
         Assert.Equal(baseIndexes, P1ItemBases.All.Select(EquipmentBaseArt.IconIndex));
         Assert.Equal(P14UniqueItems.All.Select(item => item.StableId), EquipmentLegendaryArt.StableIds);
         Assert.Equal(2, EquipmentLegendaryArt.IconIndex("core.unique.ravens_answer"));
-        Assert.Equal(36, EquipmentLegendaryArt.IconIndex("core.mythic.heart_of_ash"));
+        Assert.Equal(40, EquipmentLegendaryArt.IconIndex("core.mythic.heart_of_ash"));
+        Assert.Equal(55, P14UniqueItems.All.Select(item => EquipmentLegendaryArt.IconIndex(item.StableId)).Distinct().Count());
         Assert.Equal(ItemCategory.Helmet, P1ItemBases.Get(P14UniqueItems.All[2].BaseStableId).Category);
         Assert.Contains(P14UniqueItems.All.Where(item => item.Mythic), item =>
             P1ItemBases.Get(item.BaseStableId).Category == ItemCategory.BodyArmor);

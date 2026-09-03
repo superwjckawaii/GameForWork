@@ -6,7 +6,7 @@ namespace GameForWork.Core.Equipment;
 public static class EquipmentBaseArt
 {
     public const int Columns = 13;
-    public const int Rows = 12;
+    public const int Rows = 19;
     public static IReadOnlyList<string> ItemBaseIds { get; } = EquipmentCatalog.Snapshot.Bases.Select(item => item.Id).ToArray();
     private static readonly IReadOnlyDictionary<string, int> Indices = ItemBaseIds
         .Select((stableId, index) => (stableId, index)).ToDictionary(pair => pair.stableId, pair => pair.index,
@@ -16,7 +16,7 @@ public static class EquipmentBaseArt
     {
         string canonical = EquipmentCatalog.ResolveBaseId(itemBase.StableId);
         return Indices.TryGetValue(canonical, out int index)
-            ? index % 130
+            ? index
             : throw new KeyNotFoundException($"Equipment art mapping missing for {itemBase.StableId}.");
     }
 }
@@ -24,6 +24,7 @@ public static class EquipmentBaseArt
 public static class EquipmentLegendaryArt
 {
     public const int Columns = 5;
+    public const int Rows = 11;
     public static IReadOnlyList<string> StableIds { get; } = P14.P14UniqueItems.All.Select(value => value.StableId).ToArray();
     private static readonly IReadOnlyDictionary<string, int> Indices = StableIds
         .Select((stableId, index) => (stableId, index)).ToDictionary(pair => pair.stableId, pair => pair.index,
@@ -31,13 +32,8 @@ public static class EquipmentLegendaryArt
 
     public static int IconIndex(string stableId)
     {
-        if (stableId == "p30.unique.humility_crown") return 2;
-        if (stableId == "p30.unique.arrogance_grasp") return 14;
-        if (stableId == "p30.unique.rage_temperance_carapace") return 9;
-        if (stableId == "p30.unique.paired_virtue_girdle") return 16;
-        if (stableId == "core.mythic.heart_of_ash") return 36;
         return Indices.TryGetValue(stableId, out int index)
-            ? index % 45 : throw new KeyNotFoundException($"Legendary art mapping missing for {stableId}.");
+            ? index : throw new KeyNotFoundException($"Legendary art mapping missing for {stableId}.");
     }
 }
 

@@ -305,13 +305,6 @@ public sealed class P10EndgameState
         return first;
     }
 
-    public bool TryClaimCitadelMythic()
-    {
-        if (!CitadelDefeated || MythicGranted) return false;
-        MythicGranted = true;
-        return true;
-    }
-
     public static bool IsCitadel(P1MapItem map) => map.InstanceId.StartsWith(CitadelMapPrefix, StringComparison.Ordinal);
     public static bool IsCitadelPractice(P1MapItem map) => map.InstanceId.StartsWith(CitadelPracticeMapPrefix, StringComparison.Ordinal);
     public static bool IsBreakthroughTrial(P1MapItem map) => map.InstanceId.StartsWith(BreakthroughMapPrefix, StringComparison.Ordinal);

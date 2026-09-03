@@ -77,8 +77,6 @@ public sealed class P14FeatureTests
         Assert.True(state.RecordCitadelVictory());
         Assert.Equal(4, state.BreakthroughPoints);
         Assert.Equal(5, state.BonusAtlasPoints);
-        Assert.True(state.TryClaimCitadelMythic());
-        Assert.False(state.TryClaimCitadelMythic());
         Assert.False(state.RecordCitadelVictory());
         Assert.Equal(1, state.MythicReforgeMaterials);
     }

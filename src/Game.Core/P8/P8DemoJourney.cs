@@ -141,7 +141,7 @@ public sealed class P8DemoJourney
         new(P8JourneyStep.EnterCitadel, "取得天垒门票", "完成 T11+ 地图，使用 8 枚碎片合成灰烬天垒门票。", P8JourneyDestination.Expedition,
             "正式模式消耗门票；练习模式免费但没有奖励。"),
         new(P8JourneyStep.DefeatCitadel, "击败灰烬天垒", "连续突破城墙、双卫和核心，完成 Demo 主旅程。", P8JourneyDestination.Expedition,
-            "三阶段资源连续保留。首杀奖励神话装备、5 个异界点和 2 个升华点。"),
+            "三阶段资源连续保留。首次胜利奖励5个异界点和2个升华点；当前版本神话装备由天垒Boss概率掉落。"),
     ];
 
     private readonly HashSet<P8JourneyEvent> _events = [];
@@ -263,6 +263,8 @@ public sealed class P8DemoJourney
                         session.World.Storage.Items.Count(item => item.Rarity == ItemRarity.Legendary);
         int highestDamage = session.World.Expedition.Reports.SelectMany(report => report.Skills)
             .Select(skill => skill.Damage).DefaultIfEmpty().Max();
+        IReadOnlySet<string> mythicIds = P14.P14UniqueItems.All.Where(item => item.Mythic)
+            .Select(item => item.StableId).ToHashSet(StringComparer.Ordinal);
         return new P8DemoSummary(
             RealPlayMilliseconds, OfflineMilliseconds, CompletedActs(session),
             session.World.Teams.Sum(team => team.MapsCompleted), session.World.Teams.Sum(team => team.MapsFailed),
@@ -271,7 +273,8 @@ public sealed class P8DemoJourney
             build.MainSkill, build.MainSkillLinks, highestDamage, score, legendary, saveHash,
             session.Endgame.CompletedTiers.DefaultIfEmpty().Max(),
             session.Endgame.MechanicEncounters.Values.Sum(), session.Endgame.CitadelVictories,
-            equipment.Concat(session.World.Storage.Items).Count(item => item.LegendaryRule?.StableId == "core.mythic.heart_of_ash"),
+            equipment.Concat(session.World.Storage.Items).Count(item =>
+                item.LegendaryRule is not null && mythicIds.Contains(item.LegendaryRule.StableId)),
             Enum.GetValues<P9BuildingKind>().Sum(session.Town.Level));
     }
 

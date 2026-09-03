@@ -44,13 +44,17 @@ public sealed class P29FeatureTests
         foreach (string pool in new[] { "warden", "citadel", "abyss", "garden", "red", "blue", "warfront" })
         {
             IReadOnlyList<P14UniqueDefinition> items = P20LegendaryDrops.Pool(pool);
-            Assert.Equal(4, items.Count);
+            Assert.Equal(pool == "citadel" ? 9 : 4, items.Count);
             Assert.All(items, item =>
             {
                 EquipmentLegendaryEntry entry = EquipmentCatalog.LegendaryItems.Single(value => value.DisplayName == item.DisplayName);
                 Assert.Equal(entry.Id, EquipmentRuleRegistry.Get(entry.RuleId).SourceDefinitionId);
             });
         }
+        Assert.Equal(P14UniqueItems.All.Where(item => item.Mythic).Select(item => item.StableId).Order(),
+            P20LegendaryDrops.Pool("citadel").Where(item => item.Mythic).Select(item => item.StableId).Order());
+        Assert.DoesNotContain(new[] { "warden", "abyss", "garden", "red", "blue", "warfront" }
+            .SelectMany(P20LegendaryDrops.Pool), item => item.Mythic);
         Assert.Equal(12, P20LegendaryDrops.Pool("common").Count);
     }
 
