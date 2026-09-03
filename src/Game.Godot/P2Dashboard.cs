@@ -97,6 +97,7 @@ public partial class P2Dashboard : VBoxContainer
     private ConfirmationDialog? _confirmDialog;
     private OptionButton? _batchRarity;
     private OptionButton? _batchScope;
+    private CheckBox? _batchIncludeCraftingBases;
     private ItemContainerKind _contextContainer;
     private int _contextIndex = -1;
     private ItemContainerKind _craftContainer = ItemContainerKind.Storage;
@@ -593,6 +594,12 @@ public partial class P2Dashboard : VBoxContainer
         _batchRarity.Select((int)ItemRarity.Magic);
         _batchScope = AddOptions(batch, "范围", ["整理背包", "仓库", "两者"]);
         _batchScope.Select((int)P16BatchScope.Storage);
+        _batchIncludeCraftingBases = new CheckBox
+        {
+            Text = "包含制作底材",
+            TooltipText = "默认保护制作底材；勾选后，符合稀有度和范围的制作底材也会进入批量操作。",
+        };
+        batch.AddChild(_batchIncludeCraftingBases);
         AddButton(batch, "批量出售", () => ConfirmBatch(P16BatchAction.Sell));
         AddButton(batch, "批量分解", () => ConfirmBatch(P16BatchAction.Dismantle));
         AddButton(batch, "按连接数整理", () => SortItems(P16ItemSortMode.LinkedSockets));
@@ -1265,12 +1272,14 @@ public partial class P2Dashboard : VBoxContainer
         P1GameSession session = RequireSession();
         ItemRarity maximum = (ItemRarity)(_batchRarity?.Selected ?? (int)ItemRarity.Magic);
         P16BatchScope scope = (P16BatchScope)(_batchScope?.Selected ?? (int)P16BatchScope.Storage);
-        P16BatchPreview preview = P16BatchItems.Preview(session, action, scope, maximum);
+        bool includeCraftingBases = _batchIncludeCraftingBases?.ButtonPressed == true;
+        P16BatchPreview preview = P16BatchItems.Preview(session, action, scope, maximum, includeCraftingBases);
         if (preview.Total == 0)
         {
             string reasons = preview.ExcludedReasons.Count == 0 ? string.Empty :
                 $"（{string.Join("、", preview.ExcludedReasons.Select(pair => $"{pair.Key} {pair.Value}"))}）";
-            Changed($"没有符合“{RarityLabel(maximum)}及以下”的可处理物品；锁定、关键、神话和制作底材已排除{reasons}。");
+            string protections = includeCraftingBases ? "锁定、关键和神话装备" : "锁定、关键、神话装备和制作底材";
+            Changed($"没有符合“{RarityLabel(maximum)}及以下”的可处理物品；{protections}已排除{reasons}。");
             return;
         }
 
@@ -1281,6 +1290,10 @@ public partial class P2Dashboard : VBoxContainer
         string warning = maximum == ItemRarity.Legendary
             ? "\n⚠ 已选择传奇及以下：普通传奇会被处理，神话装备仍受保护。"
             : string.Empty;
+        int craftingBaseCount = preview.Targets.Count(target => target.Item.IsCraftingBase);
+        string craftingBaseWarning = craftingBaseCount > 0
+            ? $"\n⚠ 已选择包含制作底材：其中 {craftingBaseCount} 件的制作底材标记不会阻止本次操作。"
+            : string.Empty;
         string protectedItems = preview.ExcludedReasons.Count == 0 ? string.Empty :
             $"（{string.Join("、", preview.ExcludedReasons.Select(pair => $"{pair.Key} {pair.Value}"))}）";
         string buyback = sell && preview.BuybackEvictions > 0
@@ -1289,7 +1302,7 @@ public partial class P2Dashboard : VBoxContainer
         _confirmDialog!.DialogText =
             $"将{(sell ? "出售" : "分解")} {preview.Total} 件物品：{counts}。\n" +
             $"预计获得 {preview.Proceeds} {(sell ? "金币" : "铁屑")}；另有 {preview.Excluded} 件受保护{protectedItems}。" +
-            warning + buyback + "\n确认执行？";
+            warning + craftingBaseWarning + buyback + "\n确认执行？";
         _pendingConfirmation = () =>
         {
             P16BatchExecution result = P16BatchItems.Execute(session, preview);

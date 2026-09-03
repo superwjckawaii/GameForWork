@@ -28,7 +28,7 @@ public sealed record P16BatchExecution(int Completed, int Failed);
 public static class P16BatchItems
 {
     public static P16BatchPreview Preview(P1GameSession session, P16BatchAction action,
-        P16BatchScope scope, ItemRarity maximumRarity)
+        P16BatchScope scope, ItemRarity maximumRarity, bool includeCraftingBases = false)
     {
         ArgumentNullException.ThrowIfNull(session);
         IEnumerable<P16BatchTarget> candidates = scope switch
@@ -39,10 +39,10 @@ public static class P16BatchItems
         };
         P16BatchTarget[] all = candidates.ToArray();
         P16BatchTarget[] withinRarity = all.Where(target => target.Item.Rarity <= maximumRarity).ToArray();
-        P16BatchTarget[] selected = withinRarity.Where(target => IsSafe(target.Item))
+        P16BatchTarget[] selected = withinRarity.Where(target => IsSafe(target.Item, includeCraftingBases))
             .OrderBy(target => target.Container).ThenBy(target => target.Index).ToArray();
         IReadOnlyDictionary<string, int> excludedReasons = withinRarity
-            .Where(target => !IsSafe(target.Item))
+            .Where(target => !IsSafe(target.Item, includeCraftingBases))
             .GroupBy(target => ProtectionReason(target.Item), StringComparer.Ordinal)
             .ToDictionary(group => group.Key, group => group.Count(), StringComparer.Ordinal);
         int proceeds = action == P16BatchAction.Sell
@@ -84,9 +84,10 @@ public static class P16BatchItems
         _ => 0,
     };
 
-    public static bool IsSafe(ItemInstance item)
+    public static bool IsSafe(ItemInstance item, bool includeCraftingBases = false)
     {
-        if (item.IsLocked || item.IsCraftingBase || item.IsKeyItem || IsMythic(item)) return false;
+        if (item.IsLocked || item.IsKeyItem || IsMythic(item)) return false;
+        if (item.IsCraftingBase && !includeCraftingBases) return false;
         return true;
     }
 

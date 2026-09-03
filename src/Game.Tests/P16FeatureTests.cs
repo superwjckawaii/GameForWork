@@ -117,6 +117,28 @@ public sealed class P16FeatureTests
     }
 
     [Fact]
+    public void BatchPreviewCanExplicitlyIncludeCraftingBasesWithoutIncludingOtherProtectedItems()
+    {
+        P1GameSession session = Session();
+        session.World.Storage.TryStore(Item("craft", ItemRarity.Rare, 0, 80) with { IsCraftingBase = true });
+        session.World.Storage.TryStore(Item("locked-craft", ItemRarity.Rare, 0, 80) with
+        {
+            IsCraftingBase = true,
+            IsLocked = true,
+        });
+        session.World.Storage.TryStore(P14UniqueItems.Create("core.mythic.heart_of_ash", 100, "mythic"));
+
+        P16BatchPreview preview = P16BatchItems.Preview(session, P16BatchAction.Sell,
+            P16BatchScope.Storage, ItemRarity.Legendary, includeCraftingBases: true);
+
+        Assert.Single(preview.Targets, target => target.Item.InstanceId == "craft");
+        Assert.Equal(2, preview.Excluded);
+        Assert.Equal(1, preview.ExcludedReasons["已锁定"]);
+        Assert.Equal(1, preview.ExcludedReasons["神话装备"]);
+        Assert.DoesNotContain("制作底材", preview.ExcludedReasons.Keys);
+    }
+
+    [Fact]
     public void FilterSupportsAndConditionsRangesAndSystemProtection()
     {
         var filter = new LootFilter([
