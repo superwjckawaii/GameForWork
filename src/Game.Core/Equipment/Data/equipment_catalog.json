@@ -50994,6 +50994,10 @@
             "displayText": ""
           }
         ],
+        "categoryComponentRanges": {
+          "OneHandWeapon": [81, 111, 163, 189],
+          "TwoHandWeapon": [149, 204, 300, 348]
+        },
         "requiredBaseTags": []
       },
       {
@@ -51032,6 +51036,10 @@
             "displayText": ""
           }
         ],
+        "categoryComponentRanges": {
+          "OneHandWeapon": [68, 92, 136, 157],
+          "TwoHandWeapon": [124, 170, 250, 290]
+        },
         "requiredBaseTags": []
       },
       {
@@ -51070,6 +51078,10 @@
             "displayText": ""
           }
         ],
+        "categoryComponentRanges": {
+          "OneHandWeapon": [54, 74, 108, 126],
+          "TwoHandWeapon": [99, 136, 200, 232]
+        },
         "requiredBaseTags": []
       },
       {
@@ -51108,6 +51120,10 @@
             "displayText": ""
           }
         ],
+        "categoryComponentRanges": {
+          "OneHandWeapon": [31, 42, 62, 71],
+          "TwoHandWeapon": [57, 77, 114, 132]
+        },
         "requiredBaseTags": []
       },
       {
@@ -51146,6 +51162,10 @@
             "displayText": ""
           }
         ],
+        "categoryComponentRanges": {
+          "OneHandWeapon": [11, 15, 23, 26],
+          "TwoHandWeapon": [21, 28, 42, 48]
+        },
         "requiredBaseTags": []
       },
       {
@@ -51184,6 +51204,10 @@
             "displayText": ""
           }
         ],
+        "categoryComponentRanges": {
+          "OneHandWeapon": [1, 2, 3, 4],
+          "TwoHandWeapon": [2, 3, 6, 7]
+        },
         "requiredBaseTags": []
       }
     ],
@@ -51224,6 +51248,10 @@
             "displayText": ""
           }
         ],
+        "categoryComponentRanges": {
+          "OneHandWeapon": [89, 121, 180, 210],
+          "TwoHandWeapon": [165, 225, 335, 390]
+        },
         "requiredBaseTags": []
       },
       {
@@ -51262,6 +51290,10 @@
             "displayText": ""
           }
         ],
+        "categoryComponentRanges": {
+          "OneHandWeapon": [74, 101, 150, 175],
+          "TwoHandWeapon": [137, 188, 279, 325]
+        },
         "requiredBaseTags": []
       },
       {
@@ -51300,6 +51332,10 @@
             "displayText": ""
           }
         ],
+        "categoryComponentRanges": {
+          "OneHandWeapon": [59, 81, 120, 140],
+          "TwoHandWeapon": [110, 150, 223, 260]
+        },
         "requiredBaseTags": []
       },
       {
@@ -51338,6 +51374,10 @@
             "displayText": ""
           }
         ],
+        "categoryComponentRanges": {
+          "OneHandWeapon": [34, 46, 68, 80],
+          "TwoHandWeapon": [63, 85, 128, 148]
+        },
         "requiredBaseTags": []
       },
       {
@@ -51376,6 +51416,10 @@
             "displayText": ""
           }
         ],
+        "categoryComponentRanges": {
+          "OneHandWeapon": [12, 17, 25, 29],
+          "TwoHandWeapon": [23, 31, 47, 54]
+        },
         "requiredBaseTags": []
       },
       {
@@ -51414,6 +51458,10 @@
             "displayText": ""
           }
         ],
+        "categoryComponentRanges": {
+          "OneHandWeapon": [1, 2, 3, 4],
+          "TwoHandWeapon": [3, 5, 6, 7]
+        },
         "requiredBaseTags": []
       }
     ],
@@ -51454,6 +51502,10 @@
             "displayText": ""
           }
         ],
+        "categoryComponentRanges": {
+          "OneHandWeapon": [15, 21, 296, 344],
+          "TwoHandWeapon": [28, 38, 549, 638]
+        },
         "requiredBaseTags": []
       },
       {
@@ -51492,6 +51544,10 @@
             "displayText": ""
           }
         ],
+        "categoryComponentRanges": {
+          "OneHandWeapon": [13, 17, 247, 286],
+          "TwoHandWeapon": [23, 32, 458, 531]
+        },
         "requiredBaseTags": []
       },
       {
@@ -51530,6 +51586,10 @@
             "displayText": ""
           }
         ],
+        "categoryComponentRanges": {
+          "OneHandWeapon": [10, 14, 197, 229],
+          "TwoHandWeapon": [19, 25, 366, 425]
+        },
         "requiredBaseTags": []
       },
       {
@@ -51568,6 +51628,10 @@
             "displayText": ""
           }
         ],
+        "categoryComponentRanges": {
+          "OneHandWeapon": [5, 8, 112, 131],
+          "TwoHandWeapon": [11, 14, 208, 242]
+        },
         "requiredBaseTags": []
       },
       {
@@ -51606,6 +51670,10 @@
             "displayText": ""
           }
         ],
+        "categoryComponentRanges": {
+          "OneHandWeapon": [2, 2, 41, 48],
+          "TwoHandWeapon": [4, 5, 76, 88]
+        },
         "requiredBaseTags": []
       },
       {
@@ -51644,6 +51712,10 @@
             "displayText": ""
           }
         ],
+        "categoryComponentRanges": {
+          "OneHandWeapon": [1, 1, 5, 6],
+          "TwoHandWeapon": [2, 2, 10, 11]
+        },
         "requiredBaseTags": []
       }
     ],
@@ -53161,7 +53233,7 @@
       "displayName": "\u751F\u547D\u504F\u5411\u6253\u9020",
       "costText": "\u751F\u547D\u504F\u5411\u6253\u9020\uFF1B\u547D\u80FD 200",
       "targetText": "\u540C\u65F6\u5B58\u5728\u53EF\u79FB\u9664\u975E\u751F\u547D\u81EA\u7136\u8BCD\u7F00\u4E0E\u5408\u6CD5\u751F\u547D\u5019\u9009\u7684\u672A\u8150\u5316\u7A00\u6709\u88C5\u5907",
-      "ruleText": "\u7B49\u6743\u79FB\u9664 1 \u6761\u4E0D\u5E26\u751F\u547D\u6807\u7B7E\u7684\u53EF\u53D8\u81EA\u7136\u8BCD\u7F00\uFF0C\u5E76\u5728\u76F8\u540C\u524D/\u540E\u7F00\u4F4D\u7F6E\u52A0\u5165 1 \u6761\u5408\u6CD5\u751F\u547D\u8BCD\u7F00",
+      "ruleText": "\u7B49\u6743\u79FB\u9664 1 \u6761\u4E0D\u5E26\u751F\u547D\u6807\u7B7E\u7684\u53EF\u53D8\u81EA\u7136\u8BCD\u7F00\uFF0C\u518D\u5728\u4EFB\u610F\u6709\u7A7A\u4F4D\u7684\u5408\u6CD5\u524D/\u540E\u7F00\u4F4D\u7F6E\u52A0\u5165 1 \u6761\u751F\u547D\u8BCD\u7F00",
       "kind": "LifeEnergy"
     },
     {
@@ -53169,7 +53241,7 @@
       "displayName": "\u9632\u5FA1\u504F\u5411\u6253\u9020",
       "costText": "\u9632\u5FA1\u504F\u5411\u6253\u9020\uFF1B\u547D\u80FD 200",
       "targetText": "\u540C\u65F6\u5B58\u5728\u53EF\u79FB\u9664\u975E\u9632\u5FA1\u81EA\u7136\u8BCD\u7F00\u4E0E\u5408\u6CD5\u9632\u5FA1\u5019\u9009\u7684\u672A\u8150\u5316\u7A00\u6709\u88C5\u5907",
-      "ruleText": "\u540C\u7B2C 35 \u9879\uFF0C\u5C06\u975E\u9632\u5FA1\u8BCD\u7F00\u66FF\u6362\u6210\u540C\u4F4D\u7F6E\u9632\u5FA1\u8BCD\u7F00",
+      "ruleText": "\u540C\u7B2C 35 \u9879\uFF0C\u79FB\u9664\u975E\u9632\u5FA1\u8BCD\u7F00\u540E\u5728\u4EFB\u610F\u5408\u6CD5\u7A7A\u4F4D\u52A0\u5165\u9632\u5FA1\u8BCD\u7F00",
       "kind": "LifeEnergy"
     },
     {
@@ -53177,7 +53249,7 @@
       "displayName": "\u653B\u51FB\u504F\u5411\u6253\u9020",
       "costText": "\u653B\u51FB\u504F\u5411\u6253\u9020\uFF1B\u547D\u80FD 200",
       "targetText": "\u540C\u65F6\u5B58\u5728\u53EF\u79FB\u9664\u975E\u653B\u51FB\u81EA\u7136\u8BCD\u7F00\u4E0E\u5408\u6CD5\u653B\u51FB\u5019\u9009\u7684\u672A\u8150\u5316\u7A00\u6709\u88C5\u5907",
-      "ruleText": "\u540C\u7B2C 35 \u9879\uFF0C\u5C06\u975E\u653B\u51FB\u8BCD\u7F00\u66FF\u6362\u6210\u540C\u4F4D\u7F6E\u653B\u51FB\u8BCD\u7F00",
+      "ruleText": "\u540C\u7B2C 35 \u9879\uFF0C\u79FB\u9664\u975E\u653B\u51FB\u8BCD\u7F00\u540E\u5728\u4EFB\u610F\u5408\u6CD5\u7A7A\u4F4D\u52A0\u5165\u653B\u51FB\u8BCD\u7F00",
       "kind": "LifeEnergy"
     },
     {
@@ -53185,7 +53257,7 @@
       "displayName": "\u6CD5\u672F\u504F\u5411\u6253\u9020",
       "costText": "\u6CD5\u672F\u504F\u5411\u6253\u9020\uFF1B\u547D\u80FD 200",
       "targetText": "\u540C\u65F6\u5B58\u5728\u53EF\u79FB\u9664\u975E\u6CD5\u672F\u81EA\u7136\u8BCD\u7F00\u4E0E\u5408\u6CD5\u6CD5\u672F\u5019\u9009\u7684\u672A\u8150\u5316\u7A00\u6709\u88C5\u5907",
-      "ruleText": "\u540C\u7B2C 35 \u9879\uFF0C\u5C06\u975E\u6CD5\u672F\u8BCD\u7F00\u66FF\u6362\u6210\u540C\u4F4D\u7F6E\u6CD5\u672F\u8BCD\u7F00",
+      "ruleText": "\u540C\u7B2C 35 \u9879\uFF0C\u79FB\u9664\u975E\u6CD5\u672F\u8BCD\u7F00\u540E\u5728\u4EFB\u610F\u5408\u6CD5\u7A7A\u4F4D\u52A0\u5165\u6CD5\u672F\u8BCD\u7F00",
       "kind": "LifeEnergy"
     },
     {
@@ -53193,7 +53265,7 @@
       "displayName": "\u901F\u5EA6\u504F\u5411\u6253\u9020",
       "costText": "\u901F\u5EA6\u504F\u5411\u6253\u9020\uFF1B\u547D\u80FD 200",
       "targetText": "\u540C\u65F6\u5B58\u5728\u53EF\u79FB\u9664\u975E\u901F\u5EA6\u81EA\u7136\u8BCD\u7F00\u4E0E\u5408\u6CD5\u901F\u5EA6\u5019\u9009\u7684\u672A\u8150\u5316\u7A00\u6709\u88C5\u5907",
-      "ruleText": "\u540C\u7B2C 35 \u9879\uFF0C\u5C06\u975E\u901F\u5EA6\u8BCD\u7F00\u66FF\u6362\u6210\u540C\u4F4D\u7F6E\u901F\u5EA6\u8BCD\u7F00",
+      "ruleText": "\u540C\u7B2C 35 \u9879\uFF0C\u79FB\u9664\u975E\u901F\u5EA6\u8BCD\u7F00\u540E\u5728\u4EFB\u610F\u5408\u6CD5\u7A7A\u4F4D\u52A0\u5165\u901F\u5EA6\u8BCD\u7F00",
       "kind": "LifeEnergy"
     },
     {
@@ -53201,7 +53273,7 @@
       "displayName": "\u66B4\u51FB\u504F\u5411\u6253\u9020",
       "costText": "\u66B4\u51FB\u504F\u5411\u6253\u9020\uFF1B\u547D\u80FD 200",
       "targetText": "\u540C\u65F6\u5B58\u5728\u53EF\u79FB\u9664\u975E\u66B4\u51FB\u81EA\u7136\u8BCD\u7F00\u4E0E\u5408\u6CD5\u66B4\u51FB\u5019\u9009\u7684\u672A\u8150\u5316\u7A00\u6709\u88C5\u5907",
-      "ruleText": "\u540C\u7B2C 35 \u9879\uFF0C\u5C06\u975E\u66B4\u51FB\u8BCD\u7F00\u66FF\u6362\u6210\u540C\u4F4D\u7F6E\u66B4\u51FB\u8BCD\u7F00",
+      "ruleText": "\u540C\u7B2C 35 \u9879\uFF0C\u79FB\u9664\u975E\u66B4\u51FB\u8BCD\u7F00\u540E\u5728\u4EFB\u610F\u5408\u6CD5\u7A7A\u4F4D\u52A0\u5165\u66B4\u51FB\u8BCD\u7F00",
       "kind": "LifeEnergy"
     },
     {
@@ -53209,7 +53281,7 @@
       "displayName": "\u7269\u7406\u504F\u5411\u6253\u9020",
       "costText": "\u7269\u7406\u504F\u5411\u6253\u9020\uFF1B\u547D\u80FD 200",
       "targetText": "\u540C\u65F6\u5B58\u5728\u53EF\u79FB\u9664\u975E\u7269\u7406\u81EA\u7136\u8BCD\u7F00\u4E0E\u5408\u6CD5\u7269\u7406\u5019\u9009\u7684\u672A\u8150\u5316\u7A00\u6709\u88C5\u5907",
-      "ruleText": "\u540C\u7B2C 35 \u9879\uFF0C\u5C06\u975E\u7269\u7406\u8BCD\u7F00\u66FF\u6362\u6210\u540C\u4F4D\u7F6E\u7269\u7406\u8BCD\u7F00",
+      "ruleText": "\u540C\u7B2C 35 \u9879\uFF0C\u79FB\u9664\u975E\u7269\u7406\u8BCD\u7F00\u540E\u5728\u4EFB\u610F\u5408\u6CD5\u7A7A\u4F4D\u52A0\u5165\u7269\u7406\u8BCD\u7F00",
       "kind": "LifeEnergy"
     },
     {
@@ -53217,7 +53289,7 @@
       "displayName": "\u706B\u7130\u504F\u5411\u6253\u9020",
       "costText": "\u706B\u7130\u504F\u5411\u6253\u9020\uFF1B\u547D\u80FD 200",
       "targetText": "\u540C\u65F6\u5B58\u5728\u53EF\u79FB\u9664\u975E\u706B\u7130\u81EA\u7136\u8BCD\u7F00\u4E0E\u5408\u6CD5\u706B\u7130\u5019\u9009\u7684\u672A\u8150\u5316\u7A00\u6709\u88C5\u5907",
-      "ruleText": "\u540C\u7B2C 35 \u9879\uFF0C\u5C06\u975E\u706B\u7130\u8BCD\u7F00\u66FF\u6362\u6210\u540C\u4F4D\u7F6E\u706B\u7130\u8BCD\u7F00",
+      "ruleText": "\u540C\u7B2C 35 \u9879\uFF0C\u79FB\u9664\u975E\u706B\u7130\u8BCD\u7F00\u540E\u5728\u4EFB\u610F\u5408\u6CD5\u7A7A\u4F4D\u52A0\u5165\u706B\u7130\u8BCD\u7F00",
       "kind": "LifeEnergy"
     },
     {
@@ -53225,7 +53297,7 @@
       "displayName": "\u51B0\u971C\u504F\u5411\u6253\u9020",
       "costText": "\u51B0\u971C\u504F\u5411\u6253\u9020\uFF1B\u547D\u80FD 200",
       "targetText": "\u540C\u65F6\u5B58\u5728\u53EF\u79FB\u9664\u975E\u51B0\u971C\u81EA\u7136\u8BCD\u7F00\u4E0E\u5408\u6CD5\u51B0\u971C\u5019\u9009\u7684\u672A\u8150\u5316\u7A00\u6709\u88C5\u5907",
-      "ruleText": "\u540C\u7B2C 35 \u9879\uFF0C\u5C06\u975E\u51B0\u971C\u8BCD\u7F00\u66FF\u6362\u6210\u540C\u4F4D\u7F6E\u51B0\u971C\u8BCD\u7F00",
+      "ruleText": "\u540C\u7B2C 35 \u9879\uFF0C\u79FB\u9664\u975E\u51B0\u971C\u8BCD\u7F00\u540E\u5728\u4EFB\u610F\u5408\u6CD5\u7A7A\u4F4D\u52A0\u5165\u51B0\u971C\u8BCD\u7F00",
       "kind": "LifeEnergy"
     },
     {
@@ -53233,7 +53305,7 @@
       "displayName": "\u95EA\u7535\u504F\u5411\u6253\u9020",
       "costText": "\u95EA\u7535\u504F\u5411\u6253\u9020\uFF1B\u547D\u80FD 200",
       "targetText": "\u540C\u65F6\u5B58\u5728\u53EF\u79FB\u9664\u975E\u95EA\u7535\u81EA\u7136\u8BCD\u7F00\u4E0E\u5408\u6CD5\u95EA\u7535\u5019\u9009\u7684\u672A\u8150\u5316\u7A00\u6709\u88C5\u5907",
-      "ruleText": "\u540C\u7B2C 35 \u9879\uFF0C\u5C06\u975E\u95EA\u7535\u8BCD\u7F00\u66FF\u6362\u6210\u540C\u4F4D\u7F6E\u95EA\u7535\u8BCD\u7F00",
+      "ruleText": "\u540C\u7B2C 35 \u9879\uFF0C\u79FB\u9664\u975E\u95EA\u7535\u8BCD\u7F00\u540E\u5728\u4EFB\u610F\u5408\u6CD5\u7A7A\u4F4D\u52A0\u5165\u95EA\u7535\u8BCD\u7F00",
       "kind": "LifeEnergy"
     },
     {
@@ -53241,7 +53313,7 @@
       "displayName": "\u865A\u7A7A\u504F\u5411\u6253\u9020",
       "costText": "\u865A\u7A7A\u504F\u5411\u6253\u9020\uFF1B\u547D\u80FD 200",
       "targetText": "\u540C\u65F6\u5B58\u5728\u53EF\u79FB\u9664\u975E\u865A\u7A7A\u81EA\u7136\u8BCD\u7F00\u4E0E\u5408\u6CD5\u865A\u7A7A\u5019\u9009\u7684\u672A\u8150\u5316\u7A00\u6709\u88C5\u5907",
-      "ruleText": "\u540C\u7B2C 35 \u9879\uFF0C\u5C06\u975E\u865A\u7A7A\u8BCD\u7F00\u66FF\u6362\u6210\u540C\u4F4D\u7F6E\u865A\u7A7A\u8BCD\u7F00",
+      "ruleText": "\u540C\u7B2C 35 \u9879\uFF0C\u79FB\u9664\u975E\u865A\u7A7A\u8BCD\u7F00\u540E\u5728\u4EFB\u610F\u5408\u6CD5\u7A7A\u4F4D\u52A0\u5165\u865A\u7A7A\u8BCD\u7F00",
       "kind": "LifeEnergy"
     },
     {
@@ -53249,7 +53321,7 @@
       "displayName": "\u5C5E\u6027\u504F\u5411\u6253\u9020",
       "costText": "\u5C5E\u6027\u504F\u5411\u6253\u9020\uFF1B\u547D\u80FD 200",
       "targetText": "\u540C\u65F6\u5B58\u5728\u53EF\u79FB\u9664\u975E\u5C5E\u6027\u81EA\u7136\u8BCD\u7F00\u4E0E\u5408\u6CD5\u5C5E\u6027\u5019\u9009\u7684\u672A\u8150\u5316\u7A00\u6709\u88C5\u5907",
-      "ruleText": "\u540C\u7B2C 35 \u9879\uFF0C\u5C06\u975E\u5C5E\u6027\u8BCD\u7F00\u66FF\u6362\u6210\u540C\u4F4D\u7F6E\u5C5E\u6027\u8BCD\u7F00",
+      "ruleText": "\u540C\u7B2C 35 \u9879\uFF0C\u79FB\u9664\u975E\u5C5E\u6027\u8BCD\u7F00\u540E\u5728\u4EFB\u610F\u5408\u6CD5\u7A7A\u4F4D\u52A0\u5165\u5C5E\u6027\u8BCD\u7F00",
       "kind": "LifeEnergy"
     },
     {

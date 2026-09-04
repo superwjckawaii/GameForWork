@@ -97,7 +97,7 @@ public static class EquipmentCatalog
 
     private static IReadOnlyList<AffixDefinition> BuildAffixes() => SnapshotValue.AffixFamilies
         .SelectMany(family => family)
-        .Select(ToAffixDefinition)
+        .SelectMany(ToAffixDefinitions)
         .OrderBy(value => value.StableFamilyId, StringComparer.Ordinal)
         .ThenBy(value => value.Tier)
         .ToArray();
@@ -131,14 +131,39 @@ public static class EquipmentCatalog
                 ParseEnum(component.Scope, ItemModifierScope.Global), component.MaximumValue)).ToArray());
     }
 
-    private static AffixDefinition ToAffixDefinition(EquipmentAffixEntry value)
+    private static IEnumerable<AffixDefinition> ToAffixDefinitions(EquipmentAffixEntry value)
     {
         ItemCategory[] categories = value.ApplicableCategories.Select(Enum.Parse<ItemCategory>).ToArray();
-        AffixModifierComponent[] components = value.Components.Select(component => new AffixModifierComponent(
+        if (value.CategoryComponentRanges is null || value.CategoryComponentRanges.Count == 0)
+            return [ToAffixDefinition(value, categories, value.Components)];
+        string[] expectedCategories = categories.Select(category => category.ToString()).Order(StringComparer.Ordinal).ToArray();
+        string[] rangedCategories = value.CategoryComponentRanges.Keys.Order(StringComparer.Ordinal).ToArray();
+        if (!expectedCategories.SequenceEqual(rangedCategories, StringComparer.Ordinal))
+            throw new InvalidDataException($"Affix {value.Id} category ranges do not cover its applicable categories exactly.");
+        return value.CategoryComponentRanges.Select(entry =>
+        {
+            var category = Enum.Parse<ItemCategory>(entry.Key);
+            if (!categories.Contains(category))
+                throw new InvalidDataException($"Affix {value.Id} defines ranges for unsupported category {entry.Key}.");
+            if (entry.Value.Count != value.Components.Count * 2)
+                throw new InvalidDataException($"Affix {value.Id} category {entry.Key} has an invalid component range count.");
+            EquipmentComponentEntry[] components = value.Components.Select((component, index) => component with
+            {
+                MinimumValue = entry.Value[index * 2],
+                MaximumValue = entry.Value[index * 2 + 1],
+            }).ToArray();
+            return ToAffixDefinition(value, [category], components);
+        });
+    }
+
+    private static AffixDefinition ToAffixDefinition(EquipmentAffixEntry value,
+        IReadOnlyList<ItemCategory> categories, IReadOnlyList<EquipmentComponentEntry> sourceComponents)
+    {
+        AffixModifierComponent[] components = sourceComponents.Select(component => new AffixModifierComponent(
             ParseEnum(component.Kind, ItemModifierKind.None), component.MinimumValue, component.MaximumValue,
             ParseEnum(component.Scope, ItemModifierScope.Global), component.DisplayText)).ToArray();
         return new AffixDefinition(value.Id, value.DisplayName, categories[0], Enum.Parse<AffixPosition>(value.Position),
-            value.Tier, value.MinimumItemLevel, value.MinimumValue, value.MaximumValue, value.Weight,
+            value.Tier, value.MinimumItemLevel, components[0].MinimumValue, components[0].MaximumValue, value.Weight,
             ParseEnum(value.ModifierKind, ItemModifierKind.None), value.GroupId, categories, value.TagWeights,
             "equipment.catalog", value.RawText, value.ModTags, value.Local, "Natural", components, value.RequiredBaseTags);
     }
@@ -174,7 +199,8 @@ public sealed record EquipmentAffixEntry(
     int MinimumValue, int MaximumValue, int Weight, string ModifierKind, string GroupId,
     IReadOnlyList<string> ApplicableCategories, IReadOnlyDictionary<string, int>? TagWeights, string RawText,
     IReadOnlyList<string>? ModTags, bool Local, IReadOnlyList<EquipmentComponentEntry> Components,
-    IReadOnlyList<string> RequiredBaseTags);
+    IReadOnlyList<string> RequiredBaseTags,
+    IReadOnlyDictionary<string, IReadOnlyList<int>>? CategoryComponentRanges = null);
 
 public sealed record EquipmentEnchantmentEntry(
     string Id, IReadOnlyList<string> LegacyIds, string DisplayName, int WorkshopLevel, int GoldCost,

@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.RegularExpressions;
 using GameForWork.Core.P1.Combat;
 using GameForWork.Core.P1.Items;
 using GameForWork.Core.P1.Progression;
@@ -11,6 +12,10 @@ namespace GameForWork.GodotClient;
 
 internal static class P1UiText
 {
+    private static readonly Regex ImplicitRollPattern = new(
+        @"(?<sign>[+＋-]?)\d+(?:\.\d+)?%?(?:\s*[～~–—]\s*[+＋-]?\d+(?:\.\d+)?%?)?",
+        RegexOptions.CultureInvariant);
+
     public static string ItemTooltip(ItemInstance item, bool includeAffixDetails = false)
     {
         var text = new StringBuilder();
@@ -97,10 +102,11 @@ internal static class P1UiText
             string label = string.IsNullOrWhiteSpace(item.Base.ImplicitText)
                 ? "底材固有"
                 : item.Base.ImplicitText;
+            string rolledImplicit = RolledImplicitText(label, item.Base.ImplicitModifier, item.EffectiveImplicitValue);
             string rollRange = includeAffixDetails
                 ? $" [roll {RangeValue(item.Base.ImplicitModifier, item.Base.ImplicitMinimumValue)}～{RangeValue(item.Base.ImplicitModifier, item.Base.ImplicitMaximumValue)}]"
                 : string.Empty;
-            text.AppendLine($"（基底词缀）{label} {RangeValue(item.Base.ImplicitModifier, item.EffectiveImplicitValue)}{rollRange}");
+            text.AppendLine($"（基底词缀）{rolledImplicit}{rollRange}");
         }
         foreach (ItemBaseImplicit implicitModifier in item.Base.ExtraImplicits)
             text.AppendLine($"（基底词缀）{implicitModifier.DisplayText}" + (includeAffixDetails ? " [固定]" : string.Empty));
@@ -344,6 +350,21 @@ internal static class P1UiText
         return kind.ToString().Contains("BasisPoints", StringComparison.Ordinal)
             ? $"{sign}{value / 100.0:0.#}%"
             : $"{sign}{value}";
+    }
+
+    private static string RolledImplicitText(string label, ItemModifierKind kind, int value)
+    {
+        Match match = ImplicitRollPattern.Match(label);
+        string rolled = RangeValue(kind, value);
+        if (!match.Success) return $"{label} {rolled}";
+        bool unsignedRoll = match.Groups["sign"].Length == 0;
+        if (unsignedRoll && rolled.StartsWith('+')) rolled = rolled[1..];
+        string prefix = label[..match.Index];
+        string trimmedPrefix = prefix.TrimEnd();
+        if (unsignedRoll && (trimmedPrefix.EndsWith("提高", StringComparison.Ordinal) ||
+                             trimmedPrefix.EndsWith("降低", StringComparison.Ordinal)))
+            prefix = trimmedPrefix;
+        return string.Concat(prefix, rolled, label.AsSpan(match.Index + match.Length));
     }
 
     internal static string ModifierName(ItemModifierKind kind) => kind switch

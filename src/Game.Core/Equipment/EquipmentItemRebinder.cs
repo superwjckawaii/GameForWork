@@ -74,7 +74,7 @@ public static class EquipmentItemRebinder
         string canonical = EquipmentCatalog.ResolveAffixId(roll.Definition.StableFamilyId);
         AffixDefinition? definition = EquipmentCatalog.Affixes.FirstOrDefault(value =>
             value.StableFamilyId == canonical && value.Tier == roll.Definition.Tier && value.Supports(itemBase));
-        if (definition is not null) return roll with { Definition = definition };
+        if (definition is not null) return RebindToDefinition(roll, definition);
 
         AffixDefinition[] replacements = EquipmentCatalog.Affixes.Where(value => value.Position == roll.Definition.Position &&
             value.Tier == roll.Definition.Tier && value.MinimumItemLevel <= item.ItemLevel && value.Supports(itemBase) &&
@@ -89,6 +89,36 @@ public static class EquipmentItemRebinder
             component.Kind, component.MinimumValue + (int)(BitConverter.ToUInt32(digest, 4) % (uint)Math.Max(1, component.MaximumValue - component.MinimumValue + 1)),
             component.Scope, component.DisplayText)).ToArray();
         return new AffixRoll(definition, effects[0].Value, roll.Crafted, effects);
+    }
+
+    private static AffixRoll RebindToDefinition(AffixRoll roll, AffixDefinition definition)
+    {
+        IReadOnlyList<AffixModifierComponent> oldDefinitions = roll.Definition.EffectComponents;
+        IReadOnlyList<AffixModifierComponent> newDefinitions = definition.EffectComponents;
+        IReadOnlyList<RolledAffixComponent> oldEffects = roll.Effects;
+        RolledAffixComponent[] effects = newDefinitions.Select((component, index) =>
+        {
+            RolledAffixComponent? oldEffect = oldEffects.FirstOrDefault(value => value.Kind == component.Kind)
+                ?? oldEffects.ElementAtOrDefault(index);
+            AffixModifierComponent? oldDefinition = oldDefinitions.FirstOrDefault(value => value.Kind == component.Kind)
+                ?? oldDefinitions.ElementAtOrDefault(index);
+            int value = oldEffect is null || oldDefinition is null
+                ? component.MinimumValue
+                : RescaleRoll(oldEffect.Value, oldDefinition.MinimumValue, oldDefinition.MaximumValue,
+                    component.MinimumValue, component.MaximumValue);
+            return new RolledAffixComponent(component.Kind, value, component.Scope, component.DisplayText);
+        }).ToArray();
+        return roll with { Definition = definition, Value = effects[0].Value, Components = effects };
+    }
+
+    private static int RescaleRoll(int value, int oldMinimum, int oldMaximum, int newMinimum, int newMaximum)
+    {
+        if (oldMinimum == newMinimum && oldMaximum == newMaximum) return Math.Clamp(value, newMinimum, newMaximum);
+        int newSpan = newMaximum - newMinimum;
+        int oldSpan = oldMaximum - oldMinimum;
+        if (oldSpan <= 0) return newMinimum + newSpan / 2;
+        long offset = Math.Clamp(value, oldMinimum, oldMaximum) - oldMinimum;
+        return newMinimum + (int)((offset * newSpan + oldSpan / 2L) / oldSpan);
     }
 
     private static bool SharesTag(AffixDefinition left, AffixDefinition right)

@@ -164,6 +164,97 @@ public sealed class P32EquipmentCatalogTests
     }
 
     [Fact]
+    public void ProtectedBiasedCraftCanUseAnOpenPrefixWithoutChangingExistingPrefixes()
+    {
+        ItemBaseDefinition itemBase = EquipmentCatalog.GetBase("equipment.base.ezomyte_blade");
+        AffixRoll[] affixes =
+        [
+            MinimumRoll(Affix(itemBase, "equipment.affix.localphysicaldamagepercent", 2)),
+            MinimumRoll(Affix(itemBase, "equipment.affix.weapon.added_lightning", 5)),
+            MinimumRoll(Affix(itemBase, "equipment.affix.ignite.chance", 2)),
+            MinimumRoll(Affix(itemBase, "equipment.affix.shock.chance", 4)),
+            MinimumRoll(Affix(itemBase, "equipment.affix.bleed.chance", 4)),
+        ];
+        ItemInstance item = ItemGenerator.Generate(itemBase.StableId, 100, ItemRarity.Rare, 1, "protected-biased") with
+        {
+            Affixes = affixes,
+            ProtectPrefixesNextCraft = true,
+        };
+        string[] oldPrefixes = item.Affixes.Where(value => value.Definition.Position == AffixPosition.Prefix)
+            .Select(Signature).Order(StringComparer.Ordinal).ToArray();
+        EquipmentCraftingOperationEntry operation = EquipmentCatalog.CraftingOperations
+            .Single(value => value.DisplayName == "物理偏向打造");
+        Assert.True(EquipmentCraftingService.Preview(item, new(operation.Id)).Available);
+
+        bool observedAddedPrefix = false;
+        for (ulong seed = 1; seed <= 128; seed++)
+        {
+            var wallet = new EquipmentCraftingWallet();
+            EquipmentCraftingPreview preview = EquipmentCraftingService.Preview(item, new(operation.Id, Seed: seed));
+            wallet.Credit(preview.Resource, preview.Cost);
+            EquipmentCraftingResult result = EquipmentCraftingService.Execute(wallet, item, new(operation.Id, Seed: seed));
+            Assert.True(result.Succeeded, result.FailureReason);
+            Assert.False(result.Item!.ProtectPrefixesNextCraft);
+            Assert.Equal(oldPrefixes, result.Item.Affixes.Where(value => value.Definition.Position == AffixPosition.Prefix)
+                .Select(Signature).Where(oldPrefixes.Contains).Order(StringComparer.Ordinal));
+            Assert.NotEqual(item.Affixes.Select(Signature).Order(StringComparer.Ordinal),
+                result.Item.Affixes.Select(Signature).Order(StringComparer.Ordinal));
+            observedAddedPrefix |= result.Item.PrefixCount == 3;
+        }
+        Assert.True(observedAddedPrefix);
+    }
+
+    [Fact]
+    public void BiasedCraftPreviewRejectsAnItemWhoseOnlyRemovalIsProtected()
+    {
+        ItemBaseDefinition itemBase = EquipmentCatalog.GetBase("equipment.base.ezomyte_blade");
+        ItemInstance item = ItemGenerator.Generate(itemBase.StableId, 100, ItemRarity.Rare, 1, "protected-only") with
+        {
+            Affixes = [MinimumRoll(Affix(itemBase, "equipment.affix.weapon.added_lightning", 5))],
+            ProtectPrefixesNextCraft = true,
+        };
+        EquipmentCraftingOperationEntry operation = EquipmentCatalog.CraftingOperations
+            .Single(value => value.DisplayName == "物理偏向打造");
+        EquipmentCraftingPreview preview = EquipmentCraftingService.Preview(item, new(operation.Id));
+        Assert.False(preview.Available);
+        Assert.Equal("no_replaceable_affix", preview.FailureReason);
+    }
+
+    [Fact]
+    public void ElementalWeaponDamageUsesPoeRangesPerHandednessAndMigratesExistingRolls()
+    {
+        ItemBaseDefinition oneHanded = EquipmentCatalog.Bases.First(value => value.Category == ItemCategory.OneHandWeapon);
+        ItemBaseDefinition twoHanded = EquipmentCatalog.GetBase("equipment.base.ezomyte_blade");
+        AffixDefinition oneHandedLightning = Affix(oneHanded, "equipment.affix.weapon.added_lightning", 1);
+        AffixDefinition twoHandedLightning = Affix(twoHanded, "equipment.affix.weapon.added_lightning", 1);
+        Assert.Equal([15, 21, 296, 344], oneHandedLightning.EffectComponents
+            .SelectMany(value => new[] { value.MinimumValue, value.MaximumValue }));
+        Assert.Equal([28, 38, 549, 638], twoHandedLightning.EffectComponents
+            .SelectMany(value => new[] { value.MinimumValue, value.MaximumValue }));
+
+        AffixDefinition oldDefinition = twoHandedLightning with
+        {
+            MinimumValue = 8,
+            MaximumValue = 9,
+            Components =
+            [
+                twoHandedLightning.EffectComponents[0] with { MinimumValue = 8, MaximumValue = 9 },
+                twoHandedLightning.EffectComponents[1] with { MinimumValue = 69, MaximumValue = 82 },
+            ],
+        };
+        ItemInstance saved = ItemGenerator.Generate(twoHanded.StableId, 100, ItemRarity.Rare, 2, "old-lightning") with
+        {
+            Affixes = [new AffixRoll(oldDefinition, 8, Components:
+            [
+                new(ItemModifierKind.AddedMinimumLightningDamage, 8, ItemModifierScope.LocalWeapon),
+                new(ItemModifierKind.AddedMaximumLightningDamage, 76, ItemModifierScope.LocalWeapon),
+            ])],
+        };
+        AffixRoll migrated = Assert.Single(EquipmentItemRebinder.Rebind(saved).Affixes);
+        Assert.Equal([28, 597], migrated.Effects.Select(value => value.Value));
+    }
+
+    [Fact]
     public void EveryFormalCraftingOperationReachesAConcreteExecutor()
     {
         ItemInstance rare = ItemGenerator.Generate("core.base.life_ring", 100, ItemRarity.Rare, 0x321, "all-crafts");
@@ -210,4 +301,14 @@ public sealed class P32EquipmentCatalogTests
     }
 
     private static string Signature(AffixRoll value) => $"{value.Definition.StableFamilyId}:{value.Value}:{string.Join(',', value.Effects.Select(effect => effect.Value))}";
+
+    private static AffixDefinition Affix(ItemBaseDefinition itemBase, string family, int tier) =>
+        P1Affixes.For(itemBase, 100).Single(value => value.StableFamilyId == family && value.Tier == tier);
+
+    private static AffixRoll MinimumRoll(AffixDefinition definition)
+    {
+        RolledAffixComponent[] components = definition.EffectComponents.Select(value =>
+            new RolledAffixComponent(value.Kind, value.MinimumValue, value.Scope, value.DisplayText)).ToArray();
+        return new AffixRoll(definition, components[0].Value, Components: components);
+    }
 }

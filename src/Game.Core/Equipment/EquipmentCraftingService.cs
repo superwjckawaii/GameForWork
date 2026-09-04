@@ -127,8 +127,7 @@ public static class EquipmentCraftingService
         if (item.Rarity != ItemRarity.Rare) return Fail("rare_required", "命能加工要求稀有装备。", resource, cost);
         if (operation.DisplayName.StartsWith("保留前缀", StringComparison.Ordinal)) return RerollHalf(item, AffixPosition.Prefix, seed, resource, cost);
         if (operation.DisplayName.StartsWith("保留后缀", StringComparison.Ordinal)) return RerollHalf(item, AffixPosition.Suffix, seed, resource, cost);
-        string tag = operation.DisplayName.Replace("偏向重铸", string.Empty, StringComparison.Ordinal)
-            .Replace("偏向打造", string.Empty, StringComparison.Ordinal).Trim();
+        string tag = DirectionFrom(operation.DisplayName);
         return operation.DisplayName.Contains("偏向重铸", StringComparison.Ordinal)
             ? BiasedReroll(item, tag, seed, resource, cost)
             : BiasedReplace(item, tag, seed, resource, cost);
@@ -293,15 +292,51 @@ public static class EquipmentCraftingService
     {
         AffixDefinition[] candidates = P1Affixes.For(item.Base, item.ItemLevel).Where(value => HasDirection(value, tag)).ToArray();
         if (candidates.Length == 0) return Fail("no_direction_candidate", $"没有合法{tag}词缀。", resource, cost);
-        AffixRoll[] removable = item.Affixes.Where(value => !value.Crafted && !item.IsFractured(value) && !HasDirection(value.Definition, tag)).ToArray();
-        if (removable.Length == 0) return Fail("no_replaceable_affix", "没有可替换的非目标自然词缀。", resource, cost);
+        (AffixRoll Removed, AffixDefinition[] Candidates)[] choices = BiasedReplaceChoices(item, tag, candidates);
+        if (choices.Length == 0) return Fail("no_replaceable_affix", "没有可替换且能产生合法目标词缀的非目标自然词缀。", resource, cost);
         var random = new Pcg32(seed);
-        AffixRoll removed = removable[(int)(random.NextUInt() % (uint)removable.Length)];
-        AffixDefinition[] samePosition = candidates.Where(value => value.Position == removed.Definition.Position && item.Affixes.All(existing => existing.Definition.MutualExclusionGroup != value.MutualExclusionGroup)).ToArray();
-        if (samePosition.Length == 0) return Fail("no_same_position_candidate", "同位置没有合法目标词缀。", resource, cost);
-        AffixRoll replacement = Roll(samePosition[(int)(random.NextUInt() % (uint)samePosition.Length)], random);
-        ItemInstance changed = item with { Affixes = item.Affixes.Select(value => ReferenceEquals(value, removed) ? replacement : value).ToArray() };
-        return Ok(ApplyProtections(item, changed, true), $"已完成{tag}偏向打造", resource, cost);
+        (AffixRoll removed, AffixDefinition[] pool) = choices[(int)(random.NextUInt() % (uint)choices.Length)];
+        AffixDefinition selected = WeightedChoice(pool, item.Base, random);
+        AffixRoll replacement = Roll(selected, random);
+        ItemInstance changed = item with
+        {
+            Affixes = item.Affixes.Where(value => !ReferenceEquals(value, removed)).Append(replacement).ToArray(),
+        };
+        ItemInstance protectedResult = ApplyProtections(item, changed, true);
+        return SameExplicitAffixes(item, protectedResult)
+            ? Fail("no_effective_change", "保护生效后没有可产生实际变化的合法结果。", resource, cost)
+            : Ok(protectedResult, $"已完成{tag}偏向打造", resource, cost);
+    }
+
+    private static (AffixRoll Removed, AffixDefinition[] Candidates)[] BiasedReplaceChoices(
+        ItemInstance item, string tag, IReadOnlyList<AffixDefinition> candidates) => item.Affixes
+        .Where(value => !value.Crafted && !item.IsFractured(value) && !HasDirection(value.Definition, tag) &&
+                        !IsProtected(item, value.Definition.Position))
+        .Select(removed =>
+        {
+            AffixRoll[] remaining = item.Affixes.Where(value => !ReferenceEquals(value, removed)).ToArray();
+            AffixDefinition[] legal = candidates.Where(candidate =>
+                remaining.Count(value => value.Definition.Position == candidate.Position) < 3 &&
+                remaining.All(value => value.Definition.MutualExclusionGroup != candidate.MutualExclusionGroup)).ToArray();
+            return (Removed: removed, Candidates: legal);
+        })
+        .Where(choice => choice.Candidates.Length > 0)
+        .ToArray();
+
+    private static bool IsProtected(ItemInstance item, AffixPosition position) =>
+        position == AffixPosition.Prefix ? item.ProtectPrefixesNextCraft : item.ProtectSuffixesNextCraft;
+
+    private static AffixDefinition WeightedChoice(IReadOnlyList<AffixDefinition> candidates,
+        ItemBaseDefinition itemBase, Pcg32 random)
+    {
+        int total = candidates.Sum(value => value.WeightFor(itemBase));
+        int roll = (int)(random.NextUInt() % (uint)total);
+        foreach (AffixDefinition candidate in candidates)
+        {
+            roll -= candidate.WeightFor(itemBase);
+            if (roll < 0) return candidate;
+        }
+        return candidates[^1];
     }
 
     private static EquipmentCraftingResult ShiftTier(ItemInstance item, string familyId, ulong seed, string resource, int cost)
@@ -325,11 +360,31 @@ public static class EquipmentCraftingService
         if (!explicitCraft) return changed;
         IEnumerable<AffixRoll> affixes = changed.Affixes;
         if (original.ProtectPrefixesNextCraft)
-            affixes = affixes.Where(value => value.Definition.Position != AffixPosition.Prefix).Concat(original.Affixes.Where(value => value.Definition.Position == AffixPosition.Prefix));
+            affixes = RestoreProtectedPosition(original, affixes, AffixPosition.Prefix);
         if (original.ProtectSuffixesNextCraft)
-            affixes = affixes.Where(value => value.Definition.Position != AffixPosition.Suffix).Concat(original.Affixes.Where(value => value.Definition.Position == AffixPosition.Suffix));
+            affixes = RestoreProtectedPosition(original, affixes, AffixPosition.Suffix);
         AffixRoll[] normalized = affixes.GroupBy(value => value.Definition.StableFamilyId, StringComparer.Ordinal).Select(group => group.First()).Take(6).ToArray();
         return changed with { Affixes = normalized, ProtectPrefixesNextCraft = false, ProtectSuffixesNextCraft = false, CraftSequence = original.CraftSequence + 1 };
+    }
+
+    private static IEnumerable<AffixRoll> RestoreProtectedPosition(ItemInstance original,
+        IEnumerable<AffixRoll> changedAffixes, AffixPosition position)
+    {
+        AffixRoll[] changed = changedAffixes.ToArray();
+        AffixRoll[] protectedAffixes = original.Affixes.Where(value => value.Definition.Position == position).ToArray();
+        AffixRoll[] additions = changed.Where(value => value.Definition.Position == position &&
+            protectedAffixes.All(existing => existing.Definition.StableFamilyId != value.Definition.StableFamilyId &&
+                                              existing.Definition.MutualExclusionGroup != value.Definition.MutualExclusionGroup))
+            .Take(Math.Max(0, 3 - protectedAffixes.Length)).ToArray();
+        return changed.Where(value => value.Definition.Position != position).Concat(protectedAffixes).Concat(additions);
+    }
+
+    private static bool SameExplicitAffixes(ItemInstance left, ItemInstance right)
+    {
+        static string Signature(AffixRoll value) => $"{value.Definition.StableFamilyId}:{value.Definition.Tier}:{value.Crafted}:" +
+            string.Join(',', value.Effects.Select(effect => $"{effect.Kind}:{effect.Value}:{effect.Scope}"));
+        return left.Affixes.Select(Signature).Order(StringComparer.Ordinal)
+            .SequenceEqual(right.Affixes.Select(Signature).Order(StringComparer.Ordinal), StringComparer.Ordinal);
     }
 
     private static ItemInstance CopyPersistent(ItemInstance original, ItemInstance generated) => generated with
@@ -385,6 +440,14 @@ public static class EquipmentCraftingService
         if (operation.Kind == "LegendaryExchange" && !EquipmentCatalog.LegendaryItems.Any(value =>
                 value.Id == request.SelectedDefinitionId && value.Rarity == "Legendary")) return "exchange_target_invalid";
         if (operation.Kind == "LifeEnergy" && item.Rarity != ItemRarity.Rare) return "rare_required";
+        if (operation.Kind == "LifeEnergy" && operation.DisplayName.Contains("偏向打造", StringComparison.Ordinal))
+        {
+            string tag = DirectionFrom(operation.DisplayName);
+            AffixDefinition[] candidates = P1Affixes.For(item.Base, item.ItemLevel)
+                .Where(value => HasDirection(value, tag)).ToArray();
+            if (candidates.Length == 0) return "no_direction_candidate";
+            if (BiasedReplaceChoices(item, tag, candidates).Length == 0) return "no_replaceable_affix";
+        }
         if (operation.DisplayName == "淬刃打造" && item.Base.Category is not (ItemCategory.OneHandWeapon or ItemCategory.TwoHandWeapon)) return "incompatible_base";
         if (operation.DisplayName == "守壁打造" && item.Base.ArmorMaximum + item.Base.EvasionMaximum + item.Base.ShieldMaximum + item.Base.SpiritBarrierMaximum == 0) return "incompatible_base";
         if (operation.DisplayName is "连接重铸" or "稳固增连" && item.Base.SocketLimit <= 0) return "no_sockets";
@@ -393,6 +456,10 @@ public static class EquipmentCraftingService
     }
 
     private static EquipmentCraftingOperationEntry Get(string id) => EquipmentCatalog.CraftingOperations.Single(value => value.Id == id);
+
+    private static string DirectionFrom(string displayName) => displayName
+        .Replace("偏向重铸", string.Empty, StringComparison.Ordinal)
+        .Replace("偏向打造", string.Empty, StringComparison.Ordinal).Trim();
 
     private static (string resource, int cost) ParseCost(string text, ItemInstance item)
     {
@@ -418,7 +485,8 @@ public static class EquipmentCraftingService
         "enchantment_required" => "请选择附魔。", "workshop_level" => "工坊等级不足。",
         "incompatible_base" => "该操作不适用于此装备。", "exchange_target_invalid" => "请选择可兑换的普通传奇。",
         "rare_required" => "该操作要求稀有装备。", "no_sockets" => "此底材没有连接孔。",
-        "links_full" => "连接数已经达到底材上限。", _ => reason,
+        "links_full" => "连接数已经达到底材上限。", "no_direction_candidate" => "此装备没有合法的目标方向词缀。",
+        "no_replaceable_affix" => "没有可替换且能产生合法目标词缀的非目标自然词缀。", _ => reason,
     };
     private static EquipmentCraftingResult Ok(ItemInstance item, string summary, string resource, int cost) => new(true, string.Empty, summary, item, resource, cost);
     private static EquipmentCraftingResult Fail(string reason, string summary, string resource, int cost) => new(false, reason, summary, null, resource, cost);
