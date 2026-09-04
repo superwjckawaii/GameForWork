@@ -1484,6 +1484,62 @@ public sealed class P1GameSession
         return true;
     }
 
+    public bool TryDismantleP30Jewel(string instanceId, bool confirmed, out string message)
+    {
+        P30JewelInstance? jewel = Jewels.Items.FirstOrDefault(item => item.InstanceId == instanceId);
+        if (jewel is null)
+        {
+            message = "珠宝不存在。";
+            return false;
+        }
+        if (Jewels.Socketed.Values.Contains(instanceId, StringComparer.Ordinal))
+        {
+            message = "已镶嵌的珠宝不能分解，请先从天赋树取下。";
+            return false;
+        }
+        if (jewel.Rarity >= P30JewelRarity.Rare && !confirmed)
+        {
+            message = $"分解{P30Jewels.RarityName(jewel.Rarity)}珠宝需要确认。";
+            return false;
+        }
+        int scraps = P30Jewels.DismantleYield(jewel.Rarity);
+        if (!Jewels.TryRemove(instanceId)) throw new InvalidOperationException("Validated jewel could not be removed.");
+        World.Economy.AddDispositionProceeds(0, scraps);
+        Management.AddHistory($"珠宝分解：{jewel.DisplayName}，获得 {scraps} 铁屑。");
+        RefreshHeroBuild();
+        message = $"已分解 {jewel.DisplayName}，获得 {scraps} 铁屑。";
+        return true;
+    }
+
+    public bool TryDismantleP30Jewels(P30JewelRarity maximumRarity, bool confirmed, out string message)
+    {
+        HashSet<string> socketed = Jewels.Socketed.Values.ToHashSet(StringComparer.Ordinal);
+        P30JewelInstance[] targets = Jewels.Items
+            .Where(item => item.Rarity <= maximumRarity && !socketed.Contains(item.InstanceId))
+            .OrderBy(item => item.InstanceId, StringComparer.Ordinal)
+            .ToArray();
+        if (targets.Length == 0)
+        {
+            message = "没有符合条件且未镶嵌的珠宝。";
+            return false;
+        }
+        if (!confirmed)
+        {
+            int previewScraps = targets.Sum(item => P30Jewels.DismantleYield(item.Rarity));
+            message = $"将分解 {targets.Length} 枚未镶嵌珠宝，获得 {previewScraps} 铁屑。";
+            return false;
+        }
+        int scraps = targets.Sum(item => P30Jewels.DismantleYield(item.Rarity));
+        foreach (P30JewelInstance target in targets)
+            if (!Jewels.TryRemove(target.InstanceId))
+                throw new InvalidOperationException("Validated jewel batch could not be removed.");
+        World.Economy.AddDispositionProceeds(0, scraps);
+        Management.AddHistory($"批量分解珠宝：{targets.Length} 枚，获得 {scraps} 铁屑。");
+        RefreshHeroBuild();
+        message = $"已分解 {targets.Length} 枚珠宝，获得 {scraps} 铁屑。";
+        return true;
+    }
+
     private static ulong StableHash(string value)
     {
         ulong hash = 14695981039346656037UL;
@@ -1599,7 +1655,9 @@ public sealed class P1GameSession
         MoreDamageOverTimeBasisPoints: build.MoreDamageOverTimeBasisPoints,
         IncreasedActionSpeedBasisPoints: build.IncreasedActionSpeedBasisPoints,
         InstantLifeLeechBasisPoints: build.InstantLifeLeechBasisPoints,
-        LocalWeaponStats: build.Equipment.LocalWeapon) with
+        LocalWeaponStats: build.Equipment.LocalWeapon,
+        IncreasedSpellDamageBasisPoints: build.IncreasedSpellDamageBasisPoints,
+        IncreasedAttackSpeedBasisPoints: build.IncreasedAttackSpeedBasisPoints) with
         {
             AiSummary = $"{ai.Preset} · {(ai.MatchMode == AiRuleMatchMode.All ? "全部满足" : "任一满足")}：" +
                 $"敌人≥{ai.MinimumEnemyCount}、稀有度 {ai.EnemyRarity}、距离≤{ai.MaximumEnemyDistance}、" +

@@ -218,6 +218,7 @@ public static class P6CombatSkillRules
         long value = rawDamage;
         long increasedMultiplier = 10_000L + build.IncreasedDamageBasisPoints +
             passive.DamageFor(tags) + (long)configuration.Quality * 100;
+        if (tags.HasFlag(SkillTag.Spell)) increasedMultiplier += build.IncreasedSpellDamageBasisPoints;
         value = Scale(value, increasedMultiplier);
         value = Scale(value, 10_000L + passive.MoreDamageBasisPoints);
         int jewelMore = skill.Role == P17SkillRole.DamageOverTime ? build.MoreDamageOverTimeBasisPoints : 0;
@@ -236,8 +237,10 @@ public static class P6CombatSkillRules
     {
         P205PassiveModifiers passive = build.PassiveProfile ?? P205PassiveModifiers.Empty;
         int masterySpeed = P30MasteryRuntime.ActionSpeedMultiplier(passive, tags, build.Weapon);
+        int increasedSpeed = build.IncreasedActionSpeedBasisPoints;
+        if (tags.HasFlag(SkillTag.Attack)) increasedSpeed = checked(increasedSpeed + build.IncreasedAttackSpeedBasisPoints);
         return Math.Max(1, checked((int)((long)Math.Max(1, baseTicks) * 10_000 * 10_000 /
-            Math.Max(10_000_000, (long)(10_000 + build.IncreasedActionSpeedBasisPoints) * masterySpeed))));
+            Math.Max(10_000_000, (long)(10_000 + increasedSpeed) * masterySpeed))));
     }
 
     private static int LegacyValue(SkillConfiguration configuration, SkillSupport support) =>

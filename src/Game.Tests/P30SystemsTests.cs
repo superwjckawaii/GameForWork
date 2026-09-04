@@ -380,12 +380,125 @@ public sealed class P30SystemsTests
         Assert.Equal(affected.Count(node => node.Kind is PassiveNodeKind.Notable or PassiveNodeKind.Mastery) * 500,
             modifiers.IncreasedPhysiqueBasisPoints);
 
+        Assert.True(state.TryUnsocket(socket));
+        Assert.True(state.TryRemove(physique.InstanceId));
+        P30JewelInstance abacus = P30Jewels.CreateLegendary("bastion_abacus", 100, "abacus", 11);
+        Assert.True(state.TryAdd(abacus));
+        Assert.True(state.TrySocket(socket, abacus.InstanceId, 100, out _));
+        modifiers = P30Jewels.CalculateModifiers(state, allocation);
+        Assert.Equal(affected.Count(node => node.Kind == PassiveNodeKind.Small) * 400,
+            modifiers.IncreasedAttackDamageBasisPoints);
+        Assert.Equal(affected.Count(node => node.Kind is PassiveNodeKind.Notable or PassiveNodeKind.Mastery) * 300,
+            modifiers.IncreasedAttackSpeedBasisPoints);
+
+        Assert.True(state.TryUnsocket(socket));
+        Assert.True(state.TryRemove(abacus.InstanceId));
+        P30JewelInstance echo = P30Jewels.CreateLegendary("rampart_echo", 100, "echo", 13);
+        Assert.True(state.TryAdd(echo));
+        Assert.True(state.TrySocket(socket, echo.InstanceId, 100, out _));
+        modifiers = P30Jewels.CalculateModifiers(state, allocation);
+        Assert.Equal(affected.Count(node => node.Kind == PassiveNodeKind.Small) * 400,
+            modifiers.IncreasedArmorBasisPoints);
+        Assert.Equal(affected.Count(node => node.Kind is PassiveNodeKind.Notable or PassiveNodeKind.Mastery) * 200,
+            modifiers.IncreasedMaximumLifeBasisPoints);
+
         static double Distance(string left, string right)
         {
             PassiveNodeDefinition a = P1PassiveTree.Get(left);
             PassiveNodeDefinition b = P1PassiveTree.Get(right);
             return Math.Sqrt(Math.Pow(a.X - b.X, 2) + Math.Pow(a.Y - b.Y, 2));
         }
+    }
+
+    [Fact]
+    public void CrimsonMemoryUsesFinalPhysiqueInCharacterPreviewAndCombatBuild()
+    {
+        string socket = P1PassiveTree.Nodes.First(node => node.Kind == PassiveNodeKind.JewelSocket).StableId;
+        var jewels = new P30JewelState();
+        P30JewelInstance memory = P30Jewels.CreateLegendary("crimson_memory", 1, "crimson-memory");
+        Assert.True(jewels.TryAdd(memory));
+        Assert.True(jewels.TrySocket(socket, memory.InstanceId, 100, out _));
+        var passives = new PassiveTreeAllocation();
+        var loadout = new EquipmentLoadout();
+        var skill = new SkillConfiguration(P1SkillIds.HeavyStrike, SkillSupport.None);
+
+        AssembledCharacterBuild lower = CharacterBuildAssembler.Assemble(100,
+            new CharacterAttributes(1_100, 10, 10, 10), loadout, passives, skill, jewels);
+        AssembledCharacterBuild higher = CharacterBuildAssembler.Assemble(100,
+            new CharacterAttributes(1_300, 10, 10, 10), loadout, passives, skill, jewels);
+
+        Assert.Equal(55_160, lower.IncreasedAttackDamageBasisPoints);
+        Assert.Equal(65_160, higher.IncreasedAttackDamageBasisPoints);
+        Assert.Equal(26_400, lower.Sheet.IncreasedArmorBasisPoints);
+        Assert.Equal(31_200, higher.Sheet.IncreasedArmorBasisPoints);
+        Assert.True(higher.IncreasedAttackDamageBasisPoints > lower.IncreasedAttackDamageBasisPoints);
+        Assert.Equal(10_000, higher.IncreasedAttackDamageBasisPoints - lower.IncreasedAttackDamageBasisPoints);
+        Assert.True(higher.Sheet.IncreasedArmorBasisPoints > lower.Sheet.IncreasedArmorBasisPoints);
+    }
+
+    [Fact]
+    public void AllAttributeMemoryJewelsScaleFromTheirFinalAttribute()
+    {
+        CharacterAttributes attributes = new(1_000, 750, 500, 250);
+        AssertMemory("crimson_memory", modifiers =>
+        {
+            Assert.Equal(30_000, modifiers.IncreasedAttackDamageBasisPoints);
+            Assert.Equal(24_000, modifiers.IncreasedArmorBasisPoints);
+        });
+        AssertMemory("verdant_memory", modifiers =>
+        {
+            Assert.Equal(6_000, modifiers.IncreasedAttackSpeedBasisPoints);
+            Assert.Equal(18_000, modifiers.IncreasedEvasionBasisPoints);
+        });
+        AssertMemory("golden_memory", modifiers =>
+        {
+            Assert.Equal(8_000, modifiers.IncreasedMaximumManaBasisPoints);
+            Assert.Equal(4_000, modifiers.IncreasedRecoveryRateBasisPoints);
+        });
+        AssertMemory("azure_memory", modifiers =>
+        {
+            Assert.Equal(7_500, modifiers.IncreasedSpellDamageBasisPoints);
+            Assert.Equal(6_000, modifiers.IncreasedMaximumShieldBasisPoints);
+        });
+
+        void AssertMemory(string legendaryId, Action<P30JewelModifiers> assert)
+        {
+            string socket = P1PassiveTree.Nodes.First(node => node.Kind == PassiveNodeKind.JewelSocket).StableId;
+            var state = new P30JewelState();
+            P30JewelInstance jewel = P30Jewels.CreateLegendary(legendaryId, 1, legendaryId);
+            Assert.True(state.TryAdd(jewel));
+            Assert.True(state.TrySocket(socket, jewel.InstanceId, 100, out _));
+            assert(P30Jewels.CalculateAttributeMemoryModifiers(state, attributes));
+        }
+    }
+
+    [Fact]
+    public void JewelCleanupProtectsSocketedJewelsAndRequiresConfirmationForBatchAndRareItems()
+    {
+        P1GameSession session = P1GameSession.CreateNew(new("珠宝清理", CharacterGender.Androgynous,
+            CharacterSkinTone.Fair, CharacterHairStyle.Cropped, GameForWork.Core.P23.P23BaseClass.Fighter), 0x30c1);
+        P30JewelInstance normal = P30Jewels.RollPrismatic(1, 1, "cleanup-normal", P30JewelRarity.Normal);
+        P30JewelInstance magic = P30Jewels.RollPrismatic(1, 2, "cleanup-magic", P30JewelRarity.Magic);
+        P30JewelInstance rare = P30Jewels.RollPrismatic(1, 3, "cleanup-rare", P30JewelRarity.Rare);
+        Assert.True(session.Jewels.TryAdd(normal));
+        Assert.True(session.Jewels.TryAdd(magic));
+        Assert.True(session.Jewels.TryAdd(rare));
+        string socket = P1PassiveTree.Nodes.First(node => node.Kind == PassiveNodeKind.JewelSocket).StableId;
+        Assert.True(session.Jewels.TrySocket(socket, normal.InstanceId, 1, out _));
+        int scraps = session.World.Economy.IronScraps;
+
+        Assert.False(session.TryDismantleP30Jewels(P30JewelRarity.Magic, confirmed: false, out string preview));
+        Assert.Contains("1 枚", preview);
+        Assert.True(session.TryDismantleP30Jewels(P30JewelRarity.Magic, confirmed: true, out _));
+        Assert.Contains(session.Jewels.Items, item => item.InstanceId == normal.InstanceId);
+        Assert.DoesNotContain(session.Jewels.Items, item => item.InstanceId == magic.InstanceId);
+        Assert.Equal(scraps + 2, session.World.Economy.IronScraps);
+
+        Assert.False(session.TryDismantleP30Jewel(rare.InstanceId, confirmed: false, out _));
+        Assert.True(session.TryDismantleP30Jewel(rare.InstanceId, confirmed: true, out _));
+        Assert.Equal(scraps + 7, session.World.Economy.IronScraps);
+        Assert.False(session.TryDismantleP30Jewel(normal.InstanceId, confirmed: true, out string protectedMessage));
+        Assert.Contains("已镶嵌", protectedMessage);
     }
 
     [Fact]

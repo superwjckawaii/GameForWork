@@ -39,7 +39,8 @@ public sealed record P30JewelModifiers(int Physique = 0, int Dexterity = 0, int 
     int MoreAttackDamageBasisPoints = 0, int MoreSpellDamageBasisPoints = 0,
     int MoreDamageOverTimeBasisPoints = 0, int MaximumElementalResistanceBasisPoints = 0,
     int MaximumVoidResistanceBasisPoints = 0, int IncreasedActionSpeedBasisPoints = 0,
-    int ReservationEfficiencyBasisPoints = 0, int IncreasedPhysiqueBasisPoints = 0);
+    int ReservationEfficiencyBasisPoints = 0, int IncreasedPhysiqueBasisPoints = 0,
+    int IncreasedRecoveryRateBasisPoints = 0);
 
 public sealed class P30JewelState
 {
@@ -352,6 +353,53 @@ public static class P30Jewels
     public static int MapCompletionDropChanceBasisPoints(int tier) => Math.Clamp(tier, 1, 20) switch
     { <= 5 => 180, <= 10 => 220, <= 15 => 270, _ => 330 };
     public static int BossDropChanceBasisPoints(int tier) => 100 + 8 * Math.Clamp(tier, 1, 20);
+
+    public static int DismantleYield(P30JewelRarity rarity) => rarity switch
+    {
+        P30JewelRarity.Normal => 1,
+        P30JewelRarity.Magic => 2,
+        P30JewelRarity.Rare => 5,
+        P30JewelRarity.Legendary => 12,
+        _ => 0,
+    };
+
+    public static P30JewelModifiers CalculateAttributeMemoryModifiers(P30JewelState state,
+        P1.Combat.CharacterAttributes finalAttributes)
+    {
+        ArgumentNullException.ThrowIfNull(state);
+        ArgumentNullException.ThrowIfNull(finalAttributes);
+        int attack = 0, spell = 0, mana = 0, shield = 0, armor = 0, evasion = 0, speed = 0, recovery = 0;
+        foreach (string socketId in state.Socketed.Keys)
+        {
+            switch (state.At(socketId)?.Legendary?.StableId)
+            {
+                case "p30.jewel.crimson_memory":
+                    int physiqueStacks = finalAttributes.Physique / 50;
+                    attack = checked(attack + physiqueStacks * 1_500);
+                    armor = checked(armor + physiqueStacks * 1_200);
+                    break;
+                case "p30.jewel.verdant_memory":
+                    int dexterityStacks = finalAttributes.Dexterity / 50;
+                    speed = checked(speed + dexterityStacks * 400);
+                    evasion = checked(evasion + dexterityStacks * 1_200);
+                    break;
+                case "p30.jewel.golden_memory":
+                    int spiritStacks = finalAttributes.Spirit / 50;
+                    mana = checked(mana + spiritStacks * 800);
+                    recovery = checked(recovery + spiritStacks * 400);
+                    break;
+                case "p30.jewel.azure_memory":
+                    int energyStacks = finalAttributes.Energy / 50;
+                    spell = checked(spell + energyStacks * 1_500);
+                    shield = checked(shield + energyStacks * 1_200);
+                    break;
+            }
+        }
+        return new(IncreasedAttackDamageBasisPoints: attack, IncreasedSpellDamageBasisPoints: spell,
+            IncreasedMaximumManaBasisPoints: mana, IncreasedMaximumShieldBasisPoints: shield,
+            IncreasedArmorBasisPoints: armor, IncreasedEvasionBasisPoints: evasion,
+            IncreasedAttackSpeedBasisPoints: speed, IncreasedRecoveryRateBasisPoints: recovery);
+    }
 
     public static P30JewelModifiers CalculateModifiers(P30JewelState state,
         P1.Progression.PassiveTreeAllocation? allocation = null)

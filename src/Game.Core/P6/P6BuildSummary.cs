@@ -138,6 +138,7 @@ public static class P6BuildSummaryRules
                 skill.BaseDamageBasisPoints)
             : skill.BaseDamageBasisPoints;
         int increased = checked(build.IncreasedDamageBasisPoints + passive.DamageFor(tags) + configuration.Quality * 100);
+        if (tags.HasFlag(SkillTag.Spell)) increased = checked(increased + build.IncreasedSpellDamageBasisPoints);
         int jewelMore = skill.Role == P17SkillRole.DamageOverTime ? build.MoreDamageOverTimeBasisPoints : 0;
         if (tags.HasFlag(SkillTag.Attack)) jewelMore += build.MoreAttackDamageBasisPoints;
         if (tags.HasFlag(SkillTag.Spell)) jewelMore += build.MoreSpellDamageBasisPoints;

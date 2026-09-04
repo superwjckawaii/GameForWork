@@ -24,7 +24,9 @@ public sealed record AssembledCharacterBuild(
     ChargedHeavyStrikeState? ChargedHeavyStrike,
     IReadOnlyList<P1FlaskKind> Flasks,
     WeaponProfile EffectiveWeapon,
-    P30VirtueViceLoadout? VirtueViceLoadout = null)
+    P30VirtueViceLoadout? VirtueViceLoadout = null,
+    int IncreasedSpellDamageBasisPoints = 0,
+    int IncreasedAttackSpeedBasisPoints = 0)
 {
     public bool HasUsableWeapon => Equipment.Weapon is not null;
 
@@ -87,6 +89,9 @@ public static class CharacterBuildAssembler
             else energy = ScaleAttribute(energy, 2_000);
         }
         var attributes = new CharacterAttributes(physique, dexterity, spirit, energy);
+        P30JewelModifiers attributeMemory = jewelState is null
+            ? new()
+            : P30Jewels.CalculateAttributeMemoryModifiers(jewelState, attributes);
         DefensiveEquipment defense = equipment.Defense;
         int masteryDefense = P30MasteryRuntime.DefenseMultiplier(advanced, weapon);
         defense = defense with
@@ -107,11 +112,15 @@ public static class CharacterBuildAssembler
             attributes,
             defense,
             checked(item.FlatMaximumLife + passive.FlatMaximumLife),
-            checked(passive.IncreasedMaximumLifeBasisPoints + item.IncreasedMaximumLifeBasisPoints + jewel.IncreasedMaximumLifeBasisPoints),
+            checked(passive.IncreasedMaximumLifeBasisPoints + item.IncreasedMaximumLifeBasisPoints +
+                jewel.IncreasedMaximumLifeBasisPoints + attributeMemory.IncreasedMaximumLifeBasisPoints),
             checked(item.FlatMaximumMana + passive.FlatMaximumMana),
-            checked(item.IncreasedArmorBasisPoints + passive.IncreasedArmorBasisPoints + jewel.IncreasedArmorBasisPoints),
-            checked(evasionIncrease + jewel.IncreasedEvasionBasisPoints),
-            checked(item.IncreasedShieldBasisPoints + item.IncreasedMaximumShieldBasisPoints + advanced.IncreasedShieldBasisPoints + jewel.IncreasedMaximumShieldBasisPoints),
+            checked(item.IncreasedArmorBasisPoints + passive.IncreasedArmorBasisPoints +
+                jewel.IncreasedArmorBasisPoints + attributeMemory.IncreasedArmorBasisPoints),
+            checked(evasionIncrease + jewel.IncreasedEvasionBasisPoints + attributeMemory.IncreasedEvasionBasisPoints),
+            checked(item.IncreasedShieldBasisPoints + item.IncreasedMaximumShieldBasisPoints +
+                advanced.IncreasedShieldBasisPoints + jewel.IncreasedMaximumShieldBasisPoints +
+                attributeMemory.IncreasedMaximumShieldBasisPoints),
             checked(item.IncreasedManaRegenerationBasisPoints + passive.IncreasedManaRegenerationBasisPoints),
             checked(item.FireResistanceBasisPoints + advanced.FireResistanceBasisPoints),
             checked(item.ColdResistanceBasisPoints + advanced.ColdResistanceBasisPoints),
@@ -121,7 +130,8 @@ public static class CharacterBuildAssembler
             checked(item.SpellSuppressionBasisPoints + advanced.SpellSuppressionBasisPoints),
             checked(item.FlatLifeRegeneration + advanced.FlatLifeRegeneration),
             item.IncreasedMovementSpeedBasisPoints,
-            checked(item.IncreasedMaximumManaBasisPoints + jewel.IncreasedMaximumManaBasisPoints),
+            checked(item.IncreasedMaximumManaBasisPoints + jewel.IncreasedMaximumManaBasisPoints +
+                attributeMemory.IncreasedMaximumManaBasisPoints),
             item.Value(ItemModifierKind.FlatShield),
             equipment.SpiritBarrier,
             item.Value(ItemModifierKind.FlatSpiritBarrier),
@@ -134,12 +144,15 @@ public static class CharacterBuildAssembler
                 item.Value(ItemModifierKind.MaximumVoidResistanceBasisPoints) + jewel.MaximumVoidResistanceBasisPoints),
             MaximumBlockChanceBasisPoints: checked(7_500 + item.Value(ItemModifierKind.MaximumAttackBlockChanceBasisPoints)),
             SpellBlockChanceBasisPoints: item.Value(ItemModifierKind.SpellBlockChanceBasisPoints),
-            MaximumSpellBlockChanceBasisPoints: checked(7_500 + item.Value(ItemModifierKind.MaximumSpellBlockChanceBasisPoints)));
+            MaximumSpellBlockChanceBasisPoints: checked(7_500 + item.Value(ItemModifierKind.MaximumSpellBlockChanceBasisPoints)),
+            IncreasedRecoveryRateBasisPoints: attributeMemory.IncreasedRecoveryRateBasisPoints);
+        int increasedAttackSpeed = checked(item.IncreasedAttackSpeedBasisPoints + passive.IncreasedAttackSpeedBasisPoints +
+            jewel.IncreasedAttackSpeedBasisPoints + attributeMemory.IncreasedAttackSpeedBasisPoints);
         SkillUseProfile heavyStrike = SkillRules.BuildHeavyStrike(
             heavyStrikeConfiguration,
             weapon,
             sheet.MaximumLife().Value,
-            checked(item.IncreasedAttackSpeedBasisPoints + passive.IncreasedAttackSpeedBasisPoints));
+            increasedAttackSpeed);
         heavyStrike = P1LegendaryRules.ApplyToHeavyStrike(heavyStrike, equipment.WeaponLegendaryRule);
         var warCry = new WarCryState { EchoNotableAllocated = passive.Echo };
         return new AssembledCharacterBuild(
@@ -152,7 +165,9 @@ public static class CharacterBuildAssembler
                 item.IncreasedPhysicalDamageBasisPoints +
                 item.Value(ItemModifierKind.IncreasedAttackDamageBasisPoints) +
                 passive.IncreasedAttackDamageBasisPoints +
-                specializedWeaponDamage + jewel.IncreasedAttackDamageBasisPoints),
+                specializedWeaponDamage + jewel.IncreasedAttackDamageBasisPoints +
+                attributeMemory.IncreasedAttackDamageBasisPoints +
+                sheet.AttackDamageIncreaseFromPhysique().Value),
             checked(item.AddedPhysicalDamage +
                 (item.Value(ItemModifierKind.AddedMinimumPhysicalDamage) + item.Value(ItemModifierKind.AddedMaximumPhysicalDamage)) / 2),
             checked(item.IncreasedCriticalChanceBasisPoints + advanced.IncreasedCriticalChanceBasisPoints + jewel.IncreasedCriticalChanceBasisPoints),
@@ -170,7 +185,10 @@ public static class CharacterBuildAssembler
                 .Select(pair => P1FlaskRules.KindForBase(pair.Value.Base.StableId)).Where(kind => kind.HasValue)
                 .Select(kind => kind!.Value).Distinct().ToArray()),
             weapon,
-            VirtueVice(item, jewel));
+            VirtueVice(item, jewel),
+            checked(item.Value(ItemModifierKind.IncreasedSpellDamageBasisPoints) +
+                jewel.IncreasedSpellDamageBasisPoints + attributeMemory.IncreasedSpellDamageBasisPoints),
+            increasedAttackSpeed);
     }
 
     private static P30VirtueViceLoadout VirtueVice(EquipmentModifiers item, P30JewelModifiers jewel)

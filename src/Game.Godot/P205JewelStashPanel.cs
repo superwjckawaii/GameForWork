@@ -16,6 +16,11 @@ public partial class P205JewelStashPanel : VBoxContainer
     private Button? _corrupt;
     private Button? _divine;
     private Button? _unsocket;
+    private Button? _dismantleSelected;
+    private Button? _dismantleBatch;
+    private OptionButton? _cleanupRarity;
+    private ConfirmationDialog? _confirmation;
+    private Action? _pendingConfirmation;
     private string? _selectedInstanceId;
     private string _signature = string.Empty;
 
@@ -53,9 +58,30 @@ public partial class P205JewelStashPanel : VBoxContainer
         _divine = CraftButton("神铸银重投半径", P30JewelCraftOperation.RerollLegendaryRadius);
         _unsocket = new Button { Text = "从天赋取下", CustomMinimumSize = new Vector2(0, 30) };
         _unsocket.Pressed += UnsocketSelected;
+        _dismantleSelected = new Button { Text = "分解所选", CustomMinimumSize = new Vector2(0, 30) };
+        _dismantleSelected.Pressed += DismantleSelected;
+        _cleanupRarity = new OptionButton { CustomMinimumSize = new Vector2(0, 30) };
+        _cleanupRarity.AddItem("清理普通", (int)P30JewelRarity.Normal);
+        _cleanupRarity.AddItem("清理魔法及以下", (int)P30JewelRarity.Magic);
+        _cleanupRarity.AddItem("清理稀有及以下", (int)P30JewelRarity.Rare);
+        _cleanupRarity.AddItem("清理传奇及以下", (int)P30JewelRarity.Legendary);
+        _cleanupRarity.Select((int)P30JewelRarity.Magic);
+        _dismantleBatch = new Button { Text = "批量清理未镶嵌珠宝", CustomMinimumSize = new Vector2(0, 30) };
+        _dismantleBatch.Pressed += ConfirmBatchDismantle;
         actions.AddChild(_reroll); actions.AddChild(_dissolve); actions.AddChild(_corrupt); actions.AddChild(_divine);
-        actions.AddChild(_unsocket);
+        actions.AddChild(_unsocket); actions.AddChild(_dismantleSelected);
+        actions.AddChild(_cleanupRarity); actions.AddChild(_dismantleBatch);
         AddChild(actions);
+
+        _confirmation = new ConfirmationDialog { Title = "确认分解珠宝", OkButtonText = "确认分解" };
+        _confirmation.Confirmed += () =>
+        {
+            Action? action = _pendingConfirmation;
+            _pendingConfirmation = null;
+            action?.Invoke();
+        };
+        _confirmation.Canceled += () => _pendingConfirmation = null;
+        AddChild(_confirmation);
     }
 
     public void RefreshState(bool force = false)
@@ -67,7 +93,8 @@ public partial class P205JewelStashPanel : VBoxContainer
                          $"{j.RolledRadius}:" +
                          $"{session.Jewels.Socketed.Values.Contains(j.InstanceId)}:" +
                          string.Join(',', j.Affixes.Select(a => $"{a.StableId}:{a.Tier}:{a.Value}")))) +
-            $"|wallet:{string.Join(',', new[] { MetalCurrencyKind.ChaosGold, MetalCurrencyKind.DissolutionSilver, MetalCurrencyKind.CorruptionIron, MetalCurrencyKind.DivineSilver }.Select(kind => session.World.Economy.MetalAmount(kind)))}";
+            $"|wallet:{string.Join(',', new[] { MetalCurrencyKind.ChaosGold, MetalCurrencyKind.DissolutionSilver, MetalCurrencyKind.CorruptionIron, MetalCurrencyKind.DivineSilver }.Select(kind => session.World.Economy.MetalAmount(kind)))}" +
+            $"|scraps:{session.World.Economy.IronScraps}";
         if (!force && signature == _signature) return;
         _signature = signature;
         foreach (Node child in _grid.GetChildren()) child.QueueFree();
@@ -122,9 +149,68 @@ public partial class P205JewelStashPanel : VBoxContainer
         RefreshState(force: changed);
     }
 
+    private void DismantleSelected()
+    {
+        if (_session is null || _selectedInstanceId is null) return;
+        P1GameSession session = _session();
+        P30JewelInstance? jewel = session.Jewels.Items.FirstOrDefault(item => item.InstanceId == _selectedInstanceId);
+        if (jewel is null) return;
+        if (session.Jewels.Socketed.Values.Contains(jewel.InstanceId, StringComparer.Ordinal))
+        {
+            _changed?.Invoke("已镶嵌的珠宝不能分解，请先从天赋树取下。");
+            return;
+        }
+        if (jewel.Rarity >= P30JewelRarity.Rare)
+        {
+            Confirm($"确定分解 {jewel.DisplayName}？将获得 {P30Jewels.DismantleYield(jewel.Rarity)} 铁屑。",
+                () => ExecuteDismantleSelected(jewel.InstanceId, confirmed: true));
+            return;
+        }
+        ExecuteDismantleSelected(jewel.InstanceId, confirmed: false);
+    }
+
+    private void ExecuteDismantleSelected(string instanceId, bool confirmed)
+    {
+        if (_session is null) return;
+        bool changed = _session().TryDismantleP30Jewel(instanceId, confirmed, out string message);
+        _changed?.Invoke(message);
+        if (!changed) return;
+        _selectedInstanceId = null;
+        RefreshState(force: true);
+    }
+
+    private void ConfirmBatchDismantle()
+    {
+        if (_session is null || _cleanupRarity is null) return;
+        P1GameSession session = _session();
+        P30JewelRarity maximum = (P30JewelRarity)_cleanupRarity.GetSelectedId();
+        session.TryDismantleP30Jewels(maximum, confirmed: false, out string preview);
+        if (!session.Jewels.Items.Any(item => item.Rarity <= maximum &&
+                !session.Jewels.Socketed.Values.Contains(item.InstanceId, StringComparer.Ordinal)))
+        {
+            _changed?.Invoke(preview);
+            return;
+        }
+        Confirm(preview, () =>
+        {
+            bool changed = session.TryDismantleP30Jewels(maximum, confirmed: true, out string message);
+            _changed?.Invoke(message);
+            if (changed) RefreshState(force: true);
+        });
+    }
+
+    private void Confirm(string text, Action action)
+    {
+        if (_confirmation is null) return;
+        _pendingConfirmation = action;
+        _confirmation.DialogText = text;
+        _confirmation.PopupCentered();
+    }
+
     private void RefreshSelection()
     {
-        if (_session is null || _selection is null || _reroll is null || _dissolve is null || _corrupt is null || _divine is null || _unsocket is null) return;
+        if (_session is null || _selection is null || _reroll is null || _dissolve is null || _corrupt is null ||
+            _divine is null || _unsocket is null || _dismantleSelected is null || _dismantleBatch is null) return;
         P1GameSession session = _session();
         P30JewelInstance? jewel = session.Jewels.Items.FirstOrDefault(item => item.InstanceId == _selectedInstanceId);
         string? socket = jewel is null ? null : session.Jewels.Socketed.FirstOrDefault(pair => pair.Value == jewel.InstanceId).Key;
@@ -138,6 +224,9 @@ public partial class P205JewelStashPanel : VBoxContainer
         _corrupt.Disabled = !craftable || jewel?.Rarity != P30JewelRarity.Rare;
         _divine.Disabled = jewel?.Legendary is not { MinimumRadius: > 0 };
         _unsocket.Disabled = socket is null;
+        _dismantleSelected.Disabled = jewel is null || socket is not null;
+        _dismantleBatch.Disabled = session.Jewels.Items.All(item =>
+            session.Jewels.Socketed.Values.Contains(item.InstanceId, StringComparer.Ordinal));
         _reroll.Text = $"混沌金重铸 ({session.World.Economy.MetalAmount(MetalCurrencyKind.ChaosGold)})";
         _dissolve.Text = $"消解银剥离 ({session.World.Economy.MetalAmount(MetalCurrencyKind.DissolutionSilver)})";
         _corrupt.Text = $"赤蚀铁腐化 ({session.World.Economy.MetalAmount(MetalCurrencyKind.CorruptionIron)})";

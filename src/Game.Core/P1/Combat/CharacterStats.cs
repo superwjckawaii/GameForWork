@@ -39,7 +39,8 @@ public sealed record CharacterSheet(
     int MaximumBlockChanceBasisPoints = 7_500,
     int SpellSuppressionEffectBasisPoints = 7_000,
     int SpellBlockChanceBasisPoints = 0,
-    int MaximumSpellBlockChanceBasisPoints = 7_500)
+    int MaximumSpellBlockChanceBasisPoints = 7_500,
+    int IncreasedRecoveryRateBasisPoints = 0)
 {
     public int CappedResistance(int value) => Math.Clamp(value, P30CombatRules.MinimumResistance,
         MaximumElementalResistanceBasisPoints);
@@ -145,27 +146,31 @@ public sealed record CharacterSheet(
     {
         int maximumMana = MaximumMana().Value;
         int baseRegeneration = checked(maximumMana * 600 / 10_000);
-        int value = ApplyIncreased(baseRegeneration, IncreasedManaRegenerationBasisPoints);
+        int increased = checked(IncreasedManaRegenerationBasisPoints + IncreasedRecoveryRateBasisPoints);
+        int value = ApplyIncreased(baseRegeneration, increased);
         return CalculatedValue.Single(
             "每秒法力恢复",
-            $"{maximumMana} × 6% × (10000 + {IncreasedManaRegenerationBasisPoints}) / 10000",
+            $"{maximumMana} × 6% × (10000 + {increased}) / 10000",
             value);
     }
 
-    public CalculatedValue LifeRegenerationPerSecond() => CalculatedValue.Single(
-        "每秒生命恢复",
-        $"装备固定生命恢复 {FlatLifeRegeneration}",
-        Math.Max(0, FlatLifeRegeneration));
+    public CalculatedValue LifeRegenerationPerSecond()
+    {
+        int value = ApplyIncreased(Math.Max(0, FlatLifeRegeneration), IncreasedRecoveryRateBasisPoints);
+        return CalculatedValue.Single("每秒生命恢复",
+            $"{Math.Max(0, FlatLifeRegeneration)} × (10000 + {IncreasedRecoveryRateBasisPoints}) / 10000", value);
+    }
 
     public CalculatedValue ShieldRecoveryPerSecond()
     {
         int maximumShield = MaximumShield().Value;
         int energySpeedIncrease = ShieldRecoverySpeedIncreaseBasisPoints().Value;
         int baseRecovery = checked(maximumShield * 2_000 / 10_000);
-        int value = ApplyIncreased(baseRecovery, energySpeedIncrease);
+        int increased = checked(energySpeedIncrease + IncreasedRecoveryRateBasisPoints);
+        int value = ApplyIncreased(baseRecovery, increased);
         return CalculatedValue.Single(
             "每秒护盾恢复",
-            $"{maximumShield} × 20% × (10000 + {energySpeedIncrease}) / 10000",
+            $"{maximumShield} × 20% × (10000 + {increased}) / 10000",
             value);
     }
 
