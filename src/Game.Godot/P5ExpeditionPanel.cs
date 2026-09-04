@@ -254,10 +254,21 @@ public partial class P5ExpeditionPanel : VBoxContainer
             P5TeamDispatchSnapshot? dispatch = session.World.Expedition.Get(kind);
             if (dispatch is not null && dispatchSignature != _dispatchSignature)
             {
-                controls.Mode.Select(controls.Mode.GetItemIndex((int)dispatch.Mode));
-                controls.RunCount.Visible = dispatch.Mode == P5DispatchMode.Once;
-                if (dispatch.Mode == P5DispatchMode.Once && dispatch.RemainingRuns > 0)
-                    controls.RunCount.Value = dispatch.RemainingRuns;
+                if (controls.Boss is { } activeBoss && P5ExpeditionDirector.IsBossTarget(dispatch.Target))
+                {
+                    activeBoss.Target.Select(activeBoss.Target.GetItemIndex((int)dispatch.Target));
+                    activeBoss.Mode.Select(activeBoss.Mode.GetItemIndex((int)dispatch.Mode));
+                    activeBoss.Count.Visible = dispatch.Mode == P5DispatchMode.Once;
+                    if (dispatch.Mode == P5DispatchMode.Once && dispatch.RemainingRuns > 0)
+                        activeBoss.Count.Value = dispatch.RemainingRuns;
+                }
+                else
+                {
+                    controls.Mode.Select(controls.Mode.GetItemIndex((int)dispatch.Mode));
+                    controls.RunCount.Visible = dispatch.Mode == P5DispatchMode.Once;
+                    if (dispatch.Mode == P5DispatchMode.Once && dispatch.RemainingRuns > 0)
+                        controls.RunCount.Value = dispatch.RemainingRuns;
+                }
             }
             controls.Status.Text = TeamStatus(team, dispatch);
             if (controls.Boss is { } boss)
@@ -411,7 +422,7 @@ public partial class P5ExpeditionPanel : VBoxContainer
             bool onceOnly = (P5ExpeditionTarget)target.GetItemId(target.Selected) == P5ExpeditionTarget.FinalBreakthrough;
             mode.Disabled = onceOnly;
             if (onceOnly) mode.Select(mode.GetItemIndex((int)P5DispatchMode.Once));
-            count.Visible = true;
+            count.Visible = onceOnly || (P5DispatchMode)mode.GetItemId(mode.Selected) == P5DispatchMode.Once;
             if (onceOnly) count.Value = 1;
         };
         var start = new Button { Text = "开始 Boss 挑战" };
@@ -420,7 +431,7 @@ public partial class P5ExpeditionPanel : VBoxContainer
             P5ExpeditionTarget selected = (P5ExpeditionTarget)target.GetItemId(target.Selected);
             P5DispatchMode selectedMode = (P5DispatchMode)mode.GetItemId(mode.Selected);
             bool started = _session!().AssignBossChallenge(selected, selectedMode, (int)count.Value);
-            _changed?.Invoke(started ? $"已开始 {BossName(selected)}。" : $"无法开始：{_session!().GetBossChallengeAvailability(selected).Requirement}。");
+            _changed?.Invoke(started ? $"已开始 {BossName(selected)}：{ModeName(selectedMode)}。" : $"无法开始：{_session!().GetBossChallengeAvailability(selected).Requirement}。");
             RefreshState();
         }
         start.Pressed += () =>
@@ -575,7 +586,7 @@ public partial class P5ExpeditionPanel : VBoxContainer
             string target = P10EndgameState.IsCitadel(team.ActiveMap) ? "灰烬天垒" :
                 P5ExpeditionDirector.IsPractice(team.ActiveMap) ? "Boss 练习" :
                 P5ExpeditionDirector.IsBoss(team.ActiveMap) ? "深渊监守者" : $"T{team.ActiveMap.Tier} · Lv{team.ActiveMap.MonsterLevel} 地图";
-            return $"执行中：{target} · 剩余约 {Math.Max(1, team.RemainingMapTimeMilliseconds / 1_000)} 秒" +
+            return $"执行中：{target}{ModeStatus(dispatch)} · 剩余约 {Math.Max(1, team.RemainingMapTimeMilliseconds / 1_000)} 秒" +
                    (team.IsStopped ? " · 本图结算后停止" : string.Empty) + "\n" +
                    $"路线 {team.ActiveRoute} · 最近 {(team.LastRun?.Succeeded == true ? "成功" : team.LastRun is null ? "暂无结算" : "失败")}";
         }
@@ -588,12 +599,19 @@ public partial class P5ExpeditionPanel : VBoxContainer
         if (team.Queue.Count > 0)
         {
             P1MapItem map = team.Queue.Maps[0];
-            return $"准备中：{TargetName(dispatch?.Target ?? P5ExpeditionTarget.SafeMaps)} · T{map.Tier} · Lv{map.MonsterLevel}";
+            return $"准备中：{TargetName(dispatch?.Target ?? P5ExpeditionTarget.SafeMaps)}{ModeStatus(dispatch)} · T{map.Tier} · Lv{map.MonsterLevel}";
         }
 
         return dispatch is null ? "空闲：请选择目标。" :
             $"{(dispatch.Enabled ? "等待执行" : "已完成本次派遣")}：{TargetName(dispatch.Target)}\n完成 {team.MapsCompleted} · 失败 {team.MapsFailed}";
     }
+
+    private static string ModeStatus(P5TeamDispatchSnapshot? dispatch) => dispatch?.Mode switch
+    {
+        P5DispatchMode.Repeat => " · 重复执行",
+        P5DispatchMode.Once when dispatch.RemainingRuns > 1 => $" · 剩余 {dispatch.RemainingRuns} 次",
+        _ => string.Empty,
+    };
 
     private static string TeamSignature(P1TeamExpeditionState team) =>
         $"{team.Kind}:{team.ActiveMap?.InstanceId}:{team.Queue.Count}:{team.IsStopped}:{team.StopReason}:" +

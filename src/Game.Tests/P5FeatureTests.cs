@@ -4,6 +4,7 @@ using GameForWork.Core.P1.Progression;
 using GameForWork.Core.P1.World;
 using GameForWork.Core.P2;
 using GameForWork.Core.P5;
+using GameForWork.Core.P10;
 
 namespace GameForWork.Tests;
 
@@ -139,6 +140,47 @@ public sealed class P5FeatureTests
 
         Assert.Equal(0, session.World.Expedition.AbyssWardenTickets);
         Assert.Equal("boss_ticket_missing", session.World.Hero.StopReason);
+    }
+
+    [Fact]
+    public void RepeatedCitadelChallengeQueuesFormalMapsAcrossSessionRestore()
+    {
+        P1GameSession session = CreateSession();
+        for (int index = 0; index < P10EndgameState.CitadelFragmentsPerTicket * 4; index++)
+            session.Endgame.RecordMapCompletion(new P1MapItem($"citadel-ticket-{index}", 20), MapRoute.Abyss, (ulong)index);
+
+        Assert.True(session.AssignBossChallenge(P5ExpeditionTarget.AshenCitadel, P5DispatchMode.Repeat));
+        session = P1GameSession.Restore(session.Capture());
+        for (int index = 0; index < 4; index++)
+        {
+            P1MapItem map = Assert.Single(session.World.Hero.Queue.Maps);
+            Assert.True(P10EndgameState.IsCitadel(map));
+            Assert.False(string.IsNullOrWhiteSpace(map.AreaId));
+            Assert.Contains(MapRoute.Abyss, map.EffectiveRouteCandidates);
+            Assert.Equal(MapRoute.Abyss, map.SelectedRoute);
+            map.Validate();
+            Assert.True(session.World.Hero.Queue.TryDequeue(out _));
+            if (index < 3)
+                Assert.True(session.World.Expedition.PrepareNext(session.World, session.World.Hero));
+        }
+    }
+
+    [Fact]
+    public void LegacyQueuedCitadelMapIsFormalizedBeforeItStarts()
+    {
+        P1GameSession session = CreateSession();
+        var legacy = new P1MapItem("p10-ashen-citadel-063556", 20,
+            RouteCandidates: [MapRoute.Abyss], SelectedRoute: MapRoute.Abyss);
+        Assert.True(session.World.Hero.Queue.TryEnqueue(legacy));
+
+        var simulator = new P1WorldSimulator(new P1MapAttemptResolver());
+        simulator.Simulate(session.World, 1, 20_260_827);
+
+        P1MapItem active = Assert.IsType<P1MapItem>(session.World.Hero.ActiveMap);
+        Assert.False(string.IsNullOrWhiteSpace(active.AreaId));
+        Assert.Contains(MapRoute.Abyss, active.EffectiveRouteCandidates);
+        Assert.Equal(MapRoute.Abyss, active.SelectedRoute);
+        active.Validate();
     }
 
     [Fact]

@@ -825,17 +825,24 @@ public partial class Main : Node
             _saveRepository = new SaveRepository(_savesRoot, slot);
             _saveRepository.Initialize();
             string? json = _saveRepository.LoadP1SessionJson();
+            P1GameSessionSnapshot? loadedSnapshot = null;
             try
             {
-                _session = string.IsNullOrWhiteSpace(json)
-                    ? null
-                    : P1GameSession.Restore(
-                        JsonSerializer.Deserialize<P1GameSessionSnapshot>(json, SaveJsonOptions) ??
-                        throw new InvalidDataException("Save JSON was empty."));
+                if (!string.IsNullOrWhiteSpace(json))
+                {
+                    loadedSnapshot = JsonSerializer.Deserialize<P1GameSessionSnapshot>(json, SaveJsonOptions) ??
+                        throw new InvalidDataException("Save JSON was empty.");
+                    _session = P1GameSession.Restore(loadedSnapshot);
+                }
+                else
+                {
+                    _session = null;
+                }
             }
             catch (Exception exception) when (exception is JsonException or InvalidDataException or NotSupportedException)
             {
                 string archived = _saveRepository.ArchiveLegacyAndReset();
+                loadedSnapshot = null;
                 _session = null;
                 _logger?.Write(GameLogLevel.Warning, "p12.legacy_save_archived", "persistence",
                     "An incompatible test save was archived and a clean database was created.",
@@ -843,7 +850,19 @@ public partial class Main : Node
                 ShowNotice("旧测试档与当前结构不兼容，已保留到 recovery/legacy；本槽位将重新开始。");
             }
             if (!DeveloperFeaturesEnabled && _session is not null) _session.DebugTwentyTimes = false;
-            SettleOfflineOnOpen();
+            try
+            {
+                SettleOfflineOnOpen();
+            }
+            catch (Exception exception) when (loadedSnapshot is not null)
+            {
+                _session = P1GameSession.Restore(loadedSnapshot);
+                if (!DeveloperFeaturesEnabled) _session.DebugTwentyTimes = false;
+                _battlePaused = true;
+                _logger?.Write(GameLogLevel.Error, "offline.startup_failed", "offline",
+                    "The save was loaded without applying the failed offline interval.", exception: exception);
+                ShowNotice("存档已安全加载，但本次离线结算失败；战斗已暂停，原存档没有被覆盖。");
+            }
         }
         catch (Exception exception)
         {

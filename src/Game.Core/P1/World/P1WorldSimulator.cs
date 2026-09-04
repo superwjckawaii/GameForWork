@@ -538,7 +538,7 @@ public sealed class P1WorldSimulator(IP1MapAttemptResolver attemptResolver)
 
             P1MapItem queuedSource = team.Queue.Maps[0];
             bool enteredAsFormalMap = !string.IsNullOrWhiteSpace(queuedSource.AreaId) && queuedSource.EffectiveRouteCandidates.Count > 0;
-            P1MapItem queuedMap = queuedSource.EnsureFormal(worldSeed);
+            P1MapItem queuedMap = P5ExpeditionDirector.EnsureFormalDispatchMap(queuedSource, worldSeed);
             queuedMap = PrepareMap?.Invoke(queuedMap) ?? queuedMap;
             queuedMap = queuedMap with { Gameplay = team.Policy.Gameplay ?? new() };
             if (queuedMap.Tier > state.MaximumUnlockedMapTier && !P5ExpeditionDirector.IsBoss(queuedMap) &&

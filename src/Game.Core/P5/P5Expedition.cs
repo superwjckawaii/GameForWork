@@ -173,6 +173,9 @@ public sealed class P5ExpeditionDirector
             status = "map_scheduled";
         }
 
+        if (IsBoss(map) || IsPractice(map))
+            map = EnsureFormalDispatchMap(map, (ulong)BossSequence);
+
         if (!team.Queue.TryEnqueue(map))
         {
             throw new InvalidOperationException("P5 dispatch could not enqueue an empty team queue.");
@@ -276,6 +279,24 @@ public sealed class P5ExpeditionDirector
         GameForWork.Core.P10.P10EndgameState.IsCitadel(map) || GameForWork.Core.P10.P10EndgameState.IsBreakthroughTrial(map);
     public static bool IsPractice(P1MapItem map) => map.InstanceId.StartsWith(PracticePrefix, StringComparison.Ordinal) ||
         GameForWork.Core.P10.P10EndgameState.IsCitadelPractice(map);
+    public static P1MapItem EnsureFormalDispatchMap(P1MapItem map, ulong seed)
+    {
+        ArgumentNullException.ThrowIfNull(map);
+        if (!IsBoss(map) && !IsPractice(map)) return map.EnsureFormal(seed);
+        MapRoute desiredRoute = GameForWork.Core.P10.P10EndgameState.IsBreakthroughTrial(map)
+            ? MapRoute.Safe
+            : MapRoute.Abyss;
+        P1MapItem formal = (map with { SelectedRoute = null }).EnsureFormal(seed);
+        IReadOnlyList<MapRoute> routes = formal.EffectiveRouteCandidates.Contains(desiredRoute)
+            ? formal.EffectiveRouteCandidates
+            : formal.EffectiveRouteCandidates.Append(desiredRoute).Distinct().TakeLast(3).ToArray();
+        return (formal with
+        {
+            RouteCandidates = routes,
+            SelectedRoute = desiredRoute,
+            Altar = map.Altar,
+        }).Validate();
+    }
     public static bool IsBossTarget(P5ExpeditionTarget target) => target is
         P5ExpeditionTarget.AbyssWarden or P5ExpeditionTarget.AbyssWardenPractice or
         P5ExpeditionTarget.AshenCitadel or P5ExpeditionTarget.AshenCitadelPractice or
