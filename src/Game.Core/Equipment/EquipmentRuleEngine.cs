@@ -80,8 +80,8 @@ public static class EquipmentRuleRegistry
         EquipmentRuleRegistration[] legendary = EquipmentCatalog.LegendaryItems.Select(entry => new EquipmentRuleRegistration(
             entry.RuleId, entry.Id, TriggerFor(entry.RuleText), !IsDynamic(entry.RuleText), entry.RuleText)).ToArray();
         EquipmentRuleRegistration[] result = enchantments.Concat(legendary).ToArray();
-        if (result.Length != 108 || result.Select(value => value.RuleId).Distinct(StringComparer.Ordinal).Count() != 108)
-            throw new InvalidOperationException("Equipment rule registry must contain exactly 53 enchantment and 55 legendary rules.");
+        if (result.Length != 109 || result.Select(value => value.RuleId).Distinct(StringComparer.Ordinal).Count() != 109)
+            throw new InvalidOperationException("Equipment rule registry must contain exactly 54 enchantment and 55 legendary rules.");
         return result;
     }
 
@@ -110,6 +110,8 @@ public static class EquipmentRuleRegistry
 
 public static class EquipmentRuleEngine
 {
+    public const string WorldEaterCatalogId = "equipment.legendary.52.44a586da1f";
+
     public static EquipmentRuleOutcome Dispatch(
         EquipmentRuleRegistration registration,
         EquipmentRuleState state,
@@ -155,10 +157,10 @@ public static class EquipmentRuleEngine
 
     public static int UnarmedMoreDamageBasisPoints(int finalLocalDefense) => Math.Max(0, finalLocalDefense / 50) * 500;
 
-    public static (int minimum, int maximum) MythicDaggerAddedVoidDamage(int finalPhysique)
+    public static (int minimum, int maximum) WorldEaterAddedVoidDamage(int finalPhysique)
     {
         int steps = Math.Max(0, finalPhysique / 100);
-        return (steps * 50, steps * 100);
+        return (checked(steps * 100), checked(steps * 150));
     }
 
     private static EquipmentRuleOutcome GainStack(EquipmentRuleState state, EquipmentRuleContext context,

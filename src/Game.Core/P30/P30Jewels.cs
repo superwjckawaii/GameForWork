@@ -154,13 +154,13 @@ public static class P30Jewels
         O("mercy_oath", "仁恕之瞳", P30VirtueViceKind.Mercy, "深渊终战"), O("temperance_oath", "静律之芯", P30VirtueViceKind.Temperance, "命能花园终战"),
         O("humility_oath", "俯身之镜", P30VirtueViceKind.Humility, "地图Boss"), O("rage_oath", "裂怒之核", P30VirtueViceKind.Rage, "赤誓终战"),
         O("sloth_oath", "闲眠之眼", P30VirtueViceKind.Sloth, "亡旗战阵终战"), O("arrogance_oath", "孤峰之瞳", P30VirtueViceKind.Arrogance, "苍誓终战"),
-        R("bloodbound_domain", "赤骸疆界", 180, 260,
+        R("bloodbound_domain", "赤骸疆界", 180, 780,
             "半径内已配置小天赋各提供体魄 +20；已配置显著或专精各使体魄提高 5%"),
-        R("pathless_chart", "无径星图", 140, 200,
+        R("pathless_chart", "无径星图", 140, 600,
             "半径内天赋可以无需连接直接配置；这些未连接天赋不能作为通往半径外天赋的起点"),
-        R("bastion_abacus", "天垒算珠", 180, 240,
+        R("bastion_abacus", "天垒算珠", 180, 720,
             "半径内已配置小天赋各使攻击伤害提高 4%；已配置显著或专精各使攻击速度提高 3%"),
-        R("rampart_echo", "守垒余响", 180, 240,
+        R("rampart_echo", "守垒余响", 180, 720,
             "半径内已配置小天赋各使护甲提高 4%；已配置显著或专精各使最大生命提高 2%"),
     ];
 

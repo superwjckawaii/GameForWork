@@ -139,6 +139,27 @@ public sealed class P16FeatureTests
     }
 
     [Fact]
+    public void BatchCleanupIncludesMythicOnlyWhenExplicitlySelected()
+    {
+        P1GameSession session = Session();
+        ItemInstance mythic = P14UniqueItems.Create("core.mythic.heart_of_ash", 100, "mythic-cleanup");
+        Assert.True(session.World.Storage.TryStore(mythic));
+
+        P16BatchPreview protectedPreview = P16BatchItems.Preview(session, P16BatchAction.Dismantle,
+            P16BatchScope.Storage, ItemRarity.Legendary);
+        Assert.Empty(protectedPreview.Targets);
+        Assert.Equal(1, protectedPreview.ExcludedReasons["神话装备"]);
+
+        P16BatchPreview selectedPreview = P16BatchItems.Preview(session, P16BatchAction.Dismantle,
+            P16BatchScope.Storage, ItemRarity.Legendary, includeMythic: true);
+        Assert.Single(selectedPreview.Targets, target => target.Item.InstanceId == mythic.InstanceId);
+        Assert.True(selectedPreview.IncludesMythic);
+        Assert.Equal(1, selectedPreview.MythicCount);
+        Assert.Equal(new P16BatchExecution(1, 0), P16BatchItems.Execute(session, selectedPreview));
+        Assert.Empty(session.World.Storage.Items);
+    }
+
+    [Fact]
     public void FilterSupportsAndConditionsRangesAndSystemProtection()
     {
         var filter = new LootFilter([

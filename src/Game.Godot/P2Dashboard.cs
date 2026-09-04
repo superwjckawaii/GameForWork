@@ -628,7 +628,7 @@ public partial class P2Dashboard : VBoxContainer
 
         var batch = new HFlowContainer();
         body.AddChild(batch);
-        _batchRarity = AddOptions(batch, "最高稀有度", ["基础及以下", "魔法及以下", "稀有及以下", "传奇及以下"]);
+        _batchRarity = AddOptions(batch, "最高稀有度", ["基础及以下", "魔法及以下", "稀有及以下", "传奇及以下", "神话及以下"]);
         _batchRarity.Select((int)ItemRarity.Magic);
         _batchScope = AddOptions(batch, "范围", ["整理背包", "仓库", "两者"]);
         _batchScope.Select((int)P16BatchScope.Storage);
@@ -1246,26 +1246,35 @@ public partial class P2Dashboard : VBoxContainer
     private void ConfirmBatch(P16BatchAction action)
     {
         P1GameSession session = RequireSession();
-        ItemRarity maximum = (ItemRarity)(_batchRarity?.Selected ?? (int)ItemRarity.Magic);
+        int raritySelection = _batchRarity?.Selected ?? (int)ItemRarity.Magic;
+        bool includeMythic = raritySelection > (int)ItemRarity.Legendary;
+        ItemRarity maximum = (ItemRarity)Math.Min(raritySelection, (int)ItemRarity.Legendary);
         P16BatchScope scope = (P16BatchScope)(_batchScope?.Selected ?? (int)P16BatchScope.Storage);
         bool includeCraftingBases = _batchIncludeCraftingBases?.ButtonPressed == true;
-        P16BatchPreview preview = P16BatchItems.Preview(session, action, scope, maximum, includeCraftingBases);
+        P16BatchPreview preview = P16BatchItems.Preview(session, action, scope, maximum, includeCraftingBases, includeMythic);
         if (preview.Total == 0)
         {
             string reasons = preview.ExcludedReasons.Count == 0 ? string.Empty :
                 $"（{string.Join("、", preview.ExcludedReasons.Select(pair => $"{pair.Key} {pair.Value}"))}）";
-            string protections = includeCraftingBases ? "锁定、关键和神话装备" : "锁定、关键、神话装备和制作底材";
-            Changed($"没有符合“{RarityLabel(maximum)}及以下”的可处理物品；{protections}已排除{reasons}。");
+            string protections = includeCraftingBases
+                ? includeMythic ? "锁定和关键装备" : "锁定、关键和神话装备"
+                : includeMythic ? "锁定、关键装备和制作底材" : "锁定、关键、神话装备和制作底材";
+            Changed($"没有符合“{(includeMythic ? "神话" : RarityLabel(maximum))}及以下”的可处理物品；{protections}已排除{reasons}。");
             return;
         }
 
         bool sell = action == P16BatchAction.Sell;
         string counts = string.Join("、", Enum.GetValues<ItemRarity>()
-            .Where(rarity => preview.Counts.ContainsKey(rarity))
-            .Select(rarity => $"{RarityLabel(rarity)} {preview.Counts[rarity]}"));
-        string warning = maximum == ItemRarity.Legendary
-            ? "\n⚠ 已选择传奇及以下：普通传奇会被处理，神话装备仍受保护。"
-            : string.Empty;
+            .Where(rarity => preview.Counts.GetValueOrDefault(rarity) -
+                (rarity == ItemRarity.Legendary ? preview.MythicCount : 0) > 0)
+            .Select(rarity => $"{RarityLabel(rarity)} {preview.Counts[rarity] -
+                (rarity == ItemRarity.Legendary ? preview.MythicCount : 0)}")
+            .Concat(preview.MythicCount > 0 ? [$"神话 {preview.MythicCount}"] : []));
+        string warning = includeMythic
+            ? "\n⚠ 已选择神话及以下：神话装备也会被永久处理，分解后不能恢复。"
+            : maximum == ItemRarity.Legendary
+                ? "\n⚠ 已选择传奇及以下：普通传奇会被处理，神话装备仍受保护。"
+                : string.Empty;
         int craftingBaseCount = preview.Targets.Count(target => target.Item.IsCraftingBase);
         string craftingBaseWarning = craftingBaseCount > 0
             ? $"\n⚠ 已选择包含制作底材：其中 {craftingBaseCount} 件的制作底材标记不会阻止本次操作。"

@@ -265,12 +265,18 @@ public sealed class EquipmentLoadout
             cold = new LocalDamageRange(copied.coldMinimum, copied.coldMaximum);
             lightning = new LocalDamageRange(copied.lightningMinimum, copied.lightningMaximum);
         }
+        LocalDamageRange voidDamage = LocalElementalRange(item,
+            ItemModifierKind.AddedMinimumVoidDamage, ItemModifierKind.AddedMaximumVoidDamage);
+        if (item.Enchantment?.DisplayName == "混沌王印")
+            voidDamage = new LocalDamageRange(
+                checked(voidDamage.Minimum + weapon.MinimumPhysicalDamage * 30 / 100),
+                checked(voidDamage.Maximum + weapon.MaximumPhysicalDamage * 30 / 100));
         return new LocalWeaponStats(
             weapon,
             fire,
             cold,
             lightning,
-            LocalElementalRange(item, ItemModifierKind.AddedMinimumVoidDamage, ItemModifierKind.AddedMaximumVoidDamage));
+            voidDamage);
     }
 
     public static WeaponProfile CalculateWeapon(ItemInstance item) => CalculateLocalWeapon(item).Physical;

@@ -1,6 +1,7 @@
 using GameForWork.Core.P1.Combat;
 using GameForWork.Core.P1.Progression;
 using GameForWork.Core.P30;
+using GameForWork.Core.Equipment;
 
 namespace GameForWork.Core.P1.Items;
 
@@ -92,6 +93,20 @@ public static class CharacterBuildAssembler
         P30JewelModifiers attributeMemory = jewelState is null
             ? new()
             : P30Jewels.CalculateAttributeMemoryModifiers(jewelState, attributes);
+        ItemInstance? mainHand = loadout.Items.GetValueOrDefault(EquipmentSlot.MainHand);
+        if (mainHand?.LegendaryCatalogId == EquipmentRuleEngine.WorldEaterCatalogId &&
+            equipment.LocalWeapon is { } localWeapon)
+        {
+            (int minimum, int maximum) = EquipmentRuleEngine.WorldEaterAddedVoidDamage(attributes.Physique);
+            equipment = equipment with
+            {
+                LocalWeapon = localWeapon with
+                {
+                    Void = new LocalDamageRange(checked(localWeapon.Void.Minimum + minimum),
+                        checked(localWeapon.Void.Maximum + maximum)),
+                },
+            };
+        }
         DefensiveEquipment defense = equipment.Defense;
         int masteryDefense = P30MasteryRuntime.DefenseMultiplier(advanced, weapon);
         defense = defense with
@@ -166,8 +181,7 @@ public static class CharacterBuildAssembler
                 item.Value(ItemModifierKind.IncreasedAttackDamageBasisPoints) +
                 passive.IncreasedAttackDamageBasisPoints +
                 specializedWeaponDamage + jewel.IncreasedAttackDamageBasisPoints +
-                attributeMemory.IncreasedAttackDamageBasisPoints +
-                sheet.AttackDamageIncreaseFromPhysique().Value),
+                attributeMemory.IncreasedAttackDamageBasisPoints),
             checked(item.AddedPhysicalDamage +
                 (item.Value(ItemModifierKind.AddedMinimumPhysicalDamage) + item.Value(ItemModifierKind.AddedMaximumPhysicalDamage)) / 2),
             checked(item.IncreasedCriticalChanceBasisPoints + advanced.IncreasedCriticalChanceBasisPoints + jewel.IncreasedCriticalChanceBasisPoints),

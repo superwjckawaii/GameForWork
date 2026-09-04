@@ -1,5 +1,6 @@
 using GameForWork.Core.P1;
 using GameForWork.Core.P1.Combat;
+using GameForWork.Core.P1.Items;
 using GameForWork.Core.P1.Progression;
 using GameForWork.Core.P1.World;
 using GameForWork.Core.P2;
@@ -115,6 +116,15 @@ public static class P6BuildSummaryRules
             int reduction = DamageRules.ArmorReduction(25, Math.Max(1, hit)).Value;
             hit = (int)Math.Clamp((long)hit * (10_000 - reduction) / 10_000, 0, int.MaxValue);
         }
+        LocalWeaponStats? localWeapon = tags.HasFlag(SkillTag.Attack) ? build.LocalWeaponStats : null;
+        int addedMinimum = localWeapon is null ? 0 : checked(localWeapon.Fire.Minimum + localWeapon.Cold.Minimum +
+            localWeapon.Lightning.Minimum + localWeapon.Void.Minimum);
+        int addedMaximum = localWeapon is null ? 0 : checked(localWeapon.Fire.Maximum + localWeapon.Cold.Maximum +
+            localWeapon.Lightning.Maximum + localWeapon.Void.Maximum);
+        int addedAverage = checked((addedMinimum + addedMaximum) / 2);
+        if (addedAverage > 0)
+            hit = checked(hit + P6CombatSkillRules.ScaleOffensiveDamage(addedAverage, skill, configuration, build,
+                tags, targetLife: 100_000, targetMaximumLife: 100_000));
         int accuracy = build.Sheet.Accuracy(build.FlatAccuracy).Value;
         int hitChance = build.AlwaysHit || tags.HasFlag(SkillTag.Spell)
             ? 10_000 : DamageRules.HitChance(accuracy, 20, false).Value;
@@ -131,11 +141,11 @@ public static class P6BuildSummaryRules
 
         int baseMinimum = tags.HasFlag(SkillTag.Attack)
             ? ScaleToInt((long)build.Weapon.MinimumPhysicalDamage + build.AddedPhysicalDamage,
-                skill.BaseDamageBasisPoints)
+                skill.BaseDamageBasisPoints) + ScaleToInt(addedMinimum, skill.BaseDamageBasisPoints)
             : skill.BaseDamageBasisPoints;
         int baseMaximum = tags.HasFlag(SkillTag.Attack)
             ? ScaleToInt((long)build.Weapon.MaximumPhysicalDamage + build.AddedPhysicalDamage,
-                skill.BaseDamageBasisPoints)
+                skill.BaseDamageBasisPoints) + ScaleToInt(addedMaximum, skill.BaseDamageBasisPoints)
             : skill.BaseDamageBasisPoints;
         int increased = checked(build.IncreasedDamageBasisPoints + passive.DamageFor(tags) + configuration.Quality * 100);
         if (tags.HasFlag(SkillTag.Spell)) increased = checked(increased + build.IncreasedSpellDamageBasisPoints);

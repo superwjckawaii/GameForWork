@@ -333,6 +333,10 @@ public sealed class P30SystemsTests
         Assert.Contains(drop.Legendary!.StableId,
             P30Jewels.CitadelLegendaryIds.Select(id => $"p30.jewel.{id}"));
         Assert.InRange(drop.EffectiveRadius, drop.Legendary.MinimumRadius, drop.Legendary.MaximumRadius);
+        Assert.Equal(780, P30Jewels.Legendary.Single(value => value.StableId == "p30.jewel.bloodbound_domain").MaximumRadius);
+        Assert.Equal(600, P30Jewels.Legendary.Single(value => value.StableId == "p30.jewel.pathless_chart").MaximumRadius);
+        Assert.Equal(720, P30Jewels.Legendary.Single(value => value.StableId == "p30.jewel.bastion_abacus").MaximumRadius);
+        Assert.Equal(720, P30Jewels.Legendary.Single(value => value.StableId == "p30.jewel.rampart_echo").MaximumRadius);
         (bool rerolled, _, P30JewelInstance? divine, _) = P30Jewels.Craft(drop,
             P30JewelCraftOperation.RerollLegendaryRadius, 0x77);
         Assert.True(rerolled);
@@ -427,12 +431,12 @@ public sealed class P30SystemsTests
         AssembledCharacterBuild higher = CharacterBuildAssembler.Assemble(100,
             new CharacterAttributes(1_300, 10, 10, 10), loadout, passives, skill, jewels);
 
-        Assert.Equal(55_160, lower.IncreasedAttackDamageBasisPoints);
-        Assert.Equal(65_160, higher.IncreasedAttackDamageBasisPoints);
+        Assert.Equal(33_000, lower.IncreasedAttackDamageBasisPoints);
+        Assert.Equal(39_000, higher.IncreasedAttackDamageBasisPoints);
         Assert.Equal(26_400, lower.Sheet.IncreasedArmorBasisPoints);
         Assert.Equal(31_200, higher.Sheet.IncreasedArmorBasisPoints);
         Assert.True(higher.IncreasedAttackDamageBasisPoints > lower.IncreasedAttackDamageBasisPoints);
-        Assert.Equal(10_000, higher.IncreasedAttackDamageBasisPoints - lower.IncreasedAttackDamageBasisPoints);
+        Assert.Equal(6_000, higher.IncreasedAttackDamageBasisPoints - lower.IncreasedAttackDamageBasisPoints);
         Assert.True(higher.Sheet.IncreasedArmorBasisPoints > lower.Sheet.IncreasedArmorBasisPoints);
     }
 

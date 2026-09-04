@@ -1611,7 +1611,7 @@ public sealed class P1GameSession
         build.EffectiveWeapon,
         new SkillConfiguration(P1SkillIds.HeavyStrike, supports),
         build.FlatAccuracy,
-        build.IncreasedAttackDamageBasisPoints,
+        checked(build.IncreasedAttackDamageBasisPoints + build.Sheet.AttackDamageIncreaseFromPhysique().Value),
         build.IncreasedCriticalChanceBasisPoints,
         build.IncreasedBleedChanceBasisPoints,
         UseWarCry: ai.UseWarCry,

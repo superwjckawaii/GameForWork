@@ -75,7 +75,8 @@ public static class EquipmentEnchantmentCatalog
 
     private static IReadOnlyList<ItemCategory>? Categories(string name) => name switch
     {
-        "处刑铭文" or "断界王印" or "奥术王印" => [ItemCategory.OneHandWeapon, ItemCategory.TwoHandWeapon],
+        "处刑铭文" or "断界王印" or "奥术王印" or "混沌王印" =>
+            [ItemCategory.OneHandWeapon, ItemCategory.TwoHandWeapon],
         "谦逊足印" or "傲慢之印" or "暴怒之印" or "节制之印" or "慈悲之印" or "懒惰之印" => [ItemCategory.Helmet, ItemCategory.Gloves, ItemCategory.Boots],
         "轻羽刻印" => [ItemCategory.Boots],
         "双御铭文" => [ItemCategory.Shield],
@@ -143,6 +144,7 @@ public static class EquipmentEnchantmentCatalog
         "逐风王印" => [C(ItemModifierKind.IncreasedDexterityBasisPoints, 1_500)],
         "万象王印" => [C(ItemModifierKind.IncreasedSpiritBasisPoints, 1_500)],
         "星海王印" => [C(ItemModifierKind.IncreasedEnergyBasisPoints, 1_500)],
+        "混沌王印" => [C(ItemModifierKind.None, 1, ItemModifierScope.Rule)],
         _ => throw new InvalidDataException($"Missing enchantment implementation: {name}"),
     };
 

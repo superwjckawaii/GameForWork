@@ -18,7 +18,9 @@ public sealed record P16BatchPreview(
     int Proceeds,
     int Excluded,
     IReadOnlyDictionary<string, int> ExcludedReasons,
-    int BuybackEvictions)
+    int BuybackEvictions,
+    bool IncludesMythic = false,
+    int MythicCount = 0)
 {
     public int Total => Targets.Count;
 }
@@ -28,7 +30,8 @@ public sealed record P16BatchExecution(int Completed, int Failed);
 public static class P16BatchItems
 {
     public static P16BatchPreview Preview(P1GameSession session, P16BatchAction action,
-        P16BatchScope scope, ItemRarity maximumRarity, bool includeCraftingBases = false)
+        P16BatchScope scope, ItemRarity maximumRarity, bool includeCraftingBases = false,
+        bool includeMythic = false)
     {
         ArgumentNullException.ThrowIfNull(session);
         IEnumerable<P16BatchTarget> candidates = scope switch
@@ -39,10 +42,10 @@ public static class P16BatchItems
         };
         P16BatchTarget[] all = candidates.ToArray();
         P16BatchTarget[] withinRarity = all.Where(target => target.Item.Rarity <= maximumRarity).ToArray();
-        P16BatchTarget[] selected = withinRarity.Where(target => IsSafe(target.Item, includeCraftingBases))
+        P16BatchTarget[] selected = withinRarity.Where(target => IsSafe(target.Item, includeCraftingBases, includeMythic))
             .OrderBy(target => target.Container).ThenBy(target => target.Index).ToArray();
         IReadOnlyDictionary<string, int> excludedReasons = withinRarity
-            .Where(target => !IsSafe(target.Item, includeCraftingBases))
+            .Where(target => !IsSafe(target.Item, includeCraftingBases, includeMythic))
             .GroupBy(target => ProtectionReason(target.Item), StringComparer.Ordinal)
             .ToDictionary(group => group.Key, group => group.Count(), StringComparer.Ordinal);
         int proceeds = action == P16BatchAction.Sell
@@ -53,7 +56,8 @@ public static class P16BatchItems
             : 0;
         return new(action, scope, maximumRarity, selected,
             selected.GroupBy(target => target.Item.Rarity).ToDictionary(group => group.Key, group => group.Count()),
-            proceeds, withinRarity.Length - selected.Length, excludedReasons, evictions);
+            proceeds, withinRarity.Length - selected.Length, excludedReasons, evictions, includeMythic,
+            selected.Count(target => IsMythic(target.Item)));
     }
 
     public static P16BatchExecution Execute(P1GameSession session, P16BatchPreview preview)
@@ -84,9 +88,9 @@ public static class P16BatchItems
         _ => 0,
     };
 
-    public static bool IsSafe(ItemInstance item, bool includeCraftingBases = false)
+    public static bool IsSafe(ItemInstance item, bool includeCraftingBases = false, bool includeMythic = false)
     {
-        if (item.IsLocked || item.IsKeyItem || IsMythic(item)) return false;
+        if (item.IsLocked || item.IsKeyItem || IsMythic(item) && !includeMythic) return false;
         if (item.IsCraftingBase && !includeCraftingBases) return false;
         return true;
     }

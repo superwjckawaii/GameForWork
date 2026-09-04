@@ -52534,6 +52534,17 @@
       "components": [],
       "ruleId": "equipment.rule.enchantment.53",
       "ruleText": "能量提高 15%；与其他能量提高相加后作用于固定能量；同一件装备只能保留一个附魔"
+    },
+    {
+      "id": "equipment.enchantment.54.7d3c1a9b42",
+      "legacyIds": [],
+      "displayName": "混沌王印",
+      "workshopLevel": 4,
+      "goldCost": 25000,
+      "applicableEquipment": "全部单手/双手武器",
+      "components": [],
+      "ruleId": "equipment.rule.enchantment.54",
+      "ruleText": "使用该武器攻击时，获得等同于本武器最终局部物理点伤 30% 的额外虚空伤害；按物理伤害最小值与最大值分别计算，不设额外上限；只作用于攻击，不向法术、召唤物、灵兽、构装体或陷阱传递；同一件装备只能保留一个附魔"
     }
   ],
   "legendaryItems": [
@@ -53055,7 +53066,7 @@
       "baseAndSource": "\u65E0\u58F0\u7EC8\u5203\uFF1B\u7EC8\u5C40\u8981\u585E Boss \u6982\u7387\u6389\u843D\uFF08v0.5 \u4E34\u65F6\u89C4\u5219\uFF09",
       "fixedAffixesText": "\u672C\u6B66\u5668\u5C40\u90E8\u7269\u7406\u4F24\u5BB3\u63D0\u9AD8 220%\uFF1B\u672C\u6B66\u5668\u5C40\u90E8\u653B\u51FB\u901F\u5EA6\u63D0\u9AD8 25%\uFF1B\u672C\u6B66\u5668\u57FA\u7840\u66B4\u51FB\u7387 \u002B3 \u4E2A\u767E\u5206\u70B9",
       "ruleId": "equipment.rule.legendary.52",
-      "ruleText": "\u6BCF 100 \u70B9\u6700\u7EC8\u4F53\u9B44\uFF0C\u4F7F\u7528\u672C\u6B66\u5668\u653B\u51FB\u65F6\u9644\u52A0 50\uFF5E100 \u70B9\u865A\u7A7A\u4F24\u5BB3\uFF0C\u4E0D\u8BBE\u4E0A\u9650\u3002\u6309\u5B8C\u6574 100 \u70B9\u5411\u4E0B\u53D6\u6574\uFF1A\u4F8B\u5982 399 \u70B9\u4F53\u9B44\u9644\u52A0 150\uFF5E300\uFF1B\u53EA\u8BFB\u53D6\u653B\u51FB\u4F24\u5BB3\u8BA1\u7B97\u524D\u7684\u6700\u7EC8\u4F53\u9B44\uFF0C\u672C\u6B21\u653B\u51FB\u4E34\u65F6\u4EA7\u751F\u7684\u5C5E\u6027\u53D8\u5316\u4E0D\u80FD\u8FFD\u6EAF\u91CD\u7B97"
+      "ruleText": "\u6BCF 100 \u70B9\u6700\u7EC8\u4F53\u9B44\uFF0C\u4F7F\u7528\u672C\u6B66\u5668\u653B\u51FB\u65F6\u9644\u52A0 100\uFF5E150 \u70B9\u865A\u7A7A\u4F24\u5BB3\uFF0C\u4E0D\u8BBE\u4E0A\u9650\u3002\u6309\u5B8C\u6574 100 \u70B9\u5411\u4E0B\u53D6\u6574\uFF1A\u4F8B\u5982 399 \u70B9\u4F53\u9B44\u9644\u52A0 300\uFF5E450\uFF1B\u53EA\u8BFB\u53D6\u653B\u51FB\u4F24\u5BB3\u8BA1\u7B97\u524D\u7684\u6700\u7EC8\u4F53\u9B44\uFF0C\u672C\u6B21\u653B\u51FB\u4E34\u65F6\u4EA7\u751F\u7684\u5C5E\u6027\u53D8\u5316\u4E0D\u80FD\u8FFD\u6EAF\u91CD\u7B97"
     },
     {
       "id": "equipment.legendary.53.26839c4b94",

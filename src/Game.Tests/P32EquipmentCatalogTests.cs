@@ -1,5 +1,7 @@
 using GameForWork.Core.Equipment;
+using GameForWork.Core.P1.Combat;
 using GameForWork.Core.P1.Items;
+using GameForWork.Core.P1.Progression;
 using GameForWork.Core.P30;
 
 namespace GameForWork.Tests;
@@ -24,7 +26,7 @@ public sealed class P32EquipmentCatalogTests
         Assert.Equal(1, EquipmentCatalog.Snapshot.SchemaVersion);
         Assert.Equal(244, EquipmentCatalog.Bases.Count);
         Assert.Equal(212, EquipmentCatalog.Affixes.Select(value => value.StableFamilyId).Distinct(StringComparer.Ordinal).Count());
-        Assert.Equal(53, EquipmentCatalog.Enchantments.Count);
+        Assert.Equal(54, EquipmentCatalog.Enchantments.Count);
         Assert.Equal(55, EquipmentCatalog.LegendaryItems.Count);
         Assert.Equal(50, EquipmentCatalog.LegendaryItems.Count(value => value.Rarity == "Legendary"));
         Assert.Equal(5, EquipmentCatalog.LegendaryItems.Count(value => value.Rarity == "Mythic"));
@@ -56,8 +58,8 @@ public sealed class P32EquipmentCatalogTests
     [Fact]
     public void ConfirmedEnchantmentsAndLegendaryRulesUseOneRegistry()
     {
-        Assert.Equal(53, EquipmentEnchantmentCatalog.All.Count);
-        Assert.Equal(108, EquipmentRuleRegistry.All.Count);
+        Assert.Equal(54, EquipmentEnchantmentCatalog.All.Count);
+        Assert.Equal(109, EquipmentRuleRegistry.All.Count);
         Assert.Equal(400, EquipmentEnchantmentCatalog.All.Single(value => value.DisplayName == "精准刻印").Value);
         Assert.Equal(6_500, EquipmentEnchantmentCatalog.All.Single(value => value.DisplayName == "毁伤铭文").Value);
         Assert.Contains(EquipmentEnchantmentCatalog.All.Single(value => value.DisplayName == "虹彩王印").EffectComponents,
@@ -67,8 +69,43 @@ public sealed class P32EquipmentCatalogTests
         EquipmentRuleRegistration registration = EquipmentRuleRegistry.Get(returning.RuleId);
         Assert.Equal(EquipmentRuleEvent.ProjectileFinished, registration.Trigger);
         Assert.DoesNotContain("降低", returning.RuleText, StringComparison.Ordinal);
-        Assert.Equal((150, 300), EquipmentRuleEngine.MythicDaggerAddedVoidDamage(399));
-        Assert.Equal((0, 0), EquipmentRuleEngine.MythicDaggerAddedVoidDamage(99));
+        Assert.Equal((300, 450), EquipmentRuleEngine.WorldEaterAddedVoidDamage(399));
+        Assert.Equal((0, 0), EquipmentRuleEngine.WorldEaterAddedVoidDamage(99));
+        Assert.Equal((100_000, 150_000), EquipmentRuleEngine.WorldEaterAddedVoidDamage(100_000));
+    }
+
+    [Fact]
+    public void ChaosKingEnchantmentSupportsEveryWeaponAndAddsThirtyPercentFinalPhysicalAsVoid()
+    {
+        ItemEnchantment enchantment = EquipmentEnchantmentCatalog.All.Single(value => value.DisplayName == "混沌王印");
+        Assert.Equal(4, enchantment.WorkshopLevel);
+        ItemBaseDefinition[] weapons = EquipmentCatalog.Bases
+            .Where(value => value.Category is ItemCategory.OneHandWeapon or ItemCategory.TwoHandWeapon)
+            .ToArray();
+        Assert.NotEmpty(weapons);
+        Assert.All(weapons, weapon => Assert.True(EquipmentEnchantmentCatalog.Supports(enchantment, weapon)));
+
+        ItemInstance item = ItemGenerator.Generate(weapons[0].StableId, 100, ItemRarity.Basic, 0x54) with
+        {
+            Enchantment = enchantment,
+        };
+        LocalWeaponStats local = EquipmentLoadout.CalculateLocalWeapon(item);
+        Assert.Equal(local.Physical.MinimumPhysicalDamage * 30 / 100, local.Void.Minimum);
+        Assert.Equal(local.Physical.MaximumPhysicalDamage * 30 / 100, local.Void.Maximum);
+    }
+
+    [Fact]
+    public void WorldEaterAddsUncappedFinalPhysiqueVoidDamageToTheEquippedWeapon()
+    {
+        ItemInstance worldEater = EquipmentLegendaryFactory.Create(EquipmentRuleEngine.WorldEaterCatalogId,
+            100, "world-eater", 52);
+        var loadout = new EquipmentLoadout();
+        Assert.True(loadout.TryEquip(EquipmentSlot.MainHand, worldEater));
+        AssembledCharacterBuild build = CharacterBuildAssembler.Assemble(100,
+            new CharacterAttributes(399, 10, 10, 10), loadout, new PassiveTreeAllocation(),
+            new SkillConfiguration(P1SkillIds.HeavyStrike, SkillSupport.None));
+
+        Assert.Equal(new LocalDamageRange(300, 450), build.Equipment.LocalWeapon!.Void);
     }
 
     [Fact]
