@@ -277,6 +277,7 @@ public sealed class P5ExpeditionDirector
 
     public static bool IsBoss(P1MapItem map) => map.InstanceId.StartsWith(BossPrefix, StringComparison.Ordinal) ||
         GameForWork.Core.P10.P10EndgameState.IsCitadel(map) || GameForWork.Core.P10.P10EndgameState.IsBreakthroughTrial(map);
+    public static bool IsAbyssWarden(P1MapItem map) => map.InstanceId.StartsWith(BossPrefix, StringComparison.Ordinal);
     public static bool IsPractice(P1MapItem map) => map.InstanceId.StartsWith(PracticePrefix, StringComparison.Ordinal) ||
         GameForWork.Core.P10.P10EndgameState.IsCitadelPractice(map);
     public static P1MapItem EnsureFormalDispatchMap(P1MapItem map, ulong seed)

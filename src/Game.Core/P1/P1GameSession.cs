@@ -119,11 +119,12 @@ public sealed record P1GameSessionSnapshot(
     P10EndgameSnapshot? Endgame = null,
     IReadOnlyDictionary<string, int>? MasterySelections = null,
     IReadOnlyDictionary<string, PassiveJewelKind>? SocketedJewels = null,
-    P30JewelStateSnapshot? P30Jewels = null);
+    P30JewelStateSnapshot? P30Jewels = null,
+    bool CitadelDropCompensationGranted = false);
 
 public sealed class P1GameSession
 {
-    public const int CurrentFormatVersion = 23;
+    public const int CurrentFormatVersion = 24;
     private readonly P1WorldSimulator _simulator = new(new P1MapAttemptResolver());
     private readonly P2CampaignSimulator _campaignSimulator = new();
     private AssembledCharacterBuild _heroBuild;
@@ -194,6 +195,7 @@ public sealed class P1GameSession
     public bool DebugTwentyTimes { get; set; }
     public ulong Seed { get; }
     public int SimulationSequence { get; private set; }
+    public bool CitadelDropCompensationGranted { get; private set; }
     public AssembledCharacterBuild HeroBuild => _heroBuild;
     public int SimulationSpeed => DebugTwentyTimes ? 20 : 1;
 
@@ -254,7 +256,8 @@ public sealed class P1GameSession
         bool migratingV20 = snapshot.FormatVersion == 20;
         bool migratingV21 = snapshot.FormatVersion == 21;
         bool migratingV22 = snapshot.FormatVersion == 22;
-        if ((!migratingV18 && !migratingV19 && !migratingV20 && !migratingV21 && !migratingV22 && snapshot.FormatVersion != CurrentFormatVersion) || snapshot.SimulationSequence < 0)
+        bool migratingV23 = snapshot.FormatVersion == 23;
+        if ((!migratingV18 && !migratingV19 && !migratingV20 && !migratingV21 && !migratingV22 && !migratingV23 && snapshot.FormatVersion != CurrentFormatVersion) || snapshot.SimulationSequence < 0)
         {
             throw new InvalidDataException(
                 $"P1 session snapshot version {snapshot.FormatVersion} is unsupported; expected {CurrentFormatVersion}.");
@@ -307,6 +310,17 @@ public sealed class P1GameSession
             snapshot.Seed,
             snapshot.SimulationSequence,
             snapshot.DebugTwentyTimes);
+        session.CitadelDropCompensationGranted = snapshot.CitadelDropCompensationGranted;
+        if (migratingV23 && session.Endgame.CitadelVictories > 0 && !session.HasMythic("equipment.legendary.52.44a586da1f"))
+        {
+            ItemInstance compensation = P14UniqueItems.Create(
+                "equipment.legendary.52.44a586da1f", 100,
+                $"citadel-pool-compensation-{snapshot.Seed:x16}");
+            if (!session.World.Storage.TryStore(compensation))
+                session.Management.AddToRecovery(compensation, "灰烬天垒掉落池修复补偿");
+            session.Management.AddHistory($"灰烬天垒掉落池修复：补偿百骸噬界（已记录 {session.Endgame.CitadelVictories:N0} 次天垒胜利）。");
+            session.CitadelDropCompensationGranted = true;
+        }
         session.ApplyTownBuildingEffects();
         if (session.Endgame.FinalBreakthroughCompleted)
         {
@@ -341,7 +355,13 @@ public sealed class P1GameSession
         Endgame.Capture(),
         new Dictionary<string, int>(Passives.MasterySelections),
         new Dictionary<string, PassiveJewelKind>(Passives.SocketedJewels),
-        Jewels.Capture());
+        Jewels.Capture(),
+        CitadelDropCompensationGranted);
+
+    private bool HasMythic(string catalogId) =>
+        HeroEquipment.Items.Values.Concat(MercenaryEquipment.Items.Values).Concat(World.Storage.Items)
+            .Concat(Management.SortingBag).Concat(Management.Recovery)
+            .Any(item => item.LegendaryCatalogId == catalogId);
 
     public P1OfflineResult Advance(long realElapsedMilliseconds)
     {
@@ -1242,6 +1262,25 @@ public sealed class P1GameSession
 
     public P6BuildSummary GetBuildSummary() => P6BuildSummaryRules.Calculate(this);
 
+    public IReadOnlyList<SkillConfiguration> GetPreviewSkillCandidates() => BuildActiveSkills()
+        .Where(configuration => P30SkillCatalog.ActiveForSkill(configuration.SkillId).Combat.Capabilities
+            .HasFlag(P17SkillCapability.Damage))
+        .Where(configuration => P30SkillCatalog.ActiveForSkill(configuration.SkillId).Combat.Role is not
+            (P17SkillRole.Reservation or P17SkillRole.WarCry or P17SkillRole.Guard or P17SkillRole.Movement))
+        .OrderBy(configuration => configuration.Priority)
+        .ThenBy(configuration => configuration.SkillId, StringComparer.Ordinal)
+        .ToArray();
+
+    public SkillConfiguration? GetPreviewSkill()
+    {
+        IReadOnlyList<SkillConfiguration> candidates = GetPreviewSkillCandidates();
+        return candidates.FirstOrDefault(configuration =>
+                   configuration.StoneInstanceId == Management.PreviewSkillStoneInstanceId) ??
+               candidates.FirstOrDefault();
+    }
+
+    public bool SelectPreviewSkill(string stoneInstanceId) => Management.SelectPreviewSkill(stoneInstanceId);
+
     public P2EquipmentComparison CompareHeroEquipment(ItemInstance candidate, EquipmentSlot slot)
     {
         ArgumentNullException.ThrowIfNull(candidate);
@@ -1529,7 +1568,8 @@ public sealed class P1GameSession
         PassiveProfile: build.Passives.Advanced,
         CriticalMultiplierBasisPoints: checked(15_000 + build.IncreasedCriticalMultiplierBasisPoints),
         AlwaysHit: build.Passives.Advanced?.ResoluteTechnique == true,
-        CannotCrit: build.Passives.Advanced?.ResoluteTechnique == true,
+        CannotCrit: build.Passives.Advanced?.ResoluteTechnique == true ||
+            P30MasteryRuntime.CannotCrit(build.Passives.Advanced ?? P205PassiveModifiers.Empty),
         IncreasedWarCryCooldownRecoveryBasisPoints: build.Passives.IncreasedWarCryCooldownRecoveryBasisPoints,
         IncreasedWarCryRangeBasisPoints: build.Passives.IncreasedWarCryRangeBasisPoints,
         VirtueViceLoadout: build.VirtueViceLoadout,

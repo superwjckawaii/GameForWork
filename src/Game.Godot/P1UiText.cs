@@ -6,6 +6,7 @@ using GameForWork.Core.P1.Progression;
 using GameForWork.Core.P14;
 using GameForWork.Core.P20;
 using GameForWork.Core.P29;
+using GameForWork.Core.P30;
 using Godot;
 
 namespace GameForWork.GodotClient;
@@ -637,4 +638,15 @@ internal static class P1UiText
         PassiveBranch.Void => "虚空分支",
         _ => branch.ToString(),
     };
+
+    public static string JewelTooltip(P30JewelInstance jewel)
+    {
+        string affixes = string.Join('\n', jewel.Affixes.Select(affix =>
+            $"{P30Jewels.PositionName(affix.Position)} · T{affix.Tier} · {P30Jewels.AffixText(affix)}"));
+        string legendary = jewel.Legendary is null ? string.Empty :
+            $"\n{jewel.Legendary.Effect}\n来源：{jewel.Legendary.Source}";
+        return $"{jewel.DisplayName}\n{P30Jewels.RarityName(jewel.Rarity)} · 物品等级 {jewel.ItemLevel} · 共鸣度 {jewel.Resonance}%" +
+               (string.IsNullOrEmpty(affixes) ? string.Empty : $"\n{affixes}") + legendary +
+               $"\n{(jewel.Corrupted ? "已腐化" : "未腐化")}{(jewel.Locked ? " · 已锁定" : string.Empty)}";
+    }
 }

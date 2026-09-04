@@ -122,7 +122,8 @@ public sealed record P2ManagementSnapshot(
     long OperationSequence,
     bool FreeFullRespecAvailable,
     IReadOnlyList<P6SkillSchemeSnapshot>? SkillSchemes = null,
-    P6SkillSchemeKind ActiveSkillScheme = P6SkillSchemeKind.Clear);
+    P6SkillSchemeKind ActiveSkillScheme = P6SkillSchemeKind.Clear,
+    string PreviewSkillStoneInstanceId = "");
 
 public sealed class P2ManagementState
 {
@@ -156,6 +157,7 @@ public sealed class P2ManagementState
     public IReadOnlyList<string> OperationHistory => _operationHistory;
     public bool FreeFullRespecAvailable { get; private set; }
     public P6SkillSchemeKind ActiveSkillScheme { get; private set; } = P6SkillSchemeKind.Clear;
+    public string PreviewSkillStoneInstanceId { get; private set; } = string.Empty;
     public IReadOnlyDictionary<P6SkillSchemeKind, IReadOnlyList<SkillLinkConfiguration>> SkillSchemes => _skillSchemes;
 
     public static P2ManagementState CreateNew(P23BaseClass baseClass = P23BaseClass.Fighter)
@@ -224,6 +226,7 @@ public sealed class P2ManagementState
             state._operationSequence = Math.Max(snapshot.OperationSequence, 0);
             state.FreeFullRespecAvailable = snapshot.FreeFullRespecAvailable;
             state.ActiveSkillScheme = snapshot.ActiveSkillScheme;
+            state.PreviewSkillStoneInstanceId = snapshot.PreviewSkillStoneInstanceId ?? string.Empty;
             foreach (P6SkillSchemeSnapshot scheme in snapshot.SkillSchemes ?? [])
             {
                 state._skillSchemes[scheme.Kind] = CloneLinks(scheme.Links);
@@ -279,7 +282,23 @@ public sealed class P2ManagementState
         _operationSequence,
         FreeFullRespecAvailable,
         _skillSchemes.Select(pair => new P6SkillSchemeSnapshot(pair.Key, CloneLinks(pair.Value))).ToArray(),
-        ActiveSkillScheme);
+        ActiveSkillScheme,
+        PreviewSkillStoneInstanceId);
+
+    public bool SelectPreviewSkill(string stoneInstanceId)
+    {
+        if (PreviewSkillStoneInstanceId == stoneInstanceId) return false;
+        SkillLinkConfiguration? link = _skillLinks.FirstOrDefault(item =>
+            !string.IsNullOrEmpty(item.ChainId) && item.ActiveStoneInstanceId == stoneInstanceId);
+        SkillStoneInstance? stone = link is null ? null : _skillStones.FirstOrDefault(item => item.InstanceId == stoneInstanceId);
+        if (stone?.Definition.Kind != SkillStoneKind.Active ||
+            !stone.Definition.Capabilities.HasFlag(P17SkillCapability.Damage) ||
+            P30SkillCatalog.ActiveForStone(stone.DefinitionId).Combat.Role is
+                P17SkillRole.Reservation or P17SkillRole.WarCry or P17SkillRole.Guard or P17SkillRole.Movement)
+            return false;
+        PreviewSkillStoneInstanceId = stoneInstanceId;
+        return true;
+    }
 
     public bool TryAddToSortingBag(ItemInstance item)
     {

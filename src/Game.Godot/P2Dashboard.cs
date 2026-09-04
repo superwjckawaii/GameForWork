@@ -14,6 +14,7 @@ using GameForWork.Core.P16;
 using GameForWork.Core.P18;
 using GameForWork.Core.P20;
 using GameForWork.Core.P23;
+using GameForWork.Core.P30;
 using Godot;
 using System.Security.Cryptography;
 using System.Text.Json;
@@ -69,6 +70,8 @@ public partial class P2Dashboard : VBoxContainer
     private Label? _overviewStatus;
     private Label? _characterStatus;
     private Label? _storageStatus;
+    private OptionButton? _previewSkillSelector;
+    private string _previewSkillSignature = string.Empty;
     private Label? _selectedPassive;
     private Label? _craftingStatus;
     private string _storageSearch = string.Empty;
@@ -461,6 +464,18 @@ public partial class P2Dashboard : VBoxContainer
                 ? string.Empty : RequireSession().Town.Roster[(int)index - 1].Identity.StableId;
             Refresh();
         };
+        header.AddChild(new Label { Text = "详情主技能" });
+        _previewSkillSelector = new OptionButton
+        {
+            TooltipText = "只列出已装备且能造成伤害的主动技能；战旗、光环、战吼、守护和位移不会被当作 DPS 主技能。",
+        };
+        _previewSkillSelector.ItemSelected += index =>
+        {
+            if (_previewSkillSelector is null || index < 0 || index >= _previewSkillSelector.ItemCount) return;
+            string instanceId = _previewSkillSelector.GetItemMetadata((int)index).AsString();
+            if (RequireSession().SelectPreviewSkill(instanceId)) Changed("角色详情主技能已切换。");
+        };
+        header.AddChild(_previewSkillSelector);
         var collapseSidebar = new Button
         {
             Text = "收起装备侧栏",
@@ -1692,6 +1707,7 @@ public partial class P2Dashboard : VBoxContainer
         if (townActive) _townPanel?.Refresh();
         if (characterActive)
         {
+            RefreshPreviewSkillSelector();
             EquipmentLoadout selectedLoadout = SelectedLoadout();
             P1TeamExpeditionState selectedTeam = _selectedCharacter == P2CharacterKind.Hero
                 ? _session.World.Hero
@@ -1740,8 +1756,12 @@ public partial class P2Dashboard : VBoxContainer
                 .Select(slot => selectedLoadout.Items.GetValueOrDefault(slot))
                 .ToArray();
             _equipmentGrid!.SetSlots(slots);
+            Dictionary<string, string> jewelTooltips = _session.Jewels.Socketed.ToDictionary(
+                pair => pair.Key,
+                pair => P1UiText.JewelTooltip(_session.Jewels.Items.Single(jewel => jewel.InstanceId == pair.Value)),
+                StringComparer.Ordinal);
             _passiveTree!.SetState(_session.Passives.Allocated, _session.World.Hero.Progression.EarnedPassivePoints,
-                _session.Passives.StartKind, _session.Jewels.Socketed);
+                _session.Passives.StartKind, _session.Jewels.Socketed, jewelTooltips);
             _jewelStashPanel?.RefreshState();
             _bossFragmentsStatus!.Text =
                 $"◆ 深渊监守者\n碎片 {_session.World.Expedition.AbyssWardenFragments}/{P5ExpeditionDirector.FragmentsPerTicket}　门票 ×{_session.World.Expedition.AbyssWardenTickets}\n" +
@@ -1808,6 +1828,29 @@ public partial class P2Dashboard : VBoxContainer
         $"恢复：{summary.Recovery} · 增益：{summary.BuffCoverage}\n" +
         (summary.Issues.Count == 0 ? "构筑检查：未发现孔位或兼容性问题\n" : $"构筑检查：{string.Join("；", summary.Issues)}\n") +
         summary.Assumptions;
+
+    private void RefreshPreviewSkillSelector()
+    {
+        if (_previewSkillSelector is null || _session is null) return;
+        IReadOnlyList<SkillConfiguration> candidates = _session.GetPreviewSkillCandidates();
+        SkillConfiguration? selected = _session.GetPreviewSkill();
+        string signature = string.Join('|', candidates.Select(item =>
+            $"{item.StoneInstanceId}:{item.SkillId}:{item.Priority}:{string.Join(',', item.ExtendedP30Supports)}")) +
+            "|selected:" + selected?.StoneInstanceId;
+        if (signature == _previewSkillSignature) return;
+        _previewSkillSignature = signature;
+        _previewSkillSelector.Clear();
+        foreach (SkillConfiguration candidate in candidates)
+        {
+            string name = P30SkillCatalog.ActiveForSkill(candidate.SkillId).Combat.DisplayName;
+            _previewSkillSelector.AddItem($"{name} · 优先级 {candidate.Priority}");
+            int index = _previewSkillSelector.ItemCount - 1;
+            _previewSkillSelector.SetItemMetadata(index, candidate.StoneInstanceId);
+            if (candidate.StoneInstanceId == selected?.StoneInstanceId)
+                _previewSkillSelector.Select(index);
+        }
+        _previewSkillSelector.Disabled = _selectedCharacter != P2CharacterKind.Hero || candidates.Count == 0;
+    }
 
     private P1GameSession RequireSession() => _session ?? throw new InvalidOperationException("请先创建角色。");
 

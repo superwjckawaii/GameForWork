@@ -3,6 +3,12 @@ using GameForWork.Core.P1.Combat;
 using GameForWork.Core.P1.Items;
 using GameForWork.Core.P1.Progression;
 using GameForWork.Core.P18;
+using GameForWork.Core.P10;
+using GameForWork.Core.P17;
+using GameForWork.Core.P4;
+using GameForWork.Core.P1.World;
+using GameForWork.Core.Equipment;
+using GameForWork.Core.P6;
 using GameForWork.Core.P30;
 using System.Text.Json;
 
@@ -10,6 +16,94 @@ namespace GameForWork.Tests;
 
 public sealed class P30SystemsTests
 {
+    [Fact]
+    public void VersionTwentyThreeCitadelVictoriesGrantExactlyOneTargetedCompensation()
+    {
+        P1GameSession source = P1GameSession.CreateNew(new("补偿测试", CharacterGender.Androgynous,
+            CharacterSkinTone.Umber, CharacterHairStyle.Cropped, GameForWork.Core.P23.P23BaseClass.Fighter), 0x3051);
+        var oldEndgame = new P10EndgameState();
+        for (int index = 0; index < 11_463; index++) oldEndgame.RecordCitadelVictory();
+        P1GameSessionSnapshot old = source.Capture() with { FormatVersion = 23, Endgame = oldEndgame.Capture() };
+
+        P1GameSession migrated = P1GameSession.Restore(old);
+        P1GameSession restoredAgain = P1GameSession.Restore(migrated.Capture());
+        int Count(P1GameSession session) => session.World.Storage.Items.Count(item => item.LegendaryCatalogId == "equipment.legendary.52.44a586da1f") +
+            session.Management.Recovery.Count(item => item.LegendaryCatalogId == "equipment.legendary.52.44a586da1f");
+
+        Assert.True(migrated.CitadelDropCompensationGranted);
+        Assert.Equal(1, Count(migrated));
+        Assert.Equal(1, Count(restoredAgain));
+        Assert.Contains(migrated.Management.OperationHistory, line => line.Contains("11,463", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void MainSkillCandidatesExcludeReservationsAndSelectionPersists()
+    {
+        P1GameSession session = P1GameSession.CreateNew(new("技能预览", CharacterGender.Androgynous,
+            CharacterSkinTone.Umber, CharacterHairStyle.Cropped, GameForWork.Core.P23.P23BaseClass.Fighter), 0x3052);
+        SkillConfiguration[] candidates = session.GetPreviewSkillCandidates().ToArray();
+
+        Assert.NotEmpty(candidates);
+        Assert.All(candidates, candidate =>
+        {
+            P30ActiveSkillDefinition definition = P30SkillCatalog.ActiveForSkill(candidate.SkillId);
+            Assert.True(definition.Combat.Capabilities.HasFlag(P17SkillCapability.Damage));
+            Assert.NotEqual(P17SkillRole.Reservation, definition.Combat.Role);
+        });
+        Assert.True(session.SelectPreviewSkill(candidates[0].StoneInstanceId));
+        Assert.Equal(candidates[0].StoneInstanceId,
+            P1GameSession.Restore(session.Capture()).GetPreviewSkill()!.StoneInstanceId);
+    }
+
+    [Fact]
+    public void LinkAndMasteryChangesAffectSharedPreviewMathAndAuthoritativeCombat()
+    {
+        P30ActiveSkillDefinition active = P30SkillCatalog.Active.Single(item => item.Combat.DisplayName == "十方终式");
+        P30SupportSkillDefinition support = P30SkillCatalog.Supports.Single(item => item.DisplayName == "孤锋专注");
+        var plain = new SkillConfiguration(active.Combat.SkillId, SkillSupport.None, Level: 21);
+        var linked = plain with { P30SupportLinks = [new(support.StoneId, 21, 20)] };
+        var noMastery = P205PassiveModifiers.Empty;
+        var mastery = noMastery with { MasteryMechanics = "p30.mastery.rule.双手.2" };
+        WeaponProfile weapon = EquipmentCatalog.GetBase("core.base.rusted_greatsword").ToWeaponProfile() with
+        { MinimumPhysicalDamage = 100, MaximumPhysicalDamage = 100 };
+        P1TeamBuild Build(SkillConfiguration configuration, P205PassiveModifiers profile) => new(
+            new CharacterSheet(100, new CharacterAttributes(300, 120, 100, 100),
+                new DefensiveEquipment(5_000, 500, 0), FlatMaximumLife: 5_000),
+            weapon,
+            new SkillConfiguration(P1SkillIds.HeavyStrike, SkillSupport.None),
+            FlatAccuracy: 10_000, UseWarCry: false, ActiveSkills: [configuration], PassiveProfile: profile);
+        int Preview(SkillConfiguration configuration, P205PassiveModifiers profile)
+        {
+            P6ResolvedSkill resolved = P6CombatSkillRules.Resolve(configuration, 5_000, profile);
+            int raw = P6CombatSkillRules.BaseDamage(resolved, active.Combat.Tags,
+                weapon, 0);
+            return P6CombatSkillRules.ScaleOffensiveDamage(raw, resolved, configuration,
+                Build(configuration, profile), active.Combat.Tags, 10_000, 10_000);
+        }
+        int Actual(SkillConfiguration configuration, P205PassiveModifiers profile) =>
+            new P4SpatialCombatRunner().Run(new P4NodeCombatRequest(Build(configuration, profile), 1, 100, 1,
+                false, true, false, 0, MaximumTicks: 100), 0x3053).Events
+                .First(item => item.Kind == P4SpatialEventKind.SkillEffect && item.Value > 0 &&
+                    item.Detail.Contains(active.Combat.SkillId, StringComparison.Ordinal)).Value;
+
+        Assert.True(Preview(linked, noMastery) > Preview(plain, noMastery));
+        Assert.True(Actual(linked, noMastery) > Actual(plain, noMastery));
+        Assert.True(Preview(plain, mastery) > Preview(plain, noMastery));
+        Assert.True(Actual(plain, mastery) > Actual(plain, noMastery));
+    }
+
+    [Fact]
+    public void EveryMasteryOptionHasAUniqueExplicitMechanicAndNoTextDerivedRuntimeFallback()
+    {
+        P30MasteryChoice[] choices = P1PassiveTree.Nodes.Where(node => node.Kind == PassiveNodeKind.Mastery)
+            .SelectMany(P30PassiveTreeCatalog.MasteryChoices).GroupBy(choice => choice.MechanicId, StringComparer.Ordinal)
+            .Select(group => group.First()).ToArray();
+
+        Assert.Equal(434, P30PassiveTreeCatalog.ExplicitMasteryRuleCount);
+        Assert.Equal(434, choices.Length);
+        Assert.All(choices, choice => Assert.StartsWith("p30.mastery.rule.", choice.MechanicId));
+    }
+
     [Fact]
     public void SkillCatalogSealsAllConfirmedP30Data()
     {
@@ -281,7 +375,7 @@ public sealed class P30SystemsTests
         P1GameSession restored = P1GameSession.Restore(snapshot);
         Assert.Contains(restored.Jewels.Items, item => item.InstanceId == "saved-jewel");
         Assert.Contains(restored.Jewels.Items, item => item.InstanceId == "saved-rare-jewel" && item.Affixes.Count == 4);
-        Assert.Equal(23, P1GameSession.CurrentFormatVersion);
+        Assert.Equal(24, P1GameSession.CurrentFormatVersion);
     }
 
     [Theory]

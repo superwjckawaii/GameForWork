@@ -6,6 +6,8 @@ using GameForWork.Core.P14;
 using GameForWork.Core.P20;
 using GameForWork.Core.P28;
 using GameForWork.Core.P29;
+using GameForWork.Core.P10;
+using GameForWork.Core.P5;
 using GameForWork.Core.Simulation;
 using GameForWork.Core.Equipment;
 
@@ -13,6 +15,16 @@ namespace GameForWork.Tests;
 
 public sealed class P29FeatureTests
 {
+    [Fact]
+    public void AshenCitadelMapRoutesToCitadelLegendaryPoolBeforeGenericBossRouting()
+    {
+        var map = new P1MapItem($"{P10EndgameState.CitadelMapPrefix}regression", 16);
+
+        Assert.True(P5ExpeditionDirector.IsBoss(map));
+        Assert.Equal("citadel", P20LegendaryDrops.BossPool(map));
+        Assert.Contains(P20LegendaryDrops.Pool("citadel"), item => item.StableId == "equipment.legendary.52.44a586da1f");
+    }
+
     [Fact]
     public void WarfrontHasSixRealBasesPerTierAndDeterministicNonRepeatingSupply()
     {

@@ -439,8 +439,9 @@ public static class P20LegendaryDrops
     public static IReadOnlyList<P14UniqueDefinition> ExchangePool => P14UniqueItems.All
         .Where(item => !item.Mythic).OrderBy(item => item.DisplayName, StringComparer.Ordinal).ToArray();
 
-    public static string BossPool(P1MapItem map) => P5ExpeditionDirector.IsBoss(map) ? "warden" :
-        P10EndgameState.IsCitadel(map) ? "citadel" : $"mapboss:{(string.IsNullOrWhiteSpace(map.AreaId) ? map.EnsureFormal().AreaId : map.AreaId)}";
+    public static string BossPool(P1MapItem map) => P10EndgameState.IsCitadel(map) ? "citadel" :
+        P5ExpeditionDirector.IsAbyssWarden(map) ? "warden" :
+        $"mapboss:{(string.IsNullOrWhiteSpace(map.AreaId) ? map.EnsureFormal().AreaId : map.AreaId)}";
 
     public static string ResolvePool(P20LootContext context, IReadOnlyList<P20DefeatedEnemy> defeated)
     {

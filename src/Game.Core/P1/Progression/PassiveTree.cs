@@ -199,7 +199,8 @@ public sealed record P205PassiveModifiers(
     bool ResoluteTechnique,
     bool IronReflexes,
     bool Flaskless,
-    IReadOnlyDictionary<PassiveEffectKind, int>? Specialized = null)
+    IReadOnlyDictionary<PassiveEffectKind, int>? Specialized = null,
+    string MasteryMechanics = "")
 {
     public static P205PassiveModifiers Empty { get; } = new(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, false, false, false);
@@ -848,6 +849,9 @@ public sealed class PassiveTreeAllocation
                 sums[(int)PassiveEffectKind.RuleResoluteTechnique] > 0, sums[(int)PassiveEffectKind.RuleIronReflexes] > 0,
                 sums[(int)PassiveEffectKind.RuleFlaskless] > 0,
                 Enum.GetValues<PassiveEffectKind>().Where(kind => (int)kind >= (int)PassiveEffectKind.IncreasedOneHandDamageBasisPoints)
-                    .Where(kind => sums[(int)kind] != 0).ToDictionary(kind => kind, kind => sums[(int)kind])));
+                    .Where(kind => sums[(int)kind] != 0).ToDictionary(kind => kind, kind => sums[(int)kind]),
+                string.Join('|', _masterySelections.Select(pair =>
+                        P30PassiveTreeCatalog.MasteryMechanicId(P1PassiveTree.Get(pair.Key), pair.Value))
+                    .Order(StringComparer.Ordinal))));
     }
 }

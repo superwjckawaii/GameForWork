@@ -25,7 +25,7 @@ public sealed record P30ClusterData(
     string MasteryKey,
     IReadOnlyList<string> MasteryOptions);
 
-public sealed record P30MasteryChoice(PassiveEffect Effect, string Description);
+public sealed record P30MasteryChoice(PassiveEffect Effect, string Description, string MechanicId);
 
 public static partial class P30PassiveTreeCatalog
 {
@@ -103,12 +103,16 @@ public static partial class P30PassiveTreeCatalog
         P30ClusterData cluster = Data.Clusters.First(item =>
             $"p30.mastery.{item.MasteryKey}" == node.MasteryGroup);
         return cluster.MasteryOptions.Select((description, index) =>
-        {
-            PassiveEffectKind effect = ThemeEffect(description, index);
-            return new P30MasteryChoice(new PassiveEffect(effect,
-                ParseValue(description, effect, PassiveNodeKind.Mastery)), description);
-        }).ToArray();
+            new P30MasteryChoice(
+                P30ExplicitMasteryEffects.Get(cluster.MasteryKey, index),
+                description,
+                $"p30.mastery.rule.{cluster.MasteryKey}.{index}")).ToArray();
     }
+
+    public static string MasteryMechanicId(PassiveNodeDefinition node, int option) =>
+        MasteryChoices(node)[option].MechanicId;
+
+    public static int ExplicitMasteryRuleCount => P30ExplicitMasteryEffects.RuleCount;
 
     private static void AddStarts(ICollection<PassiveNodeDefinition> nodes,
         IDictionary<string, (float X, float Y)> positions)

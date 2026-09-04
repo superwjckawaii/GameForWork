@@ -21,6 +21,7 @@ public partial class P1PassiveTreeView : Control
     private PassiveNodeDefinition[] _nodes = [];
     private IReadOnlySet<string> _allocated = new HashSet<string>();
     private IReadOnlyDictionary<string, string> _socketedJewels = new Dictionary<string, string>();
+    private IReadOnlyDictionary<string, string> _socketedJewelTooltips = new Dictionary<string, string>();
     private int _earnedPoints;
     private PassiveStartKind _start = PassiveStartKind.Physique;
     private string _search = string.Empty;
@@ -134,14 +135,17 @@ public partial class P1PassiveTreeView : Control
     }
 
     public void SetState(IReadOnlySet<string> allocated, int earnedPoints, PassiveStartKind start = PassiveStartKind.Physique,
-        IReadOnlyDictionary<string, string>? socketedJewels = null)
+        IReadOnlyDictionary<string, string>? socketedJewels = null,
+        IReadOnlyDictionary<string, string>? socketedJewelTooltips = null)
     {
         socketedJewels ??= new Dictionary<string, string>();
+        socketedJewelTooltips ??= new Dictionary<string, string>();
         string signature = earnedPoints + "|" + start + "|" + string.Join('|', allocated.OrderBy(id => id, StringComparer.Ordinal)) +
-                           "|" + string.Join('|', socketedJewels.OrderBy(pair => pair.Key).Select(pair => $"{pair.Key}:{pair.Value}"));
+                           "|" + string.Join('|', socketedJewels.OrderBy(pair => pair.Key).Select(pair =>
+                               $"{pair.Key}:{pair.Value}:{socketedJewelTooltips.GetValueOrDefault(pair.Key)}"));
         if (signature == _stateSignature) return;
         _stateSignature = signature; _allocated = allocated; _earnedPoints = earnedPoints; _start = start;
-        _socketedJewels = socketedJewels; QueueRedraw();
+        _socketedJewels = socketedJewels; _socketedJewelTooltips = socketedJewelTooltips; QueueRedraw();
     }
 
     public void SetSearch(string query) { _search = query?.Trim() ?? string.Empty; QueueRedraw(); }
@@ -214,7 +218,8 @@ public partial class P1PassiveTreeView : Control
         string? next = hovered?.StableId;
         if (next == _hovered) return;
         _hovered = next;
-        TooltipText = hovered is null ? string.Empty : P1UiText.PassiveTooltip(hovered, _allocated.Contains(hovered.StableId), IsAvailable(hovered));
+        TooltipText = hovered is null ? string.Empty : P1UiText.PassiveTooltip(hovered, _allocated.Contains(hovered.StableId), IsAvailable(hovered)) +
+            (_socketedJewelTooltips.TryGetValue(hovered.StableId, out string? jewel) ? $"\n\n已装备珠宝\n{jewel}" : string.Empty);
     }
 
     private void BuildLayoutAndIndex()

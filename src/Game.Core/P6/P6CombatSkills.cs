@@ -1,5 +1,6 @@
 using GameForWork.Core.P1.Combat;
 using GameForWork.Core.P1.Progression;
+using GameForWork.Core.P1.World;
 using GameForWork.Core.P17;
 using GameForWork.Core.P24;
 using GameForWork.Core.P30;
@@ -199,6 +200,34 @@ public static class P6CombatSkillRules
             ? skill.ExecuteMultiplierBasisPoints
             : skill.NonExecuteMultiplierBasisPoints;
         return checked(skill.DamageMultiplierBasisPoints * conditional / 10_000);
+    }
+
+    public static int BaseDamage(P6ResolvedSkill skill, SkillTag tags, WeaponProfile weapon,
+        int addedPhysicalDamage, int? weaponRoll = null)
+    {
+        if (!tags.HasFlag(SkillTag.Attack)) return Math.Max(1, skill.BaseDamageBasisPoints);
+        int physical = weaponRoll ?? checked((weapon.MinimumPhysicalDamage + weapon.MaximumPhysicalDamage) / 2);
+        return Math.Max(1, checked(physical + addedPhysicalDamage));
+    }
+
+    public static int ScaleOffensiveDamage(int rawDamage, P6ResolvedSkill skill,
+        SkillConfiguration configuration, P1TeamBuild build, SkillTag tags,
+        int targetLife, int targetMaximumLife, int actionMultiplierBasisPoints = 10_000)
+    {
+        P205PassiveModifiers passive = build.PassiveProfile ?? P205PassiveModifiers.Empty;
+        int value = checked(rawDamage * (10_000 + build.IncreasedDamageBasisPoints +
+            passive.DamageFor(tags) + configuration.Quality * 100) / 10_000);
+        value = checked(value * (10_000 + passive.MoreDamageBasisPoints) / 10_000);
+        int jewelMore = skill.Role == P17SkillRole.DamageOverTime ? build.MoreDamageOverTimeBasisPoints : 0;
+        if (tags.HasFlag(SkillTag.Attack)) jewelMore += build.MoreAttackDamageBasisPoints;
+        if (tags.HasFlag(SkillTag.Spell)) jewelMore += build.MoreSpellDamageBasisPoints;
+        value = checked(value * (10_000 + jewelMore) / 10_000);
+        if (tags.HasFlag(SkillTag.Attack))
+            value = checked(value * skill.BaseDamageBasisPoints / 10_000);
+        value = checked(value * DamageMultiplier(skill, targetLife, targetMaximumLife) / 10_000);
+        value = checked(value * P30MasteryRuntime.OffensiveMultiplier(passive, tags, build.Weapon,
+            targetLife, targetMaximumLife) / 10_000);
+        return checked(value * actionMultiplierBasisPoints / 10_000);
     }
 
     private static int LegacyValue(SkillConfiguration configuration, SkillSupport support) =>

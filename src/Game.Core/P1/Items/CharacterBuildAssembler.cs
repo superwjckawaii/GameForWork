@@ -69,16 +69,31 @@ public static class CharacterBuildAssembler
         P205PassiveModifiers advanced = passive.Advanced ?? P205PassiveModifiers.Empty;
         P30JewelModifiers jewel = jewelState is null ? new() : P30Jewels.CalculateModifiers(jewelState);
         int specializedWeaponDamage = WeaponPassiveIncrease(loadout, passive, advanced);
-        var attributes = new CharacterAttributes(
-            ScaleAttribute(baseAttributes.Physique + item.Physique + advanced.Physique + jewel.Physique,
-                item.Value(ItemModifierKind.IncreasedPhysiqueBasisPoints) + item.Value(ItemModifierKind.IncreasedAllAttributesBasisPoints)),
-            ScaleAttribute(baseAttributes.Dexterity + item.Dexterity + advanced.Dexterity + jewel.Dexterity,
-                item.Value(ItemModifierKind.IncreasedDexterityBasisPoints) + item.Value(ItemModifierKind.IncreasedAllAttributesBasisPoints)),
-            ScaleAttribute(baseAttributes.Spirit + item.Spirit + advanced.Spirit + jewel.Spirit,
-                item.Value(ItemModifierKind.IncreasedSpiritBasisPoints) + item.Value(ItemModifierKind.IncreasedAllAttributesBasisPoints)),
-            ScaleAttribute(baseAttributes.Energy + item.Energy + advanced.Energy + jewel.Energy,
-                item.Value(ItemModifierKind.IncreasedEnergyBasisPoints) + item.Value(ItemModifierKind.IncreasedAllAttributesBasisPoints)));
+        int physique = ScaleAttribute(baseAttributes.Physique + item.Physique + advanced.Physique + jewel.Physique,
+            item.Value(ItemModifierKind.IncreasedPhysiqueBasisPoints) + item.Value(ItemModifierKind.IncreasedAllAttributesBasisPoints));
+        int dexterity = ScaleAttribute(baseAttributes.Dexterity + item.Dexterity + advanced.Dexterity + jewel.Dexterity,
+            item.Value(ItemModifierKind.IncreasedDexterityBasisPoints) + item.Value(ItemModifierKind.IncreasedAllAttributesBasisPoints));
+        int spirit = ScaleAttribute(baseAttributes.Spirit + item.Spirit + advanced.Spirit + jewel.Spirit,
+            item.Value(ItemModifierKind.IncreasedSpiritBasisPoints) + item.Value(ItemModifierKind.IncreasedAllAttributesBasisPoints));
+        int energy = ScaleAttribute(baseAttributes.Energy + item.Energy + advanced.Energy + jewel.Energy,
+            item.Value(ItemModifierKind.IncreasedEnergyBasisPoints) + item.Value(ItemModifierKind.IncreasedAllAttributesBasisPoints));
+        if (P30MasteryRuntime.Has(advanced, "属性", 3))
+        {
+            int maximum = Math.Max(Math.Max(physique, dexterity), Math.Max(spirit, energy));
+            if (physique == maximum) physique = ScaleAttribute(physique, 2_000);
+            else if (dexterity == maximum) dexterity = ScaleAttribute(dexterity, 2_000);
+            else if (spirit == maximum) spirit = ScaleAttribute(spirit, 2_000);
+            else energy = ScaleAttribute(energy, 2_000);
+        }
+        var attributes = new CharacterAttributes(physique, dexterity, spirit, energy);
         DefensiveEquipment defense = equipment.Defense;
+        int masteryDefense = P30MasteryRuntime.DefenseMultiplier(advanced, weapon);
+        defense = defense with
+        {
+            Armor = checked(defense.Armor * masteryDefense / 10_000),
+            Evasion = checked(defense.Evasion * masteryDefense / 10_000),
+        };
+        defense = defense with { Shield = checked(defense.Shield * P30MasteryRuntime.ShieldMultiplier(advanced) / 10_000) };
         int evasionIncrease = checked(item.IncreasedEvasionBasisPoints + advanced.IncreasedEvasionBasisPoints);
         if (advanced.IronReflexes)
         {
