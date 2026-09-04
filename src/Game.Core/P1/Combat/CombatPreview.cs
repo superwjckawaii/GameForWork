@@ -1,3 +1,5 @@
+using GameForWork.Core.P30;
+
 namespace GameForWork.Core.P1.Combat;
 
 public sealed record CombatPreview(
@@ -52,7 +54,7 @@ public static class CombatPreviewRules
         averageHit = Math.Max(1, checked((int)((long)averageHit * (10_000 - armorReduction.Value) / 10_000)));
         hitTrace.Add("目标护甲", $"previous × (10000 - {armorReduction.Value}) / 10000", averageHit);
 
-        int attacksPerSecondMilli = checked(20_000 / heavyStrike.AttackIntervalTicks);
+        int attacksPerSecondMilli = heavyStrike.AttackFrequencyMilliPerSecond;
         CalculatedValue hitChance = DamageRules.HitChance(accuracy, targetEvasion, false);
         int criticalChance = Math.Clamp(
             checked((int)((long)weapon.CriticalChanceBasisPoints * (10_000 + increasedCriticalChanceBasisPoints) / 10_000)),
@@ -78,7 +80,7 @@ public static class CombatPreviewRules
             hitTrace.Build(averageHit),
             CalculatedValue.Single(
                 "预计攻击频率（千分之一/秒）",
-                $"20000 / {heavyStrike.AttackIntervalTicks}",
+                $"min({heavyStrike.UncappedAttackFrequencyMilliPerSecond}, {P30CombatRules.MaximumAttackFrequencyMilliPerSecond})",
                 attacksPerSecondMilli),
             hitChance,
             CalculatedValue.Single("预计暴击率", weapon.CriticalChanceBasisPoints.ToString(System.Globalization.CultureInfo.InvariantCulture), criticalChance),

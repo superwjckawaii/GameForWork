@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using GameForWork.Core.P1.Items;
+using GameForWork.Core.P30;
 using GameForWork.Core.Simulation;
 
 namespace GameForWork.Core.P1.Combat;
@@ -100,6 +101,7 @@ public sealed class P1EncounterRunner
         int initialEnemyLife = enemyLife;
         int initialHeroLife = heroResources.Life;
         int heroNextActionTick = 0;
+        int heroAttackFrequencyCarry = 0;
         int enemyNextActionTick = 0;
         int corpseExplosionTick = -1;
         BossPhase? previousBossPhase = null;
@@ -172,23 +174,27 @@ public sealed class P1EncounterRunner
                 }
                 else
                 {
-                    var strikeRequest = new HeavyStrikeRequest(
-                        heroResources,
-                        heavyStrike,
-                        request.HeroWeapon,
-                        request.Hero.Accuracy(request.HeroFlatAccuracy).Value,
-                        request.Enemy.Evasion,
-                        request.Enemy.Armor,
-                        IncreasedDamageBasisPoints: request.HeroIncreasedDamageBasisPoints,
-                        AddedMinimumPhysicalDamage: request.AddedPhysicalDamage,
-                        AddedMaximumPhysicalDamage: request.AddedPhysicalDamage,
-                        IncreasedCriticalChanceBasisPoints: request.HeroIncreasedCriticalChanceBasisPoints,
-                        IncreasedBleedChanceBasisPoints: request.HeroIncreasedBleedChanceBasisPoints,
-                        WarCry: warCry);
-                    HeavyStrikeResult strike = HeavyStrikeRules.Resolve(strikeRequest, random, tick);
-                    if (strike.CastSucceeded)
+                    int attacks = P30CombatRules.AttacksForScheduledSimulationTick(
+                        heavyStrike.AttackFrequencyMilliPerSecond, ref heroAttackFrequencyCarry);
+                    bool castSucceeded = false;
+                    for (int attack = 0; attack < attacks && enemyLife > 0; attack++)
                     {
-                        heroNextActionTick = checked(tick + heavyStrike.AttackIntervalTicks);
+                        var strikeRequest = new HeavyStrikeRequest(
+                            heroResources,
+                            heavyStrike,
+                            request.HeroWeapon,
+                            request.Hero.Accuracy(request.HeroFlatAccuracy).Value,
+                            request.Enemy.Evasion,
+                            request.Enemy.Armor,
+                            IncreasedDamageBasisPoints: request.HeroIncreasedDamageBasisPoints,
+                            AddedMinimumPhysicalDamage: request.AddedPhysicalDamage,
+                            AddedMaximumPhysicalDamage: request.AddedPhysicalDamage,
+                            IncreasedCriticalChanceBasisPoints: request.HeroIncreasedCriticalChanceBasisPoints,
+                            IncreasedBleedChanceBasisPoints: request.HeroIncreasedBleedChanceBasisPoints,
+                            WarCry: warCry);
+                        HeavyStrikeResult strike = HeavyStrikeRules.Resolve(strikeRequest, random, tick);
+                        if (!strike.CastSucceeded) break;
+                        castSucceeded = true;
                         DamageResult damage = strike.Damage!;
                         if (damage.Hit)
                         {
@@ -218,10 +224,7 @@ public sealed class P1EncounterRunner
                             events.Add(new P1CombatEvent(tick, P1CombatEventKind.HeavyStrikeMissed));
                         }
                     }
-                    else
-                    {
-                        heroNextActionTick = tick + 1;
-                    }
+                    heroNextActionTick = tick + (castSucceeded ? heavyStrike.AttackIntervalTicks : 1);
                 }
             }
 

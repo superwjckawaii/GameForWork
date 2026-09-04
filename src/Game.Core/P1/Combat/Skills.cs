@@ -201,11 +201,16 @@ public sealed record SkillUseProfile(
     int LifeCost,
     int RangeRaw,
     int AttackIntervalTicks,
+    int UncappedAttackFrequencyMilliPerSecond,
     int CastTimeTicks,
     int CooldownTicks,
     int BleedChanceBasisPoints,
     IReadOnlyList<int> MoreDamageMultipliersBasisPoints,
-    int IncreasedAttackSpeedBasisPoints);
+    int IncreasedAttackSpeedBasisPoints)
+{
+    public int AttackFrequencyMilliPerSecond => Math.Clamp(UncappedAttackFrequencyMilliPerSecond, 0,
+        P30CombatRules.MaximumAttackFrequencyMilliPerSecond);
+}
 
 public sealed class WarCryState
 {
@@ -301,7 +306,9 @@ public static class SkillRules
             moreMultipliers.Add(13_000);
         }
 
-        int adjustedRateMilli = checked((int)((long)weapon.AttacksPerSecondMilli * (10_000 + increasedAttackSpeed) / 10_000));
+        int uncappedRateMilli = P30CombatRules.ApplyIncreased(weapon.AttacksPerSecondMilli, increasedAttackSpeed);
+        int adjustedRateMilli = Math.Clamp(uncappedRateMilli, 1,
+            P30CombatRules.MaximumAttackFrequencyMilliPerSecond);
         int attackIntervalTicks = Math.Max(1, DivideRoundUp(20_000, adjustedRateMilli));
         return new SkillUseProfile(
             configuration.SkillId,
@@ -309,6 +316,7 @@ public static class SkillRules
             lifeCost,
             range,
             attackIntervalTicks,
+            uncappedRateMilli,
             0,
             0,
             bleedChance,
@@ -322,6 +330,7 @@ public static class SkillRules
         LifeCost: 0,
         RangeRaw: P1Skills.WarCry.RangeRaw,
         AttackIntervalTicks: 0,
+        UncappedAttackFrequencyMilliPerSecond: 0,
         CastTimeTicks: P1Skills.WarCry.CastTimeTicks,
         CooldownTicks: P1Skills.WarCry.CooldownTicks,
         BleedChanceBasisPoints: 0,

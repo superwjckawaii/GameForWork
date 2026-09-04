@@ -260,6 +260,24 @@ public static class P6CombatSkillRules
             Math.Max(10_000_000, (long)(10_000 + increasedSpeed) * masterySpeed))));
     }
 
+    public static int ActionFrequencyMilliPerSecond(P1TeamBuild build, int baseTicks, int cooldownTicks,
+        SkillTag tags)
+    {
+        int actionDelay = ActionDelay(build, baseTicks, tags);
+        if (!tags.HasFlag(SkillTag.Attack)) return checked(20_000 / actionDelay);
+
+        P205PassiveModifiers passive = build.PassiveProfile ?? P205PassiveModifiers.Empty;
+        int masterySpeed = P30MasteryRuntime.ActionSpeedMultiplier(passive, tags, build.Weapon);
+        int increasedSpeed = checked(build.IncreasedActionSpeedBasisPoints + build.IncreasedAttackSpeedBasisPoints);
+        int baseFrequency = baseTicks <= 1
+            ? Math.Max(1, build.Weapon.AttacksPerSecondMilli)
+            : Math.Max(1, 20_000 / baseTicks);
+        int frequency = P30CombatRules.AttackFrequencyMilliPerSecond(baseFrequency, increasedSpeed,
+            [masterySpeed]);
+        if (cooldownTicks > 1) frequency = Math.Min(frequency, 20_000 / cooldownTicks);
+        return frequency;
+    }
+
     private static int LegacyValue(SkillConfiguration configuration, SkillSupport support) =>
         P30SkillCatalog.SupportFor(support).ValueAt(configuration.Level, configuration.Quality);
 

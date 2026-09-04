@@ -1743,8 +1743,12 @@ public partial class P2Dashboard : VBoxContainer
                 pair => pair.Key,
                 pair => P1UiText.JewelTooltip(_session.Jewels.Items.Single(jewel => jewel.InstanceId == pair.Value)),
                 StringComparer.Ordinal);
+            Dictionary<string, int> jewelRadii = _session.Jewels.Socketed.ToDictionary(
+                pair => pair.Key,
+                pair => _session.Jewels.Items.Single(jewel => jewel.InstanceId == pair.Value).EffectiveRadius,
+                StringComparer.Ordinal);
             _passiveTree!.SetState(_session.Passives.Allocated, _session.World.Hero.Progression.EarnedPassivePoints,
-                _session.Passives.StartKind, _session.Jewels.Socketed, jewelTooltips);
+                _session.Passives.StartKind, _session.Jewels.Socketed, jewelTooltips, jewelRadii);
             _jewelStashPanel?.RefreshState();
             _bossFragmentsStatus!.Text =
                 $"◆ 深渊监守者\n碎片 {_session.World.Expedition.AbyssWardenFragments}/{P5ExpeditionDirector.FragmentsPerTicket}　门票 ×{_session.World.Expedition.AbyssWardenTickets}\n" +

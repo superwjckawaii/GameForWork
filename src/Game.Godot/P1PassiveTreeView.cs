@@ -22,6 +22,7 @@ public partial class P1PassiveTreeView : Control
     private IReadOnlySet<string> _allocated = new HashSet<string>();
     private IReadOnlyDictionary<string, string> _socketedJewels = new Dictionary<string, string>();
     private IReadOnlyDictionary<string, string> _socketedJewelTooltips = new Dictionary<string, string>();
+    private IReadOnlyDictionary<string, int> _socketedJewelRadii = new Dictionary<string, int>();
     private int _earnedPoints;
     private PassiveStartKind _start = PassiveStartKind.Physique;
     private string _search = string.Empty;
@@ -54,6 +55,7 @@ public partial class P1PassiveTreeView : Control
     {
         DrawRect(new Rect2(Vector2.Zero, Size), new Color("11151d"), true);
         DrawBackdrop();
+        DrawSocketedJewelRanges();
         var drawnEdges = new HashSet<string>(StringComparer.Ordinal);
         foreach (PassiveNodeDefinition node in _nodes)
         {
@@ -78,7 +80,8 @@ public partial class P1PassiveTreeView : Control
             }
         }
 
-        if (SelectedStableId is { } selectedId && P1PassiveTree.Get(selectedId).Kind == PassiveNodeKind.JewelSocket)
+        if (SelectedStableId is { } selectedId && P1PassiveTree.Get(selectedId).Kind == PassiveNodeKind.JewelSocket &&
+            _socketedJewelRadii.GetValueOrDefault(selectedId) <= 0)
         {
             DrawCircle(ToScreen(_centers[selectedId]), 150f * _zoom, new Color("6b84ad44"));
             DrawCircle(ToScreen(_centers[selectedId]), 150f * _zoom, new Color("86a3cf"), false, 1.5f);
@@ -136,16 +139,20 @@ public partial class P1PassiveTreeView : Control
 
     public void SetState(IReadOnlySet<string> allocated, int earnedPoints, PassiveStartKind start = PassiveStartKind.Physique,
         IReadOnlyDictionary<string, string>? socketedJewels = null,
-        IReadOnlyDictionary<string, string>? socketedJewelTooltips = null)
+        IReadOnlyDictionary<string, string>? socketedJewelTooltips = null,
+        IReadOnlyDictionary<string, int>? socketedJewelRadii = null)
     {
         socketedJewels ??= new Dictionary<string, string>();
         socketedJewelTooltips ??= new Dictionary<string, string>();
+        socketedJewelRadii ??= new Dictionary<string, int>();
         string signature = earnedPoints + "|" + start + "|" + string.Join('|', allocated.OrderBy(id => id, StringComparer.Ordinal)) +
                            "|" + string.Join('|', socketedJewels.OrderBy(pair => pair.Key).Select(pair =>
-                               $"{pair.Key}:{pair.Value}:{socketedJewelTooltips.GetValueOrDefault(pair.Key)}"));
+                               $"{pair.Key}:{pair.Value}:{socketedJewelTooltips.GetValueOrDefault(pair.Key)}:" +
+                               socketedJewelRadii.GetValueOrDefault(pair.Key)));
         if (signature == _stateSignature) return;
         _stateSignature = signature; _allocated = allocated; _earnedPoints = earnedPoints; _start = start;
-        _socketedJewels = socketedJewels; _socketedJewelTooltips = socketedJewelTooltips; QueueRedraw();
+        _socketedJewels = socketedJewels; _socketedJewelTooltips = socketedJewelTooltips;
+        _socketedJewelRadii = socketedJewelRadii; QueueRedraw();
     }
 
     public void SetSearch(string query) { _search = query?.Trim() ?? string.Empty; QueueRedraw(); }
@@ -321,6 +328,23 @@ public partial class P1PassiveTreeView : Control
             Vector2 point = area.GetCenter() + new Vector2(node.X, node.Y) / P1PassiveTree.LayoutExtent * area.Size * .44f;
             DrawCircle(point, node.Kind == PassiveNodeKind.Start ? 2.4f : 1.2f,
                 node.Kind == PassiveNodeKind.Start ? AvailableColor : _allocated.Contains(node.StableId) ? AllocatedColor : LockedColor.Lightened(.25f));
+        }
+    }
+
+    private void DrawSocketedJewelRanges()
+    {
+        foreach ((string socketId, int radius) in _socketedJewelRadii
+                     .Where(pair => pair.Value > 0)
+                     .OrderByDescending(pair => pair.Value)
+                     .ThenBy(pair => pair.Key, StringComparer.Ordinal))
+        {
+            if (!_centers.TryGetValue(socketId, out Vector2 worldCenter)) continue;
+            Vector2 center = ToScreen(worldCenter);
+            float screenRadius = radius * _zoom;
+            bool selected = SelectedStableId == socketId;
+            DrawCircle(center, screenRadius, selected ? new Color("986ad13b") : new Color("76559c25"));
+            DrawCircle(center, screenRadius, selected ? new Color("ddb5ff") : new Color("a982cf"), false,
+                selected ? 2.4f : Math.Max(1f, 1.5f * _zoom));
         }
     }
 

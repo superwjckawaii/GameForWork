@@ -29,7 +29,7 @@ public partial class P205JewelStashPanel : VBoxContainer
         _session = session;
         _changed = changed;
         SizeFlagsHorizontal = SizeFlags.ExpandFill; SizeFlagsVertical = SizeFlags.ExpandFill;
-        AddChild(new Label { Text = "珠宝仓 · 240 格 · 拖到已分配的记忆棱孔", AutowrapMode = TextServer.AutowrapMode.WordSmart });
+        AddChild(new Label { Text = "珠宝仓 · 240 格 · 拖到已分配的记忆棱孔 · 同名珠宝按半径从大到小", AutowrapMode = TextServer.AutowrapMode.WordSmart });
         _grid = new GridContainer { Columns = 12, SizeFlagsHorizontal = SizeFlags.ExpandFill };
         _grid.AddThemeConstantOverride("h_separation", 3); _grid.AddThemeConstantOverride("v_separation", 3);
         var scroll = new ScrollContainer
@@ -98,7 +98,7 @@ public partial class P205JewelStashPanel : VBoxContainer
         if (!force && signature == _signature) return;
         _signature = signature;
         foreach (Node child in _grid.GetChildren()) child.QueueFree();
-        foreach (P30JewelInstance jewel in session.Jewels.Items.OrderByDescending(j => j.Rarity).ThenBy(j => j.DisplayName))
+        foreach (P30JewelInstance jewel in P30Jewels.OrderForStash(session.Jewels.Items))
         {
             string? socket = session.Jewels.Socketed.FirstOrDefault(pair => pair.Value == jewel.InstanceId).Key;
             Color color = ColorFor(jewel);

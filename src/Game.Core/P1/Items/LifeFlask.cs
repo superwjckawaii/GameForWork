@@ -1,5 +1,6 @@
 using GameForWork.Core.P1.Combat;
 using GameForWork.Core.Equipment;
+using GameForWork.Core.P30;
 
 namespace GameForWork.Core.P1.Items;
 
@@ -98,10 +99,15 @@ public static class P1LegendaryRules
             return profile;
         }
 
-        int slowerInterval = DivideRoundUp(
-            checked(profile.AttackIntervalTicks * 10_000),
-            rule.HeavyStrikeAttackSpeedMultiplierBasisPoints);
-        return profile with { AttackIntervalTicks = slowerInterval };
+        int uncappedFrequency = P30CombatRules.ApplyMore(profile.UncappedAttackFrequencyMilliPerSecond,
+            [rule.HeavyStrikeAttackSpeedMultiplierBasisPoints]);
+        int frequency = Math.Clamp(uncappedFrequency, 1, P30CombatRules.MaximumAttackFrequencyMilliPerSecond);
+        int slowerInterval = DivideRoundUp(20_000, frequency);
+        return profile with
+        {
+            AttackIntervalTicks = slowerInterval,
+            UncappedAttackFrequencyMilliPerSecond = uncappedFrequency,
+        };
     }
 
     public static int CalculateAftershockDamage(int heavyStrikeDamage, LegendaryRule? rule) =>

@@ -77,6 +77,8 @@ public static class P30CombatRules
     public const int AbsoluteSuppressionEffectMaximum = 9_000;
     public const int SpiritBarrierReductionMaximum = 8_000;
     public const int DefaultLeechPerSecondMaximum = 3_500;
+    public const int MaximumAttackFrequencyMilliPerSecond = 60_000;
+    public const int AuthoritativeSimulationTicksPerSecond = 20;
 
     private static readonly P30DamageType[] ConversionOrder =
         [P30DamageType.Physical, P30DamageType.Lightning, P30DamageType.Cold, P30DamageType.Fire];
@@ -146,11 +148,39 @@ public static class P30CombatRules
         int flatBasisPoints = 0) => Math.Clamp(
         checked(ApplyIncreased(baseCriticalBasisPoints, increasedBasisPoints) + flatBasisPoints), 0, Basis);
 
+    public static int AttackFrequencyMilliPerSecond(int attacksPerSecondMilli, int increasedSpeedBasisPoints,
+        IEnumerable<int>? moreSpeedMultipliers = null) => Math.Clamp(
+        ApplyMore(ApplyIncreased(attacksPerSecondMilli, increasedSpeedBasisPoints),
+            moreSpeedMultipliers ?? []),
+        0,
+        MaximumAttackFrequencyMilliPerSecond);
+
+    /// <summary>
+    /// The simulation remains deterministic at 20 Hz. Frequencies above 20 attacks per second are represented by
+    /// multiple attacks in one simulation tick, with the remainder carried to the next scheduled tick.
+    /// </summary>
+    public static int AttacksForScheduledSimulationTick(int attackFrequencyMilliPerSecond,
+        ref int carriedFrequencyMilli)
+    {
+        int frequency = Math.Clamp(attackFrequencyMilliPerSecond, 0, MaximumAttackFrequencyMilliPerSecond);
+        int frequencyPerSimulationTick = AuthoritativeSimulationTicksPerSecond * 1_000;
+        if (frequency <= frequencyPerSimulationTick)
+        {
+            carriedFrequencyMilli = 0;
+            return frequency > 0 ? 1 : 0;
+        }
+
+        int available = checked(carriedFrequencyMilli + frequency);
+        int attacks = available / frequencyPerSimulationTick;
+        carriedFrequencyMilli = available % frequencyPerSimulationTick;
+        return attacks;
+    }
+
     public static int AttackIntervalMilliseconds(int attacksPerSecondMilli, int increasedSpeedBasisPoints,
         IEnumerable<int>? moreSpeedMultipliers = null, int skillAttackTimeMultiplierBasisPoints = Basis)
     {
-        long frequency = ApplyMore(ApplyIncreased(attacksPerSecondMilli, increasedSpeedBasisPoints),
-            moreSpeedMultipliers ?? []);
+        long frequency = AttackFrequencyMilliPerSecond(attacksPerSecondMilli, increasedSpeedBasisPoints,
+            moreSpeedMultipliers);
         if (frequency <= 0) return int.MaxValue;
         return checked((int)Math.Max(1, (1_000_000L * skillAttackTimeMultiplierBasisPoints +
             frequency * Basis - 1) / (frequency * Basis)));

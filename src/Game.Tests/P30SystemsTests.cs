@@ -17,6 +17,49 @@ namespace GameForWork.Tests;
 public sealed class P30SystemsTests
 {
     [Fact]
+    public void AttackFrequencyUsesSixtyPerSecondCapAndCarriesSubTickAttacks()
+    {
+        Assert.Equal(60_000, P30CombatRules.AttackFrequencyMilliPerSecond(2_000, 500_000));
+        Assert.Equal(17, P30CombatRules.AttackIntervalMilliseconds(2_000, 500_000));
+
+        WeaponProfile weapon = EquipmentCatalog.GetBase("core.base.rusted_greatsword").ToWeaponProfile() with
+        { AttacksPerSecondMilli = 1_000 };
+        SkillUseProfile profile = SkillRules.BuildHeavyStrike(
+            new SkillConfiguration(P1SkillIds.HeavyStrike, SkillSupport.None), weapon, 1_000, 1_000_000);
+        Assert.True(profile.UncappedAttackFrequencyMilliPerSecond > 60_000);
+        Assert.Equal(60_000, profile.AttackFrequencyMilliPerSecond);
+        var build = new P1TeamBuild(
+            new CharacterSheet(100, new CharacterAttributes(100, 100, 100, 100),
+                new DefensiveEquipment(0, 0, 0)),
+            weapon,
+            new SkillConfiguration(P1SkillIds.HeavyStrike, SkillSupport.None),
+            IncreasedAttackSpeedBasisPoints: 1_000_000);
+        Assert.Equal(60_000, P6CombatSkillRules.ActionFrequencyMilliPerSecond(build, 1, 1,
+            SkillTag.Attack));
+
+        int carry = 0;
+        int attacks = 0;
+        for (int tick = 0; tick < 20; tick++)
+            attacks += P30CombatRules.AttacksForScheduledSimulationTick(21_000, ref carry);
+        Assert.Equal(21, attacks);
+        Assert.Equal(3, P30CombatRules.AttacksForScheduledSimulationTick(60_000, ref carry));
+    }
+
+    [Fact]
+    public void JewelStashOrdersSameNameByEffectiveRadiusDescending()
+    {
+        P30JewelInstance small = P30Jewels.CreateLegendary("bloodbound_domain", 100, "small", 1) with
+        { RolledRadius = 180 };
+        P30JewelInstance large = P30Jewels.CreateLegendary("bloodbound_domain", 100, "large", 2) with
+        { RolledRadius = 720 };
+        P30JewelInstance medium = P30Jewels.CreateLegendary("bloodbound_domain", 100, "medium", 3) with
+        { RolledRadius = 440 };
+
+        Assert.Equal(["large", "medium", "small"],
+            P30Jewels.OrderForStash([small, large, medium]).Select(jewel => jewel.InstanceId));
+    }
+
+    [Fact]
     public void MoreModifiersCompoundAcrossIndependentDamageBuckets()
     {
         Assert.Equal(5_600, P30CombatRules.CombineMoreBasisPoints(2_000, 3_000));

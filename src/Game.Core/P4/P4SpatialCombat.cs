@@ -242,7 +242,8 @@ public sealed class P4SpatialCombatRunner
         SkillUseProfile heavyStrike = request.Build.HeavyStrikeProfile ?? SkillRules.BuildHeavyStrike(
             (request.Build.ActiveSkills ?? []).FirstOrDefault(skill => skill.SkillId == P1SkillIds.HeavyStrike) ?? request.Build.HeavyStrike,
             request.Build.Weapon,
-            hero.MaximumLife);
+            hero.MaximumLife,
+            request.Build.IncreasedAttackSpeedBasisPoints);
         heavyStrike = P1LegendaryRules.ApplyToHeavyStrike(heavyStrike, request.Build.WeaponLegendaryRule);
         heavyStrike = P18AscendancyRules.ApplyHeavyStrikeCost(heavyStrike, hero.MaximumLife, ascendancy);
         var warCry = new WarCryState { EchoNotableAllocated = request.Build.EchoNotableAllocated };
@@ -297,6 +298,8 @@ public sealed class P4SpatialCombatRunner
         P4Point heroPosition = new(6_000, 22_000);
         string heroTargetId = string.Empty;
         int heroNextActionTick = 0;
+        int heavyStrikeFrequencyCarry = 0;
+        var p17AttackFrequencyCarry = new Dictionary<string, int>(StringComparer.Ordinal);
         int cleaveReadyTick = 0;
         int bladeReadyTick = 0;
         int chargeReadyTick = 0;
@@ -491,10 +494,24 @@ public sealed class P4SpatialCombatRunner
                     if (chosen is not null && p17Skills.TryGetValue(chosen, out P6ResolvedSkill? p17Skill) &&
                         P6CombatSkillRules.TryPay(hero, p17Skill))
                     {
-                        ExecuteP17Skill(request, p17Skill, skills[chosen], target, enemies, hero, random, tick,
-                            ref heroPosition, bannerMultiplier, events, ref guardUntilTick, ref guardReductionBasisPoints,
-                            p17UseCounts, ref fortificationLayers, ref fortificationUntilTick,
-                            ref lastSelfAttackOrSpellTick);
+                        SkillTag p17Tags = P1Skills.Get(p17Skill.SkillId).Tags;
+                        int useCount = 1;
+                        if (p17Tags.HasFlag(SkillTag.Attack))
+                        {
+                            int frequency = P6CombatSkillRules.ActionFrequencyMilliPerSecond(request.Build,
+                                p17Skill.CastTimeTicks, p17Skill.CooldownTicks, p17Tags);
+                            int carry = p17AttackFrequencyCarry.GetValueOrDefault(p17Skill.SkillId);
+                            useCount = P30CombatRules.AttacksForScheduledSimulationTick(frequency, ref carry);
+                            p17AttackFrequencyCarry[p17Skill.SkillId] = carry;
+                        }
+                        for (int use = 0; use < useCount && target.Life > 0; use++)
+                        {
+                            if (use > 0 && !P6CombatSkillRules.TryPay(hero, p17Skill)) break;
+                            ExecuteP17Skill(request, p17Skill, skills[chosen], target, enemies, hero, random, tick,
+                                ref heroPosition, bannerMultiplier, events, ref guardUntilTick, ref guardReductionBasisPoints,
+                                p17UseCounts, ref fortificationLayers, ref fortificationUntilTick,
+                                ref lastSelfAttackOrSpellTick);
+                        }
                         if (p17Skill.Role == P17SkillRole.Guard && ascendancy.Has(P18NodeIds.BastionGuardSmall))
                             guardUntilTick += Math.Max(1, (guardUntilTick - tick) / 4);
                         p17ReadyTicks[chosen] = tick + Math.Max(1, p17Skill.CooldownTicks);
@@ -607,20 +624,28 @@ public sealed class P4SpatialCombatRunner
                     else if (chosen == P1SkillIds.HeavyStrike &&
                              SkillRules.TryPaySkillCost(hero, heavyStrike))
                     {
-                        int warCryMultiplier = checked(warCry.ConsumeHeavyStrikeMultiplier(tick) * bannerMultiplier / 10_000);
-                        ApplyHeroHit(request, target, random, tick, warCryMultiplier,
-                            P4SpatialEventKind.HeavyStrike, heroPosition, events,
-                            checked(request.Build.IncreasedBleedChanceBasisPoints + heavyStrike.BleedChanceBasisPoints), hero,
-                            ascendancy.Has(P18NodeIds.BloodTideSmall) ? 100 : 0);
                         int speedBasisPoints = Math.Max(1_000, 10_000 + ascendancyRuntime.AttackSpeedBasisPoints +
                             request.Build.IncreasedActionSpeedBasisPoints +
                             virtueVice.Bonuses().IncreasedActionSpeedBasisPoints);
                         int masterySpeed = P30MasteryRuntime.ActionSpeedMultiplier(
                             request.Build.PassiveProfile ?? P205PassiveModifiers.Empty,
                             P1Skills.HeavyStrike.Tags, request.Build.Weapon);
-                        int attackInterval = checked((int)Math.Max(1,
-                            ((long)heavyStrike.AttackIntervalTicks * 10_000 * 10_000 +
-                             (long)speedBasisPoints * masterySpeed - 1) / ((long)speedBasisPoints * masterySpeed)));
+                        int frequency = P30CombatRules.AttackFrequencyMilliPerSecond(
+                            heavyStrike.UncappedAttackFrequencyMilliPerSecond,
+                            speedBasisPoints - 10_000,
+                            [masterySpeed]);
+                        int attackCount = P30CombatRules.AttacksForScheduledSimulationTick(frequency,
+                            ref heavyStrikeFrequencyCarry);
+                        for (int attack = 0; attack < attackCount && target.Life > 0; attack++)
+                        {
+                            if (attack > 0 && !SkillRules.TryPaySkillCost(hero, heavyStrike)) break;
+                            int warCryMultiplier = checked(warCry.ConsumeHeavyStrikeMultiplier(tick) * bannerMultiplier / 10_000);
+                            ApplyHeroHit(request, target, random, tick, warCryMultiplier,
+                                P4SpatialEventKind.HeavyStrike, heroPosition, events,
+                                checked(request.Build.IncreasedBleedChanceBasisPoints + heavyStrike.BleedChanceBasisPoints), hero,
+                                ascendancy.Has(P18NodeIds.BloodTideSmall) ? 100 : 0);
+                        }
+                        int attackInterval = Math.Max(1, checked((20_000 + frequency - 1) / frequency));
                         heroNextActionTick = tick + attackInterval;
                     }
                     else

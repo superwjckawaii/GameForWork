@@ -177,6 +177,17 @@ public static class P30Jewels
     public static string PositionName(P30JewelAffixPosition value) => value switch
     { P30JewelAffixPosition.Prefix => "前缀", P30JewelAffixPosition.Suffix => "后缀", _ => "腐化词缀" };
 
+    public static IReadOnlyList<P30JewelInstance> OrderForStash(IEnumerable<P30JewelInstance> jewels)
+    {
+        ArgumentNullException.ThrowIfNull(jewels);
+        return jewels
+            .OrderByDescending(jewel => jewel.Rarity)
+            .ThenBy(jewel => jewel.DisplayName, StringComparer.Ordinal)
+            .ThenByDescending(jewel => jewel.EffectiveRadius)
+            .ThenBy(jewel => jewel.InstanceId, StringComparer.Ordinal)
+            .ToArray();
+    }
+
     public static string AffixText(P30JewelAffix affix)
     {
         string family = affix.StableId.Split('.').Last();

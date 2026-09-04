@@ -149,8 +149,9 @@ public static class P6BuildSummaryRules
         long expectedCriticalMultiplier = 10_000L +
             (long)criticalChance * (build.CriticalMultiplierBasisPoints - 10_000) / 10_000;
         long expectedHit = (long)hit * hitChance / 10_000 * expectedCriticalMultiplier / 10_000;
-        int actionTicks = Math.Max(P6CombatSkillRules.ActionDelay(build, skill.CastTimeTicks, tags), skill.CooldownTicks);
-        long dps = expectedHit * 20 / actionTicks;
+        int frequencyMilliPerSecond = P6CombatSkillRules.ActionFrequencyMilliPerSecond(build,
+            skill.CastTimeTicks, skill.CooldownTicks, tags);
+        long dps = expectedHit * frequencyMilliPerSecond / 1_000;
         if (skill.Returns) dps *= 2;
 
         int baseMinimum = tags.HasFlag(SkillTag.Attack)
@@ -189,7 +190,7 @@ public static class P6BuildSummaryRules
             increased,
             checked((int)Math.Clamp(more - 10_000, int.MinValue, int.MaxValue)),
             tags.HasFlag(SkillTag.Spell),
-            checked(20_000 / actionTicks),
+            frequencyMilliPerSecond,
             accuracy,
             hitChance,
             criticalChance,
