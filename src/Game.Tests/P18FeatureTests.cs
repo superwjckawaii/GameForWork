@@ -121,6 +121,34 @@ public sealed class P18FeatureTests
     }
 
     [Fact]
+    public void IronGuardianCurrentDescriptionsDriveAttributesArmorAndBlockMath()
+    {
+        P18CombatProfile profile = new(P18Ascendancy.IronGuardian,
+        [
+            P18NodeIds.BastionArmorSmall, P18NodeIds.BastionArmorCore,
+            P18NodeIds.BastionAttackBlockSmall, P18NodeIds.BastionAttackBlockCore,
+            P18NodeIds.BastionSpellBlockSmall, P18NodeIds.BastionSpellBlockCore,
+        ]);
+        var original = new CharacterSheet(50, new CharacterAttributes(480, 10, 10, 10),
+            new DefensiveEquipment(1_000, 0, 0));
+
+        CharacterSheet sheet = P18AscendancyRules.ApplySheet(original, profile, shieldArmor: 400);
+        Assert.Equal(648, sheet.Attributes.Physique);
+        Assert.Equal(2_900, sheet.Equipment.Armor);
+        Assert.Equal(48_000, P18AscendancyRules.IncreasedAttackDamageBasisPoints(profile,
+            sheet.Attributes.Physique));
+
+        int attackMaximum = P18AscendancyRules.AttackBlockMaximumBasisPoints(7_500, profile, true);
+        int attack = Math.Clamp(P18AscendancyRules.AttackBlockChanceBasisPoints(6_500, profile, true),
+            0, attackMaximum);
+        int spell = P18AscendancyRules.SpellBlockChanceBasisPoints(300, attack, profile, true);
+        Assert.Equal(8_000, attackMaximum);
+        Assert.Equal(8_000, attack);
+        Assert.Equal(5_900, spell);
+        Assert.Equal(0, new P18CombatRuntime(profile).IncomingHitMultiplier(true, true, 0));
+    }
+
+    [Fact]
     public void MarchRequiresSixMetersAndNextSlamConsumesIt()
     {
         var runtime = new P18CombatRuntime(new(P18Ascendancy.Warbreaker,

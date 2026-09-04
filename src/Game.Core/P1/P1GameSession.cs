@@ -1370,7 +1370,10 @@ public sealed class P1GameSession
             Passives,
             new SkillConfiguration(P1SkillIds.HeavyStrike, HeavyStrikeSupports),
             Jewels);
-        return build with { Sheet = P18AscendancyRules.ApplySheet(build.Sheet, AscendancyProfile()) };
+        return build with
+        {
+            Sheet = P18AscendancyRules.ApplySheet(build.Sheet, AscendancyProfile(), build.Equipment.ShieldArmor),
+        };
     }
 
     private static CombatPreview Preview(AssembledCharacterBuild build) => CombatPreviewRules.Calculate(
@@ -1644,7 +1647,8 @@ public sealed class P1GameSession
         HasUsableWeapon: build.HasUsableWeapon,
         PassiveProfile: build.Passives.Advanced,
         CriticalMultiplierBasisPoints: checked(15_000 + build.IncreasedCriticalMultiplierBasisPoints),
-        AlwaysHit: build.Passives.Advanced?.ResoluteTechnique == true,
+        AlwaysHit: build.Passives.Advanced?.ResoluteTechnique == true ||
+            P30MasteryRuntime.AlwaysHits(build.Passives.Advanced ?? P205PassiveModifiers.Empty, SkillTag.Attack),
         CannotCrit: build.Passives.Advanced?.ResoluteTechnique == true ||
             P30MasteryRuntime.CannotCrit(build.Passives.Advanced ?? P205PassiveModifiers.Empty),
         IncreasedWarCryCooldownRecoveryBasisPoints: build.Passives.IncreasedWarCryCooldownRecoveryBasisPoints,
@@ -1657,7 +1661,11 @@ public sealed class P1GameSession
         InstantLifeLeechBasisPoints: build.InstantLifeLeechBasisPoints,
         LocalWeaponStats: build.Equipment.LocalWeapon,
         IncreasedSpellDamageBasisPoints: build.IncreasedSpellDamageBasisPoints,
-        IncreasedAttackSpeedBasisPoints: build.IncreasedAttackSpeedBasisPoints) with
+        IncreasedAttackSpeedBasisPoints: build.IncreasedAttackSpeedBasisPoints,
+        MoreElementalDamageBasisPoints: build.MoreElementalDamageBasisPoints,
+        MoreVoidDamageBasisPoints: build.MoreVoidDamageBasisPoints,
+        MoreRareBossDamageBasisPoints: build.MoreRareBossDamageBasisPoints,
+        HasOffHand: build.HasOffHand) with
         {
             AiSummary = $"{ai.Preset} · {(ai.MatchMode == AiRuleMatchMode.All ? "全部满足" : "任一满足")}：" +
                 $"敌人≥{ai.MinimumEnemyCount}、稀有度 {ai.EnemyRarity}、距离≤{ai.MaximumEnemyDistance}、" +

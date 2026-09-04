@@ -440,8 +440,10 @@ public static class P30Jewels
                     case "critical": critical += affix.Value; break; case "critical_multi": criticalMulti += affix.Value; break;
                     case "instant_life": instantLife += affix.Value; break; case "instant_mana": instantMana += affix.Value; break;
                     case "instant_shield": instantShield += affix.Value; break;
-                    case "attack_more": moreAttack += affix.Value; break; case "spell_more": moreSpell += affix.Value; break;
-                    case "dot_more": moreDot += affix.Value; break; case "elemental_max": maximumElemental += affix.Value; break;
+                    case "attack_more": moreAttack = P30CombatRules.CombineMoreBasisPoints(moreAttack, affix.Value); break;
+                    case "spell_more": moreSpell = P30CombatRules.CombineMoreBasisPoints(moreSpell, affix.Value); break;
+                    case "dot_more": moreDot = P30CombatRules.CombineMoreBasisPoints(moreDot, affix.Value); break;
+                    case "elemental_max": maximumElemental += affix.Value; break;
                     case "void_max": maximumVoid += affix.Value; break; case "action_speed": actionSpeed += affix.Value; break;
                     case "instant_leech": instantLife += affix.Value; instantMana += affix.Value; instantShield += affix.Value; break;
                     case "reservation": reservation += affix.Value; break;

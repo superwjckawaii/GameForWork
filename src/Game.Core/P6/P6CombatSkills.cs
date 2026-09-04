@@ -212,24 +212,41 @@ public static class P6CombatSkillRules
 
     public static int ScaleOffensiveDamage(int rawDamage, P6ResolvedSkill skill,
         SkillConfiguration configuration, P1TeamBuild build, SkillTag tags,
-        int targetLife, int targetMaximumLife, int actionMultiplierBasisPoints = 10_000)
+        int targetLife, int targetMaximumLife, int actionMultiplierBasisPoints = 10_000,
+        bool targetRareOrBoss = false, P17DamageType? damageType = null,
+        int additionalIncreasedBasisPoints = 0)
     {
         P205PassiveModifiers passive = build.PassiveProfile ?? P205PassiveModifiers.Empty;
         long value = rawDamage;
         long increasedMultiplier = 10_000L + build.IncreasedDamageBasisPoints +
-            passive.DamageFor(tags) + (long)configuration.Quality * 100;
+            passive.DamageFor(tags) + (long)configuration.Quality * 100 + additionalIncreasedBasisPoints;
+        if (tags.HasFlag(SkillTag.Attack))
+            increasedMultiplier += P18.P18AscendancyRules.IncreasedAttackDamageBasisPoints(
+                build.Ascendancy ?? P18.P18CombatProfile.Empty, build.Sheet.Attributes.Physique);
         if (tags.HasFlag(SkillTag.Spell)) increasedMultiplier += build.IncreasedSpellDamageBasisPoints;
         value = Scale(value, increasedMultiplier);
         value = Scale(value, 10_000L + passive.MoreDamageBasisPoints);
-        int jewelMore = skill.Role == P17SkillRole.DamageOverTime ? build.MoreDamageOverTimeBasisPoints : 0;
-        if (tags.HasFlag(SkillTag.Attack)) jewelMore += build.MoreAttackDamageBasisPoints;
-        if (tags.HasFlag(SkillTag.Spell)) jewelMore += build.MoreSpellDamageBasisPoints;
-        value = Scale(value, 10_000L + jewelMore);
+        if (skill.Role == P17SkillRole.DamageOverTime)
+            value = Scale(value, 10_000L + build.MoreDamageOverTimeBasisPoints);
+        if (tags.HasFlag(SkillTag.Attack))
+            value = Scale(value, 10_000L + build.MoreAttackDamageBasisPoints);
+        if (tags.HasFlag(SkillTag.Spell))
+            value = Scale(value, 10_000L + build.MoreSpellDamageBasisPoints);
+        bool elementalDamage = damageType is P17DamageType.Fire or P17DamageType.Cold or P17DamageType.Lightning ||
+                               damageType is null && (tags & SkillTag.Elemental) != 0;
+        bool voidDamage = damageType == P17DamageType.Void ||
+                          damageType is null && tags.HasFlag(SkillTag.Void);
+        if (elementalDamage)
+            value = Scale(value, 10_000L + build.MoreElementalDamageBasisPoints);
+        if (voidDamage)
+            value = Scale(value, 10_000L + build.MoreVoidDamageBasisPoints);
+        if (targetRareOrBoss)
+            value = Scale(value, 10_000L + build.MoreRareBossDamageBasisPoints);
         if (tags.HasFlag(SkillTag.Attack))
             value = Scale(value, skill.BaseDamageBasisPoints);
         value = Scale(value, DamageMultiplier(skill, targetLife, targetMaximumLife));
         value = Scale(value, P30MasteryRuntime.OffensiveMultiplier(passive, tags, build.Weapon,
-            targetLife, targetMaximumLife));
+            targetLife, targetMaximumLife, hasOffHand: build.HasOffHand));
         return SaturatingInt(Scale(value, actionMultiplierBasisPoints));
     }
 

@@ -84,7 +84,10 @@ internal static class P30ExplicitMasteryEffects
     {
         ("双手", 0) or ("双手", 2) or ("剑类", 6) or ("属性", 3) or
         ("近战打击", 2) or ("破甲_物理穿透", 1) or ("眩晕", 1) or
-        ("护体_承伤缓冲", 0) or ("偷取", 0) or ("双手", 5) => new(PassiveEffectKind.MoreDamageBasisPoints, 0),
+        ("护体_承伤缓冲", 0) or ("偷取", 0) or ("双手", 5) or
+        ("生命", 0) or ("生命", 3) or ("能量护盾", 0) or ("能量护盾", 1) or
+        ("法力", 2) or ("护甲", 0) or ("闪避", 0) or ("闪避", 3) or
+        ("攻击", 0) or ("斧类", 0) or ("单手", 0) => new(fallback.Kind, 0),
         _ => fallback,
     };
 }

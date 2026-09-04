@@ -110,7 +110,8 @@ public static class P6BuildSummaryRules
         SkillTag tags = P1Skills.Get(configuration.SkillId).Tags;
         int raw = P6CombatSkillRules.BaseDamage(skill, tags, build.Weapon, build.AddedPhysicalDamage);
         int hit = P6CombatSkillRules.ScaleOffensiveDamage(raw, skill, configuration, build,
-            tags, targetLife: 100_000, targetMaximumLife: 100_000);
+            tags, targetLife: 100_000, targetMaximumLife: 100_000, targetRareOrBoss: true,
+            damageType: skill.DamageType);
         if (skill.DamageType == P17DamageType.Physical)
         {
             int reduction = DamageRules.ArmorReduction(25, Math.Max(1, hit)).Value;
@@ -121,10 +122,23 @@ public static class P6BuildSummaryRules
             localWeapon.Lightning.Minimum + localWeapon.Void.Minimum);
         int addedMaximum = localWeapon is null ? 0 : checked(localWeapon.Fire.Maximum + localWeapon.Cold.Maximum +
             localWeapon.Lightning.Maximum + localWeapon.Void.Maximum);
-        int addedAverage = checked((addedMinimum + addedMaximum) / 2);
-        if (addedAverage > 0)
-            hit = checked(hit + P6CombatSkillRules.ScaleOffensiveDamage(addedAverage, skill, configuration, build,
-                tags, targetLife: 100_000, targetMaximumLife: 100_000));
+        if (localWeapon is not null)
+        {
+            foreach ((LocalDamageRange range, P17DamageType type) in new[]
+                     {
+                         (localWeapon.Fire, P17DamageType.Fire),
+                         (localWeapon.Cold, P17DamageType.Cold),
+                         (localWeapon.Lightning, P17DamageType.Lightning),
+                         (localWeapon.Void, P17DamageType.Void),
+                     })
+            {
+                int average = checked((range.Minimum + range.Maximum) / 2);
+                if (average <= 0) continue;
+                hit = checked(hit + P6CombatSkillRules.ScaleOffensiveDamage(average, skill, configuration, build,
+                    tags, targetLife: 100_000, targetMaximumLife: 100_000, targetRareOrBoss: true,
+                    damageType: type));
+            }
+        }
         int accuracy = build.Sheet.Accuracy(build.FlatAccuracy).Value;
         int hitChance = build.AlwaysHit || tags.HasFlag(SkillTag.Spell)
             ? 10_000 : DamageRules.HitChance(accuracy, 20, false).Value;
@@ -148,15 +162,26 @@ public static class P6BuildSummaryRules
                 skill.BaseDamageBasisPoints) + ScaleToInt(addedMaximum, skill.BaseDamageBasisPoints)
             : skill.BaseDamageBasisPoints;
         int increased = checked(build.IncreasedDamageBasisPoints + passive.DamageFor(tags) + configuration.Quality * 100);
+        if (tags.HasFlag(SkillTag.Attack))
+            increased = checked(increased + P18.P18AscendancyRules.IncreasedAttackDamageBasisPoints(
+                build.Ascendancy ?? P18.P18CombatProfile.Empty, build.Sheet.Attributes.Physique));
         if (tags.HasFlag(SkillTag.Spell)) increased = checked(increased + build.IncreasedSpellDamageBasisPoints);
-        int jewelMore = skill.Role == P17SkillRole.DamageOverTime ? build.MoreDamageOverTimeBasisPoints : 0;
-        if (tags.HasFlag(SkillTag.Attack)) jewelMore += build.MoreAttackDamageBasisPoints;
-        if (tags.HasFlag(SkillTag.Spell)) jewelMore += build.MoreSpellDamageBasisPoints;
         long more = Math.Max(0, 10_000L + passive.MoreDamageBasisPoints);
-        more = ScaleMultiplier(more, 10_000L + jewelMore);
+        if (skill.Role == P17SkillRole.DamageOverTime)
+            more = ScaleMultiplier(more, 10_000L + build.MoreDamageOverTimeBasisPoints);
+        if (tags.HasFlag(SkillTag.Attack))
+            more = ScaleMultiplier(more, 10_000L + build.MoreAttackDamageBasisPoints);
+        if (tags.HasFlag(SkillTag.Spell))
+            more = ScaleMultiplier(more, 10_000L + build.MoreSpellDamageBasisPoints);
+        if ((tags & SkillTag.Elemental) != 0)
+            more = ScaleMultiplier(more, 10_000L + build.MoreElementalDamageBasisPoints);
+        if (tags.HasFlag(SkillTag.Void))
+            more = ScaleMultiplier(more, 10_000L + build.MoreVoidDamageBasisPoints);
+        more = ScaleMultiplier(more, 10_000L + build.MoreRareBossDamageBasisPoints);
         more = ScaleMultiplier(more, P6CombatSkillRules.DamageMultiplier(skill, 100_000, 100_000));
         more = ScaleMultiplier(more,
-            P30MasteryRuntime.OffensiveMultiplier(passive, tags, build.Weapon, 100_000, 100_000));
+            P30MasteryRuntime.OffensiveMultiplier(passive, tags, build.Weapon, 100_000, 100_000,
+                hasOffHand: build.HasOffHand));
         return new P6OffenseBreakdown(
             checked((int)Math.Clamp(dps, 0, int.MaxValue)),
             Math.Max(1, baseMinimum),
@@ -190,16 +215,14 @@ public static class P6BuildSummaryRules
         int evasion = sheet.Evasion().Value;
         int representativeHit = Math.Max(10, sheet.Level * 10);
         int representativeAccuracy = Math.Max(20, sheet.Level * 2);
-        int physicalBlock = build.BlockChanceBasisPoints;
-        int spellBlock = checked(build.BlockChanceBasisPoints + sheet.SpellBlockChanceBasisPoints);
         P18.P18CombatProfile ascendancy = build.Ascendancy ?? new P18.P18CombatProfile(P18.P18Ascendancy.None, []);
-        if (build.HasShield && ascendancy.Has(P18.P18NodeIds.BastionAttackBlockSmall)) physicalBlock += 800;
-        if (build.HasShield && ascendancy.Has(P18.P18NodeIds.BastionAttackBlockCore)) physicalBlock += 1_200;
-        if (build.HasShield && ascendancy.Has(P18.P18NodeIds.BastionSpellBlockSmall)) spellBlock += 800;
-        if (build.HasShield && ascendancy.Has(P18.P18NodeIds.BastionSpellBlockCore))
-            spellBlock += build.BlockChanceBasisPoints * 6 / 10;
-        int physicalBlockMaximum = ascendancy.Has(P18.P18NodeIds.BastionAttackBlockCore)
-            ? 8_000 : sheet.MaximumBlockChanceBasisPoints;
+        int physicalBlock = P18.P18AscendancyRules.AttackBlockChanceBasisPoints(
+            build.BlockChanceBasisPoints, ascendancy, build.HasShield);
+        int physicalBlockMaximum = P18.P18AscendancyRules.AttackBlockMaximumBasisPoints(
+            sheet.MaximumBlockChanceBasisPoints, ascendancy, build.HasShield);
+        int finalPhysicalBlock = build.HasShield ? Math.Clamp(physicalBlock, 0, physicalBlockMaximum) : 0;
+        int spellBlock = P18.P18AscendancyRules.SpellBlockChanceBasisPoints(
+            sheet.SpellBlockChanceBasisPoints, finalPhysicalBlock, ascendancy, build.HasShield);
         return new P6DefenseBreakdown(
             sheet.MaximumLife().Value,
             sheet.MaximumShield().Value,
@@ -218,7 +241,7 @@ public static class P6BuildSummaryRules
             sheet.VoidResistanceBasisPoints,
             P30CombatRules.EffectiveResistance(sheet.VoidResistanceBasisPoints, sheet.MaximumVoidResistanceBasisPoints),
             physicalBlock,
-            build.HasShield ? Math.Clamp(physicalBlock, 0, physicalBlockMaximum) : 0,
+            finalPhysicalBlock,
             spellBlock,
             build.HasShield ? Math.Clamp(spellBlock, 0, sheet.MaximumSpellBlockChanceBasisPoints) : 0,
             sheet.SpellSuppressionBasisPoints,

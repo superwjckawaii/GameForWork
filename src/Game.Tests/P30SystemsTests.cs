@@ -17,6 +17,71 @@ namespace GameForWork.Tests;
 public sealed class P30SystemsTests
 {
     [Fact]
+    public void MoreModifiersCompoundAcrossIndependentDamageBuckets()
+    {
+        Assert.Equal(5_600, P30CombatRules.CombineMoreBasisPoints(2_000, 3_000));
+        SkillConfiguration configuration = new(P1SkillIds.HeavyStrike, SkillSupport.None);
+        WeaponProfile weapon = EquipmentCatalog.GetBase("core.base.rusted_greatsword").ToWeaponProfile() with
+        { MinimumPhysicalDamage = 100, MaximumPhysicalDamage = 100 };
+        var sheet = new CharacterSheet(1, new CharacterAttributes(20, 10, 10, 10),
+            new DefensiveEquipment(0, 0, 0));
+        P6ResolvedSkill skill = P6CombatSkillRules.Resolve(configuration, sheet.MaximumLife().Value) with
+        { Role = P17SkillRole.DamageOverTime };
+        var baselineBuild = new P1TeamBuild(sheet, weapon, configuration);
+        P1TeamBuild moreBuild = baselineBuild with
+        {
+            MoreAttackDamageBasisPoints = 2_000,
+            MoreDamageOverTimeBasisPoints = 3_000,
+            MoreElementalDamageBasisPoints = 1_000,
+            MoreRareBossDamageBasisPoints = 400,
+        };
+        SkillTag tags = SkillTag.Attack | SkillTag.Fire | SkillTag.Duration;
+
+        int baseline = P6CombatSkillRules.ScaleOffensiveDamage(100, skill, configuration,
+            baselineBuild, tags, 10_000, 10_000, targetRareOrBoss: true);
+        int actual = P6CombatSkillRules.ScaleOffensiveDamage(100, skill, configuration,
+            moreBuild, tags, 10_000, 10_000, targetRareOrBoss: true);
+        long expected = baseline;
+        foreach (int multiplier in new[] { 12_000, 13_000, 11_000, 10_400 })
+            expected = expected * multiplier / 10_000;
+        Assert.Equal((int)expected, actual);
+    }
+
+    [Fact]
+    public void ResourceAndWeaponMasteriesUseTheirDescribedMoreMultipliers()
+    {
+        P205PassiveModifiers resources = P205PassiveModifiers.Empty with
+        {
+            MasteryMechanics = string.Join('|',
+                "p30.mastery.rule.生命.0",
+                "p30.mastery.rule.生命.3",
+                "p30.mastery.rule.偷取.0"),
+        };
+        Assert.Equal(18_200, P30MasteryRuntime.MaximumLifeMultiplier(resources));
+        Assert.Equal(0, P30MasteryRuntime.ShieldMultiplier(resources));
+        Assert.Equal(10_000, P30MasteryRuntime.IncreasedLifeLeechRecoverySpeed(resources));
+
+        P205PassiveModifiers oneHand = P205PassiveModifiers.Empty with
+        { MasteryMechanics = "p30.mastery.rule.单手.0" };
+        WeaponProfile sword = EquipmentCatalog.Bases.First(item => item.Category == ItemCategory.OneHandWeapon)
+            .ToWeaponProfile();
+        Assert.Equal(16_000, P30MasteryRuntime.OffensiveMultiplier(oneHand,
+            SkillTag.Attack | SkillTag.Physical, sword, 100, 100, hasOffHand: false));
+        Assert.Equal(10_000, P30MasteryRuntime.OffensiveMultiplier(oneHand,
+            SkillTag.Attack | SkillTag.Physical, sword, 100, 100, hasOffHand: true));
+    }
+
+    [Fact]
+    public void MaximumLifeMoreMultiplierIsSeparateFromIncreasedLife()
+    {
+        var sheet = new CharacterSheet(1, new CharacterAttributes(10, 10, 10, 10),
+            new DefensiveEquipment(0, 0, 0), IncreasedMaximumLifeBasisPoints: 1_000,
+            MaximumLifeMultiplierBasisPoints: 13_000);
+
+        Assert.Equal(139, sheet.MaximumLife().Value);
+    }
+
+    [Fact]
     public void VersionTwentyThreeCitadelVictoriesGrantExactlyOneTargetedCompensation()
     {
         P1GameSession source = P1GameSession.CreateNew(new("补偿测试", CharacterGender.Androgynous,

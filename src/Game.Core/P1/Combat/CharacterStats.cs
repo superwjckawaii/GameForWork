@@ -40,7 +40,11 @@ public sealed record CharacterSheet(
     int SpellSuppressionEffectBasisPoints = 7_000,
     int SpellBlockChanceBasisPoints = 0,
     int MaximumSpellBlockChanceBasisPoints = 7_500,
-    int IncreasedRecoveryRateBasisPoints = 0)
+    int IncreasedRecoveryRateBasisPoints = 0,
+    int MaximumLifeMultiplierBasisPoints = 10_000,
+    int MaximumManaMultiplierBasisPoints = 10_000,
+    int MaximumShieldMultiplierBasisPoints = 10_000,
+    int IncreasedLifeLeechRecoverySpeedBasisPoints = 0)
 {
     public int CappedResistance(int value) => Math.Clamp(value, P30CombatRules.MinimumResistance,
         MaximumElementalResistanceBasisPoints);
@@ -63,18 +67,20 @@ public sealed record CharacterSheet(
         var trace = new FormulaTraceBuilder();
         int baseLife = checked(80 + (8 * Level) + Attributes.Physique + FlatMaximumLife);
         trace.Add("基础最大生命", $"80 + 8 × {Level} + {Attributes.Physique} + {FlatMaximumLife}", baseLife);
-        int final = P30CombatRules.MaximumLife(Level, Attributes.Physique, FlatMaximumLife,
+        int increased = P30CombatRules.MaximumLife(Level, Attributes.Physique, FlatMaximumLife,
             IncreasedMaximumLifeBasisPoints);
-        trace.Add("最大生命增加", $"{baseLife} × (10000 + {IncreasedMaximumLifeBasisPoints}) / 10000", final);
+        trace.Add("最大生命增加", $"{baseLife} × (10000 + {IncreasedMaximumLifeBasisPoints}) / 10000", increased);
+        int final = P30CombatRules.ApplyMore(increased, [MaximumLifeMultiplierBasisPoints]);
+        trace.Add("最大生命更多/更少", $"× {MaximumLifeMultiplierBasisPoints} / 10000", final);
         return trace.Build(final);
     }
 
     public CalculatedValue MaximumMana()
     {
         int value = P30CombatRules.MaximumMana(Level, Attributes.Spirit, FlatMaximumMana,
-            IncreasedMaximumManaBasisPoints);
+            IncreasedMaximumManaBasisPoints, [MaximumManaMultiplierBasisPoints]);
         return CalculatedValue.Single("最大法力",
-            $"(40 + 2 × {Level} + 2 × {Attributes.Spirit} + {FlatMaximumMana}) × (10000 + {IncreasedMaximumManaBasisPoints}) / 10000",
+            $"(40 + 2 × {Level} + 2 × {Attributes.Spirit} + {FlatMaximumMana}) × (10000 + {IncreasedMaximumManaBasisPoints}) / 10000 × {MaximumManaMultiplierBasisPoints} / 10000",
             value);
     }
 
@@ -83,9 +89,11 @@ public sealed record CharacterSheet(
         var trace = new FormulaTraceBuilder();
         int baseShield = checked(Equipment.Shield + (2 * Attributes.Energy) + FlatMaximumShield);
         trace.Add("基础最大护盾", $"{Equipment.Shield} + 2 × {Attributes.Energy} + {FlatMaximumShield}", baseShield);
-        int final = P30CombatRules.MaximumShield(Equipment.Shield, Attributes.Energy, FlatMaximumShield,
+        int increased = P30CombatRules.MaximumShield(Equipment.Shield, Attributes.Energy, FlatMaximumShield,
             IncreasedShieldBasisPoints);
-        trace.Add("最大护盾增加", $"{baseShield} × (10000 + {IncreasedShieldBasisPoints}) / 10000", final);
+        trace.Add("最大护盾增加", $"{baseShield} × (10000 + {IncreasedShieldBasisPoints}) / 10000", increased);
+        int final = P30CombatRules.ApplyMore(increased, [MaximumShieldMultiplierBasisPoints]);
+        trace.Add("最大护盾更多/更少", $"× {MaximumShieldMultiplierBasisPoints} / 10000", final);
         return trace.Build(final);
     }
 
@@ -279,7 +287,8 @@ public sealed class ResourceState
         return Shield - previous;
     }
 
-    public void AddLifeLeech(int amount) => AddLeech(_lifeLeech, amount);
+    public void AddLifeLeech(int amount) => AddLeech(_lifeLeech, amount,
+        Sheet.IncreasedLifeLeechRecoverySpeedBasisPoints);
     public void AddManaLeech(int amount) => AddLeech(_manaLeech, amount);
     public void AddShieldLeech(int amount) => AddLeech(_shieldLeech, amount);
 
@@ -312,10 +321,14 @@ public sealed class ResourceState
         _shieldRecoveryRemainder %= ticksPerSecond;
     }
 
-    private static void AddLeech(ICollection<LeechInstance> instances, int amount)
+    private static void AddLeech(ICollection<LeechInstance> instances, int amount,
+        int increasedRecoverySpeedBasisPoints = 0)
     {
         if (amount <= 0) return;
-        instances.Add(new(amount, Math.Max(1, (amount + 1) / 2)));
+        long basePerSecond = ((long)amount + 1) / 2;
+        int scaledPerSecond = (int)Math.Clamp(basePerSecond *
+            Math.Max(0L, 10_000L + increasedRecoverySpeedBasisPoints) / 10_000, 1, int.MaxValue);
+        instances.Add(new(amount, scaledPerSecond));
     }
 
     private static void AdvanceLeech(List<LeechInstance> instances, int maximum, Func<int, int> restore)

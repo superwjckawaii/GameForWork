@@ -774,16 +774,23 @@ public sealed class PassiveTreeAllocation
     public PassiveBuildModifiers CalculateModifiers()
     {
         int[] sums = new int[Enum.GetValues<PassiveEffectKind>().Length];
+        void Accumulate(PassiveEffect effect)
+        {
+            int index = (int)effect.Kind;
+            sums[index] = effect.Kind == PassiveEffectKind.MoreDamageBasisPoints
+                ? P30CombatRules.CombineMoreBasisPoints(sums[index], effect.Value)
+                : checked(sums[index] + effect.Value);
+        }
         foreach (PassiveEffect effect in _allocated
                      .Select(P1PassiveTree.Get)
                      .SelectMany(node => node.Effects))
         {
-            sums[(int)effect.Kind] = checked(sums[(int)effect.Kind] + effect.Value);
+            Accumulate(effect);
         }
         foreach ((string id, int option) in _masterySelections)
         {
             PassiveEffect effect = P1PassiveTree.MasteryOptions(P1PassiveTree.Get(id))[option];
-            sums[(int)effect.Kind] = checked(sums[(int)effect.Kind] + effect.Value);
+            Accumulate(effect);
         }
         foreach ((string socket, PassiveJewelKind jewel) in _socketedJewels)
         {
@@ -794,7 +801,7 @@ public sealed class PassiveTreeAllocation
                 PassiveJewelKind.VerdantMemory => new(PassiveEffectKind.IncreasedMaximumLifeBasisPoints, 600 * radiusMultiplier),
                 _ => new(PassiveEffectKind.IncreasedMovementSpeedBasisPoints, 250 * radiusMultiplier),
             };
-            sums[(int)effect.Kind] = checked(sums[(int)effect.Kind] + effect.Value);
+            Accumulate(effect);
         }
 
         return new PassiveBuildModifiers(

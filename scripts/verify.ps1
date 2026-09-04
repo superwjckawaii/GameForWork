@@ -63,7 +63,7 @@ Invoke-NativeChecked -FilePath $dotnetBinary -Arguments @('run', '--project',
     (Join-Path $repositoryRoot 'tools\P32Audit\P32Audit.csproj'), '--configuration', $Configuration, '--no-build', '--',
     $equipmentAudit) -Label 'Regenerate P32 equipment audit'
 function Read-NormalizedText([string]$Path) {
-    return (Get-Content -LiteralPath $Path -Raw).Replace("`r`n", "`n")
+    return (Get-Content -LiteralPath $Path -Raw -Encoding UTF8).Replace("`r`n", "`n")
 }
 if ((Read-NormalizedText $economyAudit) -ne
     (Read-NormalizedText (Join-Path $repositoryRoot 'docs\v0.4\P29_ECONOMY_AUDIT.md'))) {

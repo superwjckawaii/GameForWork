@@ -58,7 +58,8 @@ public sealed record EquipmentSummary(
     int BaseBlockChanceBasisPoints = 0,
     int SpiritBarrier = 0,
     LocalWeaponStats? LocalWeapon = null,
-    EquipmentEffectSnapshot? Effects = null);
+    EquipmentEffectSnapshot? Effects = null,
+    int ShieldArmor = 0);
 
 public readonly record struct LocalDamageRange(int Minimum, int Maximum)
 {
@@ -222,6 +223,7 @@ public sealed class EquipmentLoadout
             sums[(int)ItemModifierKind.SupportSkillGemLevels],
             extended);
         ItemInstance? weaponItem = _items.GetValueOrDefault(EquipmentSlot.MainHand);
+        ItemInstance? offHandItem = _items.GetValueOrDefault(EquipmentSlot.OffHand);
         LocalWeaponStats? localWeapon = weaponItem?.Base.Category is ItemCategory.TwoHandWeapon or ItemCategory.OneHandWeapon
             ? CalculateLocalWeapon(weaponItem)
             : null;
@@ -236,7 +238,11 @@ public sealed class EquipmentLoadout
             equipped.Sum(LocalBlock),
             spiritBarrier,
             localWeapon,
-            EquipmentEffectCompiler.Compile(extended));
+            EquipmentEffectCompiler.Compile(extended),
+            offHandItem?.Base.Category == ItemCategory.Shield
+                ? LocalDefense(offHandItem, offHandItem.EffectiveBaseArmor,
+                    ItemModifierKind.FlatArmor, ItemModifierKind.IncreasedArmorBasisPoints)
+                : 0);
     }
 
     public static LocalWeaponStats CalculateLocalWeapon(ItemInstance item)
@@ -300,7 +306,7 @@ public sealed class EquipmentLoadout
     {
         int flat = LocalValue(item, flatKind);
         int increased = LocalValue(item, increasedKind);
-        int more = LocalValue(item, flatKind switch
+        int more = LocalMoreValue(item, flatKind switch
         {
             ItemModifierKind.FlatArmor => ItemModifierKind.MoreLocalArmorBasisPoints,
             ItemModifierKind.FlatEvasion => ItemModifierKind.MoreLocalEvasionBasisPoints,
@@ -334,12 +340,39 @@ public sealed class EquipmentLoadout
         return value;
     }
 
+    private static int LocalMoreValue(ItemInstance item, ItemModifierKind kind)
+    {
+        if (kind == ItemModifierKind.None) return 0;
+        IEnumerable<int> values = item.EffectiveImplicitComponents
+            .Where(effect => effect.Kind == kind && effect.Scope == ItemModifierScope.LocalDefense)
+            .Select(effect => effect.Value)
+            .Concat(item.Affixes.SelectMany(affix => affix.Effects)
+                .Where(effect => effect.Kind == kind && effect.Scope == ItemModifierScope.LocalDefense)
+                .Select(effect => effect.Value))
+            .Concat(item.Enchantment?.EffectComponents
+                .Where(effect => effect.Kind == kind && effect.Scope == ItemModifierScope.LocalDefense)
+                .Select(effect => effect.MinimumValue) ?? [])
+            .Concat(item.CorruptionComponents
+                .Where(effect => effect.Kind == kind && effect.Scope == ItemModifierScope.LocalDefense)
+                .Select(effect => effect.Value));
+        return values.Aggregate(0, P30CombatRules.CombineMoreBasisPoints);
+    }
+
     private static void AddGlobal(int[] sums, ItemModifierKind kind, int value, ItemModifierScope scope)
     {
         if (kind == ItemModifierKind.None || scope is ItemModifierScope.LocalWeapon or ItemModifierScope.LocalDefense or ItemModifierScope.LocalBlock)
             return;
-        sums[(int)kind] = checked(sums[(int)kind] + value);
+        sums[(int)kind] = IsMoreModifier(kind)
+            ? P30CombatRules.CombineMoreBasisPoints(sums[(int)kind], value)
+            : checked(sums[(int)kind] + value);
     }
+
+    private static bool IsMoreModifier(ItemModifierKind kind) => kind is
+        ItemModifierKind.MoreRareBossDamageBasisPoints or
+        ItemModifierKind.MoreElementalDamageBasisPoints or
+        ItemModifierKind.MoreVoidDamageBasisPoints or
+        ItemModifierKind.MoreAttackDamageBasisPoints or
+        ItemModifierKind.MoreSpellDamageBasisPoints;
 
     public static bool CanEquip(EquipmentSlot slot, ItemCategory category) => category switch
     {

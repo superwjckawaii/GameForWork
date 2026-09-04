@@ -17,12 +17,18 @@ public static class P30MasteryRuntime
             .Contains($"{Prefix}{group}.{option}", StringComparer.Ordinal);
 
     public static int OffensiveMultiplier(P205PassiveModifiers profile, SkillTag tags, WeaponProfile weapon,
-        int targetLife, int targetMaximumLife, int nearbyEnemyCount = 1, int distanceRaw = 1_000)
+        int targetLife, int targetMaximumLife, int nearbyEnemyCount = 1, int distanceRaw = 1_000,
+        bool hasOffHand = false)
     {
         int result = 10_000;
         bool attack = tags.HasFlag(SkillTag.Attack);
         bool hit = !tags.HasFlag(SkillTag.Duration);
         bool twoHand = IsCategory(weapon, ItemCategory.TwoHandWeapon);
+        if (attack && hit && Has(profile, "攻击", 0)) result = Multiply(result, 14_000);
+        if (attack && hit && tags.HasFlag(SkillTag.Physical) && IsFamily(weapon, WeaponFamily.Axe) &&
+            Has(profile, "斧类", 0)) result = Multiply(result, 16_000);
+        if (attack && hit && IsCategory(weapon, ItemCategory.OneHandWeapon) && !hasOffHand &&
+            Has(profile, "单手", 0)) result = Multiply(result, 16_000);
         if (attack && hit && twoHand && Has(profile, "双手", 0)) result = Multiply(result, 20_000);
         if (attack && hit && twoHand && Has(profile, "双手", 2) &&
             (long)targetLife * 10_000 > (long)targetMaximumLife * 7_000)
@@ -46,17 +52,42 @@ public static class P30MasteryRuntime
             result = Multiply(result, 13_500);
         if (tags.HasFlag(SkillTag.Attack) && IsCategory(weapon, ItemCategory.TwoHandWeapon) && Has(profile, "双手", 0))
             result = Multiply(result, 6_500);
+        if (tags.HasFlag(SkillTag.Attack) && IsFamily(weapon, WeaponFamily.Axe) && Has(profile, "斧类", 0))
+            result = Multiply(result, 8_500);
         return result;
     }
 
     public static bool CannotCrit(P205PassiveModifiers profile) =>
-        Has(profile, "眩晕", 1) || Has(profile, "暴击", 6) || Has(profile, "斧类", 0);
+        Has(profile, "眩晕", 1) || Has(profile, "暴击", 6) || Has(profile, "斧类", 0) ||
+        Has(profile, "攻击", 0);
+
+    public static bool AlwaysHits(P205PassiveModifiers profile, SkillTag tags) =>
+        tags.HasFlag(SkillTag.Attack) && Has(profile, "攻击", 0);
 
     public static int AdditionalLifeLeech(P205PassiveModifiers profile) => Has(profile, "偷取", 0) ? 300 : 0;
+    public static int IncreasedLifeLeechRecoverySpeed(P205PassiveModifiers profile) =>
+        Has(profile, "偷取", 0) ? 10_000 : 0;
 
     public static int AdditionalBleedChance(P205PassiveModifiers profile, SkillTag tags, WeaponProfile weapon) =>
         tags.HasFlag(SkillTag.Attack) && tags.HasFlag(SkillTag.Physical) && IsFamily(weapon, WeaponFamily.Sword) &&
         Has(profile, "剑类", 5) ? 3_000 : 0;
+
+    public static int ArmorMultiplier(P205PassiveModifiers profile, WeaponProfile weapon)
+    {
+        int result = IsCategory(weapon, ItemCategory.TwoHandWeapon) && Has(profile, "双手", 5) ? 14_000 : 10_000;
+        if (Has(profile, "护甲", 0)) result = Multiply(result, 16_000);
+        if (Has(profile, "闪避", 0)) result = Multiply(result, 5_000);
+        return result;
+    }
+
+    public static int EvasionMultiplier(P205PassiveModifiers profile, WeaponProfile weapon, bool hasShield)
+    {
+        int result = IsCategory(weapon, ItemCategory.TwoHandWeapon) && Has(profile, "双手", 5) ? 14_000 : 10_000;
+        if (Has(profile, "护甲", 0)) result = Multiply(result, 5_000);
+        if (Has(profile, "闪避", 0)) result = Multiply(result, 16_000);
+        if (!hasShield && Has(profile, "闪避", 3)) result = Multiply(result, 13_500);
+        return result;
+    }
 
     public static int DefenseMultiplier(P205PassiveModifiers profile, WeaponProfile weapon) =>
         IsCategory(weapon, ItemCategory.TwoHandWeapon) && Has(profile, "双手", 5) ? 14_000 : 10_000;
@@ -64,11 +95,30 @@ public static class P30MasteryRuntime
     public static int IncomingAttackMultiplier(P205PassiveModifiers profile, WeaponProfile weapon) =>
         IsCategory(weapon, ItemCategory.TwoHandWeapon) && Has(profile, "双手", 5) ? 9_000 : 10_000;
 
+    public static int MaximumLifeMultiplier(P205PassiveModifiers profile)
+    {
+        int result = 10_000;
+        if (Has(profile, "生命", 0)) result = Multiply(result, 13_000);
+        if (Has(profile, "生命", 3)) result = Multiply(result, 14_000);
+        if (Has(profile, "能量护盾", 0)) result = Multiply(result, 5_000);
+        if (Has(profile, "能量护盾", 1)) result = Multiply(result, 11_500);
+        return result;
+    }
+
+    public static int MaximumManaMultiplier(P205PassiveModifiers profile) =>
+        Has(profile, "法力", 2) ? 12_000 : 10_000;
+
     public static int ShieldMultiplier(P205PassiveModifiers profile)
     {
         if (Has(profile, "生命", 3)) return 0;
-        return Has(profile, "生命", 0) ? 5_000 : 10_000;
+        int result = Has(profile, "生命", 0) ? 5_000 : 10_000;
+        if (Has(profile, "能量护盾", 0)) result = Multiply(result, 14_000);
+        if (Has(profile, "能量护盾", 1)) result = Multiply(result, 11_500);
+        return result;
     }
+
+    public static int FortificationMaximum(P205PassiveModifiers profile) =>
+        Has(profile, "护体_承伤缓冲", 0) ? 20 : 10;
 
     private static bool IsCategory(WeaponProfile weapon, ItemCategory category)
     {

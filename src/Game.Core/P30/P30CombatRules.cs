@@ -92,6 +92,17 @@ public static class P30CombatRules
         return result;
     }
 
+    /// <summary>Combines two independently-worded more/less modifiers stored as deltas from 100%.</summary>
+    public static int CombineMoreBasisPoints(int accumulatedMoreBasisPoints, int additionalMoreBasisPoints)
+    {
+        long left = Math.Max(0L, (long)Basis + accumulatedMoreBasisPoints);
+        long right = Math.Max(0L, (long)Basis + additionalMoreBasisPoints);
+        if (left == 0 || right == 0) return -Basis;
+        if (left > long.MaxValue / right) return int.MaxValue;
+        long multiplier = left * right / Basis;
+        return (int)Math.Clamp(multiplier - Basis, int.MinValue, int.MaxValue);
+    }
+
     public static int MaximumLife(int level, int physique, int flatLife, int increasedBasisPoints,
         IEnumerable<int>? moreMultipliers = null) => ApplyMore(
         ApplyIncreased(checked(80 + 8 * level + physique + flatLife), increasedBasisPoints),

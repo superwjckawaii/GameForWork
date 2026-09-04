@@ -376,7 +376,11 @@ public sealed record P1TeamBuild(
     int InstantLifeLeechBasisPoints = 0,
     LocalWeaponStats? LocalWeaponStats = null,
     int IncreasedSpellDamageBasisPoints = 0,
-    int IncreasedAttackSpeedBasisPoints = 0);
+    int IncreasedAttackSpeedBasisPoints = 0,
+    int MoreElementalDamageBasisPoints = 0,
+    int MoreVoidDamageBasisPoints = 0,
+    int MoreRareBossDamageBasisPoints = 0,
+    bool HasOffHand = false);
 
 public sealed record MapNodeResult(
     int NodeIndex,

@@ -113,6 +113,8 @@ public static class P22ReleaseTargets
             .Prepend(new SkillConfiguration(P1SkillIds.HeavyStrike, supports))
             .DistinctBy(skill => skill.SkillId)
             .ToArray();
+        var ascendancy = new P18CombatProfile(definition.Ascendancy, definition.Nodes);
+        sheet = P18AscendancyRules.ApplySheet(sheet, ascendancy);
         return new P1TeamBuild(sheet, weapon, skills[0],
             FlatAccuracy: endgame ? 5_000 : 2_500,
             IncreasedDamageBasisPoints: endgame ? 18_000 : 9_000,
@@ -125,7 +127,7 @@ public static class P22ReleaseTargets
             Flasks: [P1FlaskKind.Life, P1FlaskKind.Mana, P1FlaskKind.Armor],
             HasShield: bastion,
             BlockChanceBasisPoints: bastion ? (endgame ? 7_000 : 5_500) : 0,
-            Ascendancy: new P18CombatProfile(definition.Ascendancy, definition.Nodes),
+            Ascendancy: ascendancy,
             CriticalMultiplierBasisPoints: endgame ? 20_000 : 16_000);
     }
 }

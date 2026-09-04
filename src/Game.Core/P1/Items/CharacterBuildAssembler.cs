@@ -27,7 +27,11 @@ public sealed record AssembledCharacterBuild(
     WeaponProfile EffectiveWeapon,
     P30VirtueViceLoadout? VirtueViceLoadout = null,
     int IncreasedSpellDamageBasisPoints = 0,
-    int IncreasedAttackSpeedBasisPoints = 0)
+    int IncreasedAttackSpeedBasisPoints = 0,
+    int MoreElementalDamageBasisPoints = 0,
+    int MoreVoidDamageBasisPoints = 0,
+    int MoreRareBossDamageBasisPoints = 0,
+    bool HasOffHand = false)
 {
     public bool HasUsableWeapon => Equipment.Weapon is not null;
 
@@ -108,13 +112,12 @@ public static class CharacterBuildAssembler
             };
         }
         DefensiveEquipment defense = equipment.Defense;
-        int masteryDefense = P30MasteryRuntime.DefenseMultiplier(advanced, weapon);
         defense = defense with
         {
-            Armor = checked(defense.Armor * masteryDefense / 10_000),
-            Evasion = checked(defense.Evasion * masteryDefense / 10_000),
+            Armor = checked(defense.Armor * P30MasteryRuntime.ArmorMultiplier(advanced, weapon) / 10_000),
+            Evasion = checked(defense.Evasion * P30MasteryRuntime.EvasionMultiplier(
+                advanced, weapon, equipment.HasShield) / 10_000),
         };
-        defense = defense with { Shield = checked(defense.Shield * P30MasteryRuntime.ShieldMultiplier(advanced) / 10_000) };
         int evasionIncrease = checked(item.IncreasedEvasionBasisPoints + advanced.IncreasedEvasionBasisPoints);
         if (advanced.IronReflexes)
         {
@@ -160,7 +163,11 @@ public static class CharacterBuildAssembler
             MaximumBlockChanceBasisPoints: checked(7_500 + item.Value(ItemModifierKind.MaximumAttackBlockChanceBasisPoints)),
             SpellBlockChanceBasisPoints: item.Value(ItemModifierKind.SpellBlockChanceBasisPoints),
             MaximumSpellBlockChanceBasisPoints: checked(7_500 + item.Value(ItemModifierKind.MaximumSpellBlockChanceBasisPoints)),
-            IncreasedRecoveryRateBasisPoints: attributeMemory.IncreasedRecoveryRateBasisPoints);
+            IncreasedRecoveryRateBasisPoints: attributeMemory.IncreasedRecoveryRateBasisPoints,
+            MaximumLifeMultiplierBasisPoints: P30MasteryRuntime.MaximumLifeMultiplier(advanced),
+            MaximumManaMultiplierBasisPoints: P30MasteryRuntime.MaximumManaMultiplier(advanced),
+            MaximumShieldMultiplierBasisPoints: P30MasteryRuntime.ShieldMultiplier(advanced),
+            IncreasedLifeLeechRecoverySpeedBasisPoints: P30MasteryRuntime.IncreasedLifeLeechRecoverySpeed(advanced));
         int increasedAttackSpeed = checked(item.IncreasedAttackSpeedBasisPoints + passive.IncreasedAttackSpeedBasisPoints +
             jewel.IncreasedAttackSpeedBasisPoints + attributeMemory.IncreasedAttackSpeedBasisPoints);
         SkillUseProfile heavyStrike = SkillRules.BuildHeavyStrike(
@@ -187,8 +194,10 @@ public static class CharacterBuildAssembler
             checked(item.IncreasedCriticalChanceBasisPoints + advanced.IncreasedCriticalChanceBasisPoints + jewel.IncreasedCriticalChanceBasisPoints),
             checked(item.Value(ItemModifierKind.IncreasedCriticalMultiplierBasisPoints) +
                 advanced.IncreasedCriticalMultiplierBasisPoints + jewel.IncreasedCriticalMultiplierBasisPoints),
-            jewel.MoreAttackDamageBasisPoints,
-            checked(jewel.MoreSpellDamageBasisPoints + (equipment.Effects?.Value(ItemModifierKind.MoreSpellDamageBasisPoints) ?? 0)),
+            P30CombatRules.CombineMoreBasisPoints(jewel.MoreAttackDamageBasisPoints,
+                equipment.Effects?.Value(ItemModifierKind.MoreAttackDamageBasisPoints) ?? 0),
+            P30CombatRules.CombineMoreBasisPoints(jewel.MoreSpellDamageBasisPoints,
+                equipment.Effects?.Value(ItemModifierKind.MoreSpellDamageBasisPoints) ?? 0),
             jewel.MoreDamageOverTimeBasisPoints,
             jewel.IncreasedActionSpeedBasisPoints,
             jewel.InstantLifeLeechBasisPoints,
@@ -202,7 +211,11 @@ public static class CharacterBuildAssembler
             VirtueVice(item, jewel),
             checked(item.Value(ItemModifierKind.IncreasedSpellDamageBasisPoints) +
                 jewel.IncreasedSpellDamageBasisPoints + attributeMemory.IncreasedSpellDamageBasisPoints),
-            increasedAttackSpeed);
+            increasedAttackSpeed,
+            equipment.Effects?.Value(ItemModifierKind.MoreElementalDamageBasisPoints) ?? 0,
+            equipment.Effects?.Value(ItemModifierKind.MoreVoidDamageBasisPoints) ?? 0,
+            equipment.Effects?.Value(ItemModifierKind.MoreRareBossDamageBasisPoints) ?? 0,
+            loadout.Items.ContainsKey(EquipmentSlot.OffHand));
     }
 
     private static P30VirtueViceLoadout VirtueVice(EquipmentModifiers item, P30JewelModifiers jewel)

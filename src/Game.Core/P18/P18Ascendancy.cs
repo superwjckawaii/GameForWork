@@ -241,18 +241,56 @@ public static class P18AscendancyRules
         return skill with { ManaCost = 0, LifeCost = Math.Max(skill.LifeCost, cost) };
     }
 
-    public static CharacterSheet ApplySheet(CharacterSheet sheet, P18CombatProfile profile)
+    public static CharacterSheet ApplySheet(CharacterSheet sheet, P18CombatProfile profile, int shieldArmor = 0)
     {
         int life = 0;
-        int armor = 0;
-        if (profile.Has(P18NodeIds.BloodLifeSmall)) life += 500;
-        if (profile.Has(P18NodeIds.BastionArmorSmall)) { life += 500; armor += 2_500; }
+        CharacterAttributes attributes = sheet.Attributes;
+        if (profile.Has(P18NodeIds.BloodLifeSmall)) life += 1_000;
+        if (profile.Has(P18NodeIds.BastionArmorSmall))
+            attributes = attributes with
+            {
+                Physique = checked((attributes.Physique + 120) * 10_800 / 10_000),
+            };
+        int flatArmor = profile.Has(P18NodeIds.BastionArmorCore)
+            ? checked(attributes.Physique / 100 * 300)
+            : 0;
+        if (profile.Has(P18NodeIds.BastionAttackBlockSmall))
+            flatArmor = checked(flatArmor + Math.Max(0, shieldArmor) * 2_500 / 10_000);
         if (profile.Has(P18NodeIds.BastionGuardCore)) life += 2_000;
         return sheet with
         {
+            Attributes = attributes,
+            Equipment = sheet.Equipment with { Armor = checked(sheet.Equipment.Armor + flatArmor) },
             IncreasedMaximumLifeBasisPoints = checked(sheet.IncreasedMaximumLifeBasisPoints + life),
-            IncreasedArmorBasisPoints = checked(sheet.IncreasedArmorBasisPoints + armor),
         };
+    }
+
+    public static int IncreasedAttackDamageBasisPoints(P18CombatProfile profile, int finalPhysique) =>
+        profile.Has(P18NodeIds.BastionArmorCore) ? checked(Math.Max(0, finalPhysique) / 100 * 8_000) : 0;
+
+    public static int AttackBlockChanceBasisPoints(int baseChance, P18CombatProfile profile, bool hasShield)
+    {
+        if (!hasShield) return 0;
+        int result = baseChance;
+        if (profile.Has(P18NodeIds.BastionAttackBlockSmall)) result = checked(result + 800);
+        if (profile.Has(P18NodeIds.BastionAttackBlockCore)) result = checked(result + 1_200);
+        return result;
+    }
+
+    public static int AttackBlockMaximumBasisPoints(int baseMaximum, P18CombatProfile profile, bool hasShield) =>
+        hasShield && profile.Has(P18NodeIds.BastionAttackBlockCore)
+            ? Math.Min(P30CombatRules.AbsoluteBlockMaximum, checked(baseMaximum + 500))
+            : baseMaximum;
+
+    public static int SpellBlockChanceBasisPoints(int baseChance, int finalAttackBlockChance,
+        P18CombatProfile profile, bool hasShield)
+    {
+        if (!hasShield) return 0;
+        int result = baseChance;
+        if (profile.Has(P18NodeIds.BastionSpellBlockSmall)) result = checked(result + 800);
+        if (profile.Has(P18NodeIds.BastionSpellBlockCore))
+            result = checked(result + finalAttackBlockChance * 6 / 10);
+        return result;
     }
 }
 
@@ -322,7 +360,8 @@ public sealed class P18CombatRuntime(P18CombatProfile profile)
     public int OnAttackBlock()
     {
         int multiplier = Has(P18NodeIds.BastionCounterCore) && RevengeLayers >= 3 ? 28_000 : 10_000;
-        if (Has(P18NodeIds.BastionCounterSmall)) multiplier = Multiply(multiplier, 13_000);
+        if (Has(P18NodeIds.BastionLayersCore) && BastionLayers >= 5)
+            multiplier = Multiply(multiplier, 15_000);
         RevengeLayers = Math.Min(3, RevengeLayers + 1);
         if (BastionLayers > 0) BastionLayers = 0;
         return multiplier;
@@ -336,12 +375,10 @@ public sealed class P18CombatRuntime(P18CombatProfile profile)
 
     public int IncomingHitMultiplier(bool spell, bool blocked, int tick)
     {
-        if (blocked && spell && Has(P18NodeIds.BastionSpellBlockCore)) return 3_000;
+        if (blocked && spell && Has(P18NodeIds.BastionSpellBlockCore)) return 0;
         int result = 10_000;
         if (!blocked && !spell && Has(P18NodeIds.BastionAttackBlockCore)) result = Multiply(result, 8_000);
         if (!blocked && spell && Has(P18NodeIds.BastionSpellBlockCore)) result = Multiply(result, 7_500);
-        if (Has(P18NodeIds.BastionArmorCore)) result = Multiply(result, spell ? 8_000 : 10_000);
-        if (!spell && tick < ArmorWindowUntilTick) result = Multiply(result, 8_000);
         if (Has(P18NodeIds.BastionLayersCore)) result = Multiply(result, 10_000 - BastionLayers * 500);
         if (tick < RecoveryProtectionUntilTick) result = Multiply(result, 8_000);
         return result;
@@ -349,6 +386,7 @@ public sealed class P18CombatRuntime(P18CombatProfile profile)
 
     public int PassiveRecoveryBasisPoints => Has(P18NodeIds.BastionLayersCore) && BastionLayers >= 5 ? 400 :
         Has(P18NodeIds.BastionLayersCore) && BastionLayers >= 3 ? 200 : 0;
+    public int ArmorMultiplier(int tick) => tick < ArmorWindowUntilTick ? 12_500 : 10_000;
     public void TriggerRecoveryProtection(int tick) { if (Has(P18NodeIds.BloodTideCore)) RecoveryProtectionUntilTick = tick + 40; }
     public int ArmorBreakMaximum => Has(P18NodeIds.BreakerArmorBreakCore) ? 8 : 5;
     public int ArmorBreakPerStackBasisPoints => Has(P18NodeIds.BreakerArmorBreakCore) ? 1_200 : 800;
