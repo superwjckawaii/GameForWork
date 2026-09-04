@@ -82,5 +82,6 @@ public static class P30MasteryRuntime
         catch (KeyNotFoundException) { return false; }
     }
 
-    private static int Multiply(int left, int right) => checked(left * right / 10_000);
+    private static int Multiply(int left, int right) =>
+        (int)Math.Clamp((long)left * right / 10_000, 0, int.MaxValue);
 }

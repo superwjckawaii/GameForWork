@@ -26,8 +26,6 @@ public partial class EquipmentCraftingPanel : VBoxContainer
     private HFlowContainer? _alchemy;
     private HFlowContainer? _garden;
     private Texture2D? _metalAtlas;
-    private ConfirmationDialog? _confirm;
-    private Action? _pending;
     private string _signature = string.Empty;
 
     public void Initialize(Func<P1GameSession> session, Func<EquipmentCraftTarget?> target, Action<string> changed)
@@ -43,7 +41,7 @@ public partial class EquipmentCraftingPanel : VBoxContainer
         AddChild(outerScroll);
         _body = new VBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
         outerScroll.AddChild(_body);
-        _body.AddChild(new Label { Text = "打造材料 · 不占普通仓库 · 悬浮任意材料或配方查看完整效果", AutowrapMode = TextServer.AutowrapMode.WordSmart });
+        _body.AddChild(new Label { Text = "打造材料 · 不占普通仓库 · 点击立即执行，无二次确认 · 悬浮查看完整效果", AutowrapMode = TextServer.AutowrapMode.WordSmart });
         _status = new Label { AutowrapMode = TextServer.AutowrapMode.WordSmart };
         _body.AddChild(_status);
         _grid = new GridContainer { Columns = 3, SizeFlagsHorizontal = SizeFlags.ExpandFill };
@@ -57,10 +55,6 @@ public partial class EquipmentCraftingPanel : VBoxContainer
         _body.AddChild(new Label { Text = "命能花园 · 确定性定向加工" });
         _garden = new HFlowContainer();
         _body.AddChild(_garden);
-        _confirm = new ConfirmationDialog { Title = "确认打造", OkButtonText = "确认使用", CancelButtonText = "取消", Exclusive = true };
-        _confirm.Confirmed += () => { Action? action = _pending; _pending = null; action?.Invoke(); };
-        _confirm.Canceled += () => _pending = null;
-        AddChild(_confirm);
     }
 
     public void Refresh(bool force = false)
@@ -69,10 +63,10 @@ public partial class EquipmentCraftingPanel : VBoxContainer
         P1GameSession session = _session();
         EquipmentCraftTarget? target = _target?.Invoke();
         string signature = string.Join('|', P4MetalCurrencies.All.Select(metal => session.World.Economy.MetalAmount(metal.Kind))) +
-            $"|{session.World.Economy.Gold}|{session.Endgame.LifeForce}|{session.Town.Level(P9BuildingKind.Workshop)}|{session.Town.Level(P9BuildingKind.Alchemy)}|{target?.Item.InstanceId}|{target?.Item.Affixes.Count}|{target?.Item.Quality}";
+            $"|{session.World.Economy.Gold}|{session.Endgame.LifeForce}|{session.Town.Level(P9BuildingKind.Workshop)}|{session.Town.Level(P9BuildingKind.Alchemy)}|{TargetSignature(target)}";
         if (!force && signature == _signature) return;
         _signature = signature;
-        _status!.Text = target is null ? "尚未选择装备：先在装备栏、整理背包或仓库中单击一件物品。" :
+        _status!.Text = target is null ? "尚未选择装备：将装备拖到工艺台，或在装备栏、整理背包、仓库中单击一件物品。" :
             $"当前目标：{target.Item.Base.DisplayName} · {target.Item.Rarity} · {target.Item.Affixes.Count} 词缀 · 品质 {target.Item.Quality}%" +
             (target.Item.IsCorrupted ? " · 已腐化" : string.Empty);
         foreach (Node child in _grid!.GetChildren()) child.QueueFree();
@@ -116,14 +110,9 @@ public partial class EquipmentCraftingPanel : VBoxContainer
         if (operation is null) { _changed?.Invoke("该金属没有正式做装操作。"); return; }
         EquipmentCraftingPreview preview = EquipmentCraftingService.Preview(target.Item, new(operation.Id));
         if (!preview.Available) { _changed?.Invoke(preview.Summary); return; }
-        string danger = kind == MetalCurrencyKind.CorruptionIron ? "\n\n警告：10% 概率彻底摧毁装备，此操作不可撤销。" : string.Empty;
-        string linkHint = kind == MetalCurrencyKind.ChainSteel ? "\n\n默认保证升连；按住 Shift 点击金属可重铸连接。" : string.Empty;
-        Confirm($"{preview.Summary}\n消耗：{preview.Cost} {preview.Resource}{danger}{linkHint}", () =>
-        {
-            EquipmentCraftingResult result = new P2ItemCommandService(_session!(), target.Character, target.MercenaryId)
-                .CraftEquipment(target.Container, target.Index, operation.DisplayName);
-            _changed?.Invoke(result.Summary);
-        });
+        EquipmentCraftingResult result = new P2ItemCommandService(_session!(), target.Character, target.MercenaryId)
+            .CraftEquipment(target.Container, target.Index, operation.DisplayName);
+        _changed?.Invoke(result.Summary);
     }
 
     private void RebuildEnchantments(P1GameSession session, EquipmentCraftTarget? target)
@@ -131,11 +120,15 @@ public partial class EquipmentCraftingPanel : VBoxContainer
         foreach (Node child in _enchants!.GetChildren()) child.QueueFree();
         foreach (ItemEnchantment enchantment in P9EnchantmentCatalog.All)
         {
+            EquipmentEnchantmentEntry entry = EquipmentEnchantmentCatalog.Entry(enchantment);
             var button = new Button
             {
                 Text = $"Lv.{enchantment.WorkshopLevel} {enchantment.DisplayName}\n{enchantment.GoldCost:N0} 金币",
-                TooltipText = $"{enchantment.DisplayName}\n完整效果：{ModifierText(enchantment.ModifierKind, enchantment.Value)}\n" +
-                              $"覆盖现有附魔 · 需要工坊 Lv.{enchantment.WorkshopLevel} · 消耗 {enchantment.GoldCost:N0} 金币",
+                TooltipText = $"{entry.DisplayName}（{entry.WorkshopLevel} 阶附魔）\n" +
+                              $"完整效果：{entry.RuleText}\n" +
+                              $"适用装备：{entry.ApplicableEquipment}\n" +
+                              $"获得方式：工坊 Lv.{entry.WorkshopLevel} · 消耗 {entry.GoldCost:N0} 金币\n" +
+                              "覆盖现有附魔；点击即执行；失败不扣费。",
                 Disabled = target is null || session.Town.Level(P9BuildingKind.Workshop) < enchantment.WorkshopLevel || session.World.Economy.Gold < enchantment.GoldCost,
             };
             button.Pressed += () =>
@@ -148,12 +141,9 @@ public partial class EquipmentCraftingPanel : VBoxContainer
                     WorkshopLevel: session.Town.Level(P9BuildingKind.Workshop));
                 EquipmentCraftingPreview preview = EquipmentCraftingService.Preview(current.Item, request);
                 if (!preview.Available) { _changed?.Invoke(preview.Summary); return; }
-                Confirm($"{preview.Summary}\n消耗：{preview.Cost:N0} {preview.Resource}", () =>
-                {
-                    EquipmentCraftingResult result = new P2ItemCommandService(_session!(), current.Character, current.MercenaryId)
-                        .CraftEquipment(current.Container, current.Index, operation.DisplayName, enchantment.StableId);
-                    _changed?.Invoke(result.Summary);
-                });
+                EquipmentCraftingResult result = new P2ItemCommandService(_session!(), current.Character, current.MercenaryId)
+                    .CraftEquipment(current.Container, current.Index, operation.DisplayName, enchantment.StableId);
+                _changed?.Invoke(result.Summary);
             };
             _enchants.AddChild(button);
         }
@@ -207,20 +197,17 @@ public partial class EquipmentCraftingPanel : VBoxContainer
             var button = new Button
             {
                 Text = $"{title}\n{cost:N0} {resource}",
-                TooltipText = $"{operation.RuleText}\n失败不扣费；随机结果只在确认执行后产生。",
+                TooltipText = $"{operation.RuleText}\n点击即执行；失败不扣费；随机结果在执行时产生。",
                 Disabled = target is null || preview?.Available != true || !HasResource(session, resource, cost),
             };
             button.Pressed += () =>
             {
                 EquipmentCraftTarget? current = _target?.Invoke();
                 if (current is null) return;
-                Confirm($"{title}\n消耗：{cost:N0} {resource}", () =>
-                {
-                    EquipmentCraftingResult result = new P2ItemCommandService(_session!(), current.Character, current.MercenaryId)
-                        .CraftEquipment(current.Container, current.Index, operation.DisplayName,
-                            selectedAffixFamilyId: familyId);
-                    _changed?.Invoke(result.Summary);
-                });
+                EquipmentCraftingResult result = new P2ItemCommandService(_session!(), current.Character, current.MercenaryId)
+                    .CraftEquipment(current.Container, current.Index, operation.DisplayName,
+                        selectedAffixFamilyId: familyId);
+                _changed?.Invoke(result.Summary);
             };
             _garden.AddChild(button);
         }
@@ -250,13 +237,6 @@ public partial class EquipmentCraftingPanel : VBoxContainer
         return new string(tail.TakeWhile(character => !char.IsDigit(character) && character != '×').ToArray()).Trim();
     }
 
-    private void Confirm(string text, Action action)
-    {
-        _pending = action;
-        _confirm!.DialogText = text;
-        _confirm.PopupCentered(new Vector2I(520, 260));
-    }
-
     private static string? OperationNameFor(MetalCurrencyKind kind, bool rerollLinks) => kind switch
     {
         MetalCurrencyKind.TemperingIron => "淬刃打造", MetalCurrencyKind.WardSteel => "守壁打造",
@@ -275,21 +255,14 @@ public partial class EquipmentCraftingPanel : VBoxContainer
     private static string TierText(MetalCurrencyTier tier) => tier switch
     { MetalCurrencyTier.Basic => "基础", MetalCurrencyTier.Advanced => "进阶", MetalCurrencyTier.High => "高阶", _ => "危险" };
 
-    private static string ModifierText(ItemModifierKind kind, int value)
+    private static string TargetSignature(EquipmentCraftTarget? target)
     {
-        string name = kind switch
-        {
-            ItemModifierKind.FlatAccuracy => "命中值",
-            ItemModifierKind.FlatMaximumLife => "最大生命",
-            ItemModifierKind.IncreasedAttackSpeedBasisPoints => "攻击速度提高",
-            ItemModifierKind.IncreasedPhysicalDamageBasisPoints => "物理伤害提高",
-            ItemModifierKind.IncreasedArmorBasisPoints => "护甲提高",
-            ItemModifierKind.ExtraSupportLinkCapacity => "额外连接容量",
-            _ => kind.ToString(),
-        };
-        return kind.ToString().Contains("BasisPoints", StringComparison.Ordinal)
-            ? $"{name} {value / 100.0:0.#}%"
-            : $"{name} +{value}";
+        if (target is null) return "none";
+        ItemInstance item = target.Item;
+        return $"{target.Container}:{target.Index}:{item.InstanceId}:{item.Rarity}:{item.Quality}:{item.LinkedSocketCount}:" +
+               $"{item.IsCorrupted}:{item.CorruptionOutcome}:{item.Enchantment?.StableId}:{item.FracturedAffixFamilyId}:" +
+               string.Join(',', item.Affixes.Select(affix =>
+                   $"{affix.Definition.StableFamilyId}:{affix.EffectiveValue}:{affix.Crafted}"));
     }
 
     private AtlasTexture? MetalIcon(MetalCurrencyKind kind)

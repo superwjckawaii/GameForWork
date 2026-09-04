@@ -274,10 +274,11 @@ public sealed class P1GameSession
         P23BaseClass baseClass = migratingV18 ? P23BaseClass.Fighter : snapshot.Player.BaseClass;
         P23ClassDefinition classDefinition = P23ClassCatalog.Get(baseClass);
         PlayerIdentity player = snapshot.Player with { BaseClass = baseClass };
+        P30JewelState jewels = P30JewelState.Restore(snapshot.P30Jewels);
         PassiveTreeAllocation passives = migratingV18 || migratingV19 || migratingV20 || migratingV21
             ? new PassiveTreeAllocation(snapshot.MemoryAshes, classDefinition.PassiveStart)
             : PassiveTreeAllocation.Restore(snapshot.AllocatedPassives, snapshot.MemoryAshes,
-                snapshot.MasterySelections, snapshot.SocketedJewels, classDefinition.PassiveStart);
+                snapshot.MasterySelections, snapshot.SocketedJewels, classDefinition.PassiveStart, jewels);
         P1WorldState world = P1WorldSnapshots.Restore(snapshot.World);
         if (migratingV20)
         {
@@ -306,7 +307,7 @@ public sealed class P1GameSession
             P8DemoJourney.Restore(snapshot.Journey, legacy: false),
             town,
             endgame,
-            P30JewelState.Restore(snapshot.P30Jewels),
+            jewels,
             snapshot.Seed,
             snapshot.SimulationSequence,
             snapshot.DebugTwentyTimes);
@@ -517,6 +518,14 @@ public sealed class P1GameSession
         if (P10EndgameState.IsCitadel(run.Map))
         {
             Endgame.RecordCitadelVictory();
+            P30JewelInstance? jewel = P30Jewels.RollCitadelLegendary(run.Map.MonsterLevel,
+                seed, $"p30-jewel-{SimulationSequence:000000}-citadel");
+            if (jewel is not null)
+            {
+                if (Jewels.TryAdd(jewel)) Management.AddHistory(
+                    $"灰烬天垒掉落传奇珠宝：{jewel.DisplayName}（半径 {jewel.EffectiveRadius}）");
+                else Management.AddHistory($"珠宝仓已满，{jewel.DisplayName}进入恢复记录。");
+            }
         }
         EnsureWarfrontDiscoveryMap(); SynchronizeWarfrontRouteCandidates();
         RefreshHeroTeamBuild(); RefreshMercenaryPartyBuild(); Journey.Synchronize(this);
@@ -960,7 +969,7 @@ public sealed class P1GameSession
 
     public bool TryAllocatePassive(string stableId)
     {
-        bool changed = Passives.TryAllocate(stableId, World.Hero.Progression.EarnedPassivePoints);
+        bool changed = Passives.TryAllocate(stableId, World.Hero.Progression.EarnedPassivePoints, Jewels);
         if (changed)
         {
             RefreshHeroBuild();
@@ -972,7 +981,7 @@ public sealed class P1GameSession
 
     public bool TryAllocatePassivePath(string stableId)
     {
-        bool changed = Passives.TryAllocatePath(stableId, World.Hero.Progression.EarnedPassivePoints);
+        bool changed = Passives.TryAllocatePath(stableId, World.Hero.Progression.EarnedPassivePoints, Jewels);
         if (changed)
         {
             RefreshHeroBuild();
@@ -999,7 +1008,7 @@ public sealed class P1GameSession
 
     public bool TryRefundPassive(string stableId)
     {
-        bool changed = Passives.TryRefund(stableId);
+        bool changed = Passives.TryRefund(stableId, Jewels);
         if (changed)
         {
             Jewels.TryUnsocket(stableId);
@@ -1415,13 +1424,21 @@ public sealed class P1GameSession
             reason = "需要先分配该记忆棱孔。";
             return false;
         }
+        P30JewelStateSnapshot previous = Jewels.Capture();
         bool changed = Jewels.TrySocket(stableId, instanceId, World.Hero.Progression.Level, out reason);
+        if (changed && !Passives.IsValidAllocation(Jewels))
+        {
+            Jewels.RestoreSnapshot(previous);
+            reason = "更换或移动该珠宝会使已配置天赋失去合法连接。";
+            return false;
+        }
         if (changed) RefreshHeroBuild();
         return changed;
     }
 
     public bool TryUnsocketP30Jewel(string stableId)
     {
+        if (!Passives.IsValidAllocation(Jewels, stableId)) return false;
         bool changed = Jewels.TryUnsocket(stableId);
         if (changed) RefreshHeroBuild();
         return changed;
@@ -1449,13 +1466,17 @@ public sealed class P1GameSession
             message = result;
             return false;
         }
-        if (!World.Economy.TrySpendMetal(currency, 1))
-        {
-            message = $"{P4MetalCurrencies.Get(currency).DisplayName}不足。";
-            return false;
-        }
+        P30JewelStateSnapshot beforeCraft = Jewels.Capture();
         bool changed = destroyed ? Jewels.TryRemove(instanceId) : crafted is not null && Jewels.TryReplace(crafted);
         if (!changed) throw new InvalidOperationException("Jewel crafting result could not be persisted.");
+        if (!Passives.IsValidAllocation(Jewels))
+        {
+            Jewels.RestoreSnapshot(beforeCraft);
+            message = "该半径会使已配置天赋失去合法来源，本次重投已取消。";
+            return false;
+        }
+        if (!World.Economy.TrySpendMetal(currency, 1))
+            throw new InvalidOperationException("Validated jewel crafting currency could not be spent.");
         Endgame.CompleteGameplayOperation();
         RefreshHeroBuild();
         Management.AddHistory($"珠宝加工：{result}");

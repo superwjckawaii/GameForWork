@@ -274,6 +274,11 @@ public sealed class P6FeatureTests
         Assert.Equal(LootDisposition.Sell, filter.Evaluate(sixLinkMagic));
         Assert.NotEqual("无", summary.MainSkill);
         Assert.InRange(summary.MainSkillLinks, 1, 6);
+        Assert.Equal(session.World.Hero.Build.Sheet.MaximumLife().Value, summary.Defense.MaximumLife);
+        Assert.Equal(session.World.Hero.Build.Sheet.MaximumMana().Value, summary.Defense.MaximumMana);
+        Assert.True(summary.Offense.DamagePerSecond > 0);
+        Assert.True(summary.Offense.BaseMaximumDamage >= summary.Offense.BaseMinimumDamage);
+        Assert.InRange(summary.Offense.HitChanceBasisPoints, 0, 10_000);
         Assert.Contains("估算假设", summary.Assumptions);
     }
 

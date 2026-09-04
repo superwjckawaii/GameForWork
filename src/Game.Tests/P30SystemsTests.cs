@@ -53,6 +53,8 @@ public sealed class P30SystemsTests
         Assert.True(session.SelectPreviewSkill(candidates[0].StoneInstanceId));
         Assert.Equal(candidates[0].StoneInstanceId,
             P1GameSession.Restore(session.Capture()).GetPreviewSkill()!.StoneInstanceId);
+        Assert.Equal(P30SkillCatalog.ActiveForSkill(candidates[0].SkillId).Combat.DisplayName,
+            session.GetBuildSummary().MainSkill);
     }
 
     [Fact]
@@ -90,6 +92,34 @@ public sealed class P30SystemsTests
         Assert.True(Actual(linked, noMastery) > Actual(plain, noMastery));
         Assert.True(Preview(plain, mastery) > Preview(plain, noMastery));
         Assert.True(Actual(plain, mastery) > Actual(plain, noMastery));
+    }
+
+    [Fact]
+    public void HighDamagePreviewUsesWideIntermediateArithmetic()
+    {
+        SkillConfiguration configuration = new(P1SkillIds.HeavyStrike, SkillSupport.None);
+        WeaponProfile weapon = EquipmentCatalog.GetBase("core.base.rusted_greatsword").ToWeaponProfile() with
+        { MinimumPhysicalDamage = 8_000, MaximumPhysicalDamage = 8_000 };
+        P205PassiveModifiers passive = P205PassiveModifiers.Empty with
+        {
+            MoreDamageBasisPoints = 20_000,
+            MasteryMechanics = "p30.mastery.rule.双手.0",
+        };
+        P1TeamBuild build = new(
+            new CharacterSheet(100, new CharacterAttributes(300, 120, 100, 100),
+                new DefensiveEquipment(5_000, 500, 0)),
+            weapon,
+            configuration,
+            IncreasedDamageBasisPoints: 20_000,
+            PassiveProfile: passive);
+        P6ResolvedSkill resolved = P6CombatSkillRules.Resolve(configuration,
+            build.Sheet.MaximumLife().Value, passive);
+
+        int damage = P6CombatSkillRules.ScaleOffensiveDamage(
+            P6CombatSkillRules.BaseDamage(resolved, P1Skills.HeavyStrike.Tags, weapon, 0),
+            resolved, configuration, build, P1Skills.HeavyStrike.Tags, 100_000, 100_000);
+
+        Assert.Equal(230_400, damage);
     }
 
     [Fact]
@@ -290,8 +320,72 @@ public sealed class P30SystemsTests
         Assert.True(state.TrySocket(socket, jewel.InstanceId, 100, out _));
         P30JewelState restored = P30JewelState.Restore(state.Capture());
         Assert.Equal(jewel.InstanceId, restored.Socketed[socket]);
-        Assert.Equal(20, P30Jewels.Legendary.Count);
+        Assert.Equal(24, P30Jewels.Legendary.Count);
         Assert.Equal(P30JewelCorruptionResult.PowerfulImplicit, P30Jewels.Corrupt(jewel, 1).Result);
+    }
+
+    [Fact]
+    public void CitadelLegendaryJewelsRollRadiusAndApplyTheirPassiveTreeRules()
+    {
+        ulong dropSeed = Enumerable.Range(1, 100_000).Select(value => (ulong)value)
+            .First(seed => P30Jewels.RollCitadelLegendary(100, seed, "probe") is not null);
+        P30JewelInstance drop = P30Jewels.RollCitadelLegendary(100, dropSeed, "citadel-drop")!;
+        Assert.Contains(drop.Legendary!.StableId,
+            P30Jewels.CitadelLegendaryIds.Select(id => $"p30.jewel.{id}"));
+        Assert.InRange(drop.EffectiveRadius, drop.Legendary.MinimumRadius, drop.Legendary.MaximumRadius);
+        (bool rerolled, _, P30JewelInstance? divine, _) = P30Jewels.Craft(drop,
+            P30JewelCraftOperation.RerollLegendaryRadius, 0x77);
+        Assert.True(rerolled);
+        Assert.InRange(divine!.EffectiveRadius, drop.Legendary.MinimumRadius, drop.Legendary.MaximumRadius);
+
+        var allocation = new PassiveTreeAllocation(memoryAshes: 20);
+        string socket = P1PassiveTree.Nodes.Where(node => node.Kind == PassiveNodeKind.JewelSocket)
+            .Select(node => node.StableId)
+            .First(id => P1PassiveTree.FindShortestPath(id, allocation.Allocated, allocation.StartKind).Count < 140);
+        Assert.True(allocation.TryAllocatePath(socket, 149));
+
+        var state = new P30JewelState();
+        P30JewelInstance pathless = P30Jewels.CreateLegendary("pathless_chart", 100, "pathless", 7) with
+        {
+            RolledRadius = 140,
+        };
+        Assert.True(state.TryAdd(pathless));
+        Assert.True(state.TrySocket(socket, pathless.InstanceId, 100, out _));
+        PassiveNodeDefinition direct = P1PassiveTree.Nodes.First(node =>
+            node.Kind is not (PassiveNodeKind.Start or PassiveNodeKind.JewelSocket) &&
+            node.Start == PassiveStartKind.None && !allocation.Allocated.Contains(node.StableId) &&
+            !P1PassiveTree.Neighbors(node.StableId).Any(allocation.Allocated.Contains) &&
+            Distance(socket, node.StableId) <= pathless.EffectiveRadius);
+        Assert.True(allocation.TryAllocate(direct.StableId, 149, state));
+        PassiveNodeDefinition outside = P1PassiveTree.Nodes.First(node =>
+            node.Kind is not (PassiveNodeKind.Start or PassiveNodeKind.JewelSocket) &&
+            node.Start == PassiveStartKind.None && !allocation.Allocated.Contains(node.StableId) &&
+            Distance(socket, node.StableId) > pathless.EffectiveRadius &&
+            !P1PassiveTree.Neighbors(node.StableId).Any(allocation.Allocated.Contains) &&
+            !P1PassiveTree.Neighbors(P30PassiveTreeCatalog.StartNode(allocation.StartKind)).Contains(node.StableId));
+        Assert.False(allocation.TryAllocate(outside.StableId, 149, state));
+        Assert.False(allocation.IsValidAllocation(state, socket));
+        PassiveTreeAllocation restored = PassiveTreeAllocation.Restore(allocation.Allocated, 20,
+            p30Jewels: state);
+        Assert.Contains(direct.StableId, restored.Allocated);
+
+        Assert.True(state.TryUnsocket(socket));
+        P30JewelInstance physique = P30Jewels.CreateLegendary("bloodbound_domain", 100, "physique", 9);
+        Assert.True(state.TryAdd(physique));
+        Assert.True(state.TrySocket(socket, physique.InstanceId, 100, out _));
+        P30JewelModifiers modifiers = P30Jewels.CalculateModifiers(state, allocation);
+        PassiveNodeDefinition[] affected = allocation.Allocated.Where(id => id != socket &&
+                Distance(socket, id) <= physique.EffectiveRadius).Select(P1PassiveTree.Get).ToArray();
+        Assert.Equal(8 + affected.Count(node => node.Kind == PassiveNodeKind.Small) * 20, modifiers.Physique);
+        Assert.Equal(affected.Count(node => node.Kind is PassiveNodeKind.Notable or PassiveNodeKind.Mastery) * 500,
+            modifiers.IncreasedPhysiqueBasisPoints);
+
+        static double Distance(string left, string right)
+        {
+            PassiveNodeDefinition a = P1PassiveTree.Get(left);
+            PassiveNodeDefinition b = P1PassiveTree.Get(right);
+            return Math.Sqrt(Math.Pow(a.X - b.X, 2) + Math.Pow(a.Y - b.Y, 2));
+        }
     }
 
     [Fact]

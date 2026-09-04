@@ -23,9 +23,19 @@ public static class EquipmentEnchantmentCatalog
         return Values.Single(value => value.StableId == id || value.DisplayName == name);
     }
 
+    public static EquipmentEnchantmentEntry Entry(ItemEnchantment enchantment)
+    {
+        string? legacyName = LegacyIds.GetValueOrDefault(enchantment.StableId);
+        return EquipmentCatalog.Enchantments.Single(value =>
+            value.Id == enchantment.StableId || value.DisplayName == legacyName ||
+            value.DisplayName == enchantment.DisplayName);
+    }
+
+    public static string EffectText(ItemEnchantment enchantment) => Entry(enchantment).RuleText;
+
     public static bool Supports(ItemEnchantment enchantment, ItemBaseDefinition itemBase)
     {
-        EquipmentEnchantmentEntry entry = EquipmentCatalog.Enchantments.Single(value => value.Id == enchantment.StableId);
+        EquipmentEnchantmentEntry entry = Entry(enchantment);
         string text = entry.ApplicableEquipment;
         if (text.Contains("全部", StringComparison.Ordinal) && text.Contains("武器", StringComparison.Ordinal) && IsWeapon(itemBase)) return true;
         if ((text.Contains("所有鞋", StringComparison.Ordinal) || text.Contains("全部鞋", StringComparison.Ordinal)) && itemBase.Category == ItemCategory.Boots) return true;
@@ -69,6 +79,12 @@ public static class EquipmentEnchantmentCatalog
         "谦逊足印" or "傲慢之印" or "暴怒之印" or "节制之印" or "慈悲之印" or "懒惰之印" => [ItemCategory.Helmet, ItemCategory.Gloves, ItemCategory.Boots],
         "轻羽刻印" => [ItemCategory.Boots],
         "双御铭文" => [ItemCategory.Shield],
+        "蛮力刻印" or "灵风刻印" or "明识刻印" or "聚能刻印" or
+            "巨灵铭文" or "疾影铭文" or "睿思铭文" or "星能铭文" =>
+            [ItemCategory.BodyArmor, ItemCategory.Helmet, ItemCategory.Gloves, ItemCategory.Boots,
+                ItemCategory.Belt, ItemCategory.Ring, ItemCategory.Amulet],
+        "泰坦王印" or "逐风王印" or "万象王印" or "星海王印" =>
+            [ItemCategory.Belt, ItemCategory.Ring, ItemCategory.Amulet],
         _ => null,
     };
 
@@ -115,6 +131,18 @@ public static class EquipmentEnchantmentCatalog
         "节制之印" => Virtue(ItemModifierKind.TemperanceMaximum),
         "慈悲之印" => Virtue(ItemModifierKind.MercyMaximum),
         "懒惰之印" => Virtue(ItemModifierKind.SlothMaximum),
+        "蛮力刻印" => [C(ItemModifierKind.Physique, 30)],
+        "灵风刻印" => [C(ItemModifierKind.Dexterity, 30)],
+        "明识刻印" => [C(ItemModifierKind.Spirit, 30)],
+        "聚能刻印" => [C(ItemModifierKind.Energy, 30)],
+        "巨灵铭文" => [C(ItemModifierKind.Physique, 60)],
+        "疾影铭文" => [C(ItemModifierKind.Dexterity, 60)],
+        "睿思铭文" => [C(ItemModifierKind.Spirit, 60)],
+        "星能铭文" => [C(ItemModifierKind.Energy, 60)],
+        "泰坦王印" => [C(ItemModifierKind.IncreasedPhysiqueBasisPoints, 1_500)],
+        "逐风王印" => [C(ItemModifierKind.IncreasedDexterityBasisPoints, 1_500)],
+        "万象王印" => [C(ItemModifierKind.IncreasedSpiritBasisPoints, 1_500)],
+        "星海王印" => [C(ItemModifierKind.IncreasedEnergyBasisPoints, 1_500)],
         _ => throw new InvalidDataException($"Missing enchantment implementation: {name}"),
     };
 

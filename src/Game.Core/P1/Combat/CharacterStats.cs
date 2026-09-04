@@ -37,7 +37,9 @@ public sealed record CharacterSheet(
     int MaximumElementalResistanceBasisPoints = 7_500,
     int MaximumVoidResistanceBasisPoints = 7_500,
     int MaximumBlockChanceBasisPoints = 7_500,
-    int SpellSuppressionEffectBasisPoints = 7_000)
+    int SpellSuppressionEffectBasisPoints = 7_000,
+    int SpellBlockChanceBasisPoints = 0,
+    int MaximumSpellBlockChanceBasisPoints = 7_500)
 {
     public int CappedResistance(int value) => Math.Clamp(value, P30CombatRules.MinimumResistance,
         MaximumElementalResistanceBasisPoints);
@@ -50,6 +52,9 @@ public sealed record CharacterSheet(
 
     public int EffectiveBlockChanceBasisPoints => P30CombatRules.BlockChance(BlockChanceBasisPoints,
         MaximumBlockChanceBasisPoints);
+
+    public int EffectiveSpellBlockChanceBasisPoints => P30CombatRules.BlockChance(SpellBlockChanceBasisPoints,
+        MaximumSpellBlockChanceBasisPoints);
 
     public int EffectiveSpellSuppressionBasisPoints => Math.Clamp(SpellSuppressionBasisPoints, 0, 10_000);
     public CalculatedValue MaximumLife()

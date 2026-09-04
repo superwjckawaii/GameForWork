@@ -68,9 +68,9 @@ public static class EquipmentCatalog
         Require(snapshot.AffixFamilies, 212, value => value[0].Id, "affix families");
         if (snapshot.AffixFamilies.Any(family => family.Count == 0 || family.Any(row => row.Id != family[0].Id)))
             throw new InvalidOperationException("An affix family is empty or mixes IDs.");
-        Require(snapshot.Enchantments, 41, value => value.Id, "enchantments");
+        Require(snapshot.Enchantments, 53, value => value.Id, "enchantments");
         Require(snapshot.LegendaryItems, 55, value => value.Id, "legendary items");
-        Require(snapshot.CraftingOperations, 92, value => value.Id, "crafting operations");
+        Require(snapshot.CraftingOperations, 104, value => value.Id, "crafting operations");
         Require(snapshot.CorruptionImplicits, 37, value => value.Id, "corruption implicits");
     }
 

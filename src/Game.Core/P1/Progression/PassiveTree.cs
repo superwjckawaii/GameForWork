@@ -250,15 +250,17 @@ public static class P1PassiveTree
     public static IReadOnlyList<string> MasteryOptionDescriptions(PassiveNodeDefinition node) =>
         P30PassiveTreeCatalog.MasteryOptionDescriptions(node);
 
-    public static IReadOnlyList<string> FindShortestPath(string targetId, IReadOnlySet<string> allocated, PassiveStartKind start)
+    public static IReadOnlyList<string> FindShortestPath(string targetId, IReadOnlySet<string> allocated, PassiveStartKind start,
+        IReadOnlySet<string>? connectedSources = null)
     {
         _ = Get(targetId);
         if (allocated.Contains(targetId)) return [];
         var previous = new Dictionary<string, string?>(StringComparer.Ordinal);
         var pending = new Queue<string>();
-        IEnumerable<string> sources = allocated.Count == 0
+        IReadOnlySet<string> usableSources = connectedSources ?? allocated;
+        IEnumerable<string> sources = usableSources.Count == 0
             ? new[] { P30PassiveTreeCatalog.StartNode(start) }
-            : allocated;
+            : usableSources;
         foreach (string source in sources)
         {
             previous[source] = null;
@@ -271,13 +273,14 @@ public static class P1PassiveTree
             {
                 PassiveNodeDefinition candidate = Get(neighbor);
                 if (candidate.Start != PassiveStartKind.None && candidate.Start != start) continue;
+                if (allocated.Contains(neighbor) && !usableSources.Contains(neighbor)) continue;
                 if (previous.TryAdd(neighbor, current)) pending.Enqueue(neighbor);
             }
         }
         if (!previous.ContainsKey(targetId)) return [];
         var path = new List<string>();
         string root = P30PassiveTreeCatalog.StartNode(start);
-        for (string? current = targetId; current is not null && !allocated.Contains(current); current = previous[current])
+        for (string? current = targetId; current is not null && !usableSources.Contains(current); current = previous[current])
         {
             if (current == root) break;
             path.Add(current);
@@ -589,7 +592,7 @@ public sealed class PassiveTreeAllocation
     public int MemoryAshes { get; private set; }
     public PassiveStartKind StartKind { get; }
 
-    public bool TryAllocate(string stableId, int earnedPassivePoints)
+    public bool TryAllocate(string stableId, int earnedPassivePoints, P30JewelState? jewelState = null)
     {
         PassiveNodeDefinition node = P1PassiveTree.Get(stableId);
         int availablePoints = Math.Min(earnedPassivePoints, MaximumAllocatedPoints);
@@ -603,8 +606,10 @@ public sealed class PassiveTreeAllocation
             return false;
         }
         string root = P30PassiveTreeCatalog.StartNode(StartKind);
+        IReadOnlySet<string> connected = RootConnectedAllocated();
         if (!P1PassiveTree.Neighbors(root).Contains(stableId) &&
-            !P1PassiveTree.Neighbors(stableId).Any(_allocated.Contains))
+            !P1PassiveTree.Neighbors(stableId).Any(connected.Contains) &&
+            !P30Jewels.GrantsUnlinkedAllocation(jewelState, _allocated, stableId))
         {
             return false;
         }
@@ -612,19 +617,22 @@ public sealed class PassiveTreeAllocation
         return _allocated.Add(stableId);
     }
 
-    public bool TryAllocatePath(string stableId, int earnedPassivePoints)
+    public bool TryAllocatePath(string stableId, int earnedPassivePoints, P30JewelState? jewelState = null)
     {
-        IReadOnlyList<string> path = P1PassiveTree.FindShortestPath(stableId, _allocated, StartKind);
+        if (P30Jewels.GrantsUnlinkedAllocation(jewelState, _allocated, stableId))
+            return TryAllocate(stableId, earnedPassivePoints, jewelState);
+        IReadOnlySet<string> connected = RootConnectedAllocated();
+        IReadOnlyList<string> path = P1PassiveTree.FindShortestPath(stableId, _allocated, StartKind, connected);
         int available = Math.Min(earnedPassivePoints, MaximumAllocatedPoints) - _allocated.Count;
         if (path.Count == 0 || path.Count > available) return false;
         foreach (string id in path)
-            if (!TryAllocate(id, earnedPassivePoints)) throw new InvalidOperationException("Passive path allocation lost connectivity.");
+            if (!TryAllocate(id, earnedPassivePoints, jewelState)) throw new InvalidOperationException("Passive path allocation lost connectivity.");
         return true;
     }
 
-    public bool TryRefund(string stableId)
+    public bool TryRefund(string stableId, P30JewelState? jewelState = null)
     {
-        if (!_allocated.Contains(stableId) || MemoryAshes < 1 || !CanRefundWithoutDisconnecting(stableId))
+        if (!_allocated.Contains(stableId) || MemoryAshes < 1 || !CanRefundWithoutDisconnecting(stableId, jewelState))
         {
             return false;
         }
@@ -636,7 +644,7 @@ public sealed class PassiveTreeAllocation
         return true;
     }
 
-    public bool CanRefundWithoutDisconnecting(string stableId)
+    public bool CanRefundWithoutDisconnecting(string stableId, P30JewelState? jewelState = null)
     {
         if (!_allocated.Contains(stableId))
         {
@@ -649,26 +657,31 @@ public sealed class PassiveTreeAllocation
             return true;
         }
 
-        Dictionary<string, List<string>> edges = remaining.ToDictionary(id => id,
-            id => P1PassiveTree.Neighbors(id).Where(remaining.Contains).ToList(), StringComparer.Ordinal);
+        HashSet<string> reachable = RootConnected(remaining);
+        return remaining.All(id => reachable.Contains(id) ||
+            P30Jewels.GrantsUnlinkedAllocation(jewelState, remaining, id, stableId));
+    }
 
+    public bool IsValidAllocation(P30JewelState? jewelState = null, string? ignoredSocket = null)
+    {
+        HashSet<string> reachable = RootConnected(_allocated);
+        return _allocated.All(id => reachable.Contains(id) ||
+            P30Jewels.GrantsUnlinkedAllocation(jewelState, _allocated, id, ignoredSocket));
+    }
+
+    private IReadOnlySet<string> RootConnectedAllocated() => RootConnected(_allocated);
+
+    private HashSet<string> RootConnected(IReadOnlySet<string> nodes)
+    {
         var reachable = new HashSet<string>(StringComparer.Ordinal);
         string root = P30PassiveTreeCatalog.StartNode(StartKind);
-        var pending = new Queue<string>(P1PassiveTree.Neighbors(root).Where(remaining.Contains));
+        var pending = new Queue<string>(P1PassiveTree.Neighbors(root).Where(nodes.Contains));
         while (pending.TryDequeue(out string? current))
         {
-            if (!reachable.Add(current))
-            {
-                continue;
-            }
-
-            foreach (string neighbor in edges[current])
-            {
-                pending.Enqueue(neighbor);
-            }
+            if (!reachable.Add(current)) continue;
+            foreach (string neighbor in P1PassiveTree.Neighbors(current).Where(nodes.Contains)) pending.Enqueue(neighbor);
         }
-
-        return reachable.SetEquals(remaining);
+        return reachable;
     }
 
     public bool TryReset()
@@ -728,7 +741,8 @@ public sealed class PassiveTreeAllocation
     public static PassiveTreeAllocation Restore(IEnumerable<string> allocated, int memoryAshes,
         IReadOnlyDictionary<string, int>? masteries = null,
         IReadOnlyDictionary<string, PassiveJewelKind>? jewels = null,
-        PassiveStartKind start = PassiveStartKind.Physique)
+        PassiveStartKind start = PassiveStartKind.Physique,
+        P30JewelState? p30Jewels = null)
     {
         ArgumentNullException.ThrowIfNull(allocated);
         var result = new PassiveTreeAllocation(memoryAshes, start);
@@ -738,37 +752,16 @@ public sealed class PassiveTreeAllocation
             throw new InvalidDataException("Passive allocation exceeds the supported point cap.");
         }
 
-        var remaining = new HashSet<string>(StringComparer.Ordinal);
         foreach (string stableId in nodes)
         {
-            _ = P1PassiveTree.Get(stableId);
-            if (!remaining.Add(stableId))
+            PassiveNodeDefinition node = P1PassiveTree.Get(stableId);
+            if (node.Kind == PassiveNodeKind.Start || node.Start != PassiveStartKind.None || !result._allocated.Add(stableId))
             {
                 throw new InvalidDataException("Passive allocation snapshot is not a valid path.");
             }
         }
-
-        while (remaining.Count > 0)
-        {
-            string[] connected = remaining.Where(stableId =>
-            {
-                PassiveNodeDefinition node = P1PassiveTree.Get(stableId);
-                return result._allocated.Count == 0
-                    ? P1PassiveTree.Neighbors(P30PassiveTreeCatalog.StartNode(start)).Contains(stableId)
-                    : node.Start is PassiveStartKind.None &&
-                      P1PassiveTree.Neighbors(stableId).Any(result._allocated.Contains);
-            }).ToArray();
-            if (connected.Length == 0)
-            {
-                throw new InvalidDataException("Passive allocation snapshot is not a valid path.");
-            }
-
-            foreach (string stableId in connected)
-            {
-                result._allocated.Add(stableId);
-                remaining.Remove(stableId);
-            }
-        }
+        if (!result.IsValidAllocation(p30Jewels))
+            throw new InvalidDataException("Passive allocation snapshot is not a valid path.");
 
         foreach ((string id, int option) in masteries ?? new Dictionary<string, int>())
             if (!result.TrySelectMastery(id, option)) throw new InvalidDataException("Passive mastery selection is invalid.");

@@ -949,12 +949,12 @@ public sealed class P4SpatialCombatRunner
                         random.NextUInt() % 10_000 < Math.Clamp(criticalChance, 0, 10_000);
         if (critical)
         {
-            raw = checked(raw * request.Build.CriticalMultiplierBasisPoints / 10_000);
+            raw = ScaleCombatValue(raw, request.Build.CriticalMultiplierBasisPoints);
             addedWeapon = new(
-                checked(addedWeapon.Fire * request.Build.CriticalMultiplierBasisPoints / 10_000),
-                checked(addedWeapon.Cold * request.Build.CriticalMultiplierBasisPoints / 10_000),
-                checked(addedWeapon.Lightning * request.Build.CriticalMultiplierBasisPoints / 10_000),
-                checked(addedWeapon.Void * request.Build.CriticalMultiplierBasisPoints / 10_000));
+                ScaleCombatValue(addedWeapon.Fire, request.Build.CriticalMultiplierBasisPoints),
+                ScaleCombatValue(addedWeapon.Cold, request.Build.CriticalMultiplierBasisPoints),
+                ScaleCombatValue(addedWeapon.Lightning, request.Build.CriticalMultiplierBasisPoints),
+                ScaleCombatValue(addedWeapon.Void, request.Build.CriticalMultiplierBasisPoints));
         }
         int armor = enemy.Scaled.Armor * Math.Max(0, 10_000 - enemy.ArmorBreakStacks * runtime.ArmorBreakPerStackBasisPoints) / 10_000;
         if (configuration.Supports.HasFlag(SkillSupport.ArmorPierce)) armor = armor * 7_000 / 10_000;
@@ -979,8 +979,8 @@ public sealed class P4SpatialCombatRunner
             if (value <= 0) return 0;
             value = P6CombatSkillRules.ScaleOffensiveDamage(value, skill, configuration, request.Build,
                 tags, enemy.Life, enemy.MaximumLife, multiplier);
-            value = checked(value * ascendancyMultiplier / 10_000);
-            return checked(value * (10_000 + enemy.ShockStacks * 500) / 10_000);
+            value = ScaleCombatValue(value, ascendancyMultiplier);
+            return ScaleCombatValue(value, 10_000 + enemy.ShockStacks * 500);
         }
 
         int Roll(LocalDamageRange range)
@@ -999,7 +999,7 @@ public sealed class P4SpatialCombatRunner
             switch (skill.Ailment)
             {
                 case P17Ailment.Bleed when !configuration.Supports.HasFlag(SkillSupport.Bloodlust):
-                    ApplyBleed(enemy, Math.Max(1, value * 7 / 10), runtime);
+                    ApplyBleed(enemy, Math.Max(1, ScaleCombatValue(value, 7_000)), runtime);
                     runtime.AppliedBleed();
                     break;
                 case P17Ailment.Ignite or P17Ailment.Erosion or P17Ailment.Wither:
@@ -1234,13 +1234,16 @@ public sealed class P4SpatialCombatRunner
                         heroPosition, enemy.Position, "spell_suppression"));
                 }
             }
-            int blockChance = request.Build.BlockChanceBasisPoints;
-            if (request.Build.HasShield && ascendancy.Has(P18NodeIds.BastionAttackBlockSmall)) blockChance += 800;
-            if (request.Build.HasShield && ascendancy.Has(P18NodeIds.BastionAttackBlockCore)) blockChance += 1_200;
+            int blockChance = request.Build.BlockChanceBasisPoints +
+                (spell ? request.Build.Sheet.SpellBlockChanceBasisPoints : 0);
+            if (!spell && request.Build.HasShield && ascendancy.Has(P18NodeIds.BastionAttackBlockSmall)) blockChance += 800;
+            if (!spell && request.Build.HasShield && ascendancy.Has(P18NodeIds.BastionAttackBlockCore)) blockChance += 1_200;
             if (spell && ascendancy.Has(P18NodeIds.BastionSpellBlockSmall)) blockChance += 800;
             if (spell && ascendancy.Has(P18NodeIds.BastionSpellBlockCore)) blockChance += request.Build.BlockChanceBasisPoints * 6 / 10;
-            int blockCap = ascendancy.Has(P18NodeIds.BastionAttackBlockCore) ? 8_000 :
-                request.Build.Sheet.MaximumBlockChanceBasisPoints;
+            int blockCap = spell
+                ? request.Build.Sheet.MaximumSpellBlockChanceBasisPoints
+                : ascendancy.Has(P18NodeIds.BastionAttackBlockCore) ? 8_000 :
+                    request.Build.Sheet.MaximumBlockChanceBasisPoints;
             bool blocked = damage > 0 && request.Build.HasShield && blockChance > 0 &&
                 random.NextUInt() % 10_000 < Math.Min(blockCap, blockChance);
             if (blocked)
@@ -1378,9 +1381,9 @@ public sealed class P4SpatialCombatRunner
                 enemy.Scaled.VoidResistanceBasisPoints + request.EnemyVoidResistanceBasisPoints,
                 physicalResistance)
             : new P17DamageBreakdown(0, 0, 0, 0, 0, 0, []);
-        int value = checked(physicalDamage + localDamage.Total);
+        int value = SaturatingAdd(physicalDamage, localDamage.Total);
         if (damage.Critical && request.VirtueVice is { } virtueVice)
-            value = checked(value * (10_000 + virtueVice.Bonuses().MoreCriticalDamageBasisPoints) / 10_000);
+            value = ScaleCombatValue(value, 10_000 + virtueVice.Bonuses().MoreCriticalDamageBasisPoints);
         if (value > 0 && enemy.Rarity is EnemyRarity.Rare or EnemyRarity.Boss && request.VirtueVice is { } oathState)
         {
             IReadOnlyList<P30VirtueViceKind> oaths = request.Build.VirtueViceLoadout?.Oaths ?? [];
@@ -1394,12 +1397,12 @@ public sealed class P4SpatialCombatRunner
         lifeLeechBasisPoints += P30MasteryRuntime.AdditionalLifeLeech(passive);
         if (hero is not null && value > 0 && lifeLeechBasisPoints > 0)
         {
-            ApplyLifeLeech(hero, Math.Max(1, checked(value * lifeLeechBasisPoints / 10_000)),
+            ApplyLifeLeech(hero, Math.Max(1, ScaleCombatValue(value, lifeLeechBasisPoints)),
                 request.Build.InstantLifeLeechBasisPoints);
         }
         if (damage.AppliedBleed && enemy.Life > 0)
         {
-            ApplyBleed(enemy, checked(damage.BleedTotalDamage * runtime.BleedDamageMultiplier / 10_000), runtime);
+            ApplyBleed(enemy, ScaleCombatValue(damage.BleedTotalDamage, runtime.BleedDamageMultiplier), runtime);
             runtime.AppliedBleed();
         }
 
@@ -1416,8 +1419,8 @@ public sealed class P4SpatialCombatRunner
         int ScaleLocal(int value)
         {
             if (value <= 0) return 0;
-            foreach (int multiplier in more) value = checked(value * multiplier / 10_000);
-            if (damage.Critical) value = checked(value * request.Build.CriticalMultiplierBasisPoints / 10_000);
+            foreach (int multiplier in more) value = ScaleCombatValue(value, multiplier);
+            if (damage.Critical) value = ScaleCombatValue(value, request.Build.CriticalMultiplierBasisPoints);
             return value;
         }
 
@@ -1455,16 +1458,11 @@ public sealed class P4SpatialCombatRunner
     }
 
     private static int ActionDelay(P1TeamBuild build, int baseTicks, SkillTag tags = SkillTag.Attack)
-    {
-        int masterySpeed = P30MasteryRuntime.ActionSpeedMultiplier(
-            build.PassiveProfile ?? P205PassiveModifiers.Empty, tags, build.Weapon);
-        return Math.Max(1, checked((int)((long)Math.Max(1, baseTicks) * 10_000 * 10_000 /
-            Math.Max(10_000_000, (long)(10_000 + build.IncreasedActionSpeedBasisPoints) * masterySpeed))));
-    }
+        => P6CombatSkillRules.ActionDelay(build, baseTicks, tags);
 
     private static void ApplyLifeLeech(ResourceState hero, int amount, int instantBasisPoints)
     {
-        int instant = checked(amount * Math.Clamp(instantBasisPoints, 0, 10_000) / 10_000);
+        int instant = ScaleCombatValue(amount, Math.Clamp(instantBasisPoints, 0, 10_000));
         if (instant > 0) hero.HealLife(instant);
         int remaining = amount - instant;
         if (remaining > 0) hero.AddLifeLeech(remaining);
@@ -1514,7 +1512,7 @@ public sealed class P4SpatialCombatRunner
                     runtime.TriggerRecoveryProtection(tick);
                     P4EnemyUnit? spread = enemies.Where(item => item.Life > 0)
                         .OrderBy(item => P4Point.DistanceSquared(enemy.Position, item.Position)).FirstOrDefault();
-                    if (spread is not null) ApplyBleed(spread, checked(enemy.BleedRemaining * 12 / 10), runtime);
+                    if (spread is not null) ApplyBleed(spread, ScaleCombatValue(enemy.BleedRemaining, 12_000), runtime);
                 }
             }
             resetMovement |= runtime.TryResetMovementCooldownOnKill(tick);
@@ -1544,7 +1542,7 @@ public sealed class P4SpatialCombatRunner
         {
             int first = Math.Max(enemy.BleedRemaining, totalDamage);
             int second = Math.Min(Math.Max(enemy.BleedRemaining, 0), totalDamage);
-            enemy.BleedRemaining = checked((first + second) * 8 / 10);
+            enemy.BleedRemaining = ScaleCombatValue(SaturatingAdd(first, second), 8_000);
         }
         else enemy.BleedRemaining = Math.Max(enemy.BleedRemaining, totalDamage);
         enemy.BleedPulses = Math.Max(enemy.BleedPulses, pulses);
@@ -1746,6 +1744,12 @@ public sealed class P4SpatialCombatRunner
         }
     }
 
+    private static int ScaleCombatValue(int value, int basisPoints) =>
+        (int)Math.Clamp((long)value * Math.Max(0, basisPoints) / 10_000, 0, int.MaxValue);
+
+    private static int SaturatingAdd(int left, int right) =>
+        (int)Math.Clamp((long)left + right, 0, int.MaxValue);
+
     private static IReadOnlyDictionary<P30VirtueViceKind, int>? CaptureVirtueVice(P30VirtueViceState? state)
     {
         if (state is null) return null;
@@ -1891,7 +1895,9 @@ public sealed class P4SpatialCombatRunner
             request.EnemyPhysicalReductionBasisPoints is < 0 or > 9_000 || request.EnemyElementalResistanceBasisPoints is < 0 or > 9_000 ||
             request.EnemyVoidResistanceBasisPoints is < 0 or > 9_000 || request.EnemyPenetrationBasisPoints is < 0 or > 9_000 ||
             request.ExtraEnemyProjectiles is < 0 or > 8 || request.EnemyProjectileDamageBasisPoints is < 1_000 or > 20_000 ||
-            request.EnemyAreaBasisPoints is < 1_000 or > 30_000 || request.EnemyAreaDamageBasisPoints is < 1_000 or > 30_000 ||
+            // Rank-4 Area Disaster (90%) combined with King Disaster (80% more area)
+            // is a legal 34,200-basis-point map roll.
+            request.EnemyAreaBasisPoints is < 1_000 or > 35_000 || request.EnemyAreaDamageBasisPoints is < 1_000 or > 30_000 ||
             request.BossCount is < 1 or > 2 || request.AdditionalRareEnemies is < 0 or > 8)
         {
             throw new ArgumentOutOfRangeException(nameof(request));

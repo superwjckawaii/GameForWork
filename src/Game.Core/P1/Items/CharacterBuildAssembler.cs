@@ -67,10 +67,11 @@ public static class CharacterBuildAssembler
         EquipmentModifiers item = equipment.Modifiers;
         PassiveBuildModifiers passive = passiveTree.CalculateModifiers();
         P205PassiveModifiers advanced = passive.Advanced ?? P205PassiveModifiers.Empty;
-        P30JewelModifiers jewel = jewelState is null ? new() : P30Jewels.CalculateModifiers(jewelState);
+        P30JewelModifiers jewel = jewelState is null ? new() : P30Jewels.CalculateModifiers(jewelState, passiveTree);
         int specializedWeaponDamage = WeaponPassiveIncrease(loadout, passive, advanced);
         int physique = ScaleAttribute(baseAttributes.Physique + item.Physique + advanced.Physique + jewel.Physique,
-            item.Value(ItemModifierKind.IncreasedPhysiqueBasisPoints) + item.Value(ItemModifierKind.IncreasedAllAttributesBasisPoints));
+            item.Value(ItemModifierKind.IncreasedPhysiqueBasisPoints) + item.Value(ItemModifierKind.IncreasedAllAttributesBasisPoints) +
+            jewel.IncreasedPhysiqueBasisPoints);
         int dexterity = ScaleAttribute(baseAttributes.Dexterity + item.Dexterity + advanced.Dexterity + jewel.Dexterity,
             item.Value(ItemModifierKind.IncreasedDexterityBasisPoints) + item.Value(ItemModifierKind.IncreasedAllAttributesBasisPoints));
         int spirit = ScaleAttribute(baseAttributes.Spirit + item.Spirit + advanced.Spirit + jewel.Spirit,
@@ -131,7 +132,9 @@ public static class CharacterBuildAssembler
                 jewel.MaximumElementalResistanceBasisPoints),
             MaximumVoidResistanceBasisPoints: checked(7_500 + item.MaximumAllResistanceBasisPoints +
                 item.Value(ItemModifierKind.MaximumVoidResistanceBasisPoints) + jewel.MaximumVoidResistanceBasisPoints),
-            MaximumBlockChanceBasisPoints: checked(7_500 + item.Value(ItemModifierKind.MaximumAttackBlockChanceBasisPoints)));
+            MaximumBlockChanceBasisPoints: checked(7_500 + item.Value(ItemModifierKind.MaximumAttackBlockChanceBasisPoints)),
+            SpellBlockChanceBasisPoints: item.Value(ItemModifierKind.SpellBlockChanceBasisPoints),
+            MaximumSpellBlockChanceBasisPoints: checked(7_500 + item.Value(ItemModifierKind.MaximumSpellBlockChanceBasisPoints)));
         SkillUseProfile heavyStrike = SkillRules.BuildHeavyStrike(
             heavyStrikeConfiguration,
             weapon,

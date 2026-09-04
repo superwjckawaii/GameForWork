@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.RegularExpressions;
+using GameForWork.Core.Equipment;
 using GameForWork.Core.P1.Combat;
 using GameForWork.Core.P1.Items;
 using GameForWork.Core.P1.Progression;
@@ -113,7 +114,7 @@ internal static class P1UiText
             text.AppendLine($"（基底词缀）{implicitModifier.DisplayText}" + (includeAffixDetails ? " [固定]" : string.Empty));
 
         if (item.Enchantment is not null)
-            text.AppendLine($"（附魔）{item.Enchantment.DisplayName}：{string.Join("；", item.Enchantment.EffectComponents.Select(effect => Modifier(effect.Kind, effect.MinimumValue)))}");
+            text.AppendLine($"（附魔）{item.Enchantment.DisplayName}：{EquipmentEnchantmentCatalog.EffectText(item.Enchantment)}");
 
         if (item.LegendaryRule is not null)
         {
@@ -644,7 +645,8 @@ internal static class P1UiText
         string affixes = string.Join('\n', jewel.Affixes.Select(affix =>
             $"{P30Jewels.PositionName(affix.Position)} · T{affix.Tier} · {P30Jewels.AffixText(affix)}"));
         string legendary = jewel.Legendary is null ? string.Empty :
-            $"\n{jewel.Legendary.Effect}\n来源：{jewel.Legendary.Source}";
+            $"\n{(jewel.EffectiveRadius > 0 ? $"半径：{jewel.EffectiveRadius} " : string.Empty)}" +
+            $"{jewel.Legendary.Effect}\n来源：{jewel.Legendary.Source}";
         return $"{jewel.DisplayName}\n{P30Jewels.RarityName(jewel.Rarity)} · 物品等级 {jewel.ItemLevel} · 共鸣度 {jewel.Resonance}%" +
                (string.IsNullOrEmpty(affixes) ? string.Empty : $"\n{affixes}") + legendary +
                $"\n{(jewel.Corrupted ? "已腐化" : "未腐化")}{(jewel.Locked ? " · 已锁定" : string.Empty)}";

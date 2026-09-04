@@ -186,12 +186,20 @@ public partial class P2ItemTooltipPanel : PanelContainer
         if (_label is null) return;
         string raw = _item is null ? _fallbackText : P1UiText.ItemTooltip(_item, _showDetails);
         if (_extraText.Length > 0) raw += $"\n\n{_extraText}";
+        _label.CustomMinimumSize = new Vector2(285, Math.Max(34, raw.Split('\n').Length * 17));
+        _label.Text = FormatBbCode(raw, _rarityColor);
+    }
+
+    internal static string ItemBbCode(ItemInstance item, bool includeAffixDetails) =>
+        FormatBbCode(P1UiText.ItemTooltip(item, includeAffixDetails), P1UiText.RarityColor(item.Rarity));
+
+    private static string FormatBbCode(string raw, Color rarityColor)
+    {
         string[] lines = raw.Split('\n');
         string first = lines.Length == 0 ? string.Empty : EscapeBbCode(lines[0]);
         string rest = string.Join('\n', lines.Skip(1).Select(FormatTooltipLine));
-        _label.CustomMinimumSize = new Vector2(285, Math.Max(34, lines.Length * 17));
-        _label.Text = $"[color=#{_rarityColor.ToHtml(false)}][font_size=15]{first}[/font_size][/color]" +
-                      (rest.Length == 0 ? string.Empty : $"\n[font_size=12]{rest}[/font_size]");
+        return $"[color=#{rarityColor.ToHtml(false)}][font_size=15]{first}[/font_size][/color]" +
+               (rest.Length == 0 ? string.Empty : $"\n[font_size=12]{rest}[/font_size]");
     }
 
     private static string EscapeBbCode(string text) => text.Replace("[", "[​", StringComparison.Ordinal);

@@ -276,15 +276,29 @@ public static class EquipmentCraftingService
 
     private static EquipmentCraftingResult BiasedReroll(ItemInstance item, string tag, ulong seed, string resource, int cost)
     {
-        ItemInstance generated = ItemGenerator.Generate(item.Base.StableId, item.ItemLevel, ItemRarity.Rare, seed, item.InstanceId);
         AffixDefinition[] targets = P1Affixes.For(item.Base, item.ItemLevel).Where(value => HasDirection(value, tag)).ToArray();
         if (targets.Length == 0) return Fail("no_direction_candidate", $"没有合法{tag}词缀。", resource, cost);
         var random = new Pcg32(seed ^ 0x9e3779b97f4a7c15UL);
-        AffixDefinition target = targets[(int)(random.NextUInt() % (uint)targets.Length)];
-        AffixRoll rolled = Roll(target, random);
-        AffixRoll[] affixes = generated.Affixes.Where(value => value.Definition.Position != target.Position).Take(3).Append(rolled)
-            .Concat(generated.Affixes.Where(value => value.Definition.Position == target.Position).Take(2)).Take(6).ToArray();
-        ItemInstance changed = CopyPersistent(item, generated) with { Affixes = affixes };
+        var affixes = item.Affixes.Where(value => value.Crafted || item.IsFractured(value) ||
+            IsProtected(item, value.Definition.Position)).ToList();
+        int desiredCount = Math.Max(affixes.Count, 4 + (int)(random.NextUInt() % 3));
+        bool hasTarget = affixes.Any(value => HasDirection(value.Definition, tag));
+        while (affixes.Count < desiredCount)
+        {
+            AffixDefinition[] legal = P1Affixes.For(item.Base, item.ItemLevel)
+                .Where(candidate => affixes.Count(value => value.Definition.Position == candidate.Position) < 3)
+                .Where(candidate => affixes.All(value => value.Definition.StableFamilyId != candidate.StableFamilyId &&
+                    value.Definition.MutualExclusionGroup != candidate.MutualExclusionGroup))
+                .ToArray();
+            if (!hasTarget)
+                legal = legal.Where(candidate => HasDirection(candidate, tag)).ToArray();
+            if (legal.Length == 0) break;
+            AffixDefinition selected = WeightedChoice(legal, item.Base, random, hasTarget ? tag : null);
+            affixes.Add(Roll(selected, random));
+            hasTarget |= HasDirection(selected, tag);
+        }
+        if (!hasTarget) return Fail("no_direction_capacity", $"已保留词缀占满了{tag}词缀的合法位置。", resource, cost);
+        ItemInstance changed = item with { Rarity = ItemRarity.Rare, Affixes = affixes.ToArray() };
         return Ok(ApplyProtections(item, changed, true), $"已完成{tag}偏向重铸", resource, cost);
     }
 
@@ -327,13 +341,15 @@ public static class EquipmentCraftingService
         position == AffixPosition.Prefix ? item.ProtectPrefixesNextCraft : item.ProtectSuffixesNextCraft;
 
     private static AffixDefinition WeightedChoice(IReadOnlyList<AffixDefinition> candidates,
-        ItemBaseDefinition itemBase, Pcg32 random)
+        ItemBaseDefinition itemBase, Pcg32 random, string? boostedDirection = null)
     {
-        int total = candidates.Sum(value => value.WeightFor(itemBase));
+        int Weight(AffixDefinition value) => checked(value.WeightFor(itemBase) *
+            (boostedDirection is not null && HasDirection(value, boostedDirection) ? 5 : 1));
+        int total = candidates.Sum(Weight);
         int roll = (int)(random.NextUInt() % (uint)total);
         foreach (AffixDefinition candidate in candidates)
         {
-            roll -= candidate.WeightFor(itemBase);
+            roll -= Weight(candidate);
             if (roll < 0) return candidate;
         }
         return candidates[^1];
@@ -352,7 +368,8 @@ public static class EquipmentCraftingService
         var random = new Pcg32(seed ^ 0xd1b54a32d192ed03UL);
         AffixRoll replacement = Roll(tiers[next], random);
         ItemInstance changed = item with { Affixes = item.Affixes.Select(value => ReferenceEquals(value, selected) ? replacement : value).ToArray() };
-        return Ok(ApplyProtections(item, changed, true), $"词缀移动至 T{tiers[next].Tier}", resource, cost);
+        return Ok(ApplyProtections(item, changed, true),
+            $"词缀移动至 T{P1Affixes.TierFor(item.Base, tiers[next])}", resource, cost);
     }
 
     private static ItemInstance ApplyProtections(ItemInstance original, ItemInstance changed, bool explicitCraft)
@@ -399,6 +416,12 @@ public static class EquipmentCraftingService
 
     private static bool HasDirection(AffixDefinition value, string direction)
     {
+        if (direction == "属性" && value.EffectComponents.Any(component => component.Kind is
+                ItemModifierKind.Physique or ItemModifierKind.Dexterity or ItemModifierKind.Spirit or ItemModifierKind.Energy or
+                ItemModifierKind.IncreasedPhysiqueBasisPoints or ItemModifierKind.IncreasedDexterityBasisPoints or
+                ItemModifierKind.IncreasedSpiritBasisPoints or ItemModifierKind.IncreasedEnergyBasisPoints or
+                ItemModifierKind.IncreasedAllAttributesBasisPoints))
+            return true;
         string text = $"{value.DisplayName} {value.RawText} {string.Join(' ', value.ModTags ?? [])}";
         string[] needles = direction switch
         {

@@ -628,7 +628,7 @@ clamp(200% × 最终实际击中伤害 / 眩晕阈值, 0%, 100%)
 
 主树采用三个嵌套正六边形、30 条属性路径边和六个内环职业起点；中型簇位于内外环之间，大型簇位于外环之外。另新增 4 个属性中型簇和 6 个美德/恶德大型簇，已定义主题节点预算因此增至 1193；完整结构见 [`P30_PASSIVE_TREE_TOPOLOGY.md`](P30_PASSIVE_TREE_TOPOLOGY.md)。全树最终节点可以超过约 1200；1500 仅为布局软目标，必要时允许超出。
 
-三种美德（慈悲、节制、谦逊）与三种恶德（暴怒、懒惰、傲慢）的基础每层效果、12 秒共享刷新、地图结束清零、无代码硬上限但正式来源最多 10 层、六组闭环配对、六个大型簇完整节点及共享专精均已确认，见 [`P30_VIRTUE_VICE_CLUSTERS.md`](P30_VIRTUE_VICE_CLUSTERS.md)。131 个中型簇与 37 个大型簇的固定落位已经确认，见 [`P30_PASSIVE_TREE_PLACEMENT.md`](P30_PASSIVE_TREE_PLACEMENT.md)；珠宝、24 个棱孔、普通词缀、20 枚传奇及腐化规则也已确认，见 [`P30_JEWELS_AND_SOCKETS.md`](P30_JEWELS_AND_SOCKETS.md)。119 个升级点＋30 个剧情点、149 点上限及洗点规则见 [`P30_PASSIVE_POINT_ECONOMY.md`](P30_PASSIVE_POINT_ECONOMY.md)；最终坐标与美术验收已确认，见 [`P30_PASSIVE_TREE_FINAL_LAYOUT.md`](P30_PASSIVE_TREE_FINAL_LAYOUT.md)。十八升华三批均已确认，破军者阵线崩解最终采用反转护甲，见 [`P30_ASCENDANCY_REVIEW_1.md`](P30_ASCENDANCY_REVIEW_1.md)、[`P30_ASCENDANCY_REVIEW_2.md`](P30_ASCENDANCY_REVIEW_2.md)、[`P30_ASCENDANCY_REVIEW_3.md`](P30_ASCENDANCY_REVIEW_3.md)。
+三种美德（慈悲、节制、谦逊）与三种恶德（暴怒、懒惰、傲慢）的基础每层效果、12 秒共享刷新、地图结束清零、无代码硬上限但正式来源最多 10 层、六组闭环配对、六个大型簇完整节点及共享专精均已确认，见 [`P30_VIRTUE_VICE_CLUSTERS.md`](P30_VIRTUE_VICE_CLUSTERS.md)。131 个中型簇与 37 个大型簇的固定落位已经确认，见 [`P30_PASSIVE_TREE_PLACEMENT.md`](P30_PASSIVE_TREE_PLACEMENT.md)；珠宝、24 个棱孔、普通词缀、24 枚传奇及腐化规则也已确认，见 [`P30_JEWELS_AND_SOCKETS.md`](P30_JEWELS_AND_SOCKETS.md)。119 个升级点＋30 个剧情点、149 点上限及洗点规则见 [`P30_PASSIVE_POINT_ECONOMY.md`](P30_PASSIVE_POINT_ECONOMY.md)；最终坐标与美术验收已确认，见 [`P30_PASSIVE_TREE_FINAL_LAYOUT.md`](P30_PASSIVE_TREE_FINAL_LAYOUT.md)。十八升华三批均已确认，破军者阵线崩解最终采用反转护甲，见 [`P30_ASCENDANCY_REVIEW_1.md`](P30_ASCENDANCY_REVIEW_1.md)、[`P30_ASCENDANCY_REVIEW_2.md`](P30_ASCENDANCY_REVIEW_2.md)、[`P30_ASCENDANCY_REVIEW_3.md`](P30_ASCENDANCY_REVIEW_3.md)。
 
 ## 15. 三类强度预算
 

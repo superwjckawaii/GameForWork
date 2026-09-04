@@ -21838,13 +21838,14 @@
         "position": "Suffix",
         "tier": 1,
         "minimumItemLevel": 85,
-        "minimumValue": 40,
+        "minimumValue": 56,
         "maximumValue": 60,
         "weight": 1000,
         "modifierKind": "Dexterity",
         "groupId": "equipment.group.dexterity",
         "applicableCategories": [
-          "Gloves"
+          "Gloves",
+          "Shield"
         ],
         "tagWeights": {
           "gloves": 1000,
@@ -22975,7 +22976,7 @@
         "position": "Suffix",
         "tier": 1,
         "minimumItemLevel": 85,
-        "minimumValue": 40,
+        "minimumValue": 56,
         "maximumValue": 60,
         "weight": 1000,
         "modifierKind": "Energy",
@@ -29648,7 +29649,7 @@
         "position": "Suffix",
         "tier": 1,
         "minimumItemLevel": 85,
-        "minimumValue": 40,
+        "minimumValue": 56,
         "maximumValue": 60,
         "weight": 1000,
         "modifierKind": "Spirit",
@@ -48163,7 +48164,7 @@
         "position": "Suffix",
         "tier": 1,
         "minimumItemLevel": 85,
-        "minimumValue": 40,
+        "minimumValue": 56,
         "maximumValue": 60,
         "weight": 1000,
         "modifierKind": "Physique",
@@ -52401,6 +52402,138 @@
       "components": [],
       "ruleId": "equipment.rule.enchantment.41",
       "ruleText": "\u73A9\u5BB6\u6295\u5C04\u7269\u6216\u666E\u901A\u53EC\u5524\u7269\u9020\u6210\u6709\u6548\u547D\u4E2D\u65F6\u6709 10% \u6982\u7387\u83B7\u5F97 1 \u5C42\u61D2\u60F0\uFF1B\u61D2\u60F0\u4E0A\u9650 \u002B1\uFF1B\u540C\u4E00\u6295\u5C04\u7269\u6280\u80FD\u52A8\u4F5C\u6216\u540C\u4E00\u6B21\u53EC\u5524\u7269\u653B\u51FB\u52A8\u4F5C\u6700\u591A\u5224\u5B9A\u4E00\u6B21\uFF1B\u591A\u679A\u6295\u5C04\u7269\u3001\u591A\u6BB5\u547D\u4E2D\u548C\u8303\u56F4\u5185\u591A\u76EE\u6807\u4E0D\u80FD\u91CD\u590D\u5224\u5B9A"
+    },
+    {
+      "id": "equipment.enchantment.42.6a0cb0bd4d",
+      "legacyIds": [],
+      "displayName": "蛮力刻印",
+      "workshopLevel": 2,
+      "goldCost": 250,
+      "applicableEquipment": "胸甲、头盔、手套、鞋、腰带、戒指、护符",
+      "components": [],
+      "ruleId": "equipment.rule.enchantment.42",
+      "ruleText": "体魄 +30；固定属性加成；同一件装备只能保留一个附魔"
+    },
+    {
+      "id": "equipment.enchantment.43.fb0f1fa365",
+      "legacyIds": [],
+      "displayName": "灵风刻印",
+      "workshopLevel": 2,
+      "goldCost": 250,
+      "applicableEquipment": "胸甲、头盔、手套、鞋、腰带、戒指、护符",
+      "components": [],
+      "ruleId": "equipment.rule.enchantment.43",
+      "ruleText": "灵巧 +30；固定属性加成；同一件装备只能保留一个附魔"
+    },
+    {
+      "id": "equipment.enchantment.44.4eff18a7e5",
+      "legacyIds": [],
+      "displayName": "明识刻印",
+      "workshopLevel": 2,
+      "goldCost": 250,
+      "applicableEquipment": "胸甲、头盔、手套、鞋、腰带、戒指、护符",
+      "components": [],
+      "ruleId": "equipment.rule.enchantment.44",
+      "ruleText": "精神 +30；固定属性加成；同一件装备只能保留一个附魔"
+    },
+    {
+      "id": "equipment.enchantment.45.8ab6e62b88",
+      "legacyIds": [],
+      "displayName": "聚能刻印",
+      "workshopLevel": 2,
+      "goldCost": 250,
+      "applicableEquipment": "胸甲、头盔、手套、鞋、腰带、戒指、护符",
+      "components": [],
+      "ruleId": "equipment.rule.enchantment.45",
+      "ruleText": "能量 +30；固定属性加成；同一件装备只能保留一个附魔"
+    },
+    {
+      "id": "equipment.enchantment.46.f6f8ef1b19",
+      "legacyIds": [],
+      "displayName": "巨灵铭文",
+      "workshopLevel": 3,
+      "goldCost": 2500,
+      "applicableEquipment": "胸甲、头盔、手套、鞋、腰带、戒指、护符",
+      "components": [],
+      "ruleId": "equipment.rule.enchantment.46",
+      "ruleText": "体魄 +60；固定属性加成；同一件装备只能保留一个附魔"
+    },
+    {
+      "id": "equipment.enchantment.47.013ae3c5b4",
+      "legacyIds": [],
+      "displayName": "疾影铭文",
+      "workshopLevel": 3,
+      "goldCost": 2500,
+      "applicableEquipment": "胸甲、头盔、手套、鞋、腰带、戒指、护符",
+      "components": [],
+      "ruleId": "equipment.rule.enchantment.47",
+      "ruleText": "灵巧 +60；固定属性加成；同一件装备只能保留一个附魔"
+    },
+    {
+      "id": "equipment.enchantment.48.649b864f53",
+      "legacyIds": [],
+      "displayName": "睿思铭文",
+      "workshopLevel": 3,
+      "goldCost": 2500,
+      "applicableEquipment": "胸甲、头盔、手套、鞋、腰带、戒指、护符",
+      "components": [],
+      "ruleId": "equipment.rule.enchantment.48",
+      "ruleText": "精神 +60；固定属性加成；同一件装备只能保留一个附魔"
+    },
+    {
+      "id": "equipment.enchantment.49.84a357b273",
+      "legacyIds": [],
+      "displayName": "星能铭文",
+      "workshopLevel": 3,
+      "goldCost": 2500,
+      "applicableEquipment": "胸甲、头盔、手套、鞋、腰带、戒指、护符",
+      "components": [],
+      "ruleId": "equipment.rule.enchantment.49",
+      "ruleText": "能量 +60；固定属性加成；同一件装备只能保留一个附魔"
+    },
+    {
+      "id": "equipment.enchantment.50.1b3cbf0759",
+      "legacyIds": [],
+      "displayName": "泰坦王印",
+      "workshopLevel": 4,
+      "goldCost": 25000,
+      "applicableEquipment": "腰带、戒指、护符",
+      "components": [],
+      "ruleId": "equipment.rule.enchantment.50",
+      "ruleText": "体魄提高 15%；与其他体魄提高相加后作用于固定体魄；同一件装备只能保留一个附魔"
+    },
+    {
+      "id": "equipment.enchantment.51.8b4eacbb2f",
+      "legacyIds": [],
+      "displayName": "逐风王印",
+      "workshopLevel": 4,
+      "goldCost": 25000,
+      "applicableEquipment": "腰带、戒指、护符",
+      "components": [],
+      "ruleId": "equipment.rule.enchantment.51",
+      "ruleText": "灵巧提高 15%；与其他灵巧提高相加后作用于固定灵巧；同一件装备只能保留一个附魔"
+    },
+    {
+      "id": "equipment.enchantment.52.4eb4b6011f",
+      "legacyIds": [],
+      "displayName": "万象王印",
+      "workshopLevel": 4,
+      "goldCost": 25000,
+      "applicableEquipment": "腰带、戒指、护符",
+      "components": [],
+      "ruleId": "equipment.rule.enchantment.52",
+      "ruleText": "精神提高 15%；与其他精神提高相加后作用于固定精神；同一件装备只能保留一个附魔"
+    },
+    {
+      "id": "equipment.enchantment.53.a7b056cfa8",
+      "legacyIds": [],
+      "displayName": "星海王印",
+      "workshopLevel": 4,
+      "goldCost": 25000,
+      "applicableEquipment": "腰带、戒指、护符",
+      "components": [],
+      "ruleId": "equipment.rule.enchantment.53",
+      "ruleText": "能量提高 15%；与其他能量提高相加后作用于固定能量；同一件装备只能保留一个附魔"
     }
   ],
   "legendaryItems": [
@@ -53690,6 +53823,102 @@
       "costText": "\u91D1\u5E01 25000",
       "targetText": "\u7531\u9644\u9B54\u9002\u7528\u88C5\u5907\u5B9A\u4E49",
       "ruleText": "equipment.enchantment.41.8c31341d92",
+      "kind": "Enchantment"
+    },
+    {
+      "id": "equipment.craft.enchant.6a0cb0bd4d",
+      "displayName": "附魔：蛮力刻印",
+      "costText": "金币 250",
+      "targetText": "由附魔适用装备定义",
+      "ruleText": "equipment.enchantment.42.6a0cb0bd4d",
+      "kind": "Enchantment"
+    },
+    {
+      "id": "equipment.craft.enchant.fb0f1fa365",
+      "displayName": "附魔：灵风刻印",
+      "costText": "金币 250",
+      "targetText": "由附魔适用装备定义",
+      "ruleText": "equipment.enchantment.43.fb0f1fa365",
+      "kind": "Enchantment"
+    },
+    {
+      "id": "equipment.craft.enchant.4eff18a7e5",
+      "displayName": "附魔：明识刻印",
+      "costText": "金币 250",
+      "targetText": "由附魔适用装备定义",
+      "ruleText": "equipment.enchantment.44.4eff18a7e5",
+      "kind": "Enchantment"
+    },
+    {
+      "id": "equipment.craft.enchant.8ab6e62b88",
+      "displayName": "附魔：聚能刻印",
+      "costText": "金币 250",
+      "targetText": "由附魔适用装备定义",
+      "ruleText": "equipment.enchantment.45.8ab6e62b88",
+      "kind": "Enchantment"
+    },
+    {
+      "id": "equipment.craft.enchant.f6f8ef1b19",
+      "displayName": "附魔：巨灵铭文",
+      "costText": "金币 2500",
+      "targetText": "由附魔适用装备定义",
+      "ruleText": "equipment.enchantment.46.f6f8ef1b19",
+      "kind": "Enchantment"
+    },
+    {
+      "id": "equipment.craft.enchant.013ae3c5b4",
+      "displayName": "附魔：疾影铭文",
+      "costText": "金币 2500",
+      "targetText": "由附魔适用装备定义",
+      "ruleText": "equipment.enchantment.47.013ae3c5b4",
+      "kind": "Enchantment"
+    },
+    {
+      "id": "equipment.craft.enchant.649b864f53",
+      "displayName": "附魔：睿思铭文",
+      "costText": "金币 2500",
+      "targetText": "由附魔适用装备定义",
+      "ruleText": "equipment.enchantment.48.649b864f53",
+      "kind": "Enchantment"
+    },
+    {
+      "id": "equipment.craft.enchant.84a357b273",
+      "displayName": "附魔：星能铭文",
+      "costText": "金币 2500",
+      "targetText": "由附魔适用装备定义",
+      "ruleText": "equipment.enchantment.49.84a357b273",
+      "kind": "Enchantment"
+    },
+    {
+      "id": "equipment.craft.enchant.1b3cbf0759",
+      "displayName": "附魔：泰坦王印",
+      "costText": "金币 25000",
+      "targetText": "由附魔适用装备定义",
+      "ruleText": "equipment.enchantment.50.1b3cbf0759",
+      "kind": "Enchantment"
+    },
+    {
+      "id": "equipment.craft.enchant.8b4eacbb2f",
+      "displayName": "附魔：逐风王印",
+      "costText": "金币 25000",
+      "targetText": "由附魔适用装备定义",
+      "ruleText": "equipment.enchantment.51.8b4eacbb2f",
+      "kind": "Enchantment"
+    },
+    {
+      "id": "equipment.craft.enchant.4eb4b6011f",
+      "displayName": "附魔：万象王印",
+      "costText": "金币 25000",
+      "targetText": "由附魔适用装备定义",
+      "ruleText": "equipment.enchantment.52.4eb4b6011f",
+      "kind": "Enchantment"
+    },
+    {
+      "id": "equipment.craft.enchant.a7b056cfa8",
+      "displayName": "附魔：星海王印",
+      "costText": "金币 25000",
+      "targetText": "由附魔适用装备定义",
+      "ruleText": "equipment.enchantment.53.a7b056cfa8",
       "kind": "Enchantment"
     }
   ],

@@ -21,5 +21,13 @@ public static class P1Affixes
             .Where(affix => affix.MinimumItemLevel <= itemLevel).ToArray();
 
     public static int TierFor(ItemBaseDefinition itemBase, AffixDefinition affix)
-        => affix.Tier;
+    {
+        string familyId = EquipmentCatalog.ResolveAffixId(affix.StableFamilyId);
+        AffixDefinition[] legalTiers = ByBase[EquipmentCatalog.ResolveBaseId(itemBase.StableId)]
+            .Where(candidate => EquipmentCatalog.ResolveAffixId(candidate.StableFamilyId) == familyId)
+            .OrderBy(candidate => candidate.Tier)
+            .ToArray();
+        int index = Array.FindIndex(legalTiers, candidate => candidate.Tier == affix.Tier);
+        return index < 0 ? affix.Tier : index + 1;
+    }
 }

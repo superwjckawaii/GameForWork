@@ -48,6 +48,33 @@ public sealed class P4SpatialCombatTests
     }
 
     [Fact]
+    public void SpatialCombatAcceptsMaximumKingDisasterAreaRoll()
+    {
+        P4NodeCombatResult result = new P4SpatialCombatRunner().Run(new P4NodeCombatRequest(
+            PowerfulBuild(), 1, 100, 1, HasElite: false, HasBoss: false, AbyssRoute: false,
+            Formation: 0, MaximumTicks: 1, EnemyAreaBasisPoints: 34_200), 0x48);
+
+        Assert.Equal(1, result.Ticks);
+    }
+
+    [Fact]
+    public void HighDamageBleedUsesWideIntermediateArithmeticInAuthoritativeCombat()
+    {
+        P1TeamBuild build = PowerfulBuild() with
+        {
+            Weapon = new WeaponProfile("test.high-damage-bleed", 500_000, 500_000, 1_700, 0),
+            IncreasedBleedChanceBasisPoints = 10_000,
+            AlwaysHit = true,
+        };
+
+        P4NodeCombatResult result = new P4SpatialCombatRunner().Run(new P4NodeCombatRequest(
+            build, 1, 100, 1, HasElite: false, HasBoss: true, AbyssRoute: false, Formation: 0,
+            MaximumTicks: 100, EnemyLifeBasisPoints: 500_000, BossLifeBasisPoints: 100_000), 0x4801);
+
+        Assert.Contains(result.Events, item => item.Kind == P4SpatialEventKind.HeavyStrike && item.Value > 0);
+    }
+
+    [Fact]
     public void UnlimitedSpatialBattleResolvesDeadlockWithoutTimeoutOrUnboundedFrames()
     {
         CharacterSheet sheet = new(100, new CharacterAttributes(300, 100, 100, 100),

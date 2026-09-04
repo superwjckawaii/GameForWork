@@ -5,20 +5,21 @@ public enum P30JewelRarity { Normal, Magic, Rare, Legendary }
 public enum P30JewelRadius { None, Small, Medium, Large }
 public enum P30JewelAffixPosition { Prefix, Suffix, CorruptedImplicit }
 public enum P30JewelCorruptionResult { PowerfulImplicit, Locked, Damaged, Destroyed }
-public enum P30JewelCraftOperation { RerollRare, DissolveAffix, Corrupt }
+public enum P30JewelCraftOperation { RerollRare, DissolveAffix, Corrupt, RerollLegendaryRadius }
 
 public sealed record P30JewelAffix(string StableId, string DisplayName, P30JewelAffixPosition Position,
     int Tier, int Value, string Effect, IReadOnlyList<string> Tags);
 
 public sealed record P30LegendaryJewelDefinition(string StableId, string DisplayName, P30JewelRadius Radius,
-    string Effect, string Source, P30VirtueViceKind? Oath = null);
+    string Effect, string Source, P30VirtueViceKind? Oath = null, int MinimumRadius = 0, int MaximumRadius = 0);
 
 public sealed record P30JewelInstance(string InstanceId, P30JewelBase Base, int ItemLevel, P30JewelRarity Rarity,
     int Resonance, IReadOnlyList<P30JewelAffix> Affixes, P30LegendaryJewelDefinition? Legendary = null,
-    bool Corrupted = false, bool Locked = false)
+    bool Corrupted = false, bool Locked = false, int RolledRadius = 0)
 {
     public int RequiredLevel => Math.Clamp(ItemLevel, 1, 100);
     public string DisplayName => Legendary?.DisplayName ?? P30Jewels.BaseName(Base);
+    public int EffectiveRadius => RolledRadius > 0 ? RolledRadius : P30Jewels.RadiusValue(Legendary?.Radius ?? P30JewelRadius.None);
 }
 
 public sealed record P30JewelStateSnapshot(IReadOnlyList<P30JewelInstance> Items,
@@ -38,7 +39,7 @@ public sealed record P30JewelModifiers(int Physique = 0, int Dexterity = 0, int 
     int MoreAttackDamageBasisPoints = 0, int MoreSpellDamageBasisPoints = 0,
     int MoreDamageOverTimeBasisPoints = 0, int MaximumElementalResistanceBasisPoints = 0,
     int MaximumVoidResistanceBasisPoints = 0, int IncreasedActionSpeedBasisPoints = 0,
-    int ReservationEfficiencyBasisPoints = 0);
+    int ReservationEfficiencyBasisPoints = 0, int IncreasedPhysiqueBasisPoints = 0);
 
 public sealed class P30JewelState
 {
@@ -76,6 +77,15 @@ public sealed class P30JewelState
     }
 
     public bool TryUnsocket(string socketId) => _socketed.Remove(socketId);
+
+    public void RestoreSnapshot(P30JewelStateSnapshot snapshot)
+    {
+        P30JewelState restored = Restore(snapshot);
+        _items.Clear();
+        _socketed.Clear();
+        foreach ((string id, P30JewelInstance jewel) in restored._items) _items.Add(id, jewel);
+        foreach ((string socket, string id) in restored._socketed) _socketed.Add(socket, id);
+    }
 
     public bool TryReplace(P30JewelInstance jewel)
     {
@@ -143,7 +153,19 @@ public static class P30Jewels
         O("mercy_oath", "仁恕之瞳", P30VirtueViceKind.Mercy, "深渊终战"), O("temperance_oath", "静律之芯", P30VirtueViceKind.Temperance, "命能花园终战"),
         O("humility_oath", "俯身之镜", P30VirtueViceKind.Humility, "地图Boss"), O("rage_oath", "裂怒之核", P30VirtueViceKind.Rage, "赤誓终战"),
         O("sloth_oath", "闲眠之眼", P30VirtueViceKind.Sloth, "亡旗战阵终战"), O("arrogance_oath", "孤峰之瞳", P30VirtueViceKind.Arrogance, "苍誓终战"),
+        R("bloodbound_domain", "赤骸疆界", 180, 260,
+            "半径内已配置小天赋各提供体魄 +20；已配置显著或专精各使体魄提高 5%"),
+        R("pathless_chart", "无径星图", 140, 200,
+            "半径内天赋可以无需连接直接配置；这些未连接天赋不能作为通往半径外天赋的起点"),
+        R("bastion_abacus", "天垒算珠", 180, 240,
+            "半径内已配置小天赋各使攻击伤害提高 4%；已配置显著或专精各使攻击速度提高 3%"),
+        R("rampart_echo", "守垒余响", 180, 240,
+            "半径内已配置小天赋各使护甲提高 4%；已配置显著或专精各使最大生命提高 2%"),
     ];
+
+    public const int CitadelLegendaryDropChanceBasisPoints = 800;
+    public static IReadOnlyList<string> CitadelLegendaryIds { get; } =
+        ["bloodbound_domain", "pathless_chart", "bastion_abacus", "rampart_echo"];
 
     public static string BaseName(P30JewelBase value) => value switch
     { P30JewelBase.Crimson => "赤铁棱晶", P30JewelBase.Verdant => "翠影棱晶", P30JewelBase.Golden => "金魂棱晶", P30JewelBase.Azure => "苍晶棱晶", _ => "四相棱晶" };
@@ -221,9 +243,22 @@ public static class P30Jewels
         return new(instanceId, jewelBase, itemLevel, rarity, (int)((seed >> 48) % 41), affixes);
     }
 
-    public static P30JewelInstance CreateLegendary(string stableId, int itemLevel, string instanceId) =>
-        new(instanceId, P30JewelBase.Quad, Math.Clamp(itemLevel, 1, 100), P30JewelRarity.Legendary, 0, [],
-            Legendary.Single(item => item.StableId == $"p30.jewel.{stableId}"));
+    public static P30JewelInstance CreateLegendary(string stableId, int itemLevel, string instanceId, ulong seed = 0)
+    {
+        P30LegendaryJewelDefinition definition = Legendary.Single(item => item.StableId == $"p30.jewel.{stableId}");
+        int radius = definition.MinimumRadius <= 0 ? 0 : definition.MinimumRadius +
+            (int)(Mix(seed ^ StableHash(definition.StableId)) % (ulong)(definition.MaximumRadius - definition.MinimumRadius + 1));
+        return new(instanceId, P30JewelBase.Quad, Math.Clamp(itemLevel, 1, 100), P30JewelRarity.Legendary, 0, [],
+            definition, RolledRadius: radius);
+    }
+
+    public static P30JewelInstance? RollCitadelLegendary(int itemLevel, ulong seed, string instanceId)
+    {
+        ulong roll = Mix(seed ^ 0x30c17ade1UL);
+        if (roll % 10_000 >= CitadelLegendaryDropChanceBasisPoints) return null;
+        string stableId = CitadelLegendaryIds[(int)((roll >> 16) % (ulong)CitadelLegendaryIds.Count)];
+        return CreateLegendary(stableId, itemLevel, instanceId, roll);
+    }
 
     public static (P30JewelCorruptionResult Result, P30JewelInstance? Jewel) Corrupt(P30JewelInstance jewel, ulong seed)
     {
@@ -260,6 +295,14 @@ public static class P30Jewels
         P30JewelInstance jewel, P30JewelCraftOperation operation, ulong seed)
     {
         ArgumentNullException.ThrowIfNull(jewel);
+        if (operation == P30JewelCraftOperation.RerollLegendaryRadius)
+        {
+            if (jewel.Legendary is not { MinimumRadius: > 0 } legendary)
+                return (false, "该传奇珠宝没有可重投的半径。", jewel, false);
+            int radius = legendary.MinimumRadius + (int)(Mix(seed ^ StableHash(jewel.InstanceId)) %
+                (ulong)(legendary.MaximumRadius - legendary.MinimumRadius + 1));
+            return (true, $"半径已重投为 {radius}。", jewel with { RolledRadius = radius }, false);
+        }
         if (jewel.Legendary is not null) return (false, "传奇珠宝不能进行该项加工。", jewel, false);
         if (jewel.Corrupted || jewel.Locked) return (false, "已腐化或锁定的珠宝不能继续加工。", jewel, false);
         switch (operation)
@@ -302,6 +345,7 @@ public static class P30Jewels
         P30JewelCraftOperation.RerollRare => P4.MetalCurrencyKind.ChaosGold,
         P30JewelCraftOperation.DissolveAffix => P4.MetalCurrencyKind.DissolutionSilver,
         P30JewelCraftOperation.Corrupt => P4.MetalCurrencyKind.CorruptionIron,
+        P30JewelCraftOperation.RerollLegendaryRadius => P4.MetalCurrencyKind.DivineSilver,
         _ => throw new ArgumentOutOfRangeException(nameof(operation)),
     };
 
@@ -309,18 +353,21 @@ public static class P30Jewels
     { <= 5 => 180, <= 10 => 220, <= 15 => 270, _ => 330 };
     public static int BossDropChanceBasisPoints(int tier) => 100 + 8 * Math.Clamp(tier, 1, 20);
 
-    public static P30JewelModifiers CalculateModifiers(P30JewelState state)
+    public static P30JewelModifiers CalculateModifiers(P30JewelState state,
+        P1.Progression.PassiveTreeAllocation? allocation = null)
     {
         int physique = 0, dexterity = 0, spirit = 0, energy = 0, attack = 0, spell = 0, life = 0,
             mana = 0, shield = 0, armor = 0, evasion = 0, speed = 0, accuracy = 0, critical = 0,
             criticalMulti = 0, barrier = 0, instantLife = 0, instantMana = 0, instantShield = 0,
             moreAttack = 0, moreSpell = 0, moreDot = 0, maximumElemental = 0, maximumVoid = 0,
-            actionSpeed = 0, reservation = 0;
+            actionSpeed = 0, reservation = 0, increasedPhysique = 0;
         var conversions = new List<P30Conversion>();
         var maxima = new Dictionary<P30VirtueViceKind, int>();
         var oaths = new HashSet<P30VirtueViceKind>();
-        foreach (P30JewelInstance jewel in state.Socketed.Keys.Select(state.At).OfType<P30JewelInstance>())
+        foreach ((string socketId, string _) in state.Socketed)
         {
+            P30JewelInstance? jewel = state.At(socketId);
+            if (jewel is null) continue;
             int implicitValue = jewel.Base == P30JewelBase.Quad ? 8 : 20;
             implicitValue = implicitValue * (100 + jewel.Resonance) / 100;
             switch (jewel.Base)
@@ -371,12 +418,70 @@ public static class P30Jewels
                     conversions.Add(new(P30DamageType.Fire, P30DamageType.Void, 2_500, "jewel.dark.fire"));
                     conversions.Add(new(P30DamageType.Cold, P30DamageType.Void, 2_500, "jewel.dark.cold"));
                     conversions.Add(new(P30DamageType.Lightning, P30DamageType.Void, 2_500, "jewel.dark.lightning")); break;
+                case "p30.jewel.bloodbound_domain" when allocation is not null:
+                    foreach (P1.Progression.PassiveNodeDefinition node in AllocatedNodesInRadius(socketId, jewel, allocation.Allocated))
+                    {
+                        if (node.Kind == P1.Progression.PassiveNodeKind.Small) physique += 20;
+                        else if (node.Kind is P1.Progression.PassiveNodeKind.Notable or P1.Progression.PassiveNodeKind.Mastery)
+                            increasedPhysique += 500;
+                    }
+                    break;
+                case "p30.jewel.bastion_abacus" when allocation is not null:
+                    foreach (P1.Progression.PassiveNodeDefinition node in AllocatedNodesInRadius(socketId, jewel, allocation.Allocated))
+                    {
+                        if (node.Kind == P1.Progression.PassiveNodeKind.Small) attack += 400;
+                        else if (node.Kind is P1.Progression.PassiveNodeKind.Notable or P1.Progression.PassiveNodeKind.Mastery)
+                            speed += 300;
+                    }
+                    break;
+                case "p30.jewel.rampart_echo" when allocation is not null:
+                    foreach (P1.Progression.PassiveNodeDefinition node in AllocatedNodesInRadius(socketId, jewel, allocation.Allocated))
+                    {
+                        if (node.Kind == P1.Progression.PassiveNodeKind.Small) armor += 400;
+                        else if (node.Kind is P1.Progression.PassiveNodeKind.Notable or P1.Progression.PassiveNodeKind.Mastery)
+                            life += 200;
+                    }
+                    break;
             }
         }
         return new(physique, dexterity, spirit, energy, attack, spell, life, mana, shield, armor, evasion,
             speed, accuracy, critical, criticalMulti, barrier, instantLife, instantMana, instantShield,
             conversions, maxima, oaths.Order().ToArray(), moreAttack, moreSpell, moreDot, maximumElemental,
-            maximumVoid, actionSpeed, reservation);
+            maximumVoid, actionSpeed, reservation, increasedPhysique);
+    }
+
+    public static bool GrantsUnlinkedAllocation(P30JewelState? state, IReadOnlySet<string> allocated,
+        string targetId, string? ignoredSocket = null)
+    {
+        if (state is null) return false;
+        P1.Progression.PassiveNodeDefinition target = P1.Progression.P1PassiveTree.Get(targetId);
+        if (target.Kind is P1.Progression.PassiveNodeKind.Start or P1.Progression.PassiveNodeKind.JewelSocket ||
+            target.Start != P1.Progression.PassiveStartKind.None) return false;
+        return state.Socketed.Keys.Where(socket => socket != ignoredSocket && allocated.Contains(socket))
+            .Any(socket => state.At(socket)?.Legendary?.StableId == "p30.jewel.pathless_chart" &&
+                IsInRadius(socket, targetId, state.At(socket)!.EffectiveRadius));
+    }
+
+    public static int RadiusValue(P30JewelRadius radius) => radius switch
+    {
+        P30JewelRadius.Small => 140,
+        P30JewelRadius.Medium => 180,
+        P30JewelRadius.Large => 220,
+        _ => 0,
+    };
+
+    private static IEnumerable<P1.Progression.PassiveNodeDefinition> AllocatedNodesInRadius(
+        string socketId, P30JewelInstance jewel, IReadOnlySet<string> allocated) => allocated
+        .Where(id => id != socketId && IsInRadius(socketId, id, jewel.EffectiveRadius))
+        .Select(P1.Progression.P1PassiveTree.Get);
+
+    private static bool IsInRadius(string socketId, string nodeId, int radius)
+    {
+        P1.Progression.PassiveNodeDefinition socket = P1.Progression.P1PassiveTree.Get(socketId);
+        P1.Progression.PassiveNodeDefinition node = P1.Progression.P1PassiveTree.Get(nodeId);
+        double dx = node.X - socket.X;
+        double dy = node.Y - socket.Y;
+        return dx * dx + dy * dy <= radius * radius;
     }
 
     private static int Tier(int level, ulong seed)
@@ -386,6 +491,15 @@ public static class P30Jewels
         return Math.Clamp(best + (int)(seed % (ulong)(worst - best + 1)), best, worst);
     }
     private static int Weighted(ulong roll) => roll < 100 ? 0 : roll < 200 ? 1 : roll < 300 ? 2 : roll < 400 ? 3 : 4;
+    private static ulong Mix(ulong value)
+    {
+        value += 0x9e3779b97f4a7c15UL;
+        value = (value ^ (value >> 30)) * 0xbf58476d1ce4e5b9UL;
+        value = (value ^ (value >> 27)) * 0x94d049bb133111ebUL;
+        return value ^ (value >> 31);
+    }
+    private static ulong StableHash(string value) => value.Aggregate(1469598103934665603UL,
+        (hash, character) => (hash ^ character) * 1099511628211UL);
     private static string VirtueViceName(string value) => value switch
     {
         "mercy" => "慈悲", "temperance" => "节制", "humility" => "谦逊",
@@ -395,4 +509,7 @@ public static class P30Jewels
         new($"p30.jewel.{id}", name, radius, effect, source);
     private static P30LegendaryJewelDefinition O(string id, string name, P30VirtueViceKind kind, string source) =>
         new($"p30.jewel.{id}", name, P30JewelRadius.None, $"{kind}上限+1并提供专属获取规则", source, kind);
+    private static P30LegendaryJewelDefinition R(string id, string name, int minimumRadius, int maximumRadius, string effect) =>
+        new($"p30.jewel.{id}", name, P30JewelRadius.None, effect, "灰烬天垒", MinimumRadius: minimumRadius,
+            MaximumRadius: maximumRadius);
 }

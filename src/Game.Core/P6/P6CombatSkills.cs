@@ -199,7 +199,7 @@ public static class P6CombatSkillRules
                           (long)life * 10_000 < (long)maximumLife * skill.ExecuteThresholdBasisPoints
             ? skill.ExecuteMultiplierBasisPoints
             : skill.NonExecuteMultiplierBasisPoints;
-        return checked(skill.DamageMultiplierBasisPoints * conditional / 10_000);
+        return SaturatingInt((long)skill.DamageMultiplierBasisPoints * conditional / 10_000);
     }
 
     public static int BaseDamage(P6ResolvedSkill skill, SkillTag tags, WeaponProfile weapon,
@@ -215,23 +215,42 @@ public static class P6CombatSkillRules
         int targetLife, int targetMaximumLife, int actionMultiplierBasisPoints = 10_000)
     {
         P205PassiveModifiers passive = build.PassiveProfile ?? P205PassiveModifiers.Empty;
-        int value = checked(rawDamage * (10_000 + build.IncreasedDamageBasisPoints +
-            passive.DamageFor(tags) + configuration.Quality * 100) / 10_000);
-        value = checked(value * (10_000 + passive.MoreDamageBasisPoints) / 10_000);
+        long value = rawDamage;
+        long increasedMultiplier = 10_000L + build.IncreasedDamageBasisPoints +
+            passive.DamageFor(tags) + (long)configuration.Quality * 100;
+        value = Scale(value, increasedMultiplier);
+        value = Scale(value, 10_000L + passive.MoreDamageBasisPoints);
         int jewelMore = skill.Role == P17SkillRole.DamageOverTime ? build.MoreDamageOverTimeBasisPoints : 0;
         if (tags.HasFlag(SkillTag.Attack)) jewelMore += build.MoreAttackDamageBasisPoints;
         if (tags.HasFlag(SkillTag.Spell)) jewelMore += build.MoreSpellDamageBasisPoints;
-        value = checked(value * (10_000 + jewelMore) / 10_000);
+        value = Scale(value, 10_000L + jewelMore);
         if (tags.HasFlag(SkillTag.Attack))
-            value = checked(value * skill.BaseDamageBasisPoints / 10_000);
-        value = checked(value * DamageMultiplier(skill, targetLife, targetMaximumLife) / 10_000);
-        value = checked(value * P30MasteryRuntime.OffensiveMultiplier(passive, tags, build.Weapon,
-            targetLife, targetMaximumLife) / 10_000);
-        return checked(value * actionMultiplierBasisPoints / 10_000);
+            value = Scale(value, skill.BaseDamageBasisPoints);
+        value = Scale(value, DamageMultiplier(skill, targetLife, targetMaximumLife));
+        value = Scale(value, P30MasteryRuntime.OffensiveMultiplier(passive, tags, build.Weapon,
+            targetLife, targetMaximumLife));
+        return SaturatingInt(Scale(value, actionMultiplierBasisPoints));
+    }
+
+    public static int ActionDelay(P1TeamBuild build, int baseTicks, SkillTag tags)
+    {
+        P205PassiveModifiers passive = build.PassiveProfile ?? P205PassiveModifiers.Empty;
+        int masterySpeed = P30MasteryRuntime.ActionSpeedMultiplier(passive, tags, build.Weapon);
+        return Math.Max(1, checked((int)((long)Math.Max(1, baseTicks) * 10_000 * 10_000 /
+            Math.Max(10_000_000, (long)(10_000 + build.IncreasedActionSpeedBasisPoints) * masterySpeed))));
     }
 
     private static int LegacyValue(SkillConfiguration configuration, SkillSupport support) =>
         P30SkillCatalog.SupportFor(support).ValueAt(configuration.Level, configuration.Quality);
 
     private static int More(int basisPoints, int percent) => checked(basisPoints * (10_000 + percent * 100) / 10_000);
+
+    private static long Scale(long value, long basisPoints)
+    {
+        if (value <= 0 || basisPoints <= 0) return 0;
+        if (value > long.MaxValue / basisPoints) return long.MaxValue;
+        return value * basisPoints / 10_000;
+    }
+
+    private static int SaturatingInt(long value) => (int)Math.Clamp(value, 0, int.MaxValue);
 }

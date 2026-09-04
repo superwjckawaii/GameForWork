@@ -49,6 +49,7 @@ New-Item -ItemType Directory -Path $auditRoot -Force | Out-Null
 $economyAudit = Join-Path $auditRoot 'economy.md'
 $combatAudit = Join-Path $auditRoot 'combat.md'
 $buildAudit = Join-Path $auditRoot 'p30-builds.md'
+$equipmentAudit = Join-Path $auditRoot 'p32-equipment.md'
 Invoke-NativeChecked -FilePath $dotnetBinary -Arguments @('run', '--project',
     (Join-Path $repositoryRoot 'tools\P20Audit\P20Audit.csproj'), '--configuration', $Configuration, '--no-build', '--',
     '100000', $economyAudit) -Label 'Regenerate P29 economy audit'
@@ -58,6 +59,9 @@ Invoke-NativeChecked -FilePath $dotnetBinary -Arguments @('run', '--project',
 Invoke-NativeChecked -FilePath $dotnetBinary -Arguments @('run', '--project',
     (Join-Path $repositoryRoot 'tools\P30Audit\P30Audit.csproj'), '--configuration', $Configuration, '--no-build', '--',
     $buildAudit) -Label 'Regenerate P30 build audit'
+Invoke-NativeChecked -FilePath $dotnetBinary -Arguments @('run', '--project',
+    (Join-Path $repositoryRoot 'tools\P32Audit\P32Audit.csproj'), '--configuration', $Configuration, '--no-build', '--',
+    $equipmentAudit) -Label 'Regenerate P32 equipment audit'
 function Read-NormalizedText([string]$Path) {
     return (Get-Content -LiteralPath $Path -Raw).Replace("`r`n", "`n")
 }
@@ -72,5 +76,9 @@ if ((Read-NormalizedText $combatAudit) -ne
 if ((Read-NormalizedText $buildAudit) -ne
     (Read-NormalizedText (Join-Path $repositoryRoot 'docs\v0.4\P30_BUILD_AUDIT.md'))) {
     throw 'Generated P30 build audit differs from the committed release audit.'
+}
+if ((Read-NormalizedText $equipmentAudit) -ne
+    (Read-NormalizedText (Join-Path $repositoryRoot 'docs\v0.5\P32_EQUIPMENT_AUTOMATED_AUDIT.md'))) {
+    throw 'Generated P32 equipment audit differs from the committed release audit.'
 }
 Write-Host '[verify] PASS: assets, restore, build, tests, audits, Godot import and startup all succeeded.'

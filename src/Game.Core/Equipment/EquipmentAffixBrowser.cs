@@ -29,7 +29,7 @@ public static class EquipmentAffixBrowser
                 : query.Category is null || SupportsCategory(affix, query.Category.Value))
             .Where(affix => query.Position is null || affix.Position == query.Position)
             .Where(affix => search.Length == 0 || SearchText(affix).Contains(search, StringComparison.OrdinalIgnoreCase))
-            .Select(affix => new EquipmentAffixView(affix, affix.Tier,
+            .Select(affix => new EquipmentAffixView(affix, itemBase is null ? affix.Tier : P1Affixes.TierFor(itemBase, affix),
                 itemBase is null ? affix.Weight : affix.WeightFor(itemBase)))
             .OrderBy(view => view.Definition.DisplayName, StringComparer.Ordinal)
             .ThenBy(view => view.Tier)

@@ -24,11 +24,11 @@ public sealed class P32EquipmentCatalogTests
         Assert.Equal(1, EquipmentCatalog.Snapshot.SchemaVersion);
         Assert.Equal(244, EquipmentCatalog.Bases.Count);
         Assert.Equal(212, EquipmentCatalog.Affixes.Select(value => value.StableFamilyId).Distinct(StringComparer.Ordinal).Count());
-        Assert.Equal(41, EquipmentCatalog.Enchantments.Count);
+        Assert.Equal(53, EquipmentCatalog.Enchantments.Count);
         Assert.Equal(55, EquipmentCatalog.LegendaryItems.Count);
         Assert.Equal(50, EquipmentCatalog.LegendaryItems.Count(value => value.Rarity == "Legendary"));
         Assert.Equal(5, EquipmentCatalog.LegendaryItems.Count(value => value.Rarity == "Mythic"));
-        Assert.Equal(92, EquipmentCatalog.CraftingOperations.Count);
+        Assert.Equal(104, EquipmentCatalog.CraftingOperations.Count);
         Assert.Equal(37, EquipmentCatalog.CorruptionImplicits.Count);
         Assert.All(EquipmentCatalog.Bases, value => Assert.StartsWith("equipment.base.", value.StableId, StringComparison.Ordinal));
         Assert.All(EquipmentCatalog.Affixes, value => Assert.StartsWith("equipment.affix.", value.StableFamilyId, StringComparison.Ordinal));
@@ -56,8 +56,8 @@ public sealed class P32EquipmentCatalogTests
     [Fact]
     public void ConfirmedEnchantmentsAndLegendaryRulesUseOneRegistry()
     {
-        Assert.Equal(41, EquipmentEnchantmentCatalog.All.Count);
-        Assert.Equal(96, EquipmentRuleRegistry.All.Count);
+        Assert.Equal(53, EquipmentEnchantmentCatalog.All.Count);
+        Assert.Equal(108, EquipmentRuleRegistry.All.Count);
         Assert.Equal(400, EquipmentEnchantmentCatalog.All.Single(value => value.DisplayName == "精准刻印").Value);
         Assert.Equal(6_500, EquipmentEnchantmentCatalog.All.Single(value => value.DisplayName == "毁伤铭文").Value);
         Assert.Contains(EquipmentEnchantmentCatalog.All.Single(value => value.DisplayName == "虹彩王印").EffectComponents,
@@ -69,6 +69,43 @@ public sealed class P32EquipmentCatalogTests
         Assert.DoesNotContain("降低", returning.RuleText, StringComparison.Ordinal);
         Assert.Equal((150, 300), EquipmentRuleEngine.MythicDaggerAddedVoidDamage(399));
         Assert.Equal((0, 0), EquipmentRuleEngine.MythicDaggerAddedVoidDamage(99));
+    }
+
+    [Fact]
+    public void AttributeEnchantmentsCoverLevelsTwoThroughFourAndApplyTheirComponents()
+    {
+        ItemEnchantment[] additions = EquipmentEnchantmentCatalog.All
+            .Where(value => value.StableId.StartsWith("equipment.enchantment.", StringComparison.Ordinal) &&
+                int.Parse(value.StableId.Split('.')[2]) is >= 42 and <= 53)
+            .ToArray();
+        Assert.Equal(12, additions.Length);
+        Assert.Equal(4, additions.Count(value => value.WorkshopLevel == 2));
+        Assert.Equal(4, additions.Count(value => value.WorkshopLevel == 3));
+        Assert.Equal(4, additions.Count(value => value.WorkshopLevel == 4));
+
+        ItemBaseDefinition bodyBase = EquipmentCatalog.Bases.First(value => value.Category == ItemCategory.BodyArmor);
+        ItemBaseDefinition ringBase = EquipmentCatalog.Bases.First(value => value.Category == ItemCategory.Ring);
+        ItemBaseDefinition weaponBase = EquipmentCatalog.Bases.First(value => value.Category == ItemCategory.TwoHandWeapon);
+        ItemEnchantment giant = additions.Single(value => value.DisplayName == "巨灵铭文");
+        ItemEnchantment titan = additions.Single(value => value.DisplayName == "泰坦王印");
+        Assert.True(EquipmentEnchantmentCatalog.Supports(giant, bodyBase));
+        Assert.False(EquipmentEnchantmentCatalog.Supports(giant, weaponBase));
+        Assert.True(EquipmentEnchantmentCatalog.Supports(titan, ringBase));
+        Assert.False(EquipmentEnchantmentCatalog.Supports(titan, bodyBase));
+        Assert.Contains("体魄提高 15%", EquipmentEnchantmentCatalog.EffectText(titan), StringComparison.Ordinal);
+
+        ItemInstance cleanBody = ItemGenerator.Generate(bodyBase.StableId, 100, ItemRarity.Basic, 0x4200);
+        var cleanLoadout = new EquipmentLoadout();
+        var enchantedLoadout = new EquipmentLoadout();
+        Assert.True(cleanLoadout.TryEquip(EquipmentSlot.Chest, cleanBody));
+        Assert.True(enchantedLoadout.TryEquip(EquipmentSlot.Chest, cleanBody with { Enchantment = giant }));
+        Assert.Equal(cleanLoadout.CalculateSummary().Modifiers.Physique + 60,
+            enchantedLoadout.CalculateSummary().Modifiers.Physique);
+
+        ItemInstance ring = ItemGenerator.Generate(ringBase.StableId, 100, ItemRarity.Basic, 0x4300) with { Enchantment = titan };
+        var ringLoadout = new EquipmentLoadout();
+        Assert.True(ringLoadout.TryEquip(EquipmentSlot.RingLeft, ring));
+        Assert.Equal(1_500, ringLoadout.CalculateSummary().Modifiers.Value(ItemModifierKind.IncreasedPhysiqueBasisPoints));
     }
 
     [Fact]
@@ -202,6 +239,43 @@ public sealed class P32EquipmentCatalogTests
             observedAddedPrefix |= result.Item.PrefixCount == 3;
         }
         Assert.True(observedAddedPrefix);
+    }
+
+    [Fact]
+    public void AttributeTiersAreLocalToTheBaseAndAttributeAugmentCanRollPercentageFamilies()
+    {
+        ItemBaseDefinition amulet = EquipmentCatalog.GetBase("equipment.base.warfront.last_banner_emblem");
+        AffixDefinition bestPhysique = P1Affixes.For(amulet, 102)
+            .Where(value => value.StableFamilyId == "equipment.affix.strength")
+            .MinBy(value => value.Tier)!;
+        Assert.Equal(2, bestPhysique.Tier);
+        Assert.Equal(1, P1Affixes.TierFor(amulet, bestPhysique));
+        Assert.Equal((51, 55), (bestPhysique.MinimumValue, bestPhysique.MaximumValue));
+
+        AffixDefinition resistance = P1Affixes.For(amulet, 102)
+            .First(value => value.Position == AffixPosition.Suffix &&
+                value.ModifierKind == ItemModifierKind.FireResistanceBasisPoints);
+        ItemInstance source = ItemGenerator.Generate(amulet.StableId, 102, ItemRarity.Rare, 1, "attribute-augment") with
+        {
+            Affixes = [MinimumRoll(bestPhysique), MinimumRoll(resistance)],
+        };
+        EquipmentCraftingOperationEntry operation = EquipmentCatalog.CraftingOperations
+            .Single(value => value.DisplayName == "属性偏向打造");
+        bool rolledPercentage = false;
+        for (ulong seed = 1; seed <= 20_000 && !rolledPercentage; seed++)
+        {
+            EquipmentCraftingPreview preview = EquipmentCraftingService.Preview(source, new(operation.Id, Seed: seed));
+            Assert.True(preview.Available, preview.FailureReason);
+            var wallet = new EquipmentCraftingWallet();
+            wallet.Credit(preview.Resource, preview.Cost);
+            EquipmentCraftingResult result = EquipmentCraftingService.Execute(wallet, source, new(operation.Id, Seed: seed));
+            Assert.True(result.Succeeded, result.FailureReason);
+            rolledPercentage = result.Item!.Affixes.Any(value => value.Effects.Any(effect => effect.Kind is
+                ItemModifierKind.IncreasedPhysiqueBasisPoints or ItemModifierKind.IncreasedDexterityBasisPoints or
+                ItemModifierKind.IncreasedSpiritBasisPoints or ItemModifierKind.IncreasedEnergyBasisPoints or
+                ItemModifierKind.IncreasedAllAttributesBasisPoints));
+        }
+        Assert.True(rolledPercentage);
     }
 
     [Fact]

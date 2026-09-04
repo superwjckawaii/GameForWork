@@ -33,7 +33,8 @@ public sealed record P30DamagePacket(
     IReadOnlyList<P30DamageBranch> Branches,
     IReadOnlyList<string> Trace)
 {
-    public int Total => checked(Physical + Fire + Cold + Lightning + Void);
+    public int Total => (int)Math.Clamp(
+        (long)Physical + Fire + Cold + Lightning + Void, 0, int.MaxValue);
 }
 
 public readonly record struct P30ResistanceProfile(
@@ -81,14 +82,14 @@ public static class P30CombatRules
         [P30DamageType.Physical, P30DamageType.Lightning, P30DamageType.Cold, P30DamageType.Fire];
 
     public static int ApplyIncreased(int value, params int[] increasedBasisPoints) =>
-        checked((int)((long)value * (Basis + increasedBasisPoints.Sum()) / Basis));
+        SaturatingScale(value, (long)Basis + increasedBasisPoints.Sum());
 
     public static int ApplyMore(int value, IEnumerable<int> multipliersBasisPoints)
     {
-        long result = value;
+        int result = value;
         foreach (int multiplier in multipliersBasisPoints)
-            result = checked(result * multiplier / Basis);
-        return checked((int)result);
+            result = SaturatingScale(result, multiplier);
+        return result;
     }
 
     public static int MaximumLife(int level, int physique, int flatLife, int increasedBasisPoints,
@@ -181,8 +182,8 @@ public static class P30CombatRules
     }
 
     public static int MitigateByResistance(int damage, int resistanceBasisPoints) => damage <= 0 ? 0 :
-        checked((int)Math.Max(resistanceBasisPoints < Basis ? 1 : 0,
-            (long)damage * (Basis - resistanceBasisPoints) / Basis));
+        Math.Max(resistanceBasisPoints < Basis ? 1 : 0,
+            SaturatingScale(damage, (long)Basis - resistanceBasisPoints));
 
     public static int BlockChance(int rawBasisPoints, int maximumBasisPoints = DefaultBlockMaximum) =>
         Math.Clamp(rawBasisPoints, 0, Math.Min(maximumBasisPoints, AbsoluteBlockMaximum));
@@ -327,9 +328,10 @@ public static class P30CombatRules
             var trace = branch.Trace.ToList();
             if (branch.CurrentType == P30DamageType.Physical)
             {
-                int usedArmor = checked(Math.Max(0, armor) * (Basis - Math.Clamp(armorIgnoreBasisPoints, 0, 9_000)) / Basis);
+                int usedArmor = SaturatingScale(Math.Max(0, armor),
+                    Basis - Math.Clamp(armorIgnoreBasisPoints, 0, 9_000));
                 int reduction = ArmorReduction(usedArmor, value);
-                value = checked(value * (Basis - reduction) / Basis);
+                value = SaturatingScale(value, Basis - reduction);
                 trace.Add($"armor:{usedArmor}:{reduction}=>{value}");
             }
             int resistance = EffectiveResistance(resistances.For(branch.CurrentType),
@@ -415,9 +417,17 @@ public static class P30CombatRules
 
     private static P30DamagePacket Packet(IReadOnlyList<P30DamageBranch> branches)
     {
-        int Sum(P30DamageType type) => branches.Where(branch => branch.CurrentType == type).Sum(branch => branch.BaseDamage);
+        int Sum(P30DamageType type) => (int)Math.Clamp(branches
+            .Where(branch => branch.CurrentType == type).Sum(branch => (long)branch.BaseDamage), 0, int.MaxValue);
         return new(Sum(P30DamageType.Physical), Sum(P30DamageType.Fire), Sum(P30DamageType.Cold),
             Sum(P30DamageType.Lightning), Sum(P30DamageType.Void), branches,
             branches.SelectMany(branch => branch.Trace).ToArray());
+    }
+
+    private static int SaturatingScale(int value, long basisPoints)
+    {
+        if (value <= 0 || basisPoints <= 0) return 0;
+        if (value > long.MaxValue / basisPoints) return int.MaxValue;
+        return (int)Math.Clamp((long)value * basisPoints / Basis, 0, int.MaxValue);
     }
 }

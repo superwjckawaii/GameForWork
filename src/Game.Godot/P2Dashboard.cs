@@ -5,7 +5,6 @@ using GameForWork.Core.P1.Items;
 using GameForWork.Core.P1.Progression;
 using GameForWork.Core.P1.World;
 using GameForWork.Core.P2;
-using GameForWork.Core.P4;
 using GameForWork.Core.P5;
 using GameForWork.Core.P6;
 using GameForWork.Core.P9;
@@ -69,11 +68,14 @@ public partial class P2Dashboard : VBoxContainer
     private Label? _miniStatus;
     private Label? _overviewStatus;
     private Label? _characterStatus;
-    private Label? _storageStatus;
+    private RichTextLabel? _storageStatus;
     private OptionButton? _previewSkillSelector;
+    private Control? _previewSkillRow;
+    private Label? _previewSkillDps;
     private string _previewSkillSignature = string.Empty;
     private Label? _selectedPassive;
-    private Label? _craftingStatus;
+    private P2CraftingWorkbench? _craftingWorkbench;
+    private string _craftingMessage = "将装备拖到工艺台，或单击左侧装备以选择打造目标。";
     private string _storageSearch = string.Empty;
     private RichTextLabel? _history;
     private RichTextLabel? _storyLog;
@@ -105,6 +107,7 @@ public partial class P2Dashboard : VBoxContainer
     private int _contextIndex = -1;
     private ItemContainerKind _craftContainer = ItemContainerKind.Storage;
     private int _craftIndex = -1;
+    private string _craftInstanceId = string.Empty;
     private Action? _pendingConfirmation;
     private P2CharacterKind _selectedCharacter;
     private string _selectedMercenaryId = string.Empty;
@@ -464,18 +467,6 @@ public partial class P2Dashboard : VBoxContainer
                 ? string.Empty : RequireSession().Town.Roster[(int)index - 1].Identity.StableId;
             Refresh();
         };
-        header.AddChild(new Label { Text = "详情主技能" });
-        _previewSkillSelector = new OptionButton
-        {
-            TooltipText = "只列出已装备且能造成伤害的主动技能；战旗、光环、战吼、守护和位移不会被当作 DPS 主技能。",
-        };
-        _previewSkillSelector.ItemSelected += index =>
-        {
-            if (_previewSkillSelector is null || index < 0 || index >= _previewSkillSelector.ItemCount) return;
-            string instanceId = _previewSkillSelector.GetItemMetadata((int)index).AsString();
-            if (RequireSession().SelectPreviewSkill(instanceId)) Changed("角色详情主技能已切换。");
-        };
-        header.AddChild(_previewSkillSelector);
         var collapseSidebar = new Button
         {
             Text = "收起装备侧栏",
@@ -560,12 +551,37 @@ public partial class P2Dashboard : VBoxContainer
             HandleDrop(source, sourceIndex, ItemContainerKind.Equipped, targetIndex);
         _equipmentGrid.DropValidator = CanDropOnEquipment;
         equipment.AddChild(_equipmentGrid);
-        var details = new Button { Text = "详细属性", ToggleMode = true };
+        var details = new Button { Text = "角色详情", ToggleMode = true };
         equipment.AddChild(details);
-        _storageStatus = new Label { AutowrapMode = TextServer.AutowrapMode.WordSmart };
-        equipment.AddChild(_storageStatus);
-        details.Toggled += expanded => _storageStatus.Visible = expanded;
-        _storageStatus.Visible = false;
+        var detailBody = new VBoxContainer { Visible = false, SizeFlagsHorizontal = SizeFlags.ExpandFill };
+        equipment.AddChild(detailBody);
+        var skillRow = new HBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
+        _previewSkillRow = skillRow;
+        skillRow.AddChild(new Label { Text = "主技能" });
+        _previewSkillSelector = new OptionButton
+        {
+            SizeFlagsHorizontal = SizeFlags.ExpandFill,
+            TooltipText = "只列出已装备且能造成伤害的主动技能；战旗、光环、战吼、守护和位移不会被当作 DPS 主技能。",
+        };
+        _previewSkillSelector.ItemSelected += index =>
+        {
+            if (_previewSkillSelector is null || index < 0 || index >= _previewSkillSelector.ItemCount) return;
+            string instanceId = _previewSkillSelector.GetItemMetadata((int)index).AsString();
+            if (RequireSession().SelectPreviewSkill(instanceId)) Changed("角色详情主技能已切换。");
+        };
+        skillRow.AddChild(_previewSkillSelector);
+        _previewSkillDps = new Label { HorizontalAlignment = HorizontalAlignment.Right };
+        skillRow.AddChild(_previewSkillDps);
+        detailBody.AddChild(skillRow);
+        _storageStatus = new RichTextLabel
+        {
+            BbcodeEnabled = true,
+            FitContent = true,
+            ScrollActive = false,
+            SizeFlagsHorizontal = SizeFlags.ExpandFill,
+        };
+        detailBody.AddChild(_storageStatus);
+        details.Toggled += expanded => detailBody.Visible = expanded;
         return page;
     }
 
@@ -584,27 +600,34 @@ public partial class P2Dashboard : VBoxContainer
             Text = "双击自动换装/卸装 · Shift+左键快速转移 · 拖拽精确移动 · 右键更多操作 · Alt 悬浮查看完整说明",
             AutowrapMode = TextServer.AutowrapMode.WordSmart,
         });
-        var columns = new HBoxContainer();
-        columns.AddThemeConstantOverride("separation", 14);
-        body.AddChild(columns);
-
-        var containers = new VBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
-        columns.AddChild(containers);
-        containers.AddChild(new Label { Text = "共享整理背包 · 20 格" });
+        body.AddChild(new Label { Text = "共享整理背包 · 20 格" });
         _sortingGrid = BuildGrid(ItemContainerKind.SortingBag, 5, P2ManagementState.SortingBagCapacity, 36);
-        containers.AddChild(_sortingGrid);
-        containers.AddChild(new Label { Text = "军锋镇仓库 · 100 格" });
+        body.AddChild(_sortingGrid);
+        body.AddChild(new Label { Text = "军锋镇仓库 · 100 格" });
         var storageSearch = new LineEdit { PlaceholderText = "搜索仓库：名称 / 类型 / 稀有度 / 连接数（如 5连）" };
         storageSearch.TextChanged += query =>
         {
             _storageSearch = query.Trim();
             Refresh();
         };
-        containers.AddChild(storageSearch);
+        body.AddChild(storageSearch);
+        var warehouse = new HBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
+        warehouse.AddThemeConstantOverride("separation", 14);
+        body.AddChild(warehouse);
         _storageGrid = BuildGrid(ItemContainerKind.Storage, 10, EquipmentStorage.InitialCapacity, 32);
-        containers.AddChild(_storageGrid);
+        warehouse.AddChild(_storageGrid);
+
+        _craftingWorkbench = new P2CraftingWorkbench
+        {
+            CustomMinimumSize = new Vector2(420, 360),
+            SizeFlagsHorizontal = SizeFlags.ExpandFill,
+            SizeFlagsVertical = SizeFlags.ExpandFill,
+        };
+        _craftingWorkbench.Initialize((kind, index) => SelectCraftTarget(kind, index, dragged: true));
+        warehouse.AddChild(_craftingWorkbench);
+
         var batch = new HFlowContainer();
-        containers.AddChild(batch);
+        body.AddChild(batch);
         _batchRarity = AddOptions(batch, "最高稀有度", ["基础及以下", "魔法及以下", "稀有及以下", "传奇及以下"]);
         _batchRarity.Select((int)ItemRarity.Magic);
         _batchScope = AddOptions(batch, "范围", ["整理背包", "仓库", "两者"]);
@@ -622,10 +645,6 @@ public partial class P2Dashboard : VBoxContainer
         AddButton(batch, "按物等整理", () => SortItems(P16ItemSortMode.ItemLevel));
         AddButton(batch, "按底材整理", () => SortItems(P16ItemSortMode.Base));
         AddButton(batch, "按最高T级整理", () => SortItems(P16ItemSortMode.HighestAffixTier));
-
-        body.AddChild(new Label { Text = "装备制作与附魔已集中到“打造”页；选择物品后切换该页操作。" });
-        _craftingStatus = new Label { AutowrapMode = TextServer.AutowrapMode.WordSmart };
-        body.AddChild(_craftingStatus);
 
         var safetyTabs = new TabContainer { CustomMinimumSize = new Vector2(0, 210) };
         body.AddChild(safetyTabs);
@@ -645,7 +664,7 @@ public partial class P2Dashboard : VBoxContainer
     private Control BuildMetalMode()
     {
         _metalPanel = new EquipmentCraftingPanel { Name = "打造", SizeFlagsHorizontal = SizeFlags.ExpandFill, SizeFlagsVertical = SizeFlags.ExpandFill };
-        _metalPanel.Initialize(RequireSession, CurrentCraftTarget, Changed);
+        _metalPanel.Initialize(RequireSession, CurrentCraftTarget, CraftingChanged);
         return _metalPanel;
     }
 
@@ -911,15 +930,35 @@ public partial class P2Dashboard : VBoxContainer
     private EquipmentCraftTarget? CurrentCraftTarget()
     {
         if (_craftIndex < 0) return null;
-        ItemInstance? item = _craftContainer switch
+        ItemInstance? item = ItemAt(_craftContainer, _craftIndex);
+        if (item?.InstanceId != _craftInstanceId)
         {
-            ItemContainerKind.Storage when _craftIndex < RequireSession().World.Storage.Items.Count => RequireSession().World.Storage.Items[_craftIndex],
-            ItemContainerKind.SortingBag when _craftIndex < RequireSession().Management.SortingBag.Count => RequireSession().Management.SortingBag[_craftIndex],
-            ItemContainerKind.Equipped => SelectedLoadout()
-                .Items.GetValueOrDefault((EquipmentSlot)_craftIndex),
-            _ => null,
-        };
+            (ItemContainerKind Container, int Index, ItemInstance Item)? resolved = FindCraftTarget(_craftInstanceId);
+            if (resolved is null)
+            {
+                _craftIndex = -1;
+                _craftInstanceId = string.Empty;
+                return null;
+            }
+            (_craftContainer, _craftIndex, item) = resolved.Value;
+        }
         return item is null ? null : new EquipmentCraftTarget(_craftContainer, _craftIndex, item, _selectedCharacter, _selectedMercenaryId);
+    }
+
+    private (ItemContainerKind Container, int Index, ItemInstance Item)? FindCraftTarget(string instanceId)
+    {
+        if (string.IsNullOrEmpty(instanceId)) return null;
+        int storage = RequireSession().World.Storage.Items.ToList()
+            .FindIndex(item => item.InstanceId == instanceId);
+        if (storage >= 0)
+            return (ItemContainerKind.Storage, storage, RequireSession().World.Storage.Items[storage]);
+        int sorting = RequireSession().Management.SortingBag.ToList()
+            .FindIndex(item => item.InstanceId == instanceId);
+        if (sorting >= 0)
+            return (ItemContainerKind.SortingBag, sorting, RequireSession().Management.SortingBag[sorting]);
+        KeyValuePair<EquipmentSlot, ItemInstance> equipped = SelectedLoadout().Items
+            .FirstOrDefault(pair => pair.Value.InstanceId == instanceId);
+        return equipped.Value is null ? null : (ItemContainerKind.Equipped, (int)equipped.Key, equipped.Value);
     }
 
     private VBoxContainer BuildMiniPanel()
@@ -972,11 +1011,12 @@ public partial class P2Dashboard : VBoxContainer
         return grid;
     }
 
-    private void SelectCraftTarget(ItemContainerKind kind, int index)
+    private void SelectCraftTarget(ItemContainerKind kind, int index, bool dragged = false)
     {
         if (index < 0)
         {
             _craftIndex = -1;
+            _craftInstanceId = string.Empty;
             Refresh();
             return;
         }
@@ -984,6 +1024,10 @@ public partial class P2Dashboard : VBoxContainer
         {
             _craftContainer = kind;
             _craftIndex = index;
+            _craftInstanceId = ItemAt(kind, index)?.InstanceId ?? string.Empty;
+            if (_craftInstanceId.Length > 0)
+                _craftingMessage = dragged ? "装备已放上工艺台；可在右侧“打造”页直接选择工艺。" :
+                    "已选择打造目标；也可以把装备直接拖到工艺台。";
             if (_batchScope is not null && kind is ItemContainerKind.Storage or ItemContainerKind.SortingBag)
                 _batchScope.Select(kind == ItemContainerKind.Storage ? (int)P16BatchScope.Storage : (int)P16BatchScope.SortingBag);
             Refresh();
@@ -1199,89 +1243,6 @@ public partial class P2Dashboard : VBoxContainer
         Changed(changed ? "天赋已完整重置。" : "没有可重置节点，或需要 10 个记忆灰烬。");
     }
 
-    private void CraftSelected(P2WorkshopRecipe recipe)
-    {
-        ItemInstance? currentItem = ItemAt(_craftContainer, _craftIndex);
-        if (currentItem is null)
-        {
-            Changed("请先在角色与物品页选择背包、仓库或已装备物品作为制作目标。");
-            return;
-        }
-
-        P2WorkshopPreview preview = P2Workshop.Preview(currentItem, recipe);
-        if (!preview.Succeeded)
-        {
-            Changed($"制作失败：{preview.Summary}");
-            return;
-        }
-
-        MetalCurrencyDefinition metal = P4MetalCurrencies.Get(preview.MetalCostKind!.Value);
-        ItemContainerKind container = _craftContainer;
-        int index = _craftIndex;
-        _confirmDialog!.DialogText =
-            $"{preview.Summary}\n消耗：{preview.MetalCost} {metal.DisplayName}\n\n" +
-            $"制作前：{currentItem.Affixes.Count} 条词缀\n" +
-            $"制作后：{preview.Result!.Affixes.Count} 条词缀（新增 {preview.Summary}）\n\n" +
-            $"确认对 {currentItem.Base.DisplayName} 执行？";
-        _pendingConfirmation = () =>
-        {
-            P2WorkshopPreview result = ItemCommands()
-                .Craft(container, index, recipe);
-            Changed(result.Succeeded ? $"制作完成：{result.Summary}" : $"制作失败：{result.Summary}");
-        };
-        _confirmDialog.PopupCentered();
-    }
-
-    private void CraftP6Selected(P6CraftOperation operation)
-    {
-        ItemInstance? currentItem = ItemAt(_craftContainer, _craftIndex);
-        if (currentItem is null)
-        {
-            Changed("请先选择背包、仓库或已装备物品作为制作目标。");
-            return;
-        }
-
-        string fractureFamily = operation == P6CraftOperation.FractureAffix
-            ? currentItem.Affixes.FirstOrDefault(affix => !affix.Crafted)?.Definition.StableFamilyId ?? string.Empty
-            : string.Empty;
-        P6CraftPreview preview = P6CraftingRules.Preview(currentItem, operation, fractureFamily);
-        if (!preview.Succeeded)
-        {
-            Changed($"制作失败：{preview.Summary}");
-            return;
-        }
-
-        MetalCurrencyDefinition metal = P4MetalCurrencies.Get(preview.Currency);
-        ItemContainerKind container = _craftContainer;
-        int index = _craftIndex;
-        string socketWarning = string.Empty;
-        if (container == ItemContainerKind.Equipped && preview.ResultLinks < preview.CurrentLinks)
-        {
-            string groupId = P6SocketGroupIds.For((EquipmentSlot)index);
-            SkillLinkConfiguration? link = RequireSession().Management.SkillLinks.FirstOrDefault(item => item.ChainId == groupId);
-            string[] ejected = link?.SocketStoneInstanceIds?.Skip(preview.ResultLinks)
-                .Where(id => !string.IsNullOrEmpty(id))
-                .Select(id => RequireSession().Management.SkillStones.First(stone => stone.InstanceId == id).Definition.DisplayName)
-                .ToArray() ?? [];
-            if (ejected.Length > 0)
-            {
-                socketWarning = $"\n⚠ 超出新连接数的技能石将弹回技能石背包：{string.Join("、", ejected)}";
-            }
-        }
-
-        _confirmDialog!.DialogText =
-            $"{preview.Summary}\n消耗：{preview.Cost} {metal.DisplayName}\n" +
-            $"连接：{preview.CurrentLinks} → {preview.ResultLinks}{socketWarning}\n\n" +
-            $"确认对 {currentItem.Base.DisplayName} 执行？";
-        _pendingConfirmation = () =>
-        {
-            P6CraftPreview result = ItemCommands()
-                .CraftP6(container, index, operation, fractureFamily);
-            Changed(result.Succeeded ? $"制作完成：{result.Summary}" : $"制作失败：{result.Summary}");
-        };
-        _confirmDialog.PopupCentered();
-    }
-
     private void ConfirmBatch(P16BatchAction action)
     {
         P1GameSession session = RequireSession();
@@ -1372,6 +1333,14 @@ public partial class P2Dashboard : VBoxContainer
         RequireSession().Management.AddHistory(message);
         _stateChanged?.Invoke();
         _notice?.Invoke(message);
+        Refresh();
+    }
+
+    private void CraftingChanged(string message)
+    {
+        RequireSession().Management.AddHistory(message);
+        _craftingMessage = message;
+        _stateChanged?.Invoke();
         Refresh();
     }
 
@@ -1727,13 +1696,18 @@ public partial class P2Dashboard : VBoxContainer
             _characterStatus!.Text = _selectedCharacter == P2CharacterKind.Hero
                 ? $"{_session.Player.Name} · {P23ClassCatalog.Get(_session.Player.BaseClass).DisplayName} · Lv.{selectedTeam.Progression.Level}"
                 : $"{selectedMercenary?.Identity.Name ?? "佣兵"} · {MercenaryArchetypeName(selectedMercenary?.Identity.Archetype)} · Lv.{selectedMercenary?.Level ?? selectedTeam.Progression.Level}";
-            _storageStatus!.Text =
-                $"生命 {selectedSheet.MaximumLife().Value} · 法力 {selectedSheet.MaximumMana().Value} · 护盾 {selectedSheet.Equipment.Shield}\n" +
-                $"体魄 {selectedSheet.Attributes.Physique} · 灵巧 {selectedSheet.Attributes.Dexterity} · 精神 {selectedSheet.Attributes.Spirit} · 能量 {selectedSheet.Attributes.Energy}\n" +
-                $"核心槽 {equipment.CoreSkillCapacity} · 旧制连接 {equipment.SupportLinkCapacity}\n" +
-                (selectedMercenary is null
-                    ? BuildSummaryText(_session.GetBuildSummary())
-                    : $"最终属性已公开；内部加点隐藏。\n技能：{selectedMercenary.Identity.SkillSummary}\nAI：{selectedMercenary.Identity.AiSummary}");
+            if (selectedMercenary is null)
+            {
+                P6BuildSummary summary = _session.GetBuildSummary();
+                _storageStatus!.Text = BuildSummaryText(summary);
+                _previewSkillDps!.Text = $"DPS {summary.EstimatedSingleTargetDamage:N0}";
+                _previewSkillRow!.Visible = true;
+            }
+            else
+            {
+                _storageStatus!.Text = BuildMercenarySummaryText(selectedSheet, equipment, selectedMercenary);
+                _previewSkillRow!.Visible = false;
+            }
 
             _metalPanel?.Refresh();
             if (string.IsNullOrWhiteSpace(_storageSearch))
@@ -1774,13 +1748,7 @@ public partial class P2Dashboard : VBoxContainer
                 control.Disabled = !heroSelected;
             }
 
-            ItemInstance? craftItem = ItemAt(_craftContainer, _craftIndex);
-            _craftingStatus!.Text =
-                $"金属库存：淬刃铁 {economy.MetalAmount(MetalCurrencyKind.TemperingIron)} · " +
-                $"守壁钢 {economy.MetalAmount(MetalCurrencyKind.WardSteel)} · 活血银 {economy.MetalAmount(MetalCurrencyKind.VitalSilver)} · " +
-                $"链铸钢 {economy.MetalAmount(MetalCurrencyKind.ChainSteel)} · 混沌金 {economy.MetalAmount(MetalCurrencyKind.ChaosGold)} · " +
-                $"神铸银 {economy.MetalAmount(MetalCurrencyKind.DivineSilver)} · 破溃钢 {economy.MetalAmount(MetalCurrencyKind.FractureSteel)}\n" +
-                (craftItem is null ? "当前未选择制作目标。" : $"当前目标：{craftItem.Base.DisplayName}（{_craftContainer}）");
+            _craftingWorkbench?.Refresh(CurrentCraftTarget(), _craftingMessage);
             _skillStonePanel?.SetReadOnly(!heroSelected);
             if (characterActive) _skillStonePanel?.RefreshState();
             _history!.Text = string.Join('\n', _session.Management.OperationHistory.TakeLast(200).Select(item => $"• {item}"));
@@ -1822,12 +1790,48 @@ public partial class P2Dashboard : VBoxContainer
         _ => item.Base.PrimarySlot,
     };
 
-    private static string BuildSummaryText(P6BuildSummary summary) =>
-        $"主技能 {summary.MainSkill} · {summary.MainSkillLinks} 连 · 单体估算 {summary.EstimatedSingleTargetDamage}/s · 清图估算 {summary.EstimatedClearDamage}/s\n" +
-        $"有效生命 {summary.EffectiveLife} · 护甲 {summary.Armor} · 闪避 {summary.Evasion} · 护盾 {summary.Shield}\n" +
-        $"恢复：{summary.Recovery} · 增益：{summary.BuffCoverage}\n" +
-        (summary.Issues.Count == 0 ? "构筑检查：未发现孔位或兼容性问题\n" : $"构筑检查：{string.Join("；", summary.Issues)}\n") +
-        summary.Assumptions;
+    private static string BuildSummaryText(P6BuildSummary summary)
+    {
+        P6DefenseBreakdown defense = summary.Defense;
+        P6OffenseBreakdown offense = summary.Offense;
+        return
+            $"生命 {defense.MaximumLife:N0} / 护盾 {defense.MaximumShield:N0} / 法力 {defense.MaximumMana:N0}\n" +
+            $"[color=#ef6f61]体魄 {defense.Attributes.Physique:N0}[/color]  " +
+            $"[color=#74c96b]灵巧 {defense.Attributes.Dexterity:N0}[/color]  " +
+            $"[color=#62a9e8]精神 {defense.Attributes.Spirit:N0}[/color]  " +
+            $"[color=#b78ae6]能量 {defense.Attributes.Energy:N0}[/color]\n" +
+            $"护甲 {defense.Armor:N0}（{Percent(defense.PhysicalDamageReductionBasisPoints)}物理减伤）\n" +
+            $"闪避 {defense.Evasion:N0}（闪避率 {Percent(defense.EvasionChanceBasisPoints)}）\n" +
+            $"火焰抗性 {Percent(defense.FireResistanceBasisPoints)}（生效抗性 {Percent(defense.EffectiveFireResistanceBasisPoints)}）\n" +
+            $"冰霜抗性 {Percent(defense.ColdResistanceBasisPoints)}（生效抗性 {Percent(defense.EffectiveColdResistanceBasisPoints)}）\n" +
+            $"闪电抗性 {Percent(defense.LightningResistanceBasisPoints)}（生效抗性 {Percent(defense.EffectiveLightningResistanceBasisPoints)}）\n" +
+            $"虚空抗性 {Percent(defense.VoidResistanceBasisPoints)}（生效抗性 {Percent(defense.EffectiveVoidResistanceBasisPoints)}）\n" +
+            $"物理格挡 {Percent(defense.PhysicalBlockChanceBasisPoints)}（生效格挡 {Percent(defense.EffectivePhysicalBlockChanceBasisPoints)}）\n" +
+            $"法术格挡 {Percent(defense.SpellBlockChanceBasisPoints)}（生效格挡 {Percent(defense.EffectiveSpellBlockChanceBasisPoints)}）\n" +
+            $"法术压制率 {Percent(defense.SpellSuppressionBasisPoints)}（生效压制率 {Percent(defense.EffectiveSpellSuppressionBasisPoints)}）\n\n" +
+            $"基础点伤 {offense.BaseMinimumDamage:N0}-{offense.BaseMaximumDamage:N0}\n" +
+            $"有效 increase 总量 {Percent(offense.EffectiveIncreaseBasisPoints)}\n" +
+            $"有效 more 总量 {Percent(offense.EffectiveMoreBasisPoints)}\n" +
+            $"{(offense.IsSpell ? "法术" : "攻击")}频率 {offense.FrequencyMilliPerSecond / 1000d:0.00}/s\n" +
+            $"命中 {offense.Accuracy:N0}（命中率 {Percent(offense.HitChanceBasisPoints)}）\n" +
+            $"暴击率 {Percent(offense.CriticalChanceBasisPoints)}\n" +
+            $"暴击伤害倍率 {Percent(offense.CriticalMultiplierBasisPoints)}\n\n" +
+            $"恢复：{summary.Recovery}\n增益：{summary.BuffCoverage}\n" +
+            (summary.Issues.Count == 0 ? "构筑检查：未发现孔位或兼容性问题\n" : $"构筑检查：{string.Join("；", summary.Issues)}\n") +
+            summary.Assumptions;
+    }
+
+    private static string BuildMercenarySummaryText(CharacterSheet sheet, EquipmentSummary equipment,
+        P9MercenaryMember mercenary) =>
+        $"生命 {sheet.MaximumLife().Value:N0} / 护盾 {sheet.MaximumShield().Value:N0} / 法力 {sheet.MaximumMana().Value:N0}\n" +
+        $"[color=#ef6f61]体魄 {sheet.Attributes.Physique:N0}[/color]  " +
+        $"[color=#74c96b]灵巧 {sheet.Attributes.Dexterity:N0}[/color]  " +
+        $"[color=#62a9e8]精神 {sheet.Attributes.Spirit:N0}[/color]  " +
+        $"[color=#b78ae6]能量 {sheet.Attributes.Energy:N0}[/color]\n" +
+        $"核心槽 {equipment.CoreSkillCapacity} · 连接 {equipment.SupportLinkCapacity}\n" +
+        $"最终属性已公开；内部加点隐藏。\n技能：{mercenary.Identity.SkillSummary}\nAI：{mercenary.Identity.AiSummary}";
+
+    private static string Percent(int basisPoints) => $"{basisPoints / 100d:0.##}%";
 
     private void RefreshPreviewSkillSelector()
     {
@@ -1840,6 +1844,12 @@ public partial class P2Dashboard : VBoxContainer
         if (signature == _previewSkillSignature) return;
         _previewSkillSignature = signature;
         _previewSkillSelector.Clear();
+        if (candidates.Count == 0)
+        {
+            _previewSkillSelector.AddItem("无可用伤害技能");
+            _previewSkillSelector.Disabled = true;
+            return;
+        }
         foreach (SkillConfiguration candidate in candidates)
         {
             string name = P30SkillCatalog.ActiveForSkill(candidate.SkillId).Combat.DisplayName;

@@ -14,6 +14,7 @@ public partial class P205JewelStashPanel : VBoxContainer
     private Button? _reroll;
     private Button? _dissolve;
     private Button? _corrupt;
+    private Button? _divine;
     private Button? _unsocket;
     private string? _selectedInstanceId;
     private string _signature = string.Empty;
@@ -49,9 +50,11 @@ public partial class P205JewelStashPanel : VBoxContainer
         _reroll = CraftButton("混沌金重铸", P30JewelCraftOperation.RerollRare);
         _dissolve = CraftButton("消解银剥离", P30JewelCraftOperation.DissolveAffix);
         _corrupt = CraftButton("赤蚀铁腐化", P30JewelCraftOperation.Corrupt);
+        _divine = CraftButton("神铸银重投半径", P30JewelCraftOperation.RerollLegendaryRadius);
         _unsocket = new Button { Text = "从天赋取下", CustomMinimumSize = new Vector2(0, 30) };
         _unsocket.Pressed += UnsocketSelected;
-        actions.AddChild(_reroll); actions.AddChild(_dissolve); actions.AddChild(_corrupt); actions.AddChild(_unsocket);
+        actions.AddChild(_reroll); actions.AddChild(_dissolve); actions.AddChild(_corrupt); actions.AddChild(_divine);
+        actions.AddChild(_unsocket);
         AddChild(actions);
     }
 
@@ -61,9 +64,10 @@ public partial class P205JewelStashPanel : VBoxContainer
         P1GameSession session = _session();
         string signature = string.Join('|', session.Jewels.Items.OrderBy(j => j.InstanceId)
             .Select(j => $"{j.InstanceId}:{j.Resonance}:{j.Corrupted}:{j.Locked}:" +
+                         $"{j.RolledRadius}:" +
                          $"{session.Jewels.Socketed.Values.Contains(j.InstanceId)}:" +
                          string.Join(',', j.Affixes.Select(a => $"{a.StableId}:{a.Tier}:{a.Value}")))) +
-            $"|wallet:{string.Join(',', new[] { MetalCurrencyKind.ChaosGold, MetalCurrencyKind.DissolutionSilver, MetalCurrencyKind.CorruptionIron }.Select(kind => session.World.Economy.MetalAmount(kind)))}";
+            $"|wallet:{string.Join(',', new[] { MetalCurrencyKind.ChaosGold, MetalCurrencyKind.DissolutionSilver, MetalCurrencyKind.CorruptionIron, MetalCurrencyKind.DivineSilver }.Select(kind => session.World.Economy.MetalAmount(kind)))}";
         if (!force && signature == _signature) return;
         _signature = signature;
         foreach (Node child in _grid.GetChildren()) child.QueueFree();
@@ -120,7 +124,7 @@ public partial class P205JewelStashPanel : VBoxContainer
 
     private void RefreshSelection()
     {
-        if (_session is null || _selection is null || _reroll is null || _dissolve is null || _corrupt is null || _unsocket is null) return;
+        if (_session is null || _selection is null || _reroll is null || _dissolve is null || _corrupt is null || _divine is null || _unsocket is null) return;
         P1GameSession session = _session();
         P30JewelInstance? jewel = session.Jewels.Items.FirstOrDefault(item => item.InstanceId == _selectedInstanceId);
         string? socket = jewel is null ? null : session.Jewels.Socketed.FirstOrDefault(pair => pair.Value == jewel.InstanceId).Key;
@@ -132,10 +136,12 @@ public partial class P205JewelStashPanel : VBoxContainer
         _dissolve.Disabled = !craftable || jewel?.Affixes.Any(affix =>
             affix.Position is P30JewelAffixPosition.Prefix or P30JewelAffixPosition.Suffix) != true;
         _corrupt.Disabled = !craftable || jewel?.Rarity != P30JewelRarity.Rare;
+        _divine.Disabled = jewel?.Legendary is not { MinimumRadius: > 0 };
         _unsocket.Disabled = socket is null;
         _reroll.Text = $"混沌金重铸 ({session.World.Economy.MetalAmount(MetalCurrencyKind.ChaosGold)})";
         _dissolve.Text = $"消解银剥离 ({session.World.Economy.MetalAmount(MetalCurrencyKind.DissolutionSilver)})";
         _corrupt.Text = $"赤蚀铁腐化 ({session.World.Economy.MetalAmount(MetalCurrencyKind.CorruptionIron)})";
+        _divine.Text = $"神铸银重投半径 ({session.World.Economy.MetalAmount(MetalCurrencyKind.DivineSilver)})";
     }
 
     private static string Glyph(P30JewelInstance jewel) => jewel.Legendary is not null ? "◆" : jewel.Base switch
@@ -165,7 +171,8 @@ public partial class P205JewelStashCell : Button
             $"[color=#{P1UiText.AffixTierColor(affix.Tier).ToHtml(false)}]" +
             $"{P30Jewels.PositionName(affix.Position)} - {P30Jewels.AffixText(affix)}[/color]"));
         string legendary = Jewel.Legendary is null ? string.Empty :
-            $"\n[color=#d4a2ed]{Jewel.Legendary.Effect}[/color]\n来源：{Jewel.Legendary.Source}";
+            $"\n[color=#d4a2ed]{(Jewel.EffectiveRadius > 0 ? $"半径：{Jewel.EffectiveRadius}\n" : string.Empty)}" +
+            $"{Jewel.Legendary.Effect}[/color]\n来源：{Jewel.Legendary.Source}";
         var text = new RichTextLabel
         {
             BbcodeEnabled = true, FitContent = true, ScrollActive = false,
