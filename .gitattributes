@@ -6,4 +6,5 @@
 *.ogg filter=lfs diff=lfs merge=lfs -text
 *.flac filter=lfs diff=lfs merge=lfs -text
 *.mp3 filter=lfs diff=lfs merge=lfs -text
+testdata/development-save-slot-01/save.db binary
 *.import text eol=lf

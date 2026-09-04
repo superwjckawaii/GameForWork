@@ -14,4 +14,12 @@
   <ItemGroup>
     <ProjectReference Include="..\Game.Core\Game.Core.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <None Include="..\..\testdata\development-save-slot-01\save.db"
+          Link="Fixtures\development-save-slot-01\save.db"
+          CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\testdata\development-save-slot-01\manifest.json"
+          Link="Fixtures\development-save-slot-01\manifest.json"
+          CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
 </Project>
