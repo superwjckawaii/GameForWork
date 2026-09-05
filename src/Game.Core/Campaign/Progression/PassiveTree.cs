@@ -205,7 +205,7 @@ public sealed record PassiveModifiers(
     public static PassiveModifiers Empty { get; } = new(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, false, false, false);
 
-    public int DamageFor(SkillTag tags)
+    public int DamageFor(SkillTag tags, bool damageOverTime = false)
     {
         int value = 0;
         if (tags.HasFlag(SkillTag.Attack)) value += IncreasedAttackSkillDamageBasisPoints;
@@ -216,7 +216,7 @@ public sealed record PassiveModifiers(
         if (tags.HasFlag(SkillTag.Physical)) value += IncreasedPhysicalDamageBasisPoints;
         if ((tags & SkillTag.Elemental) != 0) value += IncreasedElementalDamageBasisPoints;
         if (tags.HasFlag(SkillTag.Void)) value += IncreasedVoidDamageBasisPoints;
-        if (tags.HasFlag(SkillTag.Duration) || tags.HasFlag(SkillTag.Bleed)) value += IncreasedDamageOverTimeBasisPoints;
+        if (damageOverTime) value += IncreasedDamageOverTimeBasisPoints;
         return value;
     }
 

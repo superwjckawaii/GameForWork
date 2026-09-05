@@ -1709,7 +1709,7 @@ public partial class Dashboard : VBoxContainer
             {
                 BuildSummary summary = _session.GetBuildSummary();
                 _storageStatus!.Text = BuildSummaryText(summary);
-                _previewSkillDps!.Text = $"DPS {summary.EstimatedSingleTargetDamage:N0}";
+                _previewSkillDps!.Text = summary.Offense.IsDirectHitEstimate ? $"击中 DPS {summary.EstimatedSingleTargetDamage:N0}" : "伤害见战斗报告";
                 _previewSkillRow!.Visible = true;
             }
             else
@@ -1822,13 +1822,13 @@ public partial class Dashboard : VBoxContainer
             $"物理格挡 {Percent(defense.PhysicalBlockChanceBasisPoints)}（生效格挡 {Percent(defense.EffectivePhysicalBlockChanceBasisPoints)}）\n" +
             $"法术格挡 {Percent(defense.SpellBlockChanceBasisPoints)}（生效格挡 {Percent(defense.EffectiveSpellBlockChanceBasisPoints)}）\n" +
             $"法术压制率 {Percent(defense.SpellSuppressionBasisPoints)}（生效压制率 {Percent(defense.EffectiveSpellSuppressionBasisPoints)}）\n\n" +
-            $"基础点伤 {offense.BaseMinimumDamage:N0}-{offense.BaseMaximumDamage:N0}\n" +
+            (offense.IsDirectHitEstimate ? $"基础点伤 {offense.BaseMinimumDamage:N0}-{offense.BaseMaximumDamage:N0}\n" +
             $"有效 increase 总量 {Percent(offense.EffectiveIncreaseBasisPoints)}\n" +
             $"有效 more 总量 {Percent(offense.EffectiveMoreBasisPoints)}\n" +
             $"{(offense.IsSpell ? "法术" : "攻击")}频率 {offense.FrequencyMilliPerSecond / 1000d:0.00}/s\n" +
             $"命中 {offense.Accuracy:N0}（命中率 {Percent(offense.HitChanceBasisPoints)}）\n" +
             $"暴击率 {Percent(offense.CriticalChanceBasisPoints)}\n" +
-            $"暴击伤害倍率 {Percent(offense.CriticalMultiplierBasisPoints)}\n\n" +
+            $"暴击伤害倍率 {Percent(offense.CriticalMultiplierBasisPoints)}\n\n" : "该技能的周期、召唤或触发伤害请查看战斗报告。\n\n") +
             $"恢复：{summary.Recovery}\n增益：{summary.BuffCoverage}\n" +
             (summary.Issues.Count == 0 ? "构筑检查：未发现孔位或兼容性问题\n" : $"构筑检查：{string.Join("；", summary.Issues)}\n") +
             summary.Assumptions;

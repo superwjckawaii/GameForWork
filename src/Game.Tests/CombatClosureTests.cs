@@ -19,6 +19,44 @@ namespace GameForWork.Tests;
 public sealed class CombatClosureTests
 {
     [Fact]
+    public void DurationHitDoesNotGainDamageOverTimeIncreasesInProduction()
+    {
+        var build = Team() with { ActiveSkills = [new(SkillIds.StormBrand, SkillSupport.None)] };
+        var increased = build with { PassiveProfile = GameForWork.Core.Campaign.Progression.PassiveModifiers.Empty with { IncreasedDamageOverTimeBasisPoints = 10_000 } };
+        int HitDamage(TeamBuild team) => Run(team, 150).Events.Where(e => e.Detail.StartsWith($"skill:{SkillIds.StormBrand}|damage:", StringComparison.Ordinal)).Sum(e => e.Value);
+        Assert.True(HitDamage(build) > 0);
+        Assert.Equal(HitDamage(build), HitDamage(increased));
+        Assert.Equal(10_000, increased.PassiveProfile!.DamageFor(SkillTag.Spell | SkillTag.Duration, damageOverTime: true));
+    }
+
+    [Fact]
+    public void SpellPreviewUsesPointRangeSpellCriticalAndBespokeQuality()
+    {
+        var build = Team() with { CannotCrit = false, Weapon = Team().Weapon with { CriticalChanceBasisPoints = 9_000 } };
+        var skill = new SkillConfiguration(SkillIds.EmberNova, SkillSupport.None);
+        var ordinary = BuildSummaryRules.CalculateOffense(build, skill);
+        var quality = BuildSummaryRules.CalculateOffense(build, skill with { Quality = 20 });
+        Assert.Equal(36, ordinary.BaseMinimumDamage); Assert.Equal(54, ordinary.BaseMaximumDamage);
+        Assert.Equal(500, ordinary.CriticalChanceBasisPoints);
+        Assert.Equal(ordinary.DamagePerSecond, quality.DamagePerSecond);
+        Assert.Equal(ordinary.EffectiveIncreaseBasisPoints, quality.EffectiveIncreaseBasisPoints);
+        Assert.False(BuildSummaryRules.CalculateOffense(build, new("archetypes.skill.summon_soulbow", SkillSupport.None)).IsDirectHitEstimate);
+    }
+
+    [Fact]
+    public void PreviewConvertsPhysicalBeforeApplyingTypeIncreasesAndArmor()
+    {
+        var skill = Team().HeavyStrike;
+        var physical = BuildSummaryRules.CalculateOffense(Team(), skill);
+        var converted = Team() with { CombatEquipment = Equipment(new()
+            { [ItemModifierKind.PhysicalToFireConversionBasisPoints] = 10_000, [ItemModifierKind.IncreasedFireDamageBasisPoints] = 10_000 }) };
+        var fire = BuildSummaryRules.CalculateOffense(converted, skill);
+        Assert.True(fire.DamagePerSecond > physical.DamagePerSecond * 2);
+        Assert.Equal(10_000, fire.EffectiveIncreaseBasisPoints);
+        Assert.Equal(physical.BaseMinimumDamage, fire.BaseMinimumDamage);
+    }
+
+    [Fact]
     public void HeatUsesCompletedActionsThenStopsForTwoSecondsAndResets()
     {
         var heat = new ConstructHeatState(new());

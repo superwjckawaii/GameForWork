@@ -32,11 +32,22 @@ public static class SpellHitRules
 
     public static int Roll(ResolvedSkill skill, int level, Pcg32 random)
     {
-        if (!Profiles.TryGetValue(skill.SkillId, out var profile)) return Math.Max(1, (skill.BaseDamageBasisPoints + 50) / 100);
+        var (minimum, maximum) = DamageRange(skill, level);
+        if (!Profiles.ContainsKey(skill.SkillId)) return minimum;
+        return minimum + (int)(random.NextUInt() % (uint)(maximum - minimum + 1));
+    }
+
+    public static (int Minimum, int Maximum) DamageRange(ResolvedSkill skill, int level)
+    {
+        if (!Profiles.TryGetValue(skill.SkillId, out var profile))
+        {
+            int value = Math.Max(1, (skill.BaseDamageBasisPoints + 50) / 100);
+            return (value, value);
+        }
         double growth = Math.Pow(1.07, Math.Clamp(level, 1, 40) - 1);
         int minimum = (int)Math.Round(profile.Minimum * growth, MidpointRounding.AwayFromZero);
         int maximum = (int)Math.Round(profile.Maximum * growth, MidpointRounding.AwayFromZero);
-        return minimum + (int)(random.NextUInt() % (uint)(maximum - minimum + 1));
+        return (minimum, maximum);
     }
 
     public static int BaseCriticalChance(string skillId, int distanceRaw, int quality)
