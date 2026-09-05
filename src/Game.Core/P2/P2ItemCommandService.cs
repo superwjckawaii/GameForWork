@@ -152,6 +152,10 @@ public sealed class P2ItemCommandService(
         return item.Base.MeetsRequirements(member.Level, member.Identity.FinalAttributes);
     }
 
+    public EquipmentCraftingRequest CreateCraftingRequest(string operationId, string definitionId = "", string familyId = "") =>
+        new(operationId, definitionId, familyId, session.Town.Level(P9BuildingKind.Workshop),
+            Equipment: EquipmentCombatLoadout.From(Loadout, Loadout.CalculateSummary()));
+
     public EquipmentCraftingResult CraftEquipment(
         ItemContainerKind source,
         int index,
@@ -165,8 +169,7 @@ public sealed class P2ItemCommandService(
             .FirstOrDefault(value => value.DisplayName == operationName);
         if (operation is null) return new(false, "unknown_operation", $"未知做装操作：{operationName}。", null, string.Empty, 0);
 
-        var request = new EquipmentCraftingRequest(operation.Id, selectedDefinitionId, selectedAffixFamilyId,
-            session.Town.Level(P9BuildingKind.Workshop));
+        var request = CreateCraftingRequest(operation.Id, selectedDefinitionId, selectedAffixFamilyId);
         EquipmentCraftingPreview preview = EquipmentCraftingService.Preview(item, request);
         if (!preview.Available) return new(false, preview.FailureReason, preview.Summary, null, preview.Resource, preview.Cost);
         var wallet = new EquipmentCraftingWallet();

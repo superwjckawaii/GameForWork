@@ -93,13 +93,7 @@ public static class P21ArtContract
 
     public static int SkillStoneIndex(string stableId)
     {
-        try { return Equipment.SkillStoneArt.IconIndex(stableId); }
-        catch (KeyNotFoundException) { }
-        if (SkillStoneIndices.TryGetValue(stableId, out int index)) return index;
-        if (P30SkillCatalog.Active.Any(item => item.Combat.StoneId == stableId) ||
-            P30SkillCatalog.Supports.Any(item => item.StoneId == stableId))
-            return StableIndex(stableId, Equipment.SkillStoneArt.Columns * Equipment.SkillStoneArt.Rows);
-        throw new KeyNotFoundException($"Unknown P21 skill stone: {stableId}");
+        return Equipment.SkillStoneArt.IconIndex(stableId);
     }
 
     private static IReadOnlyDictionary<string, int> EnemyIndices =>

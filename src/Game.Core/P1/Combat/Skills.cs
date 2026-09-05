@@ -214,6 +214,7 @@ public sealed record SkillUseProfile(
 
 public sealed class WarCryState
 {
+    public void ResetCooldown() => CooldownRemainingTicks = 0;
     public int CooldownRemainingTicks { get; private set; }
     public int EmpoweredHeavyStrikes { get; private set; }
     public int ExpireTick { get; private set; } = -1;

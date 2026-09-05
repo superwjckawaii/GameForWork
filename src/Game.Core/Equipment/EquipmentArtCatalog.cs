@@ -40,15 +40,16 @@ public static class EquipmentLegendaryArt
 public static class SkillStoneArt
 {
     public const int Columns = 10;
-    public const int Rows = 9;
+    public const int Rows = 19;
+    public static IReadOnlyList<string> StableIds { get; } = P30.P30SkillCatalog.Active
+        .Select(skill => skill.Combat.StoneId).Concat(P30.P30SkillCatalog.Supports.Select(skill => skill.StoneId)).ToArray();
+    private static readonly IReadOnlyDictionary<string, int> Indices = StableIds
+        .Select((id, index) => (id, index)).ToDictionary(pair => pair.id, pair => pair.index, StringComparer.Ordinal);
 
     public static int IconIndex(string stableId)
     {
-        int active = P24.P24SkillCatalog.Active.ToList().FindIndex(skill => skill.Combat.StoneId == stableId);
-        if (active >= 0) return active;
-        int support = P24.P24SkillCatalog.Supports.ToList().FindIndex(skill => skill.StoneId == stableId);
-        if (support >= 0) return P24.P24SkillCatalog.Active.Count + support;
-        throw new KeyNotFoundException($"P25 skill-stone art mapping missing for {stableId}.");
+        return Indices.TryGetValue(stableId, out int index) ? index
+            : throw new KeyNotFoundException($"Skill-stone art mapping missing for {stableId}.");
     }
 }
 

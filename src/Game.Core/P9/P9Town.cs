@@ -342,7 +342,9 @@ public sealed class P9TownState
             HasShield: assembled.Equipment.HasShield,
             BlockChanceBasisPoints: assembled.Equipment.HasShield ? 2_000 : 0,
             HasUsableWeapon: assembled.HasUsableWeapon,
-            LocalWeaponStats: assembled.Equipment.LocalWeapon);
+            LocalWeaponStats: assembled.Equipment.LocalWeapon,
+            CombatEquipment: assembled.CombatEquipment,
+            VirtueViceLoadout: assembled.VirtueViceLoadout);
     }
 
     private void CompactParty()

@@ -62,8 +62,8 @@ public sealed record EquipmentRuleOutcome(
     int Value = 0);
 
 /// <summary>
-/// Shared event registry for every enchantment and legendary signature rule.  Systems dispatch
-/// one event here, so online, offline and preview callers do not grow definition-specific branches.
+/// Metadata registry for enchantment and legendary descriptions. A registration is not evidence
+/// of a gameplay consumer; production combat is evaluated by EquipmentCombatRuntime.
 /// </summary>
 public static class EquipmentRuleRegistry
 {
@@ -140,9 +140,9 @@ public static class EquipmentRuleEngine
         if (description.Contains("懒惰", StringComparison.Ordinal))
             return GainStack(state, context, onceKey, "懒惰", Math.Min(10, 1 + sourceCount), 1_000 * sourceCount, context.ProjectileOrOrdinaryMinionHit);
 
-        var consumed = state.Consumed.ToHashSet(StringComparer.Ordinal);
-        consumed.Add(onceKey);
-        return new(state with { ConsumedKeys = consumed }, true, description);
+        // Non-stack signatures execute through EquipmentCombatRuntime or their owning system.
+        // Merely matching a registration is never a successful gameplay effect.
+        return new(state, false);
     }
 
     public static (int fireMinimum, int fireMaximum, int coldMinimum, int coldMaximum, int lightningMinimum, int lightningMaximum)

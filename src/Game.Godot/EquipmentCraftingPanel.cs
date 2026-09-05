@@ -191,7 +191,8 @@ public partial class EquipmentCraftingPanel : VBoxContainer
         void AddOperation(EquipmentCraftingOperationEntry operation, string familyId, string title)
         {
             EquipmentCraftingPreview? preview = target is null ? null : EquipmentCraftingService.Preview(target.Item,
-                new EquipmentCraftingRequest(operation.Id, SelectedAffixFamilyId: familyId));
+                new P2ItemCommandService(session, target.Character, target.MercenaryId)
+                    .CreateCraftingRequest(operation.Id, familyId: familyId));
             string resource = preview?.Resource ?? CostResource(operation.CostText);
             int cost = preview?.Cost ?? CostAmount(operation.CostText);
             var button = new Button

@@ -1665,7 +1665,8 @@ public sealed class P1GameSession
         MoreElementalDamageBasisPoints: build.MoreElementalDamageBasisPoints,
         MoreVoidDamageBasisPoints: build.MoreVoidDamageBasisPoints,
         MoreRareBossDamageBasisPoints: build.MoreRareBossDamageBasisPoints,
-        HasOffHand: build.HasOffHand) with
+        HasOffHand: build.HasOffHand,
+        CombatEquipment: build.CombatEquipment) with
         {
             AiSummary = $"{ai.Preset} · {(ai.MatchMode == AiRuleMatchMode.All ? "全部满足" : "任一满足")}：" +
                 $"敌人≥{ai.MinimumEnemyCount}、稀有度 {ai.EnemyRarity}、距离≤{ai.MaximumEnemyDistance}、" +
@@ -1683,7 +1684,9 @@ public sealed class P1GameSession
             SupportsFor(entry.Stone.DefinitionId),
             entry.Link.Priority,
             entry.Link.AiRule ?? GlobalSkillRule(),
-            entry.Stone.Level + (entry.Stone.Mutated ? 1 : 0),
+            Math.Clamp(entry.Stone.Level + (entry.Stone.Mutated ? 1 : 0) +
+                _heroBuild.Equipment.Modifiers.Value(ItemModifierKind.ActiveSkillGemLevels) +
+                _heroBuild.Equipment.Modifiers.Value(ItemModifierKind.AllActiveSkillGemLevels), 1, 40),
             entry.Stone.InstanceId,
             P24SupportsFor(entry.Stone.DefinitionId),
             entry.Stone.Quality,
@@ -1751,7 +1754,9 @@ public sealed class P1GameSession
             .Select(id => Management.SkillStones.Single(item => item.InstanceId == id))
             .Where(stone => !string.IsNullOrEmpty(stone.Definition.P30SupportId))
             .Select(stone => new P30LinkedSupport(stone.Definition.P30SupportId,
-                stone.Level + (stone.Mutated ? 1 : 0), stone.Quality))
+                Math.Clamp(stone.Level + (stone.Mutated ? 1 : 0) +
+                    _heroBuild.Equipment.Modifiers.Value(ItemModifierKind.SupportSkillGemLevels) +
+                    _heroBuild.Equipment.Modifiers.Value(ItemModifierKind.AllSupportSkillGemLevels), 1, 40), stone.Quality))
             .GroupBy(item => item.StoneId, StringComparer.Ordinal)
             .Select(group => group.First())
             .ToArray();

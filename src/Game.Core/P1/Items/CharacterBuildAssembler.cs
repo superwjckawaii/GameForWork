@@ -31,7 +31,8 @@ public sealed record AssembledCharacterBuild(
     int MoreElementalDamageBasisPoints = 0,
     int MoreVoidDamageBasisPoints = 0,
     int MoreRareBossDamageBasisPoints = 0,
-    bool HasOffHand = false)
+    bool HasOffHand = false,
+    EquipmentCombatLoadout? CombatEquipment = null)
 {
     public bool HasUsableWeapon => Equipment.Weapon is not null;
 
@@ -72,6 +73,7 @@ public static class CharacterBuildAssembler
         EquipmentSummary equipment = loadout.CalculateSummary();
         WeaponProfile weapon = equipment.Weapon ?? P1Weapons.Unequipped;
         EquipmentModifiers item = equipment.Modifiers;
+        EquipmentCombatLoadout combatEquipment = EquipmentCombatLoadout.From(loadout, equipment);
         PassiveBuildModifiers passive = passiveTree.CalculateModifiers();
         P205PassiveModifiers advanced = passive.Advanced ?? P205PassiveModifiers.Empty;
         P30JewelModifiers jewel = jewelState is null ? new() : P30Jewels.CalculateModifiers(jewelState, passiveTree);
@@ -150,24 +152,31 @@ public static class CharacterBuildAssembler
             item.IncreasedMovementSpeedBasisPoints,
             checked(item.IncreasedMaximumManaBasisPoints + jewel.IncreasedMaximumManaBasisPoints +
                 attributeMemory.IncreasedMaximumManaBasisPoints),
-            item.Value(ItemModifierKind.FlatShield),
+            item.Value(ItemModifierKind.FlatShield) + (combatEquipment.Has("第四圣约") ? (spirit + energy) / 5 : 0),
             equipment.SpiritBarrier,
             item.Value(ItemModifierKind.FlatSpiritBarrier),
             checked(item.Value(ItemModifierKind.IncreasedSpiritBarrierBasisPoints) + jewel.IncreasedSpiritBarrierBasisPoints),
-            MaximumElementalResistanceBasisPoints: checked(7_500 + item.MaximumAllResistanceBasisPoints +
-                Math.Max(item.Value(ItemModifierKind.MaximumFireResistanceBasisPoints),
-                    Math.Max(item.Value(ItemModifierKind.MaximumColdResistanceBasisPoints), item.Value(ItemModifierKind.MaximumLightningResistanceBasisPoints))) +
-                jewel.MaximumElementalResistanceBasisPoints),
+            MaximumElementalResistanceBasisPoints: checked(7_500 + item.MaximumAllResistanceBasisPoints + jewel.MaximumElementalResistanceBasisPoints),
             MaximumVoidResistanceBasisPoints: checked(7_500 + item.MaximumAllResistanceBasisPoints +
-                item.Value(ItemModifierKind.MaximumVoidResistanceBasisPoints) + jewel.MaximumVoidResistanceBasisPoints),
+                item.Value(ItemModifierKind.MaximumVoidResistanceBasisPoints) + item.Value(ItemModifierKind.MaximumVoidResistanceBonusBasisPoints) + jewel.MaximumVoidResistanceBasisPoints),
             MaximumBlockChanceBasisPoints: checked(7_500 + item.Value(ItemModifierKind.MaximumAttackBlockChanceBasisPoints)),
             SpellBlockChanceBasisPoints: item.Value(ItemModifierKind.SpellBlockChanceBasisPoints),
             MaximumSpellBlockChanceBasisPoints: checked(7_500 + item.Value(ItemModifierKind.MaximumSpellBlockChanceBasisPoints)),
-            IncreasedRecoveryRateBasisPoints: attributeMemory.IncreasedRecoveryRateBasisPoints,
+            IncreasedRecoveryRateBasisPoints: attributeMemory.IncreasedRecoveryRateBasisPoints + item.Value(ItemModifierKind.IncreasedResourceRecoveryRateBasisPoints),
             MaximumLifeMultiplierBasisPoints: P30MasteryRuntime.MaximumLifeMultiplier(advanced),
             MaximumManaMultiplierBasisPoints: P30MasteryRuntime.MaximumManaMultiplier(advanced),
             MaximumShieldMultiplierBasisPoints: P30MasteryRuntime.ShieldMultiplier(advanced),
-            IncreasedLifeLeechRecoverySpeedBasisPoints: P30MasteryRuntime.IncreasedLifeLeechRecoverySpeed(advanced));
+            IncreasedLifeLeechRecoverySpeedBasisPoints: P30MasteryRuntime.IncreasedLifeLeechRecoverySpeed(advanced),
+            MaximumFireResistanceBonusBasisPoints: item.Value(ItemModifierKind.MaximumFireResistanceBasisPoints),
+            MaximumColdResistanceBonusBasisPoints: item.Value(ItemModifierKind.MaximumColdResistanceBasisPoints),
+            MaximumLightningResistanceBonusBasisPoints: item.Value(ItemModifierKind.MaximumLightningResistanceBasisPoints),
+            MaximumLifeRegenerationBasisPoints: item.Value(ItemModifierKind.MaximumLifeRegenerationBasisPoints),
+            MaximumShieldRegenerationBasisPoints: item.Value(ItemModifierKind.MaximumShieldRegenerationBasisPoints),
+            ReducedShieldRechargeDelayBasisPoints: item.Value(ItemModifierKind.ReducedShieldRechargeDelayBasisPoints),
+            IncreasedLeechRecoveryRateBasisPoints: item.Value(ItemModifierKind.IncreasedLeechRecoveryRateBasisPoints),
+            IncreasedMaximumLeechRateBasisPoints: item.Value(ItemModifierKind.IncreasedMaximumLeechRateBasisPoints),
+            LifeRecoveryMultiplierBasisPoints: (combatEquipment.Has("饥馑指环") ? 7_000 : 10_000) * (combatEquipment.Has("血税契据") ? 8_000 : 10_000) / 10_000,
+            SpellSuppressionEffectBasisPoints: 7_000 + item.Value(ItemModifierKind.SpellSuppressionEffectBasisPoints));
         int increasedAttackSpeed = checked(item.IncreasedAttackSpeedBasisPoints + passive.IncreasedAttackSpeedBasisPoints +
             jewel.IncreasedAttackSpeedBasisPoints + attributeMemory.IncreasedAttackSpeedBasisPoints);
         SkillUseProfile heavyStrike = SkillRules.BuildHeavyStrike(
@@ -215,7 +224,7 @@ public static class CharacterBuildAssembler
             equipment.Effects?.Value(ItemModifierKind.MoreElementalDamageBasisPoints) ?? 0,
             equipment.Effects?.Value(ItemModifierKind.MoreVoidDamageBasisPoints) ?? 0,
             equipment.Effects?.Value(ItemModifierKind.MoreRareBossDamageBasisPoints) ?? 0,
-            loadout.Items.ContainsKey(EquipmentSlot.OffHand));
+            loadout.Items.ContainsKey(EquipmentSlot.OffHand), combatEquipment);
     }
 
     private static P30VirtueViceLoadout VirtueVice(EquipmentModifiers item, P30JewelModifiers jewel)

@@ -166,6 +166,21 @@ public sealed class EquipmentLoadout
         int[] sums = new int[Enum.GetValues<ItemModifierKind>().Length];
         foreach (ItemInstance item in equipped)
         {
+            if (!string.IsNullOrEmpty(item.LegendaryCatalogId))
+            {
+                string? name = EquipmentCatalog.LegendaryItems.FirstOrDefault(entry => entry.Id == item.LegendaryCatalogId)?.DisplayName;
+                if (name == "无名谦冠") sums[(int)ItemModifierKind.HoldHumilityAtMaximum] = 1;
+                if (name == "傲慢之握") sums[(int)ItemModifierKind.HoldArroganceAtMaximum] = 1;
+                if (name == "怒节同契") { sums[(int)ItemModifierKind.HoldRageAtMaximum] = 1; sums[(int)ItemModifierKind.HoldTemperanceAtMaximum] = 1; }
+                if (name == "两极德印")
+                {
+                    string variant = item.CorruptionOutcome ?? string.Empty;
+                    foreach (var (text, kind) in new[] { ("慈悲", ItemModifierKind.HoldMercyAtMaximum), ("节制", ItemModifierKind.HoldTemperanceAtMaximum),
+                        ("谦逊", ItemModifierKind.HoldHumilityAtMaximum), ("暴怒", ItemModifierKind.HoldRageAtMaximum),
+                        ("懒惰", ItemModifierKind.HoldSlothAtMaximum), ("傲慢", ItemModifierKind.HoldArroganceAtMaximum) })
+                        if (variant.Contains(text, StringComparison.Ordinal)) sums[(int)kind] = 1;
+                }
+            }
             foreach (RolledAffixComponent implicitModifier in item.EffectiveImplicitComponents)
                 AddGlobal(sums, implicitModifier.Kind, implicitModifier.Value, implicitModifier.Scope);
             foreach (AffixRoll affix in item.Affixes)

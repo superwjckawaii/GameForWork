@@ -150,7 +150,7 @@ public static class P24SkillCatalog
         A(P23BaseClass.Hermit, "shieldbreak_counter", "破盾反击", P24SkillMechanic.Counter, SkillTag.Attack | SkillTag.Counter | SkillTag.Area,
             AttackHit | P17SkillCapability.Counter | P17SkillCapability.Area | P17SkillCapability.Triggerable, P17SkillRole.Counter, P17DamageType.Physical, P17SkillShape.Circle, 0, 4_000, 1, 50, 18_000, "能量护盾耗尽时自动反击并恢复铠能。"),
         A(P23BaseClass.Hermit, "forge_turret", "铸造炮台", P24SkillMechanic.Construct, SkillTag.Spell | SkillTag.Projectile | SkillTag.Duration,
-            P17SkillCapability.Spell | P17SkillCapability.Projectile | P17SkillCapability.Duration | P17SkillCapability.HasCost, P17SkillRole.Clear, P17DamageType.Physical, P17SkillShape.Self, 20, 10_000, 8, 40, 9_000, "铸造远程构装炮台，优先攻击高价值目标。"),
+            P17SkillCapability.Spell | P17SkillCapability.Projectile | P17SkillCapability.Duration | P17SkillCapability.HasCost, P17SkillRole.Clear, P17DamageType.Physical, P17SkillShape.Self, 20, 10_000, 16, 80, 9_000, "部署静止炮台，基础优先最近目标；对应升华可优先稀有与首领。"),
         A(P23BaseClass.Hermit, "rune_array", "符文阵列", P24SkillMechanic.Construct, SkillTag.Spell | SkillTag.Area | SkillTag.Duration | SkillTag.Elemental,
             SpellHit | P17SkillCapability.Area | P17SkillCapability.Duration | P17SkillCapability.ElementalDamage, P17SkillRole.Clear, P17DamageType.Lightning, P17SkillShape.GroundArea, 18, 8_000, 5, 32, 9_500, "构装体之间形成造成元素伤害的符文阵列。"),
         A(P23BaseClass.Hermit, "selfdestruct_rebuild", "自毁重铸", P24SkillMechanic.Rebuild, SkillTag.Spell | SkillTag.Area | SkillTag.Fire,

@@ -22,6 +22,7 @@ Write-Host "[verify] godot=$godotBinary"
 & (Join-Path $repositoryRoot 'scripts\verify_release_hygiene.ps1') -RepositoryRoot $repositoryRoot
 & (Join-Path $repositoryRoot 'scripts\verify_p21_assets.ps1') -RepositoryRoot $repositoryRoot
 & (Join-Path $repositoryRoot 'scripts\verify_p31_assets.ps1') -RepositoryRoot $repositoryRoot
+& (Join-Path $repositoryRoot 'scripts\verify_current_assets.ps1') -RepositoryRoot $repositoryRoot
 
 Invoke-NativeChecked -FilePath $dotnetBinary -Arguments @('restore', $solutionPath) -Label 'Restore solution'
 Invoke-NativeChecked -FilePath $dotnetBinary -Arguments @('build', $solutionPath, '--no-restore', '--configuration', $Configuration) -Label 'Build solution'

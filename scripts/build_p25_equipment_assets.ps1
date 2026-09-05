@@ -23,6 +23,7 @@ $sourcePaths = @{
     p32Weapons = Join-Path $p32SourceRoot 'master-weapons.png'
     p32SpecialWeapons = Join-Path $p32SourceRoot 'master-special-weapons.png'
     p32SpiritShields = Join-Path $p32SourceRoot 'master-spirit-shields.png'
+    p32EvasionShields = Join-Path $p32SourceRoot 'master-evasion-spirit-shields.png'
     p32Legendary = Join-Path $p32SourceRoot 'master-legendary.png'
 }
 foreach ($path in $sourcePaths.Values) {
@@ -61,16 +62,7 @@ function Get-CellRectangle([System.Drawing.Bitmap]$bitmap, [int]$column, [int]$r
     return [System.Drawing.Rectangle]::new($left, $top, $right - $left, $bottom - $top)
 }
 
-function Get-AlphaBounds([System.Drawing.Bitmap]$bitmap, [System.Drawing.Rectangle]$cell) {
-    $left = $cell.Right; $top = $cell.Bottom; $right = -1; $bottom = -1
-    for ($y = $cell.Top; $y -lt $cell.Bottom; $y++) { for ($x = $cell.Left; $x -lt $cell.Right; $x++) {
-        if ($bitmap.GetPixel($x, $y).A -le 8) { continue }
-        if ($x -lt $left) { $left = $x }; if ($x -gt $right) { $right = $x }
-        if ($y -lt $top) { $top = $y }; if ($y -gt $bottom) { $bottom = $y }
-    }}
-    if ($right -lt $left -or $bottom -lt $top) { throw "Empty source cell $cell" }
-    return [System.Drawing.Rectangle]::new($left, $top, $right - $left + 1, $bottom - $top + 1)
-}
+. (Join-Path $PSScriptRoot 'art-crop.ps1')
 
 function Get-TargetSize([string]$category, [string[]]$tags) {
     if ($tags -contains 'bow') { return @(29, 28) }; if ($tags -contains 'quiver') { return @(24, 27) }
@@ -86,14 +78,16 @@ function Get-TargetSize([string]$category, [string[]]$tags) {
 
 function Draw-FittedIcon([System.Drawing.Graphics]$graphics, [System.Drawing.Bitmap]$source,
     [System.Drawing.Rectangle]$sourceCell, [int]$destinationIndex, [string]$category, [string[]]$tags, [int]$columns = 13) {
-    $bounds = Get-AlphaBounds $source $sourceCell; $target = Get-TargetSize $category $tags
+    $extracted = [ArtCrop]::Extract($source, $sourceCell)
+    $bounds = [System.Drawing.Rectangle]::new(0,0,$extracted.Width,$extracted.Height); $target = Get-TargetSize $category $tags
     $scale = [Math]::Min($target[0] / $bounds.Width, $target[1] / $bounds.Height)
     $width = [Math]::Max(1, [int][Math]::Round($bounds.Width * $scale)); $height = [Math]::Max(1, [int][Math]::Round($bounds.Height * $scale))
     $cellLeft = ($destinationIndex % $columns) * 32; $cellTop = [Math]::Floor($destinationIndex / $columns) * 32
     $x = $cellLeft + [Math]::Floor((32 - $width) / 2)
     $bottomAnchored = $category -in @('BodyArmor', 'Helmet', 'Gloves', 'Boots', 'LifeFlask')
     $y = if ($bottomAnchored) { $cellTop + 30 - $height } else { $cellTop + [Math]::Floor((32 - $height) / 2) }
-    $graphics.DrawImage($source, [System.Drawing.Rectangle]::new($x, $y, $width, $height), $bounds, [System.Drawing.GraphicsUnit]::Pixel)
+    try { $graphics.DrawImage($extracted, [System.Drawing.Rectangle]::new($x, $y, $width, $height), $bounds, [System.Drawing.GraphicsUnit]::Pixel) }
+    finally { $extracted.Dispose() }
 }
 
 function Draw-TierMarks([System.Drawing.Graphics]$graphics, [int]$index, [int]$requiredLevel, [int]$columns = 13) {
@@ -174,6 +168,7 @@ try {
             $source = $sources[$mapping[0]]; $cell = Get-CellRectangle $source $mapping[1] $mapping[2][$variant - 1] 5 6
         } elseif ($index -lt 200) {
             if ($index -in @(191,195,199)) { $source=$sources.p32SpiritShields; $column=[Array]::IndexOf([object[]]@(191,195,199),$index); $cell=Get-CellRectangle $source $column 0 3 1 }
+            elseif ($index -ge 192 -and $index -le 194) { $source=$sources.p32EvasionShields; $cell=Get-CellRectangle $source ($index-192) 0 3 1 }
             else {
                 $source=$sources.p32Spirit
                 if ($index -lt 170) { $column=[Math]::Floor(($index-150)/4); $row=($index-150)%4 }
@@ -181,7 +176,12 @@ try {
                 elseif ($index -lt 185) { $column=6+[Math]::Floor(($index-173)/4); $row=($index-173)%4 }
                 elseif ($index -lt 188) { $column=9; $row=$index-185 }
                 else { $column=10+[Math]::Floor(($index-188)/4); $row=($index-188)%4 }
-                $cell=Get-CellRectangle $source $column $row 13 4
+                # This delivered master has twelve columns and a blank footer, not 13x4.
+                # The evasion/spirit shield column is supplied separately below.
+                if ($column -eq 12) { $column=11 }
+                $xs=@(30,190,338,480,623,762,906,1055,1204,1344,1496,1635,1808)
+                $ys=@(40,208,371,543,719)
+                $cell=[System.Drawing.Rectangle]::new($xs[$column],$ys[$row],$xs[$column+1]-$xs[$column],$ys[$row+1]-$ys[$row])
             }
         } else {
             if ($index -lt 228) { $source=$sources.p32Weapons; $column=[Math]::Floor(($index-200)/4); $row=($index-200)%4; $columns=7 }

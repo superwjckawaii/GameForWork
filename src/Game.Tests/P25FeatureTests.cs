@@ -61,7 +61,8 @@ public sealed class P25FeatureTests
         int[] skillIndexes = P24SkillCatalog.Active.Select(skill => P21ArtContract.SkillStoneIndex(skill.Combat.StoneId))
             .Concat(P24SkillCatalog.Supports.Select(skill => P21ArtContract.SkillStoneIndex(skill.StoneId))).ToArray();
         Assert.Equal(90, skillIndexes.Length);
-        Assert.Equal(Enumerable.Range(0, 90), skillIndexes.Order());
+        Assert.Equal(90, skillIndexes.Distinct().Count());
+        Assert.All(skillIndexes, index => Assert.InRange(index, 0, SkillStoneArt.StableIds.Count - 1));
     }
 
     [Fact]

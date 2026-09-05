@@ -44,8 +44,25 @@ public sealed record CharacterSheet(
     int MaximumLifeMultiplierBasisPoints = 10_000,
     int MaximumManaMultiplierBasisPoints = 10_000,
     int MaximumShieldMultiplierBasisPoints = 10_000,
-    int IncreasedLifeLeechRecoverySpeedBasisPoints = 0)
+    int IncreasedLifeLeechRecoverySpeedBasisPoints = 0,
+    int MaximumFireResistanceBonusBasisPoints = 0,
+    int MaximumColdResistanceBonusBasisPoints = 0,
+    int MaximumLightningResistanceBonusBasisPoints = 0,
+    int MaximumLifeRegenerationBasisPoints = 0,
+    int MaximumShieldRegenerationBasisPoints = 0,
+    int ReducedShieldRechargeDelayBasisPoints = 0,
+    int IncreasedLeechRecoveryRateBasisPoints = 0,
+    int IncreasedMaximumLeechRateBasisPoints = 0,
+    int LifeRecoveryMultiplierBasisPoints = 10_000)
 {
+    public int ResistanceMaximum(EnemyDamageType type) => type switch
+    {
+        EnemyDamageType.Fire => Math.Min(9_000, MaximumElementalResistanceBasisPoints + MaximumFireResistanceBonusBasisPoints),
+        EnemyDamageType.Cold => Math.Min(9_000, MaximumElementalResistanceBasisPoints + MaximumColdResistanceBonusBasisPoints),
+        EnemyDamageType.Lightning => Math.Min(9_000, MaximumElementalResistanceBasisPoints + MaximumLightningResistanceBonusBasisPoints),
+        EnemyDamageType.Void => Math.Min(9_000, MaximumVoidResistanceBasisPoints),
+        _ => MaximumPhysicalResistanceBasisPoints,
+    };
     public int CappedResistance(int value) => Math.Clamp(value, P30CombatRules.MinimumResistance,
         MaximumElementalResistanceBasisPoints);
 
@@ -164,7 +181,8 @@ public sealed record CharacterSheet(
 
     public CalculatedValue LifeRegenerationPerSecond()
     {
-        int value = ApplyIncreased(Math.Max(0, FlatLifeRegeneration), IncreasedRecoveryRateBasisPoints);
+        int value = ApplyIncreased(Math.Max(0, FlatLifeRegeneration) +
+            (int)((long)MaximumLife().Value * MaximumLifeRegenerationBasisPoints / 10_000), IncreasedRecoveryRateBasisPoints);
         return CalculatedValue.Single("每秒生命恢复",
             $"{Math.Max(0, FlatLifeRegeneration)} × (10000 + {IncreasedRecoveryRateBasisPoints}) / 10000", value);
     }
@@ -198,6 +216,8 @@ public sealed class ResourceState
     private int _manaRecoveryRemainder;
     private int _lifeRecoveryRemainder;
     private int _shieldRecoveryRemainder;
+    private int _shieldRegenerationRemainder;
+    private long _lifeMultiplierRemainder;
     private readonly List<LeechInstance> _lifeLeech = [];
     private readonly List<LeechInstance> _manaLeech = [];
     private readonly List<LeechInstance> _shieldLeech = [];
@@ -226,6 +246,14 @@ public sealed class ResourceState
     public int Shield { get; private set; }
     public int LastDamageTick { get; private set; } = int.MinValue / 2;
     public bool IsAlive => Life > 0;
+    public Action? LifeDepleted { get; set; }
+
+    public void SetLifeAndShield(int basisPoints)
+    {
+        Life = Math.Max(1, (int)((long)MaximumLife * Math.Clamp(basisPoints, 0, 10_000) / 10_000));
+        Shield = (int)((long)MaximumShield * Math.Clamp(basisPoints, 0, 10_000) / 10_000);
+        _lifeLeech.Clear(); _manaLeech.Clear(); _shieldLeech.Clear();
+    }
 
     public bool TryPayMana(int amount)
     {
@@ -261,13 +289,18 @@ public sealed class ResourceState
         int shieldDamage = Math.Min(Shield, amount);
         Shield -= shieldDamage;
         Life = Math.Max(0, Life - (amount - shieldDamage));
+        if (Life == 0) LifeDepleted?.Invoke();
     }
 
     public int HealLife(int amount)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(amount);
+        if (!IsAlive) return 0;
         int previous = Life;
-        Life = Math.Min(MaximumLife, checked(Life + amount));
+        _lifeMultiplierRemainder += (long)amount * Sheet.LifeRecoveryMultiplierBasisPoints;
+        amount = (int)Math.Clamp(_lifeMultiplierRemainder / 10_000, 0, int.MaxValue);
+        _lifeMultiplierRemainder %= 10_000;
+        Life = (int)Math.Min(MaximumLife, (long)Life + amount);
         return Life - previous;
     }
 
@@ -275,7 +308,7 @@ public sealed class ResourceState
     {
         ArgumentOutOfRangeException.ThrowIfNegative(amount);
         int previous = Mana;
-        Mana = Math.Min(MaximumMana, checked(Mana + amount));
+        Mana = (int)Math.Min(MaximumMana, (long)Mana + amount);
         return Mana - previous;
     }
 
@@ -283,14 +316,14 @@ public sealed class ResourceState
     {
         ArgumentOutOfRangeException.ThrowIfNegative(amount);
         int previous = Shield;
-        Shield = Math.Min(MaximumShield, checked(Shield + amount));
+        Shield = (int)Math.Min(MaximumShield, (long)Shield + amount);
         return Shield - previous;
     }
 
     public void AddLifeLeech(int amount) => AddLeech(_lifeLeech, amount,
-        Sheet.IncreasedLifeLeechRecoverySpeedBasisPoints);
-    public void AddManaLeech(int amount) => AddLeech(_manaLeech, amount);
-    public void AddShieldLeech(int amount) => AddLeech(_shieldLeech, amount);
+        Sheet.IncreasedLifeLeechRecoverySpeedBasisPoints + Sheet.IncreasedLeechRecoveryRateBasisPoints);
+    public void AddManaLeech(int amount) => AddLeech(_manaLeech, amount, Sheet.IncreasedLeechRecoveryRateBasisPoints);
+    public void AddShieldLeech(int amount) => AddLeech(_shieldLeech, amount, Sheet.IncreasedLeechRecoveryRateBasisPoints);
 
     public void AdvanceRegenerationTick(int tick)
     {
@@ -302,14 +335,20 @@ public sealed class ResourceState
 
         int lifePerSecond = Sheet.LifeRegenerationPerSecond().Value;
         _lifeRecoveryRemainder += lifePerSecond;
-        Life = Math.Min(MaximumLife, Life + (_lifeRecoveryRemainder / ticksPerSecond));
+        HealLife(_lifeRecoveryRemainder / ticksPerSecond);
         _lifeRecoveryRemainder %= ticksPerSecond;
+
+        _shieldRegenerationRemainder += (int)((long)MaximumShield * Sheet.MaximumShieldRegenerationBasisPoints / 10_000 *
+            Math.Max(0L, 10_000L + Sheet.IncreasedRecoveryRateBasisPoints) / 10_000);
+        RestoreShield(_shieldRegenerationRemainder / ticksPerSecond);
+        _shieldRegenerationRemainder %= ticksPerSecond;
 
         AdvanceLeech(_lifeLeech, MaximumLife, HealLife);
         AdvanceLeech(_manaLeech, MaximumMana, RestoreMana);
         AdvanceLeech(_shieldLeech, MaximumShield, RestoreShield);
 
-        if (tick - LastDamageTick < 2 * ticksPerSecond)
+        int rechargeDelay = Math.Max(0, 2 * ticksPerSecond * (10_000 - Sheet.ReducedShieldRechargeDelayBasisPoints) / 10_000);
+        if (tick - LastDamageTick < rechargeDelay)
         {
             _shieldRecoveryRemainder = 0;
             return;
@@ -331,11 +370,12 @@ public sealed class ResourceState
         instances.Add(new(amount, scaledPerSecond));
     }
 
-    private static void AdvanceLeech(List<LeechInstance> instances, int maximum, Func<int, int> restore)
+    private void AdvanceLeech(List<LeechInstance> instances, int maximum, Func<int, int> restore)
     {
         const int ticksPerSecond = 20;
         if (maximum <= 0 || instances.Count == 0) return;
-        int budget = Math.Max(1, maximum * P30CombatRules.DefaultLeechPerSecondMaximum / 10_000 / ticksPerSecond);
+        int budget = Math.Max(1, (int)((long)maximum * P30CombatRules.DefaultLeechPerSecondMaximum / 10_000 *
+            Math.Max(0L, 10_000L + Sheet.IncreasedMaximumLeechRateBasisPoints) / 10_000 / ticksPerSecond));
         foreach (LeechInstance instance in instances.ToArray())
         {
             if (budget <= 0) break;
@@ -343,11 +383,10 @@ public sealed class ResourceState
             int available = Math.Min(instance.Remaining, instance.Remainder / ticksPerSecond);
             int consumed = Math.Min(budget, available);
             if (consumed <= 0) continue;
-            int restored = restore(consumed);
-            instance.Remaining -= restored;
-            instance.Remainder -= restored * ticksPerSecond;
-            budget -= restored;
-            if (restored == 0) instance.Remaining = 0;
+            restore(consumed);
+            instance.Remaining -= consumed;
+            instance.Remainder -= consumed * ticksPerSecond;
+            budget -= consumed;
         }
         instances.RemoveAll(instance => instance.Remaining <= 0);
     }

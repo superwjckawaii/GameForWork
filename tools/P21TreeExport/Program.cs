@@ -37,7 +37,9 @@ TreeEdge[] atlasEdges = P10AtlasTree.Nodes.Where(node => node.PrerequisiteId is 
 var document = new TreeDocument(
     new NamedTree("Passive", passiveNodes, passiveEdges, P1PassiveTree.LayoutExtent),
     ascendancies,
-    new NamedTree("Atlas", atlasNodes, atlasEdges, P10AtlasTree.LayoutExtent));
+    new NamedTree("Atlas", atlasNodes, atlasEdges, P10AtlasTree.LayoutExtent),
+    GameForWork.Core.Equipment.SkillStoneArt.StableIds.Select((id, index) =>
+        new ArtStone(id, index, index < GameForWork.Core.P30.P30SkillCatalog.Active.Count)).ToArray());
 var options = new JsonSerializerOptions { WriteIndented = true, PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
 options.Converters.Add(new JsonStringEnumConverter());
 string destination = Path.GetFullPath(args[0]);
@@ -51,4 +53,5 @@ static TreeNode Project(string id, float x, float y, string kind, bool major, fl
 internal sealed record TreeNode(string Id, float X, float Y, float NormalizedX, float NormalizedY, string Kind, bool Major);
 internal sealed record TreeEdge(string From, string To);
 internal sealed record NamedTree(string Name, IReadOnlyList<TreeNode> Nodes, IReadOnlyList<TreeEdge> Edges, float Extent);
-internal sealed record TreeDocument(NamedTree Passive, IReadOnlyList<NamedTree> Ascendancies, NamedTree Atlas);
+internal sealed record ArtStone(string Id, int Index, bool Active);
+internal sealed record TreeDocument(NamedTree Passive, IReadOnlyList<NamedTree> Ascendancies, NamedTree Atlas, IReadOnlyList<ArtStone> Skills);

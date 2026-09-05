@@ -374,6 +374,34 @@ public partial class P1WorldView : Control
             Vector2 allyPosition = MapPoint(field, ally.Position) + VisualFootwork(ally.EntityId, elapsed, 2.6f);
             _positions[ally.EntityId] = allyPosition;
             DrawShadow(allyPosition + new Vector2(0, 5), 7);
+            if (ally.SkillId.Length > 0)
+            {
+                P4AllyFrame? nextAlly = next.Allies?.FirstOrDefault(item => item.EntityId == ally.EntityId);
+                P3SceneEvent? action = _recentEvents.LastOrDefault(item => EventSource(item, ally.EntityId) && item.Value > 0);
+                P21Facing facing = FacingBetween(ally.Position, nextAlly?.Position ?? ally.Position,
+                    action?.EffectPosition ?? current.HeroPosition);
+                P21SpriteAction unitAction = nextAlly is not null && nextAlly.Position != ally.Position ? P21SpriteAction.Move :
+                    action is not null && current.AtMilliseconds - action.AtMilliseconds < 500 ? P21SpriteAction.Attack : P21SpriteAction.Idle;
+                int unitRig = ally.SkillId switch
+                {
+                    "p24.skill.summon_boneguard" => P21ArtContract.EnemyRig("core.enemy.oathless_guard"),
+                    "p24.skill.summon_soulbow" => P21ArtContract.EnemyRig("core.enemy.ash_bone_archer"),
+                    "p24.skill.summon_spirit_beast" => P21ArtContract.EnemyRig("core.enemy.gate_hound"),
+                    _ => -1,
+                };
+                if (unitRig >= 0)
+                    DrawP21Sprite(_enemyAnimationAtlas, unitRig, facing, unitAction, elapsed, allyPosition,
+                        new Vector2(36, 46), P21ArtContract.EnemyBodyRigCount, P21ArtContract.ActorCellWidth, P21ArtContract.ActorCellHeight);
+                else
+                {
+                    // Static construct silhouette uses its placed base and barrel, not a walking character rig.
+                    DrawRect(new Rect2(allyPosition + new Vector2(-11, -9), new Vector2(22, 17)), new Color("516169"));
+                    DrawLine(allyPosition + new Vector2(0, -8), allyPosition + new Vector2(0, -24), new Color("b7ac83"), 6);
+                }
+                DrawBar(new Rect2(allyPosition + new Vector2(-17, 11), new Vector2(34, 4)),
+                    (float)ally.Life / Math.Max(1, ally.MaximumLife), new Color("54b599"));
+                continue;
+            }
             int rig = 1 + StableVisualIndex(ally.EntityId, 4);
             DrawP21Sprite(_actorAnimationAtlas, rig, heroFacing,
                 heroAction == P21SpriteAction.Idle ? P21SpriteAction.Idle : heroAction,

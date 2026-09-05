@@ -23,7 +23,8 @@ public sealed record EquipmentCraftingRequest(
     string SelectedDefinitionId = "",
     string SelectedAffixFamilyId = "",
     int WorkshopLevel = 4,
-    ulong? Seed = null);
+    ulong? Seed = null,
+    EquipmentCombatLoadout? Equipment = null);
 
 public sealed record EquipmentCraftingPreview(
     bool Available,
@@ -50,6 +51,8 @@ public static class EquipmentCraftingService
         ArgumentNullException.ThrowIfNull(item);
         EquipmentCraftingOperationEntry operation = Get(request.OperationId);
         (string resource, int cost) = ParseCost(operation.CostText, item);
+        if (operation.Kind == "LifeEnergy" && request.Equipment?.Has("园丁筋络") == true)
+            cost = checked((cost * 7 + 9) / 10);
         string failure = ValidateCommon(item, operation);
         if (failure.Length == 0) failure = ValidateRequest(item, operation, request);
         return failure.Length > 0
@@ -79,7 +82,7 @@ public static class EquipmentCraftingService
         if (operation.Kind == "Enchantment") return ApplyEnchantment(item, request, resource, cost);
         if (operation.Kind == "LegendaryExchange") return ApplyLegendary(request, seed, resource, cost);
         if (operation.Kind == "Oath") return ApplyOath(item, operation, request, seed, resource, cost);
-        if (operation.Kind == "LifeEnergy") return ApplyLifeEnergy(item, operation, seed, resource, cost);
+        if (operation.Kind == "LifeEnergy") return ApplyLifeEnergy(item, operation, seed, resource, cost, request.Equipment?.Has("园丁筋络") == true);
         return ApplyMetal(item, operation, seed, resource, cost);
     }
 
@@ -122,14 +125,19 @@ public static class EquipmentCraftingService
     }
 
     private static EquipmentCraftingResult ApplyLifeEnergy(ItemInstance item, EquipmentCraftingOperationEntry operation,
-        ulong seed, string resource, int cost)
+        ulong seed, string resource, int cost, bool gardener)
     {
         if (item.Rarity != ItemRarity.Rare) return Fail("rare_required", "命能加工要求稀有装备。", resource, cost);
-        if (operation.DisplayName.StartsWith("保留前缀", StringComparison.Ordinal)) return RerollHalf(item, AffixPosition.Prefix, seed, resource, cost);
-        if (operation.DisplayName.StartsWith("保留后缀", StringComparison.Ordinal)) return RerollHalf(item, AffixPosition.Suffix, seed, resource, cost);
+        AffixPosition? preserved = operation.DisplayName.StartsWith("保留前缀", StringComparison.Ordinal) ? AffixPosition.Prefix :
+            operation.DisplayName.StartsWith("保留后缀", StringComparison.Ordinal) ? AffixPosition.Suffix : null;
+        AffixRoll[] mutable = item.Affixes.Where(a => !a.Crafted && !item.IsFractured(a) &&
+            a.Definition.Position != preserved && !IsProtected(item, a.Definition.Position)).ToArray();
+        AffixRoll? extra = gardener && mutable.Length > 0
+            ? mutable[(int)(new Pcg32(seed ^ 0x67617264656eUL).NextUInt() % (uint)mutable.Length)] : null;
+        if (preserved is { } position) return RerollHalf(item, position, seed, resource, cost, extra);
         string tag = DirectionFrom(operation.DisplayName);
         return operation.DisplayName.Contains("偏向重铸", StringComparison.Ordinal)
-            ? BiasedReroll(item, tag, seed, resource, cost)
+            ? BiasedReroll(item, tag, seed, resource, cost, extra)
             : BiasedReplace(item, tag, seed, resource, cost);
     }
 
@@ -265,22 +273,25 @@ public static class EquipmentCraftingService
         return new(true, string.Empty, "腐化失控：装备被摧毁", null, resource, cost, true);
     }
 
-    private static EquipmentCraftingResult RerollHalf(ItemInstance item, AffixPosition preserved, ulong seed, string resource, int cost)
+    private static EquipmentCraftingResult RerollHalf(ItemInstance item, AffixPosition preserved, ulong seed, string resource, int cost, AffixRoll? extra = null)
     {
-        AffixRoll[] keep = item.Affixes.Where(affix => affix.Definition.Position == preserved || affix.Crafted || item.IsFractured(affix)).ToArray();
+        var keep = item.Affixes.Where(affix => affix.Definition.Position == preserved || affix.Crafted || item.IsFractured(affix) || affix == extra).ToList();
         ItemInstance generated = ItemGenerator.Generate(item.Base.StableId, item.ItemLevel, ItemRarity.Rare, seed, item.InstanceId);
-        AffixRoll[] fill = generated.Affixes.Where(affix => affix.Definition.Position != preserved && keep.All(existing => existing.Definition.MutualExclusionGroup != affix.Definition.MutualExclusionGroup)).Take(Math.Max(0, 6 - keep.Length)).ToArray();
-        ItemInstance changed = CopyPersistent(item, generated) with { Affixes = keep.Concat(fill).ToArray() };
+        foreach (var affix in generated.Affixes.Where(a => a.Definition.Position != preserved))
+            if (keep.Count < 6 && keep.Count(a => a.Definition.Position == affix.Definition.Position) < 3 &&
+                keep.All(a => a.Definition.MutualExclusionGroup != affix.Definition.MutualExclusionGroup && a.Definition.StableFamilyId != affix.Definition.StableFamilyId))
+                keep.Add(affix);
+        ItemInstance changed = CopyPersistent(item, generated) with { Affixes = keep.ToArray() };
         return Ok(ApplyProtections(item, changed, true), "已完成保留半边重铸", resource, cost);
     }
 
-    private static EquipmentCraftingResult BiasedReroll(ItemInstance item, string tag, ulong seed, string resource, int cost)
+    private static EquipmentCraftingResult BiasedReroll(ItemInstance item, string tag, ulong seed, string resource, int cost, AffixRoll? extra = null)
     {
         AffixDefinition[] targets = P1Affixes.For(item.Base, item.ItemLevel).Where(value => HasDirection(value, tag)).ToArray();
         if (targets.Length == 0) return Fail("no_direction_candidate", $"没有合法{tag}词缀。", resource, cost);
         var random = new Pcg32(seed ^ 0x9e3779b97f4a7c15UL);
         var affixes = item.Affixes.Where(value => value.Crafted || item.IsFractured(value) ||
-            IsProtected(item, value.Definition.Position)).ToList();
+            IsProtected(item, value.Definition.Position) || value == extra).ToList();
         int desiredCount = Math.Max(affixes.Count, 4 + (int)(random.NextUInt() % 3));
         bool hasTarget = affixes.Any(value => HasDirection(value.Definition, tag));
         while (affixes.Count < desiredCount)
@@ -411,6 +422,7 @@ public static class EquipmentCraftingService
         RolledBaseEvasion = original.RolledBaseEvasion, RolledBaseShield = original.RolledBaseShield,
         RolledBaseSpiritBarrier = original.RolledBaseSpiritBarrier, RolledImplicitComponents = original.RolledImplicitComponents,
         ProtectPrefixesNextCraft = original.ProtectPrefixesNextCraft, ProtectSuffixesNextCraft = original.ProtectSuffixesNextCraft,
+        FracturedAffixFamilyId = original.FracturedAffixFamilyId,
         CraftSequence = original.CraftSequence,
     };
 

@@ -380,7 +380,8 @@ public sealed record P1TeamBuild(
     int MoreElementalDamageBasisPoints = 0,
     int MoreVoidDamageBasisPoints = 0,
     int MoreRareBossDamageBasisPoints = 0,
-    bool HasOffHand = false);
+    bool HasOffHand = false,
+    GameForWork.Core.Equipment.EquipmentCombatLoadout? CombatEquipment = null);
 
 public sealed record MapNodeResult(
     int NodeIndex,

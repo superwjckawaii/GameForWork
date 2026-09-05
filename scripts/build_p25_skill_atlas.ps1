@@ -1,51 +1,40 @@
 param(
-    [Parameter(Mandatory = $true)][string]$SourcePath,
-    [Parameter(Mandatory = $true)][string]$OutputPath
+    [string]$SourcePath = (Join-Path $PSScriptRoot '../src/Game.Godot/assets/p21/ui/p21-skill-gems.png'),
+    [string]$OutputPath = (Join-Path $PSScriptRoot '../src/Game.Godot/assets/p25/ui/p25-skill-stones.png')
 )
-
-$ErrorActionPreference = 'Stop'
+$ErrorActionPreference='Stop'
 Add-Type -AssemblyName System.Drawing
-
-$source = [System.Drawing.Bitmap]::FromFile((Resolve-Path -LiteralPath $SourcePath))
-if ($source.Width -ne 320 -or $source.Height -ne 256) {
-    throw "Expected the P21 10x8 32px skill atlas, received $($source.Width)x$($source.Height)."
-}
-
-$atlas = New-Object System.Drawing.Bitmap 320, 288, ([System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
-$graphics = [System.Drawing.Graphics]::FromImage($atlas)
-$graphics.Clear([System.Drawing.Color]::Transparent)
-$graphics.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::NearestNeighbor
-$graphics.PixelOffsetMode = [System.Drawing.Drawing2D.PixelOffsetMode]::Half
-$graphics.CompositingMode = [System.Drawing.Drawing2D.CompositingMode]::SourceCopy
-
+. (Join-Path $PSScriptRoot 'native-tools.ps1')
+$root=Split-Path -Parent $PSScriptRoot
+$metadata=Join-Path $root 'artifacts/art-audit/catalog.json'
+$dotnet=Resolve-DotnetBinary
+Invoke-NativeChecked -FilePath $dotnet -Arguments @('run','--project',(Join-Path $root 'tools/P21TreeExport'),'--',$metadata) -Label 'Export runtime art identities'
+$skills=@((Get-Content $metadata -Raw|ConvertFrom-Json).skills)
+$source=[System.Drawing.Bitmap]::FromFile((Resolve-Path $SourcePath))
+$atlas=[System.Drawing.Bitmap]::new(320,[int][Math]::Ceiling($skills.Count/10.0)*32)
+$g=[System.Drawing.Graphics]::FromImage($atlas)
+$g.Clear([System.Drawing.Color]::Transparent)
+$g.InterpolationMode=[System.Drawing.Drawing2D.InterpolationMode]::NearestNeighbor
+$g.PixelOffsetMode=[System.Drawing.Drawing2D.PixelOffsetMode]::Half
 try {
-    $graphics.DrawImageUnscaled($source, 0, 0)
-    for ($column = 0; $column -lt 10; $column++) {
-        # The final P21 row has two intentionally empty cells; row seven is the last complete ten-icon row.
-        $sourceCell = [System.Drawing.Rectangle]::new($column * 32, 192, 32, 32)
-        $destination = [System.Drawing.Rectangle]::new($column * 32, 256, 32, 32)
-        $attributes = New-Object System.Drawing.Imaging.ImageAttributes
-        $matrix = New-Object System.Drawing.Imaging.ColorMatrix
-        $matrix.Matrix00 = 1.15
-        $matrix.Matrix11 = 0.82
-        $matrix.Matrix22 = 1.25
-        $attributes.SetColorMatrix($matrix)
+    foreach($skill in $skills) {
+        $index=[int]$skill.index
+        # Reuse the established diamond/round icon language, never the two empty P21 cells.
+        $template=if($skill.active){$index%30}else{30+($index-86)%48}
+        $x=($index%10)*32;$y=[Math]::Floor($index/10)*32
+        $g.DrawImage($source,[System.Drawing.Rectangle]::new($x,$y,32,32),[System.Drawing.Rectangle]::new(($template%10)*32,[Math]::Floor($template/10)*32,32,32),[System.Drawing.GraphicsUnit]::Pixel)
+        $dark=[System.Drawing.SolidBrush]::new([System.Drawing.Color]::FromArgb(255,21,25,35))
+        $light=[System.Drawing.SolidBrush]::new([System.Drawing.Color]::FromArgb(255,235,200,126))
         try {
-            $graphics.DrawImage($source, $destination, $sourceCell.X, $sourceCell.Y, 32, 32,
-                [System.Drawing.GraphicsUnit]::Pixel, $attributes)
-        } finally { $attributes.Dispose() }
-        $marker = [System.Drawing.Color]::FromArgb(230, 225, 174, 76)
-        $brush = New-Object System.Drawing.SolidBrush $marker
-        try { $graphics.FillRectangle($brush, $column * 32 + 25, 25 + 256, 4, 4) }
-        finally { $brush.Dispose() }
+            # Stable eight-bit rune signature, matching the existing P21 icon system.
+            $g.FillRectangle($dark,$x+4,$y+23,24,4)
+            for($bit=0;$bit -lt 8;$bit++) {
+                if((($index+1) -band (1 -shl $bit)) -ne 0){$g.FillRectangle($light,$x+5+$bit*3,$y+24,2,2)}
+            }
+        } finally {$dark.Dispose();$light.Dispose()}
     }
-    $directory = Split-Path -Parent $OutputPath
-    [System.IO.Directory]::CreateDirectory($directory) | Out-Null
-    $atlas.Save($OutputPath, [System.Drawing.Imaging.ImageFormat]::Png)
-} finally {
-    $graphics.Dispose()
-    $atlas.Dispose()
-    $source.Dispose()
-}
-
-Write-Host "[p25-art] wrote $OutputPath (90 stable skill-stone cells, 32px)"
+    $atlas.Save([System.IO.Path]::GetFullPath($OutputPath),[System.Drawing.Imaging.ImageFormat]::Png)
+} finally {$g.Dispose();$atlas.Dispose();$source.Dispose()}
+@{columns=10;rows=[int][Math]::Ceiling($skills.Count/10.0);cellSize=32;skills=$skills;sha256=(Get-FileHash $OutputPath).Hash.ToLowerInvariant()}|
+    ConvertTo-Json -Depth 6|Set-Content (Join-Path (Split-Path $OutputPath) 'skill-art-manifest.json') -Encoding utf8
+Write-Host "[skill-art] PASS: $($skills.Count) runtime identities, one nonempty cell per stone."

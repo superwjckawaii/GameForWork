@@ -73,7 +73,16 @@ public sealed class P1MercenaryProfile
             BlockChanceBasisPoints: checked(build.Equipment.BaseBlockChanceBasisPoints +
                 build.Equipment.Modifiers.BlockChanceBasisPoints),
             HasUsableWeapon: build.HasUsableWeapon,
-            LocalWeaponStats: build.Equipment.LocalWeapon);
+            LocalWeaponStats: build.Equipment.LocalWeapon,
+            CombatEquipment: build.CombatEquipment,
+            VirtueViceLoadout: build.VirtueViceLoadout,
+            MoreAttackDamageBasisPoints: build.MoreAttackDamageBasisPoints,
+            MoreSpellDamageBasisPoints: build.MoreSpellDamageBasisPoints,
+            IncreasedSpellDamageBasisPoints: build.IncreasedSpellDamageBasisPoints,
+            IncreasedAttackSpeedBasisPoints: build.IncreasedAttackSpeedBasisPoints,
+            MoreElementalDamageBasisPoints: build.MoreElementalDamageBasisPoints,
+            MoreVoidDamageBasisPoints: build.MoreVoidDamageBasisPoints,
+            MoreRareBossDamageBasisPoints: build.MoreRareBossDamageBasisPoints);
     }
 }
 

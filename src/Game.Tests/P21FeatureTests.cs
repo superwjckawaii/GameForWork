@@ -51,7 +51,7 @@ public sealed class P21FeatureTests
         foreach (string stableId in stones)
         {
             int first = P21ArtContract.SkillStoneIndex(stableId);
-            Assert.InRange(first, 0, 89);
+            Assert.InRange(first, 0, GameForWork.Core.Equipment.SkillStoneArt.StableIds.Count - 1);
             Assert.Equal(first, P21ArtContract.SkillStoneIndex(stableId));
         }
     }
