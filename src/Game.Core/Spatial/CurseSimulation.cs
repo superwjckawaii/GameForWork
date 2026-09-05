@@ -25,7 +25,7 @@ public sealed partial class SpatialCombatRunner
         if (id == "archetypes.skill.death_mark") foreach (var enemy in enemies) enemy.Curses.Remove(id);
         foreach (var enemy in targets)
         {
-            enemy.Curses.Apply(id, effect, secondary, tick + duration, 1 + equipment.Value(ItemModifierKind.AdditionalCurseMaximum), tick);
+            if (!enemy.Curses.Apply(id, effect, secondary, tick + duration, 1 + equipment.Value(ItemModifierKind.AdditionalCurseMaximum), tick, configuration.Priority)) continue;
             events.Add(Event(tick, SpatialEventKind.SkillEffect, "hero", enemy.EntityId, effect, origin, enemy.Position, $"curse:{id}|until:{tick + duration}"));
         }
         return true;

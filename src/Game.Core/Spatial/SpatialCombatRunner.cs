@@ -183,7 +183,7 @@ public sealed record NodeCombatRequest(
     VirtueViceState? VirtueVice = null,
     EquipmentCombatRuntime? EquipmentRuntime = null,
     Combat.CombatActionQueue? Actions = null, Combat.AuraCombatProfile? Auras = null,
-    Combat.FlaskRack? FlaskState = null, Combat.GuardState? Guard = null);
+    Combat.FlaskRack? FlaskState = null, Combat.GuardState? Guard = null, Combat.CombatBuffState? Buffs = null);
 
 public sealed record NodeCombatResult(
     BattleOutcome Outcome,
@@ -213,7 +213,7 @@ public sealed partial class SpatialCombatRunner
         var random = new Pcg32(seed);
         var equipment = request.EquipmentRuntime ?? new EquipmentCombatRuntime(request.Build.CombatEquipment ?? EquipmentCombatLoadout.Empty, seed);
         TeamBuild originalBuild = request.Build;
-        request = request with { EquipmentRuntime = equipment, Actions = new Combat.CombatActionQueue(), Guard = new Combat.GuardState() };
+        request = request with { EquipmentRuntime = equipment, Actions = new Combat.CombatActionQueue(), Guard = new Combat.GuardState(), Buffs = new Combat.CombatBuffState() };
         var hero = new ResourceState(
             request.Build.Sheet,
             request.InitialHeroLife,
@@ -341,7 +341,7 @@ public sealed partial class SpatialCombatRunner
             events.Add(Event(0, SpatialEventKind.BannerActivated, "hero", "hero", 0,
                 heroPosition, heroPosition, $"skill:{id}|reserved-mana:{auras.ReservedMana}"));
 
-        equipment.RedirectDamage = damage => army.RedirectDamage(damage, tick, events);
+        equipment.RedirectDamage = (damage, hit) => army.RedirectDamage(damage, hit, heroPosition, tick, events);
         equipment.CompanionAlive = () => army.CompanionAlive;
         hero.LifeDepleted = () =>
         {
@@ -394,15 +394,16 @@ public sealed partial class SpatialCombatRunner
                         Math.Max(1, request.Build.MovementSpeedBasisPoints * 300 / 10_000));
                 }
             }
-            request = request with { Build = originalBuild with
+            TeamBuild buffedBuild = request.Buffs!.Apply(originalBuild, tick);
+            request = request with { Build = buffedBuild with
             {
-                IncreasedActionSpeedBasisPoints = originalBuild.IncreasedActionSpeedBasisPoints + equipment.SpeedBonus(tick) - hero.HarmfulStatus.Effect(Ailment.Chill),
-                MovementSpeedBasisPoints = originalBuild.MovementSpeedBasisPoints + equipment.MovementBonus(tick) + flasks.Buff(ItemModifierKind.FlaskBuffMovementSpeedBasisPoints) +
+                IncreasedActionSpeedBasisPoints = buffedBuild.IncreasedActionSpeedBasisPoints + equipment.SpeedBonus(tick) - hero.HarmfulStatus.Effect(Ailment.Chill),
+                MovementSpeedBasisPoints = buffedBuild.MovementSpeedBasisPoints + equipment.MovementBonus(tick) + flasks.Buff(ItemModifierKind.FlaskBuffMovementSpeedBasisPoints) +
                     (equipment.Has("朝圣者之债") ? Math.Min(4_500, flasks.UnusedUses * 300) : 0) - hero.HarmfulStatus.Effect(Ailment.Chill),
-                IncreasedCriticalChanceBasisPoints = originalBuild.IncreasedCriticalChanceBasisPoints + flasks.Buff(ItemModifierKind.FlaskBuffCriticalChanceBasisPoints),
-                Sheet = originalBuild.Sheet with {
-                    IncreasedArmorBasisPoints = originalBuild.Sheet.IncreasedArmorBasisPoints + flasks.Buff(ItemModifierKind.FlaskBuffArmorBasisPoints),
-                    IncreasedEvasionBasisPoints = originalBuild.Sheet.IncreasedEvasionBasisPoints + flasks.Buff(ItemModifierKind.FlaskBuffEvasionBasisPoints),
+                IncreasedCriticalChanceBasisPoints = buffedBuild.IncreasedCriticalChanceBasisPoints + flasks.Buff(ItemModifierKind.FlaskBuffCriticalChanceBasisPoints),
+                Sheet = buffedBuild.Sheet with {
+                    IncreasedArmorBasisPoints = buffedBuild.Sheet.IncreasedArmorBasisPoints + flasks.Buff(ItemModifierKind.FlaskBuffArmorBasisPoints),
+                    IncreasedEvasionBasisPoints = buffedBuild.Sheet.IncreasedEvasionBasisPoints + flasks.Buff(ItemModifierKind.FlaskBuffEvasionBasisPoints),
                 },
             } };
             hero.AdvanceRegenerationTick(tick);
@@ -486,7 +487,9 @@ public sealed partial class SpatialCombatRunner
                     .OrderBy(candidate => skills[candidate!].Priority)
                     .FirstOrDefault();
                 string? skillCatalogChosen = skillCatalogSkills.Values
-                    .Where(skill => army.CanUse(skill.SkillId) && skill.Role is not SkillRole.Reservation and not SkillRole.Counter &&
+                    .Where(skill => army.CanUse(skill.SkillId) && request.Buffs!.CanUse(skill.SkillId, tick) &&
+                                    (skill.Role != SkillRole.Reservation || Combat.CombatBuffState.IsSkill(skill.SkillId)) && skill.Role != SkillRole.Counter &&
+                                    (skill.SkillId != "archetypes.skill.yin_yang_stance" || !request.Build.HasUsableWeapon) &&
                                     (!skill.RequiresShield || request.Build.HasShield) && tick >= skillCatalogReadyTicks[skill.SkillId] &&
                                     SkillTarget(skill.SkillId) is not null &&
                                     (skill.Shape == SkillShape.Self ||
@@ -899,6 +902,15 @@ public sealed partial class SpatialCombatRunner
         ref int lastSelfAttackOrSpellTick, IList<PendingProjectile> projectiles, IList<PersistentArea> persistentAreas)
     {
         if (ApplyCurse(request, skill, configuration, target, enemies, heroPosition, tick, events)) return;
+        if (Combat.CombatBuffState.IsSkill(skill.SkillId))
+        {
+            var commandTarget = enemies.Where(enemy => enemy.Life > 0).OrderByDescending(enemy => enemy.Rarity is EnemyRarity.Rare or EnemyRarity.Boss)
+                .ThenByDescending(enemy => enemy.Life).FirstOrDefault();
+            if (request.Buffs!.Activate(configuration, !request.Build.HasUsableWeapon, tick, commandTarget?.EntityId ?? ""))
+                events.Add(Event(tick, SpatialEventKind.SkillEffect, "hero", commandTarget?.EntityId ?? "hero", 0,
+                    heroPosition, heroPosition, $"skill:{skill.SkillId}|buff-applied"));
+            return;
+        }
         Point actionOrigin = heroPosition;
         if (skill.Role == SkillRole.Movement)
         {
@@ -1484,6 +1496,7 @@ public sealed partial class SpatialCombatRunner
                     damage = damage * MasteryRuntime.IncomingAttackMultiplier(
                         request.Build.PassiveProfile ?? PassiveModifiers.Empty, request.Build.Weapon) / 10_000;
                 damage = ScaleCombatValue(damage, request.EquipmentRuntime?.IncomingMultiplier(hero.Sheet, activeSkill.DamageType, true, tick) ?? 10_000);
+                damage = ScaleCombatValue(damage, request.Buffs?.IncomingHitMultiplier(!request.Build.HasUsableWeapon) ?? 10_000);
                 damage = request.Guard?.Absorb(damage, activeSkill.DamageType, tick) ?? damage;
                 if (request.EquipmentRuntime is { } equipment)
                     damage = equipment.ApplyEnemyDamage(hero, damage, true, tick, request.VirtueVice, blocked);

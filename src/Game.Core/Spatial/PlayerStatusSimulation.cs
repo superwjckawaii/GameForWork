@@ -55,7 +55,7 @@ public sealed partial class SpatialCombatRunner
             int raw = Math.Max(1, (int)Math.Min(int.MaxValue, dps));
             EnemyDamageType damageType = type switch { DamageType.Physical => EnemyDamageType.Physical, DamageType.Fire => EnemyDamageType.Fire,
                 DamageType.Cold => EnemyDamageType.Cold, DamageType.Lightning => EnemyDamageType.Lightning, _ => EnemyDamageType.Void };
-            int defended = request.EquipmentRuntime!.MitigateDamageOverTime(hero.Sheet, raw, damageType, tick, 1);
+            int defended = request.EquipmentRuntime!.MitigateDamageOverTime(request.Build.Sheet, raw, damageType, tick, 1);
             return dps * defended / raw * (10_000 + hero.HarmfulStatus.Effect(Ailment.Shock)) / 10_000m;
         }))
         {

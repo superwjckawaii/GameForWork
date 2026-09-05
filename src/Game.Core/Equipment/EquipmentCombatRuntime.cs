@@ -76,13 +76,13 @@ public sealed class EquipmentCombatRuntime(EquipmentCombatLoadout loadout, ulong
     public int ArmorIncrease(int nearbyEnemies) => (Has("无尽行军") ? Math.Min(10, _marchTicks / 20) * 800 : 0) +
         (Has("统帅之负") ? Math.Min(5, nearbyEnemies) * 1_500 : 0);
     public int SpiritBarrier(CharacterSheet sheet, int tick) => Scale(sheet.SpiritBarrier().Value, tick < _seaUntil ? 20_000 : 10_000);
-    public Func<int, int>? RedirectDamage { get; set; }
+    public Func<int, bool, int>? RedirectDamage { get; set; }
     public Func<bool>? CompanionAlive { get; set; }
 
     public int ApplyEnemyDamage(ResourceState hero, int damage, bool hit, int tick, VirtueViceState? virtues, bool blocked = false)
     {
         if (!hero.IsAlive || damage <= 0) return 0;
-        damage = RedirectDamage?.Invoke(damage) ?? damage;
+        damage = RedirectDamage?.Invoke(damage, hit) ?? damage;
         int shieldBefore = hero.Shield;
         int actual = Math.Min(damage, hero.Life + hero.Shield);
         bool shieldBroken = shieldBefore > 0 && damage >= shieldBefore;

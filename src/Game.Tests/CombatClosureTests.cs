@@ -376,4 +376,68 @@ public sealed class CombatClosureTests
         Assert.Equal(100, damage.Sum(pulse => pulse.Damage));
         Assert.Equal(20, Assert.Single(damage, pulse => pulse.Type == DamageType.Void).Damage);
     }
+
+    [Fact]
+    public void BlessingAndWarsongRespectTheirRecipientsRangeAndExpiry()
+    {
+        var buffs = new CombatBuffState(); var build = Team();
+        buffs.Activate(new("archetypes.skill.fellowship_blessing", SkillSupport.None), false, 0);
+        buffs.Activate(new("archetypes.skill.soul_warsong", SkillSupport.None), false, 0);
+        Assert.Equal(build.IncreasedActionSpeedBasisPoints + 1_200, buffs.Apply(build, 1).IncreasedActionSpeedBasisPoints);
+        Assert.Equal(new UnitBuff(2_500, 3_700, 3_200, 1_000), buffs.ForUnit(1, new(0, 0), new(1_000, 0)));
+        Assert.Equal(new UnitBuff(0, 2_500, 2_000, 0), buffs.ForUnit(1, new(0, 0), new(9_500, 0)));
+        Assert.Equal(default, buffs.ForUnit(1, new(0, 0), new(11_000, 0)));
+        Assert.Equal(build, buffs.Apply(build, 160));
+        var result = SingleCast("archetypes.skill.fellowship_blessing", 24);
+        Assert.Contains(result.Events, e => e.Detail == "skill:archetypes.skill.fellowship_blessing|buff-applied");
+    }
+
+    [Fact]
+    public void StanceSwitchReplacesBonusesAndOnlyAffectsUnarmedBuilds()
+    {
+        var state = new CombatBuffState(); var build = Team() with { HasUsableWeapon = false };
+        var yang = new SkillConfiguration("archetypes.skill.yin_yang_stance", SkillSupport.None, Mode: "Yang");
+        Assert.True(state.Activate(yang, true, 0));
+        Assert.Equal(build.IncreasedAttackSpeedBasisPoints + 1_200, state.Apply(build, 1).IncreasedAttackSpeedBasisPoints);
+        Assert.False(state.Activate(yang with { Mode = "Yin" }, true, 15));
+        Assert.True(state.Activate(yang with { Mode = "Yin" }, true, 16));
+        Assert.Equal(build.IncreasedAttackSpeedBasisPoints, state.Apply(build, 16).IncreasedAttackSpeedBasisPoints);
+        Assert.Equal(600, state.Apply(build, 16).BlockChanceBasisPoints - build.BlockChanceBasisPoints);
+        Assert.Equal(9_200, state.IncomingHitMultiplier(true));
+        var armed = Team();
+        Assert.Equal(armed, state.Apply(armed, 17));
+    }
+
+    [Fact]
+    public void CurseCapacityRetainsHigherPriorityAndRejectsLowerPriorityReplacement()
+    {
+        var curse = new CurseState();
+        Assert.True(curse.Apply("primary", 100, 0, 50, 1, 0, priority: 1));
+        Assert.False(curse.Apply("secondary", 200, 0, 50, 1, 1, priority: 2));
+        Assert.Equal(100, curse.Effect("primary", 2));
+        Assert.True(curse.Apply("secondary", 200, 0, 100, 1, 50, priority: 2));
+    }
+
+    [Fact]
+    public void CommandTargetsBossAndGrantsOnlyMinionsItsMovementBonus()
+    {
+        var state = new CombatBuffState();
+        state.Activate(new("archetypes.skill.king_soul_command", SkillSupport.None, Level: 21), false, 0, "boss");
+        Assert.Equal("boss", state.Command(1)!.TargetId);
+        Assert.Equal(3_500, state.Command(1)!.MoreDamage);
+        Assert.Equal(3_000, state.ForUnit(1, new(0, 0), new(1_000, 0), true).MovementSpeed);
+        Assert.Equal(0, state.ForUnit(1, new(0, 0), new(1_000, 0)).MovementSpeed);
+        Assert.Null(state.Command(120));
+    }
+
+    [Fact]
+    public void UnitSupportLifeUsesItsOwnStoneLevelAndQuality()
+    {
+        var stone = new SkillConfiguration("archetypes.skill.summon_boneguard", SkillSupport.None,
+            SupportLinks: [new(ActiveSkillCatalog.SupportFor(GameForWork.Core.Archetypes.SupportMechanic.Bodyguard).StoneId, 21, 20)]);
+        var result = Run(Team() with { ActiveSkills = [stone] }, 20);
+        var units = result.Frames.SelectMany(frame => frame.Allies ?? []).ToArray();
+        Assert.NotEmpty(units);
+        Assert.All(units, unit => Assert.Equal(342, unit.MaximumLife));
+    }
 }

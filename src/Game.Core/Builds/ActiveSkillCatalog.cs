@@ -252,6 +252,21 @@ public static class ActiveSkillCatalog
             _ => active.DisplayName,
         };
         if (buildsName != active.DisplayName) active = active with { DisplayName = buildsName };
+        (int Cast, int Cooldown, int Range)? timing = active.SkillId switch
+        {
+            SkillIds.EmberNova => (15, 0, 4_200), SkillIds.FrostShard => (13, 0, 9_000), SkillIds.ChainLightning => (16, 0, 9_000),
+            SkillIds.StormBrand => (12, 0, 9_000), SkillIds.FlameStep => (4, 80, 5_000), SkillIds.VoidDecayField => (15, 80, 6_000),
+            SkillIds.IronGuard => (8, 240, 0), SkillIds.PrismaticGuard => (12, 280, 0),
+            "archetypes.skill.plague_detonation" => (16, 36, 8_000), "archetypes.skill.molten_orb" => (14, 0, 9_500),
+            "archetypes.skill.ice_lance" => (16, 0, 11_000), "archetypes.skill.elemental_prism" => (15, 0, 10_000),
+            "archetypes.skill.forbidden_collapse" => (20, 70, 9_000), "archetypes.skill.aegis_pulse" => (12, 45, 5_000),
+            "archetypes.skill.sixfold_burst" => (18, 45, 7_000), "archetypes.skill.thunderstorm" => (16, 0, 10_000),
+            "archetypes.skill.void_rift" => (15, 40, 9_000), "archetypes.skill.spellarmor_activate" => (8, 160, 0),
+            "archetypes.skill.fellowship_blessing" => (10, 200, 9_000), "archetypes.skill.soul_warsong" => (8, 160, 10_000),
+            "archetypes.skill.king_soul_command" => (10, 200, 10_000), "archetypes.skill.yin_yang_stance" => (1, 16, 0),
+            _ => null,
+        };
+        if (timing is { } time) active = active with { CastTimeTicks = time.Cast, CooldownTicks = time.Cooldown, RangeRaw = time.Range };
         SkillCurve curve = Curve(active);
         (int one, int twentyOne) = DamageOverrides.TryGetValue(active.DisplayName, out var damage)
             ? damage : (active.DamageBasisPoints, DefaultTwentyOne(active.DamageBasisPoints, curve));
