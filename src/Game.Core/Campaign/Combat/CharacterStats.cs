@@ -238,6 +238,7 @@ public sealed class ResourceState
     }
 
     public CharacterSheet Sheet { get; }
+    public GameForWork.Core.Combat.HarmfulStatus HarmfulStatus { get; } = new();
     public int MaximumLife { get; }
     public int MaximumMana { get; }
     public int ReservedMana { get; private set; }
@@ -286,6 +287,13 @@ public sealed class ResourceState
         return true;
     }
 
+    public bool TryPayShield(int amount)
+    {
+        if (amount < 0 || Shield < amount || !IsAlive) return false;
+        Shield -= amount;
+        return true;
+    }
+
     public void ApplyDamage(int amount, int tick)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(amount);
@@ -316,6 +324,7 @@ public sealed class ResourceState
     public int RestoreMana(int amount)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(amount);
+        if (!IsAlive) return 0;
         int previous = Mana;
         Mana = (int)Math.Min(AvailableMaximumMana, (long)Mana + amount);
         return Mana - previous;
@@ -324,6 +333,7 @@ public sealed class ResourceState
     public int RestoreShield(int amount)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(amount);
+        if (!IsAlive) return 0;
         int previous = Shield;
         Shield = (int)Math.Min(MaximumShield, (long)Shield + amount);
         return Shield - previous;

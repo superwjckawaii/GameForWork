@@ -4,7 +4,7 @@ using GameForWork.Core.SkillCatalog;
 namespace GameForWork.Core.Combat;
 
 public sealed record DamageOverTimeInstance(Ailment Kind, DamageType Type, decimal DamagePerSecond,
-    decimal RemainingMilliseconds, string SourceId, bool Propagated = false);
+    decimal RemainingMilliseconds, string SourceId, bool Propagated = false, string InstanceId = "");
 public readonly record struct DamageOverTimePulse(Ailment Kind, DamageType Type, int Damage);
 
 /// <summary>Attacker snapshots; target defenses are supplied afresh for every simulation step.</summary>
@@ -13,27 +13,36 @@ public sealed class AilmentState
     private readonly List<DamageOverTimeInstance> _instances = [];
     private readonly Dictionary<(Ailment, DamageType), decimal> _remainders = [];
     private readonly Dictionary<Ailment, (int Count, int Until)> _debuffs = [];
+    private int _sequence;
     public IReadOnlyList<DamageOverTimeInstance> Instances => _instances;
     public int BleedMaximum { get; set; } = 1;
     public int BleedMultiplier { get; set; } = 10_000;
     public int IgniteMaximum { get; set; } = 1;
     public int IgniteMultiplier { get; set; } = 10_000;
+    public void Remove(params Ailment[] kinds)
+    {
+        _instances.RemoveAll(instance => kinds.Contains(instance.Kind));
+        foreach (var key in _remainders.Keys.Where(key => kinds.Contains(key.Item1)).ToArray()) _remainders.Remove(key);
+        foreach (var kind in kinds) _debuffs.Remove(kind);
+    }
 
     public void Apply(Ailment kind, DamageType type, decimal dps, int durationMilliseconds,
-        int fasterBasisPoints, string sourceId, bool propagated = false)
+        int fasterBasisPoints, string sourceId, bool propagated = false, string? instanceId = null)
     {
         if (dps <= 0 || durationMilliseconds <= 0) return;
         decimal speed = Math.Max(1, 10_000 + fasterBasisPoints) / 10_000m;
-        _instances.Add(new(kind, type, dps * speed, durationMilliseconds / speed, sourceId, propagated));
+        _instances.Add(new(kind, type, dps * speed, durationMilliseconds / speed, sourceId, propagated, instanceId ?? $"dot:{++_sequence}"));
     }
 
     public int Stack(Ailment kind, int tick) => _debuffs.TryGetValue(kind, out var value) && tick < value.Until ? value.Count : 0;
     public void AddStack(Ailment kind, int count, int maximum, int durationTicks, int tick) =>
         _debuffs[kind] = (Math.Min(maximum, Stack(kind, tick) + Math.Max(0, count)), tick + durationTicks);
 
-    private IEnumerable<DamageOverTimeInstance> Active() => _instances.GroupBy(instance => instance.Kind)
+    private IEnumerable<DamageOverTimeInstance> Active() => _instances.Where(instance => instance.Kind != Ailment.Ground).GroupBy(instance => instance.Kind)
         .SelectMany(group => group.OrderByDescending(instance => instance.DamagePerSecond).Take(group.Key switch
-        { Ailment.Bleed => BleedMaximum, Ailment.Ignite => IgniteMaximum, _ => int.MaxValue }));
+        { Ailment.Bleed => BleedMaximum, Ailment.Ignite => IgniteMaximum, _ => int.MaxValue }))
+        .Concat(_instances.Where(instance => instance.Kind == Ailment.Ground).GroupBy(instance => instance.SourceId)
+            .SelectMany(group => group.GroupBy(instance => instance.InstanceId).MaxBy(candidate => candidate.Sum(instance => instance.DamagePerSecond))!));
     public int Count(Ailment kind) => Active().Count(instance => instance.Kind == kind);
     public decimal Remaining(Ailment kind) => Active().Where(instance => instance.Kind == kind)
         .Sum(instance => instance.DamagePerSecond * instance.RemainingMilliseconds / 1000 * Multiplier(kind));
@@ -44,7 +53,18 @@ public sealed class AilmentState
         _instances.RemoveAll(active.Contains);
         return amount;
     }
-    public void Clear(params Ailment[] kinds) => _instances.RemoveAll(instance => kinds.Contains(instance.Kind));
+    public int ConsumeStacks(Ailment kind, int maximum, int tick)
+    {
+        if (kind == Ailment.Poison)
+        {
+            var consumed = _instances.Where(instance => instance.Kind == kind).Take(maximum).ToArray();
+            _instances.RemoveAll(consumed.Contains);
+            return consumed.Length;
+        }
+        int count = Math.Min(maximum, Stack(kind, tick));
+        if (_debuffs.TryGetValue(kind, out var value)) _debuffs[kind] = (value.Count - count, value.Until);
+        return count;
+    }
     public void SpreadTo(AilmentState target, Ailment kind)
     {
         foreach (DamageOverTimeInstance instance in Active().Where(instance => instance.Kind == kind && !instance.Propagated))

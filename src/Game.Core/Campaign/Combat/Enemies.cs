@@ -55,7 +55,9 @@ public sealed record EnemySkillProfile(
     bool Area = false,
     string Telegraph = "",
     bool Avoidable = true,
-    bool IsSpell = false);
+    bool IsSpell = false,
+    GameForWork.Core.SkillCatalog.Ailment Ailment = GameForWork.Core.SkillCatalog.Ailment.None,
+    int AilmentChanceBasisPoints = 0, string CurseId = "", int CurseEffectBasisPoints = 0);
 
 public sealed record EnemyProfile(
     string StableId, string DisplayName, int Life, int MinimumPhysicalDamage, int MaximumPhysicalDamage,

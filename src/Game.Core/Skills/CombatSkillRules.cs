@@ -72,67 +72,66 @@ public static class CombatSkillRules
         bool returns = active.Tags.HasFlag(SkillTag.Returning);
         if (configuration.Supports.HasFlag(SkillSupport.IncreasedArea))
         {
-            range = checked(range * (10_000 + LegacyValue(configuration, SkillSupport.IncreasedArea) * 100) / 10_000);
+            range = checked(range * (10_000 + SupportValue(configuration, SkillSupport.IncreasedArea) * 100) / 10_000);
             damage = checked(damage * 9_000 / 10_000);
         }
         if (configuration.Supports.HasFlag(SkillSupport.Bleed))
-            bleed += Math.Min(10_000, LegacyValue(configuration, SkillSupport.Bleed) * 100);
+            bleed += Math.Min(10_000, SupportValue(configuration, SkillSupport.Bleed) * 100);
         if (configuration.Supports.HasFlag(SkillSupport.LifeCost))
         {
             life = Math.Max(1, (mana * 15 + 9) / 10);
             mana = 0;
-            damage = More(damage, LegacyValue(configuration, SkillSupport.LifeCost));
+            damage = More(damage, SupportValue(configuration, SkillSupport.LifeCost));
         }
         if (configuration.Supports.HasFlag(SkillSupport.Brutality))
-            damage = More(damage, LegacyValue(configuration, SkillSupport.Brutality));
+            damage = More(damage, SupportValue(configuration, SkillSupport.Brutality));
         if (configuration.Supports.HasFlag(SkillSupport.MultipleProjectiles))
         {
             projectiles += 2;
             int less = ActiveSkillCatalog.Interpolate(25, 15, configuration.Level, false);
             damage = checked(damage * (100 - less) / 100);
-            projectileSpeed = checked(projectileSpeed * (10_000 + LegacyValue(configuration, SkillSupport.MultipleProjectiles) * 100) / 10_000);
+            projectileSpeed = checked(projectileSpeed * (10_000 + SupportValue(configuration, SkillSupport.MultipleProjectiles) * 100) / 10_000);
         }
         if (configuration.Supports.HasFlag(SkillSupport.FasterProjectiles))
         {
-            int value = LegacyValue(configuration, SkillSupport.FasterProjectiles);
+            int value = SupportValue(configuration, SkillSupport.FasterProjectiles);
             projectileSpeed = checked(projectileSpeed * (10_000 + value * 100) / 10_000);
             int rangeIncrease = ActiveSkillCatalog.Interpolate(20, 35, configuration.Level, false);
             range = checked(range * (10_000 + rangeIncrease * 100) / 10_000);
             damage = More(damage, rangeIncrease);
         }
         if (configuration.Supports.HasFlag(SkillSupport.UrgentWarCry))
-            cooldown = Math.Max(1, cooldown * 10_000 / (10_000 + LegacyValue(configuration, SkillSupport.UrgentWarCry) * 100));
+            cooldown = Math.Max(1, cooldown * 10_000 / (10_000 + SupportValue(configuration, SkillSupport.UrgentWarCry) * 100));
         if (configuration.Supports.HasFlag(SkillSupport.LifeLeech))
         {
-            leech = LegacyValue(configuration, SkillSupport.LifeLeech);
+            leech = SupportValue(configuration, SkillSupport.LifeLeech);
         }
         if (configuration.Supports.HasFlag(SkillSupport.Execution))
         {
             executeThreshold = 2_000;
-            execute = 10_000 + LegacyValue(configuration, SkillSupport.Execution) * 100;
+            execute = 10_000 + SupportValue(configuration, SkillSupport.Execution) * 100;
             nonExecute = 9_000;
         }
         if (configuration.Supports.HasFlag(SkillSupport.SpellEcho) && definition.Tags.HasFlag(SkillTag.Spell))
         {
-            int less = LegacyValue(configuration, SkillSupport.SpellEcho);
+            int less = SupportValue(configuration, SkillSupport.SpellEcho);
             damage = checked(damage * (100 - less) / 100);
         }
         if (configuration.Supports.HasFlag(SkillSupport.ElementalFocus) && (definition.Tags & SkillTag.Elemental) != 0)
-            damage = More(damage, LegacyValue(configuration, SkillSupport.ElementalFocus));
-        if (configuration.Supports.HasFlag(SkillSupport.CriticalStrikes)) damage = checked(damage * 11_200 / 10_000);
+            damage = More(damage, SupportValue(configuration, SkillSupport.ElementalFocus));
         if (configuration.Supports.HasFlag(SkillSupport.ConcentratedEffect) && definition.Tags.HasFlag(SkillTag.Area))
         {
             range = checked(range * 7_500 / 10_000);
-            damage = More(damage, LegacyValue(configuration, SkillSupport.ConcentratedEffect));
+            damage = More(damage, SupportValue(configuration, SkillSupport.ConcentratedEffect));
         }
         if (configuration.Supports.HasFlag(SkillSupport.AttackSpeed) && definition.Tags.HasFlag(SkillTag.Attack))
         {
-            cooldown = Math.Max(1, cooldown * 10_000 / (10_000 + LegacyValue(configuration, SkillSupport.AttackSpeed) * 100));
+            cooldown = Math.Max(1, cooldown * 10_000 / (10_000 + SupportValue(configuration, SkillSupport.AttackSpeed) * 100));
         }
         if (configuration.Supports.HasFlag(SkillSupport.HeavyMomentum))
-            damage = More(damage, LegacyValue(configuration, SkillSupport.HeavyMomentum));
+            damage = More(damage, SupportValue(configuration, SkillSupport.HeavyMomentum));
         if (configuration.Supports.HasFlag(SkillSupport.TripleImpact))
-            damage = More(damage, LegacyValue(configuration, SkillSupport.TripleImpact) / 3);
+            damage = More(damage, SupportValue(configuration, SkillSupport.TripleImpact) / 3);
         if (configuration.Supports.HasFlag(SkillSupport.TremorField))
         {
             range = checked(range * 13_000 / 10_000);
@@ -153,8 +152,8 @@ public static class CombatSkillRules
         if (configuration.Supports.HasFlag(SkillSupport.CastWhenDamaged)) damage = checked(damage * 7_000 / 10_000);
         if (configuration.Supports.HasFlag(SkillSupport.FasterCasting) && definition.Tags.HasFlag(SkillTag.Spell))
         {
-            castTime = Math.Max(1, castTime * 10_000 / 12_500);
-            mana = checked((mana * 11_000 + 9_999) / 10_000);
+            var link = SupportLink(configuration, SkillSupport.FasterCasting);
+            castTime = Math.Max(1, castTime * 10_000 / (10_000 + SupportValue(configuration, SkillSupport.FasterCasting) * 100 + link.Quality * 50));
         }
         if (configuration.Supports.HasFlag(SkillSupport.Pierce)) pierce += 2;
         if (configuration.Supports.HasFlag(SkillSupport.Fork)) fork += 2;
@@ -201,7 +200,7 @@ public static class CombatSkillRules
     public static int BaseDamage(ResolvedSkill skill, SkillTag tags, WeaponProfile weapon,
         int addedPhysicalDamage, int? weaponRoll = null)
     {
-        if (!tags.HasFlag(SkillTag.Attack)) return Math.Max(1, skill.BaseDamageBasisPoints);
+        if (!tags.HasFlag(SkillTag.Attack)) return Math.Max(1, (skill.BaseDamageBasisPoints + 50) / 100);
         int physical = weaponRoll ?? checked((weapon.MinimumPhysicalDamage + weapon.MaximumPhysicalDamage) / 2);
         return Math.Max(1, checked(physical + addedPhysicalDamage));
     }
@@ -265,7 +264,7 @@ public static class CombatSkillRules
     {
         var equipment = build.CombatEquipment ?? Equipment.EquipmentCombatLoadout.Empty;
         int common = (tags.HasFlag(SkillTag.Attack) ? build.IncreasedDamageBasisPoints - equipment.PhysicalIncreaseIncludedInAttack : 0) +
-            (build.PassiveProfile ?? PassiveModifiers.Empty).DamageFor(tags) + configuration.Quality * 100 + additionalIncreasedBasisPoints;
+            (build.PassiveProfile ?? PassiveModifiers.Empty).DamageFor(tags) + additionalIncreasedBasisPoints;
         if (tags.HasFlag(SkillTag.Attack)) common += Ascendancies.WarriorAscendancyRules.IncreasedAttackDamageBasisPoints(
             build.Ascendancy ?? Ascendancies.CombatProfile.Empty, build.Sheet.Attributes.Physique);
         if (tags.HasFlag(SkillTag.Spell)) common += build.IncreasedSpellDamageBasisPoints;
@@ -314,8 +313,17 @@ public static class CombatSkillRules
         return frequency;
     }
 
-    private static int LegacyValue(SkillConfiguration configuration, SkillSupport support) =>
-        ActiveSkillCatalog.SupportFor(support).ValueAt(configuration.Level, configuration.Quality);
+    public static LinkedSupport SupportLink(SkillConfiguration configuration, SkillSupport support)
+    {
+        var definition = ActiveSkillCatalog.SupportFor(support);
+        return configuration.ExtendedBuildsSupportLinks.FirstOrDefault(link => link.StoneId == definition.StoneId) ??
+            new(definition.StoneId, configuration.Level, configuration.Quality);
+    }
+    public static int SupportValue(SkillConfiguration configuration, SkillSupport support)
+    {
+        var link = SupportLink(configuration, support);
+        return ActiveSkillCatalog.SupportFor(support).ValueAt(link.Level, link.Quality);
+    }
 
     private static int More(int basisPoints, int percent) => checked(basisPoints * (10_000 + percent * 100) / 10_000);
 

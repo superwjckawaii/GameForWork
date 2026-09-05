@@ -33,6 +33,7 @@ public sealed partial class SpatialCombatRunner
         public ProjectileAction Action { get; } = action;
         public string TargetId { get; set; } = targetId;
         public Point Position { get; set; } = position;
+        public Point Destination { get; set; } = position;
         public int Chains { get; set; }
         public int Pierces { get; set; }
         public bool Forked { get; set; }
@@ -55,13 +56,14 @@ public sealed partial class SpatialCombatRunner
         if (cohunt)
         {
             for (int index = 0; index < Math.Max(1, skill.ProjectileCount); index++)
-                projectiles.Add(new(action, target.EntityId, origin, tick));
+                projectiles.Add(new(action, target.EntityId, origin, tick) { Destination = ExtendRay(origin, target.Position, skill.RangeRaw) });
             return;
         }
-        EnemyUnit[] targets = enemies.Where(enemy => enemy.Life > 0)
+        EnemyUnit[] targets = enemies.Where(enemy => enemy.Life > 0 && InRange(origin, enemy.Position, skill.RangeRaw))
             .OrderBy(enemy => enemy != target).ThenBy(enemy => Point.DistanceSquared(origin, enemy.Position))
             .Take(Math.Max(1, skill.ProjectileCount)).ToArray();
-        foreach (EnemyUnit enemy in targets) projectiles.Add(new(action, enemy.EntityId, origin, tick));
+        foreach (EnemyUnit enemy in targets) projectiles.Add(new(action, enemy.EntityId, origin, tick)
+            { Destination = ExtendRay(origin, enemy.Position, skill.RangeRaw) });
     }
 
     private static void ResolveProjectiles(IList<PendingProjectile> projectiles,
@@ -88,41 +90,48 @@ public sealed partial class SpatialCombatRunner
                 if (projectile.Position == heroPosition) projectiles.Remove(projectile);
                 continue;
             }
-            EnemyUnit? target = enemies.FirstOrDefault(enemy => enemy.EntityId == projectile.TargetId && enemy.Life > 0 &&
-                CanHit(enemy, returning: false));
-            if (target is null) { Finish(); continue; }
+            if (action.Star)
+            {
+                var tracked = enemies.FirstOrDefault(enemy => enemy.EntityId == projectile.TargetId && enemy.Life > 0);
+                if (tracked is null) { Finish(); continue; }
+                projectile.Destination = tracked.Position;
+            }
             Point previous = projectile.Position;
-            projectile.Position = Point.MoveToward(previous, target.Position, step);
-            if (!InRange(projectile.Position, target.Position, 350)) continue;
-            action.OutboundHits.Add(target.EntityId);
-            projectile.OutboundHits.Add(target.EntityId);
-            if (action.Cohunt && target.EntityId == action.PrimaryTarget)
-                projectile.PrimaryMultiplier = action.PrimaryHits++ == 0 ? 10_000 : 4_000;
-            Hit(target, 10_000);
-            EnemyUnit[] candidates = enemies.Where(enemy => enemy.Life > 0 && !action.OutboundHits.Contains(enemy.EntityId))
-                .OrderBy(enemy => Point.DistanceSquared(target.Position, enemy.Position)).ToArray();
-            EnemyUnit? next = null;
-            if (!projectile.Forked && skill.ForkCount > 0 && candidates.Length > 0)
+            projectile.Position = Point.MoveToward(previous, projectile.Destination, step);
+            bool redirected = false;
+            foreach (var target in enemies.Where(enemy => enemy.Life > 0 && CanHit(enemy, false) &&
+                         (!action.Star || enemy.EntityId == action.PrimaryTarget) && OnSegment(enemy.Position, previous, projectile.Position, 450))
+                         .OrderBy(enemy => Point.DistanceSquared(previous, enemy.Position)).ToArray())
             {
-                foreach (EnemyUnit forkTarget in candidates.Take(skill.ForkCount))
-                    projectiles.Add(new PendingProjectile(action, forkTarget.EntityId, target.Position, tick) { Forked = true });
-                projectiles.Remove(projectile);
-                continue;
+                action.OutboundHits.Add(target.EntityId);
+                projectile.OutboundHits.Add(target.EntityId);
+                if (action.Cohunt && target.EntityId == action.PrimaryTarget)
+                    projectile.PrimaryMultiplier = action.PrimaryHits++ == 0 ? 10_000 : 4_000;
+                Hit(target, 10_000);
+                EnemyUnit[] candidates = enemies.Where(enemy => enemy.Life > 0 && !action.OutboundHits.Contains(enemy.EntityId))
+                    .OrderBy(enemy => Point.DistanceSquared(target.Position, enemy.Position)).ToArray();
+                if (!projectile.Forked && skill.ForkCount > 0)
+                {
+                    foreach (EnemyUnit forkTarget in candidates.Take(skill.ForkCount))
+                        projectiles.Add(new PendingProjectile(action, forkTarget.EntityId, target.Position, tick)
+                            { Forked = true, Destination = ExtendRay(target.Position, forkTarget.Position, skill.RangeRaw) });
+                    projectiles.Remove(projectile);
+                    redirected = true; break;
+                }
+                if (projectile.Pierces < skill.PierceCount) { projectile.Pierces++; continue; }
+                EnemyUnit? next = projectile.Chains < skill.MaximumChains + (action.Context.FallingStar ? 3 : 0)
+                    ? candidates.FirstOrDefault(enemy => InRange(target.Position, enemy.Position, ChainRange)) : null;
+                if (next is not null)
+                {
+                    projectile.Chains++;
+                    projectile.TargetId = next.EntityId;
+                    projectile.Position = target.Position;
+                    projectile.Destination = ExtendRay(target.Position, next.Position, ChainRange);
+                }
+                else Finish();
+                redirected = true; break;
             }
-            if (projectile.Pierces < skill.PierceCount)
-            {
-                next = candidates.FirstOrDefault(enemy => OnSegment(enemy.Position, previous,
-                    new Point(target.Position.XRaw + (target.Position.XRaw - previous.XRaw) * 100,
-                        target.Position.YRaw + (target.Position.YRaw - previous.YRaw) * 100), 500));
-                if (next is not null) projectile.Pierces++;
-            }
-            if (next is null && projectile.Chains < skill.MaximumChains + (action.Context.FallingStar ? 3 : 0))
-            {
-                next = candidates.FirstOrDefault(enemy => InRange(target.Position, enemy.Position, ChainRange));
-                if (next is not null) projectile.Chains++;
-            }
-            if (next is not null) projectile.TargetId = next.EntityId;
-            else Finish();
+            if (!redirected && projectile.Position == projectile.Destination) Finish();
 
             void Finish()
             {
@@ -183,6 +192,14 @@ public sealed partial class SpatialCombatRunner
                 Math.Min(5, action.SuccessfulHits.Count), action.Origin, action.Origin,
                 $"action:{star.Context.Id}|projectile:star-launched|source-action:{action.Context.Id}"));
         }
+    }
+
+    private static Point ExtendRay(Point origin, Point aim, int range)
+    {
+        double dx = aim.XRaw - origin.XRaw, dy = aim.YRaw - origin.YRaw;
+        double length = Math.Sqrt(dx * dx + dy * dy);
+        return length == 0 ? new(origin.XRaw + range, origin.YRaw) :
+            new(origin.XRaw + (int)Math.Round(dx * range / length), origin.YRaw + (int)Math.Round(dy * range / length));
     }
 
     private static bool OnSegment(Point point, Point start, Point end, int radius)

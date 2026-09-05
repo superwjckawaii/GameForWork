@@ -9,6 +9,7 @@ using GameForWork.Core.Spatial;
 using GameForWork.Core.Encounters;
 using GameForWork.Core.Maps;
 using GameForWork.Core.Content;
+using GameForWork.Core.Skills;
 
 namespace GameForWork.Tests;
 
@@ -209,5 +210,170 @@ public sealed class CombatClosureTests
         var result = Run(Team() with { ActiveSkills = [new("archetypes.skill.summon_spirit_beast", SkillSupport.None),
             new("archetypes.skill.beast_shapeshift", SkillSupport.None, Mode: form)] }, 250);
         Assert.Contains(result.Events, e => e.Detail == $"beast-form:{form}" && e.Value == maximum);
+    }
+
+    [Fact]
+    public void GuardsConsumeCapacityReplaceThePoolAndRespectDamageTypeAndExpiry()
+    {
+        var hero = new ResourceState(Team().Sheet); var guard = new GuardState();
+        Assert.True(guard.Activate(SkillIds.IronGuard, hero, 1, 0, 0));
+        int capacity = (hero.MaximumLife + hero.MaximumShield) / 4;
+        Assert.Equal(capacity, guard.Remaining);
+        Assert.Equal(0, guard.Absorb(100, EnemyDamageType.Physical, 1));
+        Assert.Equal(100, guard.Absorb(capacity, EnemyDamageType.Fire, 2));
+        Assert.Equal(0, guard.Remaining);
+        guard.Activate(SkillIds.PrismaticGuard, hero, 1, 0, 10);
+        int remaining = guard.Remaining;
+        Assert.Equal(123, guard.Absorb(123, EnemyDamageType.Physical, 11));
+        Assert.Equal(remaining, guard.Remaining);
+        Assert.Equal(123, guard.Absorb(123, EnemyDamageType.Fire, 90));
+    }
+
+    [Fact]
+    public void SpellArmorShieldPaymentDoesNotInterruptRechargeOrCountAsEnemyDamage()
+    {
+        var hero = new ResourceState(Team().Sheet); var guard = new GuardState();
+        int before = hero.Shield, last = hero.LastDamageTick;
+        Assert.True(guard.Activate("archetypes.skill.spellarmor_activate", hero, 1, 0, 0));
+        Assert.Equal(before - before / 5, hero.Shield);
+        Assert.Equal(last, hero.LastDamageTick);
+        Assert.Equal(10, guard.ArmorEnergy);
+        hero.TryPayShield(hero.Shield);
+        Assert.False(guard.Activate("archetypes.skill.spellarmor_activate", hero, 1, 0, 1));
+    }
+
+    [Fact]
+    public void FlaskCleanseRemovesActualAilmentsAndEchoDoesNotRefreshImmunity()
+    {
+        var build = Team() with { CombatEquipment = Equipment([]) with { Flasks = [new(FlaskKind.Armor, "cleanser", 0,
+            new Dictionary<ItemModifierKind, int> { [ItemModifierKind.FlaskCleanseBleedPoison] = 400,
+                [ItemModifierKind.FlaskRepeatEffect] = 1 })] } };
+        var hero = new ResourceState(build.Sheet); var rack = new FlaskRack(build);
+        Assert.True(hero.HarmfulStatus.ApplyDot(Ailment.Poison, DamageType.Void, 100, 10_000, "enemy"));
+        rack.TryUse(FlaskKind.Armor, hero, new GameForWork.Core.Simulation.Pcg32(1));
+        Assert.Empty(hero.HarmfulStatus.DamageOverTime.Instances);
+        hero.HarmfulStatus.Tick = 79;
+        Assert.False(hero.HarmfulStatus.ApplyDot(Ailment.Poison, DamageType.Void, 100, 1_000, "enemy"));
+        hero.HarmfulStatus.Tick = 100;
+        rack.Advance(hero, 5_000);
+        Assert.True(rack.Bottles[0].Echo);
+        Assert.True(hero.HarmfulStatus.ApplyDot(Ailment.Poison, DamageType.Void, 100, 1_000, "enemy"));
+    }
+
+    [Fact]
+    public void EnemyAilmentProfilesDealPersistentDamageThroughProductionSimulation()
+    {
+        var enemy = Enemies.CorruptedWorker with { Life = 1_000_000, MinimumPhysicalDamage = 800, MaximumPhysicalDamage = 800,
+            Accuracy = 10_000, Skills = [new(EnemySkillKind.BasicStrike, "poison", EnemyDamageType.Physical, 10_000,
+                RangeRaw: 40_000, Ailment: Ailment.Poison, AilmentChanceBasisPoints: 10_000)] };
+        var result = new SpatialCombatRunner().Run(new(Team(), 1, 1, 1, false, false, false, 0,
+            MaximumTicks: 150, EnemyPool: [enemy]), 73);
+        Assert.Contains(result.Events, e => e.TargetId == "hero" && e.Detail == "dot:Poison" && e.Value > 0);
+    }
+
+    [Fact]
+    public void OverlappingGroundFromOneSkillUsesOnlyTheStrongestWhileOtherSkillsStack()
+    {
+        var state = new AilmentState();
+        state.Apply(Ailment.Ground, DamageType.Void, 20, 1_000, 0, "rift");
+        state.Apply(Ailment.Ground, DamageType.Void, 10, 2_000, 0, "rift");
+        state.Apply(Ailment.Ground, DamageType.Void, 5, 2_000, 0, "field");
+        Assert.Equal(25, state.Advance(1_000, (_, dps) => dps).Sum(pulse => pulse.Damage));
+        Assert.Equal(15, state.Advance(1_000, (_, dps) => dps).Sum(pulse => pulse.Damage));
+    }
+
+    private static NodeCombatResult SingleCast(string skillId, int mana, int ticks = 350)
+    {
+        var team = Team();
+        return new SpatialCombatRunner().Run(new(team with
+        {
+            Sheet = team.Sheet with { IncreasedManaRegenerationBasisPoints = -10_000 },
+            ActiveSkills = [new(skillId, SkillSupport.None)], CombatEquipment = Equipment([]) with { Flasks = [] },
+        }, 1, 1, 1, false, false, false, 0, InitialHeroMana: mana, MaximumTicks: ticks,
+            EnemyPool: [Enemies.CorruptedWorker with { Life = 1_000_000, MovementSpeedRawPerSecond = 0,
+                MinimumPhysicalDamage = 0, MaximumPhysicalDamage = 0 }]), 731);
+    }
+
+    [Fact]
+    public void VoidFieldDealsGroundDamageForSixSecondsWithoutHitOrCriticalEvents()
+    {
+        var result = SingleCast(SkillIds.VoidDecayField, 20);
+        var created = Assert.Single(result.Events, e => e.Detail.Contains($"skill:{SkillIds.VoidDecayField}|area-created"));
+        var dots = result.Events.Where(e => e.Detail == "dot:ground").ToArray();
+        Assert.NotEmpty(dots);
+        Assert.True(dots.Max(e => e.AtMilliseconds) - created.AtMilliseconds >= 5_950);
+        Assert.DoesNotContain(result.Events, e => e.Detail.StartsWith($"skill:{SkillIds.VoidDecayField}|damage:"));
+        Assert.All(dots, e => Assert.InRange(e.AtMilliseconds, created.AtMilliseconds + 50, created.AtMilliseconds + 6_000));
+    }
+
+    [Theory]
+    [InlineData(SkillIds.StormBrand, 14, 8, 15)]
+    [InlineData("archetypes.skill.thunderstorm", 17, 10, 10)]
+    public void PeriodicSkillsPulseAtTheirOwnIntervals(string skillId, int mana, int count, int interval)
+    {
+        var result = SingleCast(skillId, mana);
+        var created = Assert.Single(result.Events, e => e.Detail.StartsWith($"skill:{skillId}|area-created"));
+        var pulses = result.Events.Where(e => e.Detail.StartsWith($"skill:{skillId}|area-pulse")).ToArray();
+        Assert.Equal(count, pulses.Length);
+        Assert.Equal(Enumerable.Range(1, count).Select(index => created.AtMilliseconds + interval * index * 50), pulses.Select(pulse => pulse.AtMilliseconds));
+    }
+
+    [Fact]
+    public void RiftInitialHitIsSeparateFromTheFollowingGroundDamage()
+    {
+        var result = SingleCast("archetypes.skill.void_rift", 18);
+        Assert.Single(result.Events, e => e.Detail.StartsWith("skill:archetypes.skill.void_rift|damage:"));
+        Assert.Contains(result.Events, e => e.Detail == "dot:ground" && e.Value > 0);
+    }
+
+    [Fact]
+    public void SpellDamageUsesPointUnitsAndItsOwnCriticalChance()
+    {
+        var skill = CombatSkillRules.Resolve(new(SkillIds.EmberNova, SkillSupport.None), 1_000);
+        Assert.Equal(45, CombatSkillRules.BaseDamage(skill, SkillTag.Spell, Team().Weapon, 0));
+        var random = new GameForWork.Core.Simulation.Pcg32(19);
+        Assert.All(Enumerable.Range(0, 100).Select(_ => SpellHitRules.Roll(skill, 1, random)), damage => Assert.InRange(damage, 36, 54));
+        Assert.Equal(500, SpellHitRules.BaseCriticalChance(skill.SkillId, 0, 0));
+        Assert.Equal(1_700, SpellHitRules.BaseCriticalChance("archetypes.skill.ice_lance", 7_000, 20));
+    }
+
+    [Fact]
+    public void AddedSupportDamageUsesTheLinkedStoneLevelAndFlatDamageEffectiveness()
+    {
+        var fire = new SkillConfiguration(SkillIds.HeavyStrike, SkillSupport.AddedFire, Level: 1,
+            SupportLinks: [new(ActiveSkillCatalog.SupportFor(SkillSupport.AddedFire).StoneId, 21, 0)]);
+        var added = DamagePacketRules.ResolveMixed(100, SkillDamageType.Physical, default, fire.Supports, 0, 0, 0, 0, 0, configuration: fire);
+        Assert.Equal(35, added.Fire);
+        var cold = DamagePacketRules.ResolveMixed(1_000, SkillDamageType.Fire, default, SkillSupport.AddedCold, 0, 0, 0, 0, 0,
+            addedDamageEffectiveness: 5_000);
+        Assert.Equal(5, cold.Cold);
+        var dot = DamagePacketRules.ResolveMixed(1_000, SkillDamageType.Fire, default, SkillSupport.AddedCold, 0, 0, 0, 0, 0, allowAddedHitDamage: false);
+        Assert.Equal(0, dot.Cold);
+    }
+
+    [Fact]
+    public void AegisPulsePaysShieldOnceAndDealsTheInitialSpellHit()
+    {
+        var hero = new ResourceState(Team().Sheet); var guard = new GuardState();
+        int cost = GuardState.ShieldCost("archetypes.skill.aegis_pulse", hero.MaximumShield);
+        int shield = hero.Shield;
+        Assert.True(guard.Activate("archetypes.skill.aegis_pulse", hero, 1, 0, 0));
+        Assert.Equal(shield - cost, hero.Shield);
+        Assert.Equal(cost * 15_000 / 10_000, guard.Remaining);
+        var result = SingleCast("archetypes.skill.aegis_pulse", 18);
+        Assert.Contains(result.Events, e => e.Detail.StartsWith("skill:archetypes.skill.aegis_pulse|damage:") && e.Value > 0);
+    }
+
+    [Fact]
+    public void OverlappingConvertedGroundChoosesAWholeInstanceRatherThanEachBestElement()
+    {
+        var state = new AilmentState();
+        state.Apply(Ailment.Ground, DamageType.Fire, 80, 1_000, 0, "field", instanceId: "first");
+        state.Apply(Ailment.Ground, DamageType.Void, 20, 1_000, 0, "field", instanceId: "first");
+        state.Apply(Ailment.Ground, DamageType.Fire, 10, 1_000, 0, "field", instanceId: "second");
+        state.Apply(Ailment.Ground, DamageType.Void, 60, 1_000, 0, "field", instanceId: "second");
+        var damage = state.Advance(1_000, (_, dps) => dps);
+        Assert.Equal(100, damage.Sum(pulse => pulse.Damage));
+        Assert.Equal(20, Assert.Single(damage, pulse => pulse.Type == DamageType.Void).Damage);
     }
 }

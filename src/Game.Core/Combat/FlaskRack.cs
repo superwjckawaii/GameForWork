@@ -4,6 +4,7 @@ using GameForWork.Core.Campaign.World;
 using GameForWork.Core.Equipment;
 using GameForWork.Core.Simulation;
 using GameForWork.Core.Builds;
+using GameForWork.Core.SkillCatalog;
 
 namespace GameForWork.Core.Combat;
 
@@ -126,6 +127,11 @@ public sealed class FlaskRack
                 bottle.RemainingRecovery *= .75m;
                 bottle.TotalNonInstantRecovery = bottle.RemainingRecovery;
             }
+            if (Value(bottle, ItemModifierKind.FlaskCleanseBleedPoison) > 0)
+                hero.HarmfulStatus.Cleanse(80, Ailment.Bleed, Ailment.Poison);
+            if (Value(bottle, ItemModifierKind.FlaskCleanseElementalAilments) > 0)
+                hero.HarmfulStatus.Cleanse(80, Ailment.Ignite, Ailment.Chill, Ailment.Freeze, Ailment.Shock, Ailment.Paralysis);
+            if (Value(bottle, ItemModifierKind.FlaskCleanseCurses) > 0) hero.HarmfulStatus.CleanseCurses(80);
             return new(kind, bottle.Input.Id, consumed);
         }
         return null;

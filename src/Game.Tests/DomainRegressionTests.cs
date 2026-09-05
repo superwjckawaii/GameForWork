@@ -11,6 +11,8 @@ using GameForWork.Core.SkillCatalog;
 using GameForWork.Core.Spatial;
 using Microsoft.Data.Sqlite;
 
+using GameForWork.Core.Campaign.Progression;
+
 namespace GameForWork.Tests;
 
 public sealed class DomainRegressionTests
@@ -87,7 +89,8 @@ public sealed class DomainRegressionTests
     public void StarArrowsCountDistinctEnemiesAndCapAtFive()
     {
         TeamBuild team = Team(SkillIds.SpiritBlade) with { CombatEquipment = Equipment("逐星者余响",
-            new() { [ItemModifierKind.AdditionalProjectile] = 7, [ItemModifierKind.ReturnProjectiles] = 1 }) };
+            new() { [ItemModifierKind.AdditionalProjectile] = 7, [ItemModifierKind.ReturnProjectiles] = 1 }),
+            PassiveProfile = PassiveModifiers.Empty with { IncreasedSkillRangeBasisPoints = 90_000 } };
         var result = new SpatialCombatRunner().Run(new(team, 1, 1, 8, false, false, false, 0,
             MaximumTicks: 800, EnemyDamageBasisPoints: 1_000,
             EnemyPool: [Enemies.CorruptedWorker with { Life = 1_000_000, MovementSpeedRawPerSecond = 0 }]), 731);

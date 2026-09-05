@@ -1,6 +1,8 @@
 using GameForWork.Core.Campaign.Combat;
 using GameForWork.Core.Builds;
 using GameForWork.Core.Campaign.Items;
+using GameForWork.Core.Skills;
+using GameForWork.Core.Simulation;
 
 namespace GameForWork.Core.SkillCatalog;
 
@@ -48,7 +50,9 @@ public static class DamagePacketRules
         IReadOnlyDictionary<ItemModifierKind, int>? equipment = null,
         DamageModifiers? modifiers = null,
         Func<DamageBranch, int>? scaleBranch = null,
-        Action<IReadOnlyList<DamageBranch>>? captureSource = null)
+        Action<IReadOnlyList<DamageBranch>>? captureSource = null,
+        SkillConfiguration? configuration = null, int addedDamageEffectiveness = 10_000,
+        bool allowAddedHitDamage = true, Pcg32? random = null)
     {
         DamageType type = baseType switch
         {
@@ -70,11 +74,8 @@ public static class DamagePacketRules
             conversions.Add(new(DamageType.Fire, DamageType.Void, 5_000, "support.fire_to_void"));
         var extras = new List<ExtraDamage>();
         if (supports.HasFlag(SkillSupport.AddedFire))
-            extras.Add(new(DamageType.Physical, DamageType.Fire, 1_800, "support.added_fire"));
-        if (supports.HasFlag(SkillSupport.AddedCold))
-            extras.Add(new(type, DamageType.Cold, 1_500, "support.added_cold"));
-        if (supports.HasFlag(SkillSupport.AddedLightning))
-            extras.Add(new(type, DamageType.Lightning, 1_700, "support.added_lightning"));
+            extras.Add(new(DamageType.Physical, DamageType.Fire, (configuration is null ? 20 :
+                CombatSkillRules.SupportValue(configuration, SkillSupport.AddedFire)) * 100, "support.added_fire"));
 
         AddConversion(ItemModifierKind.PhysicalToFireConversionBasisPoints, DamageType.Physical, DamageType.Fire);
         AddConversion(ItemModifierKind.PhysicalToColdConversionBasisPoints, DamageType.Physical, DamageType.Cold);
@@ -99,6 +100,8 @@ public static class DamagePacketRules
         AddWeaponPacket(addedWeaponDamage.Cold, DamageType.Cold);
         AddWeaponPacket(addedWeaponDamage.Lightning, DamageType.Lightning);
         AddWeaponPacket(addedWeaponDamage.Void, DamageType.Void);
+        if (allowAddedHitDamage && supports.HasFlag(SkillSupport.AddedCold)) AddWeaponPacket(Added(SkillSupport.AddedCold, 8, 12), DamageType.Cold);
+        if (allowAddedHitDamage && supports.HasFlag(SkillSupport.AddedLightning)) AddWeaponPacket(Added(SkillSupport.AddedLightning, 3, 24), DamageType.Lightning);
         DamagePacket packet = new(
             packets.Sum(value => value.Physical), packets.Sum(value => value.Fire),
             packets.Sum(value => value.Cold), packets.Sum(value => value.Lightning),
@@ -114,6 +117,15 @@ public static class DamagePacketRules
             new ResistanceProfile(physicalResistance, fireResistance, coldResistance, lightningResistance, voidResistance));
         int total = packet.Total;
         return new(packet.Physical, packet.Fire, packet.Cold, packet.Lightning, packet.Void, total, packet.Trace);
+
+        int Added(SkillSupport support, int minimum, int maximum)
+        {
+            int level = configuration is null ? 1 : CombatSkillRules.SupportLink(configuration, support).Level;
+            double growth = Math.Pow(1.07, Math.Clamp(level, 1, 40) - 1);
+            minimum = (int)Math.Round(minimum * growth); maximum = (int)Math.Round(maximum * growth);
+            int value = random is null ? (minimum + maximum + 1) / 2 : minimum + (int)(random.NextUInt() % (uint)(maximum - minimum + 1));
+            return (int)Math.Min(int.MaxValue, (long)value * addedDamageEffectiveness / 10_000);
+        }
 
         void AddWeaponPacket(int damage, DamageType damageType)
         {
