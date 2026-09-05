@@ -74,12 +74,12 @@ public static class ClassAscendancyCatalog
         ]),
         new(Ascendancy.SpiritCantor, "spirit_cantor",
         [
-            B("reservation", "节律调息", "光环保留消耗总降15%", "光环保留", "光环保留消耗总降40%"),
-            B("aura", "共鸣扩幅", "光环效果提高20%，光环范围提高25%", "光环效果", "对主角、佣兵和召唤单位的光环效果提高50%"),
-            B("blessing", "祝祷延续", "祝福持续时间提高30%，祝福冷却恢复提高20%", "祝福", "允许1名未被派遣的佣兵与主角编入同一队伍；双方都倒下时战斗失败"),
-            B("war_song", "战歌起拍", "战吼与战歌效果提高20%，持续时间提高25%", "不息战歌", "战歌不占用动作时间；每次施放使全队伤害提高8%，持续6秒，最多3层"),
-            B("mercenary", "同袍训练", "佣兵攻击、施法和移动速度提高15%", "英雄合奏", "同行佣兵继承主角50%的光环效果，并对主角当前目标造成30%更多伤害"),
-            B("protection", "守护和声", "光环影响的友军受到击中伤害降低8%", "终曲庇护", "任一队友降至低生命时，全队获得20%最大生命与护盾屏障，冷却10秒"),
+            B("reservation", "灵歌根基", "精神+120，精神提高8%", "万籁共鸣", "每完整100点最终精神获得+300全局附加灵障、光环效果提高8%"),
+            B("aura", "共鸣扩幅", "光环效果提高25%，光环范围提高30%", "众声同调", "对主角、同行佣兵和己方单位的光环效果提高50%，与其他光环效果提高相加"),
+            B("blessing", "祝祷延续", "祝福持续时间提高30%，冷却恢复速度提高25%，效果提高20%", "并肩祝福", "允许1名未派遣佣兵同行，双方都倒下才失败；主角和同行佣兵受到的祝福效果再提高40%"),
+            B("war_song", "战歌起拍", "战吼和战歌效果提高25%，持续时间提高30%", "不息战歌", "战歌不占动作时间；每次使用全队15%更多伤害，持续6秒，最多3层共享刷新，满层合并为45%更多"),
+            B("mercenary", "同袍训练", "同行佣兵攻击、施法和移动速度提高15%", "英雄合奏", "同行佣兵受到主角光环的效果提高50%，对主角当前合法目标造成40%更多伤害"),
+            B("protection", "守护和声", "光环影响的友军受到击中伤害总降8%", "终曲庇护", "光环影响的任一友军首次进入低生命时，全队获得各自最大生命与护盾合计20%的屏障4秒，屏障存在时击中承伤总降20%，共享冷却10秒"),
         ]),
         new(Ascendancy.Hexbinder, "hexbinder",
         [
@@ -110,12 +110,12 @@ public static class ClassAscendancyCatalog
         ]),
         new(Ascendancy.AegisMage, "aegis_mage",
         [
-            B("maximum", "秘能扩容", "最大能量护盾提高20%", "最大护盾", "获得30%更多最大能量护盾"),
-            B("recharge", "快速归流", "能量护盾充能速度提高20%", "护盾充能", "充能延迟由2秒降至1秒，充能速度提高50%"),
-            B("casting", "盾能施法", "护盾高于50%时施法速度提高15%", "秘盾供能", "技能优先消耗能量护盾；以护盾支付的技能造成35%更多法术伤害"),
-            B("absorb", "过量吸收", "护盾充满时获得最大护盾10%的屏障", "无损容器", "屏障上限提高至30%；屏障存在时护盾充能不会被普通命中打断"),
-            B("counter", "法术偏振", "受到法术击中时获得20%法术格挡，持续2秒", "镜式反击", "格挡法术时向施法者释放一次不消耗资源的当前法术，冷却1秒"),
-            B("break", "破盾回响", "护盾耗尽时法术伤害提高25%，持续4秒", "零界爆发", "护盾耗尽时获得2秒伤害免疫并立刻完成一次免费施法，冷却10秒"),
+            B("maximum", "秘能扩容", "最大护盾提高20%，护盾充能速度提高15%", "无垠秘盾", "最大护盾总增30%，超充上限额外增加最大护盾的10%"),
+            B("recharge", "快速归流", "护盾充能速度提高30%，超充衰减等待延长1秒", "永续超充", "基础充能延迟降至1秒，充能速度再提高50%，超充上限额外增加最大护盾的20%，衰减速度总降50%"),
+            B("casting", "盾能施法", "普通护盾与超充合计高于最大护盾50%时，施法速度提高20%", "秘盾供能", "非触发法术优先以超充按1:1支付最终法力消耗；全部由超充支付时造成50%更多伤害，支付不触发受击或中断充能"),
+            B("absorb", "过量吸收", "超充护盾承受的击中伤害总降20%，衰减期间仍生效", "无损容器", "超充达到上限获得门限；下一次敌方击中清空超充，且最多把普通护盾降至1；冷却10秒，持续伤害与主动失去不触发"),
+            B("counter", "法术偏振", "受到未格挡法术击中后，法术格挡概率+20个百分点，持续2秒", "镜式反击", "格挡法术时向来源免费释放最近自行施放的合法非保留法术，造成60%伤害，冷却1秒；不推进历史或再次触发"),
+            B("break", "破盾回响", "敌方伤害耗尽普通护盾时，法术伤害提高30%、施法速度提高15%，持续4秒，冷却8秒", "零界爆发", "敌方伤害耗尽普通护盾时获得2秒伤害免疫，免费复演最近合法自施法造成100%伤害；冷却12秒，支付和衰减不触发"),
         ]),
         new(Ascendancy.MartialMonk, "martial_monk",
         [
@@ -221,16 +221,6 @@ public readonly record struct ProjectileProfile(
     int MoreProjectileDamageBasisPoints,
     bool CanRepeatHitSameTarget);
 
-public readonly record struct AuraProfile(
-    int ReservationMultiplierBasisPoints,
-    int IncreasedEffectBasisPoints,
-    int AdditionalHeroPartyMercenaries);
-
-public readonly record struct EnergyShieldProfile(
-    int MoreMaximumBasisPoints,
-    int RechargeDelayTicks,
-    int IncreasedRechargeRateBasisPoints);
-
 public static class ModifierMath
 {
     public static int ApplyIncreased(int value, params int[] increasedBasisPoints) =>
@@ -280,11 +270,6 @@ public static class ClassAscendancyRules
     public static int IncreasedMinionDamageBasisPoints(int livingMinions, CombatProfile profile) =>
         profile.Has(ClassNodeIds.SoulLegionCore) ? checked(Math.Max(0, livingMinions - 8) * 1_500) : 0;
 
-    public static AuraProfile Aura(CombatProfile profile) => new(
-        profile.Has(ClassNodeIds.CantorReservationCore) ? 6_000 : 10_000,
-        profile.Has(ClassNodeIds.CantorAuraCore) ? 5_000 : 0,
-        profile.Has(ClassNodeIds.CantorBlessingCore) ? 1 : 0);
-
     public static int ExtraPhysicalAsPrimaryElement(int originalPhysicalDamage, PrimaryElement element,
         CombatProfile profile)
     {
@@ -293,11 +278,6 @@ public static class ClassAscendancyRules
             ? checked(Math.Max(0, originalPhysicalDamage) * 5_000 / 10_000)
             : 0;
     }
-
-    public static EnergyShieldProfile EnergyShield(CombatProfile profile) => new(
-        profile.Has(ClassNodeIds.AegisMaximumCore) ? 13_000 : 10_000,
-        profile.Has(ClassNodeIds.AegisRechargeCore) ? 20 : EnergyShieldState.RechargeDelayTicks,
-        profile.Has(ClassNodeIds.AegisRechargeCore) ? 5_000 : 0);
 
     public static bool ConstructPrioritizes(EnemyRarity rarity, CombatProfile profile) =>
         profile.Has(ClassNodeIds.IdolTurretCore) && rarity is EnemyRarity.Rare or EnemyRarity.Boss;

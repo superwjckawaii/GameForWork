@@ -223,6 +223,7 @@ public sealed class WarCryState
     public int ManaCost { get; set; } = SkillDefinitions.WarCry.BaseManaCost;
     public int CooldownDurationTicks { get; set; } = SkillDefinitions.WarCry.CooldownTicks;
     public int EffectMultiplierBasisPoints { get; set; } = 10_000;
+    public int DurationTicks { get; set; } = 160;
 
     public bool TryActivate(ResourceState resources, int tick)
     {
@@ -233,7 +234,7 @@ public sealed class WarCryState
 
         CooldownRemainingTicks = CooldownDurationTicks;
         EmpoweredHeavyStrikes = EchoNotableAllocated ? 4 : 3;
-        ExpireTick = tick + 160;
+        ExpireTick = tick + DurationTicks;
         return true;
     }
 

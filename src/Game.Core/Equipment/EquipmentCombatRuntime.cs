@@ -85,7 +85,7 @@ public sealed class EquipmentCombatRuntime(EquipmentCombatLoadout loadout, ulong
     public Func<bool>? CompanionAlive { get; set; }
     public int LastEnemyShieldLoss { get; private set; }
     public bool LastEnemyHitBrokeShield { get; private set; }
-    public Func<int, int, int>? AbsorbEnemyDamage { get; set; }
+    public Func<int, bool, int, int>? AbsorbEnemyDamage { get; set; }
     public Action<ResourceState, EnemyDamageResult>? EnemyDamageApplied { get; set; }
 
     public int ApplyEnemyDamage(ResourceState hero, int damage, bool hit, int tick, VirtueViceState? virtues, bool blocked = false)
@@ -93,17 +93,17 @@ public sealed class EquipmentCombatRuntime(EquipmentCombatLoadout loadout, ulong
         LastEnemyShieldLoss = 0;
         LastEnemyHitBrokeShield = false;
         if (!hero.IsAlive || damage <= 0) return 0;
-        damage = AbsorbEnemyDamage?.Invoke(damage, tick) ?? damage;
+        damage = AbsorbEnemyDamage?.Invoke(damage, hit, tick) ?? damage;
         damage = RedirectDamage?.Invoke(damage, hit) ?? damage;
         if (damage <= 0) return 0;
         int shieldBefore = hero.Shield;
-        int actual = Math.Min(damage, hero.Life + hero.Shield);
-        bool shieldBroken = shieldBefore > 0 && damage >= shieldBefore;
-        LastEnemyShieldLoss = Math.Min(shieldBefore, damage);
-        LastEnemyHitBrokeShield = hit && shieldBroken;
-        bool lifeLost = !hit && shieldBefore == 0 && actual > 0;
+        int lifeBefore = hero.Life;
         int generation = hero.HarmfulStatus.Generation;
-        hero.ApplyDamage(damage, tick);
+        int actual = hero.ApplyEnemyDamage(damage, hit, tick);
+        bool shieldBroken = shieldBefore > 0 && hero.Shield == 0;
+        LastEnemyShieldLoss = Math.Max(0, shieldBefore - hero.Shield);
+        LastEnemyHitBrokeShield = hit && shieldBroken;
+        bool lifeLost = !hit && lifeBefore > hero.Life;
         if (hero.IsAlive && generation == hero.HarmfulStatus.Generation)
             EnemyDamageApplied?.Invoke(hero, new(actual, LastEnemyShieldLoss, hit, blocked, shieldBroken, tick));
         DamageTaken(actual, hit && !blocked, tick, virtues);

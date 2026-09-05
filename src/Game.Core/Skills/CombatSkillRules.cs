@@ -188,9 +188,10 @@ public static class CombatSkillRules
             buildsSupports.TemperanceQualityPerLayer);
     }
 
-    public static bool TryPay(ResourceState resources, ResolvedSkill skill) => skill.LifeCost > 0
+    public static bool TryPay(ResourceState resources, ResolvedSkill skill, bool allowOvercharge = true) => skill.LifeCost > 0
         ? resources.TryPayLifeCost(skill.LifeCost)
-        : resources.TryPayMana(skill.ManaCost);
+        : SkillDefinitions.Get(skill.SkillId).Tags.HasFlag(SkillTag.Spell)
+            ? resources.TryPaySpellMana(skill.ManaCost, allowOvercharge) : resources.TryPayMana(skill.ManaCost);
 
     public static int DamageMultiplier(ResolvedSkill skill, int life, int maximumLife)
     {

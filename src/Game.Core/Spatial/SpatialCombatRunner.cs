@@ -132,7 +132,8 @@ public sealed record SpatialFrame(
     string HeroTargetId,
     IReadOnlyList<EnemyFrame> Enemies,
     IReadOnlyList<AllyFrame>? Allies = null,
-    IReadOnlyDictionary<VirtueViceKind, int>? HeroVirtueViceLayers = null);
+    IReadOnlyDictionary<VirtueViceKind, int>? HeroVirtueViceLayers = null,
+    int HeroOvercharge = 0, int HeroMaximumOvercharge = 0);
 
 public sealed record SpatialEvent(
     long AtMilliseconds,
@@ -187,7 +188,7 @@ public sealed record NodeCombatRequest(
     Combat.FlaskRack? FlaskState = null, Combat.GuardState? Guard = null, Combat.CombatBuffState? Buffs = null,
     Combat.ReactionState? Reactions = null, Combat.ChannelCostState? ChannelCosts = null,
     EquipmentOffenseSnapshot? OffenseSnapshot = null, Combat.RuneFieldState? RuneFields = null,
-    int? ActionMultiplierSnapshot = null, int? SpellEnergyIncreaseSnapshot = null);
+    int? ActionMultiplierSnapshot = null, int? SpellEnergyIncreaseSnapshot = null, Combat.TeamProtectionState? TeamProtection = null);
 
 public sealed record NodeCombatResult(
     BattleOutcome Outcome,
@@ -218,15 +219,21 @@ public sealed partial class SpatialCombatRunner
         var equipment = request.EquipmentRuntime ?? new EquipmentCombatRuntime(request.Build.CombatEquipment ?? EquipmentCombatLoadout.Empty, seed);
         TeamBuild originalBuild = request.Build;
         request = request with { RuneFields = new(request.Build.Ascendancy) };
-        request = request with { EquipmentRuntime = equipment, Actions = new Combat.CombatActionQueue(request.Build.Ascendancy), Guard = new Combat.GuardState(request.Build.Ascendancy), Buffs = new Combat.CombatBuffState(), Reactions = new Combat.ReactionState(), ChannelCosts = new Combat.ChannelCostState() };
-        equipment.AbsorbEnemyDamage = request.Guard.AbsorbBarriers;
-        equipment.EnemyDamageApplied = request.Guard.ObserveEnemyDamage;
+        request = request with { EquipmentRuntime = equipment, Actions = new Combat.CombatActionQueue(request.Build.Ascendancy), Guard = new Combat.GuardState(request.Build.Ascendancy), Buffs = new Combat.CombatBuffState(request.Build.Ascendancy), Reactions = new Combat.ReactionState(), ChannelCosts = new Combat.ChannelCostState() };
+        request = request with { TeamProtection = new(request.Build.Ascendancy?.Has("core.ascendancy.spirit_cantor.protection.core") == true) };
         var hero = new ResourceState(
             request.Build.Sheet,
             request.InitialHeroLife,
             request.InitialHeroMana,
-            request.InitialHeroShield);
+            request.InitialHeroShield, request.Build.Ascendancy);
         hero.ReserveMana(auras.ReservedMana);
+        equipment.AbsorbEnemyDamage = (damage, hit, tick) => request.TeamProtection.Absorb("hero", request.Guard.AbsorbBarriers(damage, tick), hit, tick);
+        equipment.EnemyDamageApplied = (resource, result) =>
+        {
+            request.TeamProtection.Update("hero", hero.Life, hero.MaximumLife, hero.MaximumShield, auras.ActiveIds.Count > 0, result.Tick);
+            request.Guard.ObserveEnemyDamage(resource, result);
+        };
+        request.TeamProtection.Update("hero", hero.Life, hero.MaximumLife, hero.MaximumShield, auras.ActiveIds.Count > 0, 0);
         equipment.ExternalSkillCostMultiplier = auras.SkillCostMultiplier;
         var enemies = CreateEnemies(request, random);
         var events = new List<SpatialEvent>();
@@ -249,6 +256,7 @@ public sealed partial class SpatialCombatRunner
             maxima, held);
         request = request with { AscendancyRuntime = ascendancyRuntime, VirtueVice = virtueVice };
         Point heroPosition = new(6_000, 22_000);
+        auras.SourcePosition = () => heroPosition;
         var flasks = request.FlaskState ?? new Combat.FlaskRack(request.Build);
         void UseFlask(FlaskKind kind, int at, int threshold = 0)
         {
@@ -312,6 +320,11 @@ public sealed partial class SpatialCombatRunner
             warCry.ManaCost = warCrySkill.ManaCost;
             warCry.CooldownDurationTicks = warCrySkill.CooldownTicks;
             warCry.EffectMultiplierBasisPoints = skills[SkillIds.WarCry].Supports.HasFlag(SkillSupport.UrgentWarCry) ? 8_500 : 10_000;
+            if (ascendancy.Has("core.ascendancy.spirit_cantor.war_song.small"))
+            {
+                warCry.EffectMultiplierBasisPoints = ScaleCombatValue(warCry.EffectMultiplierBasisPoints, 12_500);
+                warCry.DurationTicks = 208;
+            }
             if (ascendancy.Has(WarriorNodeIds.BreakerWarCrySmall))
                 warCry.CooldownDurationTicks = Math.Max(1, warCry.CooldownDurationTicks * 10_000 / 13_000);
         }
@@ -402,9 +415,21 @@ public sealed partial class SpatialCombatRunner
                         Math.Max(1, request.Build.MovementSpeedBasisPoints * 300 / 10_000));
                 }
             }
+            const string instantSong = "archetypes.skill.soul_warsong";
+            if (request.Buffs!.Instant(instantSong) && skillCatalogSkills.TryGetValue(instantSong, out var song) &&
+                tick >= skillCatalogReadyTicks[instantSong] && !TriggerSupported(skills[instantSong]) &&
+                hero.HarmfulStatus.Effect(Ailment.Freeze) == 0 && hero.HarmfulStatus.Effect(Ailment.Stun) == 0 &&
+                SelectTarget(enemies, heroPosition) is { } songTarget &&
+                AiMatches(skills[instantSong], request, hero, songTarget, enemies, Point.DistanceSquared(heroPosition, songTarget.Position)) &&
+                TryPayEquipmentCost(request, hero, song))
+            {
+                request.Buffs.Activate(skills[instantSong], !request.Build.HasUsableWeapon, tick);
+                skillCatalogReadyTicks[instantSong] = tick + Math.Max(1, song.CooldownTicks);
+                events.Add(Event(tick, SpatialEventKind.SkillEffect, "hero", "hero", 0, heroPosition, heroPosition, $"skill:{instantSong}|buff-applied|instant"));
+            }
             if (request.Guard!.TryOverload(hero, tick))
                 events.Add(Event(tick, SpatialEventKind.Ascendancy, "hero", "hero", 0, heroPosition, heroPosition, "spellarmor-overload|duration:6000"));
-            TeamBuild buffedBuild = request.Guard.ApplyArmorBonuses(request.Actions!.ApplyPhantomBonuses(request.Buffs!.Apply(originalBuild, tick), tick), hero, tick);
+            TeamBuild buffedBuild = request.Guard.ApplyBonuses(request.Actions!.ApplyPhantomBonuses(request.Buffs!.Apply(originalBuild, tick), tick), hero, tick);
             request = request with
             {
                 Build = buffedBuild with
@@ -422,6 +447,7 @@ public sealed partial class SpatialCombatRunner
             };
             hero.UpdateSheet(request.RuneFields!.Apply(request.Build.Sheet, heroPosition));
             hero.AdvanceRegenerationTick(tick);
+            request.TeamProtection!.Update("hero", hero.Life, hero.MaximumLife, hero.MaximumShield, auras.ActiveIds.Count > 0, tick);
             AdvancePlayerStatus(request, hero, heroPosition, tick, events);
             if (!hero.IsAlive) break;
             if (tick >= fortificationUntilTick) fortificationLayers = 0;
@@ -503,7 +529,7 @@ public sealed partial class SpatialCombatRunner
                     .OrderBy(candidate => skills[candidate!].Priority)
                     .FirstOrDefault();
                 string? skillCatalogChosen = skillCatalogSkills.Values
-                    .Where(skill => army.CanUse(skill.SkillId) && request.Buffs!.CanUse(skill.SkillId, tick) &&
+                    .Where(skill => !request.Buffs!.Instant(skill.SkillId) && army.CanUse(skill.SkillId) && request.Buffs.CanUse(skill.SkillId, tick) &&
                                     (skill.Role != SkillRole.Reservation || Combat.CombatBuffState.IsSkill(skill.SkillId)) && skill.Role != SkillRole.Counter &&
                                     !TriggerSupported(skills[skill.SkillId]) &&
                                     (skill.SkillId != Combat.ReactionState.Overload || request.Guard!.ArmorEnergy > 0) &&
@@ -588,9 +614,11 @@ public sealed partial class SpatialCombatRunner
                             request.Guard!.Extend(Math.Max(1, (guardUntilTick - tick) / 4));
                             guardUntilTick = request.Guard.Expires;
                         }
-                        skillCatalogReadyTicks[chosen] = tick + Math.Max(1, skillCatalogSkill.CooldownTicks);
+                        skillCatalogReadyTicks[chosen] = tick + Math.Max(1, skillCatalogSkill.CooldownTicks * 10_000 /
+                            (10_000 + request.Buffs.CooldownRecovery(chosen)));
                         heroNextActionTick = tick + (skillCatalogTags.HasFlag(SkillTag.Channelling) ? 5 : ActionDelay(request.Build, skillCatalogSkill.CastTimeTicks,
                             skillCatalogTags));
+                        if (request.Buffs.Instant(chosen)) heroNextActionTick = tick;
                     }
                     else if (chosen == SkillIds.SeismicCharge && TryPayEquipmentCost(request, hero, charge!))
                     {
@@ -1161,7 +1189,8 @@ public sealed partial class SpatialCombatRunner
             (hunted ? request.Auras?.HunterCriticalMultiplier ?? 0 : 0), equipment?.ForceCritical(tags) == true ? 15_000 : 10_000) : 10_000;
         if (critical && request.VirtueVice is { } criticalVirtues)
             criticalMultiplier = ScaleCombatValue(criticalMultiplier, 10_000 + criticalVirtues.Bonuses().MoreCriticalDamageBasisPoints);
-        int armor = CombatRules.ArmorAfterBreak(enemy.Scaled.Armor, enemy.ArmorBreakStacks, runtime.ArmorBreakMaximum, request.Auras?.EnemyArmorReduction ?? 0);
+        int armor = CombatRules.ArmorAfterBreak(enemy.Scaled.Armor, enemy.ArmorBreakStacks, runtime.ArmorBreakMaximum,
+            request.Auras?.ArmorReductionAt(enemy.Position, distanceRaw) ?? 0);
         if (configuration.Supports.HasFlag(SkillSupport.ArmorPierce)) armor = armor * 7_000 / 10_000;
         var ailmentSource = new List<DamageBranch>();
         var offensiveBranches = new List<DamageBranch>();
@@ -1511,7 +1540,7 @@ public sealed partial class SpatialCombatRunner
             int finalAttackBlock = Math.Clamp(attackBlock, 0, attackBlockMaximum);
             int blockChance = spell
                 ? WarriorAscendancyRules.SpellBlockChanceBasisPoints(request.Build.Sheet.SpellBlockChanceBasisPoints,
-                    finalAttackBlock, ascendancy.Profile, request.Build.HasShield)
+                    finalAttackBlock, ascendancy.Profile, request.Build.HasShield) + request.Guard!.SpellBlockBonus(tick)
                 : attackBlock;
             int blockCap = spell
                 ? request.Build.Sheet.MaximumSpellBlockChanceBasisPoints
@@ -1584,7 +1613,10 @@ public sealed partial class SpatialCombatRunner
             if (hero.IsAlive && !substituted && !areaAvoided)
                 ScheduleSupportedReactions(request, hero, enemy.EntityId, block: blocked, hitDamage: damage);
             if (hero.IsAlive && hit.Hit && !substituted && !areaAvoided && hero.HarmfulStatus.Generation == statusGeneration)
+            {
                 request.Guard?.EnemyHit(tick);
+                if (spell) request.Guard?.EnemySpellHit(enemy.EntityId, blocked, tick);
+            }
             if (hero.IsAlive && !substituted && damage > 0 && request.EquipmentRuntime?.LastEnemyShieldLoss > 0)
             {
                 if (ReactionConfiguration(request, Combat.ReactionState.Mirror) is { } mirror)
@@ -1666,13 +1698,15 @@ public sealed partial class SpatialCombatRunner
         {
             if (request.ChannelCosts?.TryPay(hero, skill, out int paid) != true) return false;
             request.EquipmentRuntime?.BeginAction(skill.SkillId, skill.LifeCost > 0 ? paid : 0, skill.LifeCost > 0 ? 0 : paid, false, request.VirtueVice);
-            request.Reactions?.Begin(request.EquipmentRuntime?.ActionId ?? "", skill.SkillId, request.Guard);
+            request.Reactions?.Begin(request.EquipmentRuntime?.ActionId ?? "", skill.SkillId, request.Guard,
+                skill.LifeCost == 0 && hero.LastSpellFullyFunded ? 15_000 : 10_000);
             return true;
         }
         if (!CombatSkillRules.TryPay(hero, skill)) return false;
         request.EquipmentRuntime?.BeginAction(skill.SkillId, skill.LifeCost, skill.ManaCost,
             SkillDefinitions.Get(skill.SkillId).Tags.HasFlag(SkillTag.Trigger), request.VirtueVice);
-        request.Reactions?.Begin(request.EquipmentRuntime?.ActionId ?? "", skill.SkillId, request.Guard);
+        request.Reactions?.Begin(request.EquipmentRuntime?.ActionId ?? "", skill.SkillId, request.Guard,
+            skill.LifeCost == 0 && hero.LastSpellFullyFunded ? 15_000 : 10_000);
         return true;
     }
 
@@ -1680,9 +1714,11 @@ public sealed partial class SpatialCombatRunner
     {
         int multiplier = ScaleCombatValue(request.EquipmentRuntime?.Has("怒节同契") == true ? 12_000 : 10_000, request.Auras?.SkillCostMultiplier ?? 10_000);
         skill = skill with { LifeCost = ScaleCombatValue(skill.LifeCost, multiplier), ManaCost = ScaleCombatValue(skill.ManaCost, multiplier) };
-        if (!SkillRules.TryPaySkillCost(hero, skill)) return false;
+        bool spell = SkillDefinitions.Get(skill.SkillId).Tags.HasFlag(SkillTag.Spell);
+        if (!(spell && skill.LifeCost == 0 ? hero.TryPaySpellMana(skill.ManaCost) : SkillRules.TryPaySkillCost(hero, skill))) return false;
         request.EquipmentRuntime?.BeginAction(skill.SkillId, skill.LifeCost, skill.ManaCost, false, request.VirtueVice);
-        request.Reactions?.Begin(request.EquipmentRuntime?.ActionId ?? "", skill.SkillId, request.Guard);
+        request.Reactions?.Begin(request.EquipmentRuntime?.ActionId ?? "", skill.SkillId, request.Guard,
+            spell && skill.LifeCost == 0 && hero.LastSpellFullyFunded ? 15_000 : 10_000);
         return true;
     }
 
@@ -1824,7 +1860,7 @@ public sealed partial class SpatialCombatRunner
                 enemy.BleedPulses > 0 ? 1 : 0, enemy.DamageOverTimePulses > 0 ? enemy.DamageOverTimeAilment : Ailment.None,
                 enemy.ArmorBreakStacks, enemy.ShockStacks, tick < enemy.ImpairedUntilTick)).ToArray(),
             BuildAllies(heroPosition, partySize, frontlineCount).Concat(army?.Frames() ?? []).Concat(actions?.PhantomFrames(tick) ?? []).ToArray(),
-            CaptureVirtueVice(virtueVice)));
+            CaptureVirtueVice(virtueVice), hero.Overcharge, hero.MaximumOvercharge));
         // Keep simulation exact, but bound playback snapshots in extremely long battles.
         if (frames is List<SpatialFrame> list && list.Count > 4_096)
         {
@@ -1913,7 +1949,8 @@ public sealed partial class SpatialCombatRunner
     private static bool CanPay(ResourceState hero, ResolvedSkill skill) =>
         hero.Shield >= Combat.GuardState.ShieldCost(skill.SkillId, hero.MaximumShield) &&
         (skill.LifeCost > 0 ? hero.Life > skill.LifeCost / (SkillDefinitions.Get(skill.SkillId).Tags.HasFlag(SkillTag.Channelling) ? 4 : 1) :
-            hero.Mana >= skill.ManaCost / (SkillDefinitions.Get(skill.SkillId).Tags.HasFlag(SkillTag.Channelling) ? 4 : 1));
+            (SkillDefinitions.Get(skill.SkillId).Tags.HasFlag(SkillTag.Spell) ? hero.AvailableSpellMana : hero.Mana) >=
+                skill.ManaCost / (SkillDefinitions.Get(skill.SkillId).Tags.HasFlag(SkillTag.Channelling) ? 4 : 1));
 
     private static bool AiMatches(
         SkillConfiguration configuration,

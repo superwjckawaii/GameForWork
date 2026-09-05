@@ -45,8 +45,9 @@ public sealed partial class GuardState
         OverloadUntil = tick + 120; _overloadReady = tick + 160;
         return true;
     }
-    public TeamBuild ApplyArmorBonuses(TeamBuild build, ResourceState hero, int tick)
+    public TeamBuild ApplyBonuses(TeamBuild build, ResourceState hero, int tick)
     {
+        build = ApplyAegisBonuses(build, hero, tick);
         int speed = ArmorNode("overload") && hero.Shield * 2L > hero.MaximumShield ? 1_500 : 0;
         return build with
         {
@@ -59,6 +60,7 @@ public sealed partial class GuardState
     }
     public int AbsorbBarriers(int damage, int tick)
     {
+        if (Immune(tick)) return 0;
         if (tick >= _reverseExpires) _reverseBarrier = 0;
         if (tick >= _guardExpires) _guardBarrier = 0;
         int absorbed = Math.Min(damage, _reverseBarrier);
@@ -70,6 +72,7 @@ public sealed partial class GuardState
     public void ObserveEnemyDamage(ResourceState hero, EnemyDamageResult result)
     {
         if (!hero.IsAlive) return;
+        ObserveAegisDamage(result);
         if (result.ShieldLoss > 0 && ArmorNode("absorb"))
         {
             int recovery = (int)((long)result.ShieldLoss * (ArmorNode("absorb", "core") ? 2_500 : 500) / 10_000);

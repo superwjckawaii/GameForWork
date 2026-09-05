@@ -94,47 +94,6 @@ public static class CombatLimits
     };
 }
 
-public sealed class EnergyShieldState
-{
-    public const int RechargeDelayTicks = 40;
-    public const int RechargeBasisPointsPerSecond = 2_000;
-
-    public EnergyShieldState(int maximum, CombatProfile? ascendancy = null)
-    {
-        ArgumentOutOfRangeException.ThrowIfNegative(maximum);
-        EnergyShieldProfile profile = ClassAscendancyRules.EnergyShield(ascendancy ?? CombatProfile.Empty);
-        Maximum = ModifierMath.ApplyMore(maximum, profile.MoreMaximumBasisPoints);
-        RechargeDelay = profile.RechargeDelayTicks;
-        RechargeRateBasisPointsPerSecond = ModifierMath.ApplyIncreased(
-            RechargeBasisPointsPerSecond, profile.IncreasedRechargeRateBasisPoints);
-        Current = Maximum;
-    }
-
-    public int Maximum { get; }
-    public int Current { get; private set; }
-    public int RechargeDelay { get; }
-    public int RechargeRateBasisPointsPerSecond { get; }
-    public int TicksSinceDamage { get; private set; } = RechargeDelayTicks;
-    public bool IsRecharging => Current < Maximum && TicksSinceDamage >= RechargeDelay;
-
-    public int AbsorbHit(int damage)
-    {
-        ArgumentOutOfRangeException.ThrowIfNegative(damage);
-        int absorbed = Math.Min(Current, damage);
-        Current -= absorbed;
-        TicksSinceDamage = 0;
-        return damage - absorbed;
-    }
-
-    public void AdvanceTick()
-    {
-        TicksSinceDamage++;
-        if (!IsRecharging || Maximum == 0) return;
-        int perTick = Math.Max(1, checked(Maximum * RechargeRateBasisPointsPerSecond / 10_000 / 20));
-        Current = Math.Min(Maximum, checked(Current + perTick));
-    }
-}
-
 public sealed record RangeAiProfile(int PreferredDistanceRaw, int RetreatDistanceRaw, bool MoveWhileAttacking)
 {
     public RangeAiProfile Validate()

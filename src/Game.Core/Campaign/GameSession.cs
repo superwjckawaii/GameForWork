@@ -1370,7 +1370,7 @@ public sealed class GameSession
             HeroEquipment,
             Passives,
             new SkillConfiguration(SkillIds.HeavyStrike, HeavyStrikeSupports),
-            Jewels);
+            Jewels, AscendancyProfile());
         return build with
         {
             Sheet = WarriorAscendancyRules.ApplySheet(build.Sheet, AscendancyProfile(), build.Equipment.ShieldArmor),

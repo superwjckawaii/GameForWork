@@ -85,8 +85,9 @@ public static class CharacterBuildAssembler
             jewel.IncreasedPhysiqueBasisPoints + (armorFoundation ? 500 : 0));
         int dexterity = ScaleAttribute(baseAttributes.Dexterity + item.Dexterity + advanced.Dexterity + jewel.Dexterity,
             item.Value(ItemModifierKind.IncreasedDexterityBasisPoints) + item.Value(ItemModifierKind.IncreasedAllAttributesBasisPoints));
-        int spirit = ScaleAttribute(baseAttributes.Spirit + item.Spirit + advanced.Spirit + jewel.Spirit,
-            item.Value(ItemModifierKind.IncreasedSpiritBasisPoints) + item.Value(ItemModifierKind.IncreasedAllAttributesBasisPoints));
+        bool cantorFoundation = ascendancy?.Has("core.ascendancy.spirit_cantor.reservation.small") == true;
+        int spirit = ScaleAttribute(baseAttributes.Spirit + item.Spirit + advanced.Spirit + jewel.Spirit + (cantorFoundation ? 120 : 0),
+            item.Value(ItemModifierKind.IncreasedSpiritBasisPoints) + item.Value(ItemModifierKind.IncreasedAllAttributesBasisPoints) + (cantorFoundation ? 800 : 0));
         int energy = ScaleAttribute(baseAttributes.Energy + item.Energy + advanced.Energy + jewel.Energy + (armorFoundation ? 80 : 0),
             item.Value(ItemModifierKind.IncreasedEnergyBasisPoints) + item.Value(ItemModifierKind.IncreasedAllAttributesBasisPoints) + (armorFoundation ? 500 : 0));
         if (MasteryRuntime.Has(advanced, "属性", 3))
@@ -143,7 +144,7 @@ public static class CharacterBuildAssembler
             checked(evasionIncrease + jewel.IncreasedEvasionBasisPoints + attributeMemory.IncreasedEvasionBasisPoints),
             checked(item.IncreasedShieldBasisPoints + item.IncreasedMaximumShieldBasisPoints +
                 advanced.IncreasedShieldBasisPoints + jewel.IncreasedMaximumShieldBasisPoints +
-                attributeMemory.IncreasedMaximumShieldBasisPoints),
+                attributeMemory.IncreasedMaximumShieldBasisPoints + (ascendancy?.Has("core.ascendancy.aegis_mage.maximum.small") == true ? 2_000 : 0)),
             checked(item.IncreasedManaRegenerationBasisPoints + passive.IncreasedManaRegenerationBasisPoints),
             checked(item.FireResistanceBasisPoints + advanced.FireResistanceBasisPoints),
             checked(item.ColdResistanceBasisPoints + advanced.ColdResistanceBasisPoints),
@@ -157,7 +158,7 @@ public static class CharacterBuildAssembler
                 attributeMemory.IncreasedMaximumManaBasisPoints),
             item.Value(ItemModifierKind.FlatShield) + (combatEquipment.Has("第四圣约") ? (spirit + energy) / 5 : 0) + (armorHybrid ? energy / 100 * 200 : 0),
             equipment.SpiritBarrier,
-            item.Value(ItemModifierKind.FlatSpiritBarrier),
+            item.Value(ItemModifierKind.FlatSpiritBarrier) + (ascendancy?.Has("core.ascendancy.spirit_cantor.reservation.core") == true ? spirit / 100 * 300 : 0),
             checked(item.Value(ItemModifierKind.IncreasedSpiritBarrierBasisPoints) + jewel.IncreasedSpiritBarrierBasisPoints),
             MaximumElementalResistanceBasisPoints: checked(7_500 + item.MaximumAllResistanceBasisPoints + jewel.MaximumElementalResistanceBasisPoints),
             MaximumVoidResistanceBasisPoints: checked(7_500 + item.MaximumAllResistanceBasisPoints +
@@ -168,7 +169,8 @@ public static class CharacterBuildAssembler
             IncreasedRecoveryRateBasisPoints: attributeMemory.IncreasedRecoveryRateBasisPoints + item.Value(ItemModifierKind.IncreasedResourceRecoveryRateBasisPoints),
             MaximumLifeMultiplierBasisPoints: MasteryRuntime.MaximumLifeMultiplier(advanced),
             MaximumManaMultiplierBasisPoints: MasteryRuntime.MaximumManaMultiplier(advanced),
-            MaximumShieldMultiplierBasisPoints: MasteryRuntime.ShieldMultiplier(advanced),
+            MaximumShieldMultiplierBasisPoints: CombatRules.ApplyMore(MasteryRuntime.ShieldMultiplier(advanced),
+                [ascendancy?.Has("core.ascendancy.aegis_mage.maximum.core") == true ? 13_000 : 10_000]),
             IncreasedLifeLeechRecoverySpeedBasisPoints: MasteryRuntime.IncreasedLifeLeechRecoverySpeed(advanced),
             MaximumFireResistanceBonusBasisPoints: item.Value(ItemModifierKind.MaximumFireResistanceBasisPoints),
             MaximumColdResistanceBonusBasisPoints: item.Value(ItemModifierKind.MaximumColdResistanceBasisPoints),
@@ -179,7 +181,10 @@ public static class CharacterBuildAssembler
             IncreasedLeechRecoveryRateBasisPoints: item.Value(ItemModifierKind.IncreasedLeechRecoveryRateBasisPoints),
             IncreasedMaximumLeechRateBasisPoints: item.Value(ItemModifierKind.IncreasedMaximumLeechRateBasisPoints),
             LifeRecoveryMultiplierBasisPoints: (combatEquipment.Has("饥馑指环") ? 7_000 : 10_000) * (combatEquipment.Has("血税契据") ? 8_000 : 10_000) / 10_000,
-            SpellSuppressionEffectBasisPoints: 7_000 + item.Value(ItemModifierKind.SpellSuppressionEffectBasisPoints));
+            SpellSuppressionEffectBasisPoints: 7_000 + item.Value(ItemModifierKind.SpellSuppressionEffectBasisPoints),
+            IncreasedShieldRechargeRateBasisPoints: (ascendancy?.Has("core.ascendancy.aegis_mage.maximum.small") == true ? 1_500 : 0) +
+                (ascendancy?.Has("core.ascendancy.aegis_mage.recharge.small") == true ? 3_000 : 0) +
+                (ascendancy?.Has("core.ascendancy.aegis_mage.recharge.core") == true ? 5_000 : 0));
         int increasedAttackSpeed = checked(item.IncreasedAttackSpeedBasisPoints + passive.IncreasedAttackSpeedBasisPoints +
             jewel.IncreasedAttackSpeedBasisPoints + attributeMemory.IncreasedAttackSpeedBasisPoints);
         SkillUseProfile heavyStrike = SkillRules.BuildHeavyStrike(

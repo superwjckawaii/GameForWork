@@ -36,7 +36,7 @@ public sealed partial class GuardState(CombatProfile? profile = null)
         Remaining = CombatRules.ApplyIncreased((int)Math.Min(int.MaxValue, (long)Remaining + extra),
             LinkedSupportRules.SupportQuality(config, SupportMechanic.SpellArmorFusion) * 50);
     }
-    public bool Activate(string skillId, ResourceState hero, int level, int quality, int tick)
+    public bool Activate(string skillId, ResourceState hero, int level, int quality, int tick, bool free = false)
     {
         int capacity, duration;
         LastPaidShield = 0;
@@ -44,8 +44,8 @@ public sealed partial class GuardState(CombatProfile? profile = null)
         int cost = ShieldCost(skillId, hero.MaximumShield);
         if (cost > 0)
         {
-            if (!hero.TryPayShield(cost)) return false;
-            LastPaidShield = cost;
+            if (!free && !hero.TryPayShield(cost)) return false;
+            LastPaidShield = free ? 0 : cost;
             bool armor = skillId == "archetypes.skill.spellarmor_activate";
             int ratio = armor ? ActiveSkillCatalog.Interpolate(15_000, 25_000, level, false) : 15_000;
             capacity = CombatRules.ApplyIncreased((int)Math.Min(int.MaxValue, (long)ratio * cost / 10_000), quality * (armor ? 100 : 150));
@@ -66,6 +66,7 @@ public sealed partial class GuardState(CombatProfile? profile = null)
     }
     public int Absorb(int damage, EnemyDamageType type, int tick)
     {
+        if (Immune(tick)) return 0;
         if (tick >= Expires) Remaining = 0;
         if (Remaining <= 0 || damage <= 0 || ElementalOnly && type == EnemyDamageType.Physical) return damage;
         int absorbed = Math.Min(Remaining, damage);

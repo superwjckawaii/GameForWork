@@ -113,8 +113,8 @@ public sealed partial class CombatClosureTests
         Assert.Equal(shield - shield / 2, hero.Shield);
         Assert.Equal(0, state.ReverseBarrier(0));
         Assert.Equal(0, state.TakeShieldBurst().Damage);
-        Assert.Equal(5_000, state.ApplyArmorBonuses(Team(), hero, 119).MoreSpellDamageBasisPoints);
-        Assert.Equal(0, state.ApplyArmorBonuses(Team(), hero, 120).MoreSpellDamageBasisPoints);
+        Assert.Equal(5_000, state.ApplyBonuses(Team(), hero, 119).MoreSpellDamageBasisPoints);
+        Assert.Equal(0, state.ApplyBonuses(Team(), hero, 120).MoreSpellDamageBasisPoints);
         Assert.False(state.TryOverload(hero, 159));
         Assert.True(state.TryOverload(hero, 160));
     }

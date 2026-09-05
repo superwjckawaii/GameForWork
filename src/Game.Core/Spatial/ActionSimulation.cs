@@ -38,6 +38,9 @@ public sealed partial class SpatialCombatRunner
                     if (!copy.Sacrifice && hit.Skill.Shape == SkillShape.Cone && !InCleaveCone(origin, selected!.Position, enemy.Position, hit.Skill.RangeRaw)) continue;
                     int multiplier = copy.Multiplier;
                     if (copy.Source.StartsWith("phantom:", StringComparison.Ordinal) && !copy.Sacrifice)
+                        multiplier = (int)((long)multiplier * (10_000 + request.Buffs!.WarSongMore(tick)) /
+                            (10_000 + hit.Build.WarSongMoreDamageBasisPoints));
+                    if (copy.Source.StartsWith("phantom:", StringComparison.Ordinal) && !copy.Sacrifice)
                         multiplier = ScaleCombatValue(multiplier, request.Actions.PhantomTargetMultiplier(
                             enemy == SelectTarget(enemies, heroPosition) && enemy.Rarity is EnemyRarity.Rare or EnemyRarity.Boss));
                     bool critical = hit.Critical;
@@ -61,7 +64,8 @@ public sealed partial class SpatialCombatRunner
                             10_000 + enemy.Curses.Effect("archetypes.skill.doom_brand", tick)) : 10_000)
                         }).ToArray()
                     };
-                    int armor = CombatRules.ArmorAfterBreak(enemy.Scaled.Armor, enemy.ArmorBreakStacks);
+                    int armor = CombatRules.ArmorAfterBreak(enemy.Scaled.Armor, enemy.ArmorBreakStacks,
+                        additionalReductionBasisPoints: request.Auras?.ArmorReductionAt((int)Math.Sqrt(Point.DistanceSquared(heroPosition, enemy.Position))) ?? 0);
                     if (!copy.Sacrifice && hit.Configuration.Supports.HasFlag(SkillSupport.ArmorPierce)) armor = armor * 7_000 / 10_000;
                     bool spell = !copy.Sacrifice && copy.Action.Tags.HasFlag(SkillTag.Spell);
                     var defended = CombatRules.Mitigate(offensive, armor,

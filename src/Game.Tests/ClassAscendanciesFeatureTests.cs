@@ -58,15 +58,21 @@ public sealed class ClassAscendanciesFeatureTests
     }
 
     [Fact]
-    public void CantorCoreNodesApplyMultiplicativeReservationAdditiveAuraAndOneMercenary()
+    public void CantorSpiritIsAssembledBeforeAuraEffectAndDoesNotReduceReservation()
     {
         CombatProfile profile = Profile(Ascendancy.SpiritCantor,
             ClassNodeIds.CantorReservationCore, ClassNodeIds.CantorAuraCore, ClassNodeIds.CantorBlessingCore);
 
-        AuraProfile aura = ClassAscendancyRules.Aura(profile);
-        Assert.Equal(6_000, aura.ReservationMultiplierBasisPoints);
-        Assert.Equal(5_000, aura.IncreasedEffectBasisPoints);
-        Assert.Equal(1, aura.AdditionalHeroPartyMercenaries);
+        var assembled = GameForWork.Core.Campaign.Items.CharacterBuildAssembler.Assemble(1, new(0, 0, 80, 0), new(), new(),
+            new(SkillIds.HeavyStrike, SkillSupport.None), ascendancy: profile);
+        Assert.Equal(216, assembled.Sheet.Attributes.Spirit);
+        Assert.Equal(600, assembled.Sheet.FlatSpiritBarrier);
+        var team = new GameForWork.Core.Campaign.World.TeamBuild(assembled.Sheet, new("test", 1, 1, 1_000, 0),
+            new(SkillIds.HeavyStrike, SkillSupport.None), Ascendancy: profile,
+            ActiveSkills: [new(SkillIds.IronOathBanner, SkillSupport.None)]);
+        var aura = GameForWork.Core.Combat.AuraCombatProfile.Resolve(team);
+        Assert.Equal((assembled.Sheet.MaximumMana().Value * 1_500 + 9_999) / 10_000, aura.ReservedMana);
+        Assert.Equal(11_460, aura.Build.Sheet.IncreasedArmorBasisPoints);
     }
 
     [Fact]
@@ -87,16 +93,17 @@ public sealed class ClassAscendanciesFeatureTests
     {
         CombatProfile profile = Profile(Ascendancy.AegisMage,
             ClassNodeIds.AegisMaximumCore, ClassNodeIds.AegisRechargeCore);
-        var shield = new EnergyShieldState(100, profile);
-
-        Assert.Equal(130, shield.Maximum);
-        Assert.Equal(20, shield.RechargeDelay);
-        Assert.Equal(3_000, shield.RechargeRateBasisPointsPerSecond);
-        Assert.Equal(0, shield.AbsorbHit(130));
-        for (int tick = 0; tick < 19; tick++) shield.AdvanceTick();
-        Assert.False(shield.IsRecharging);
-        shield.AdvanceTick();
-        Assert.True(shield.IsRecharging);
+        var build = GameForWork.Core.Campaign.Items.CharacterBuildAssembler.Assemble(1, new(0, 0, 0, 50), new(), new(),
+            new(SkillIds.HeavyStrike, SkillSupport.None), ascendancy: profile);
+        var shield = new ResourceState(build.Sheet, ascendancy: profile);
+        Assert.Equal(156, shield.MaximumShield);
+        Assert.Equal(93, shield.MaximumOvercharge);
+        Assert.Equal(9_500, build.Sheet.IncreasedShieldRechargeRateBasisPoints);
+        shield.ApplyEnemyDamage(shield.MaximumShield, true, 0);
+        for (int tick = 1; tick < 20; tick++) shield.AdvanceRegenerationTick(tick);
+        Assert.Equal(0, shield.Shield);
+        shield.AdvanceRegenerationTick(20);
+        Assert.True(shield.Shield > 0);
     }
 
     [Theory]

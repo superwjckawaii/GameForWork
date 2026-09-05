@@ -53,7 +53,8 @@ public sealed record CharacterSheet(
     int ReducedShieldRechargeDelayBasisPoints = 0,
     int IncreasedLeechRecoveryRateBasisPoints = 0,
     int IncreasedMaximumLeechRateBasisPoints = 0,
-    int LifeRecoveryMultiplierBasisPoints = 10_000)
+    int LifeRecoveryMultiplierBasisPoints = 10_000,
+    int IncreasedShieldRechargeRateBasisPoints = 0)
 {
     public int ResistanceMaximum(EnemyDamageType type) => type switch
     {
@@ -192,7 +193,7 @@ public sealed record CharacterSheet(
         int maximumShield = MaximumShield().Value;
         int energySpeedIncrease = ShieldRecoverySpeedIncreaseBasisPoints().Value;
         int baseRecovery = checked(maximumShield * 2_000 / 10_000);
-        int increased = checked(energySpeedIncrease + IncreasedRecoveryRateBasisPoints);
+        int increased = checked(energySpeedIncrease + IncreasedRecoveryRateBasisPoints + IncreasedShieldRechargeRateBasisPoints);
         int value = ApplyIncreased(baseRecovery, increased);
         return CalculatedValue.Single(
             "每秒护盾恢复",
@@ -204,7 +205,7 @@ public sealed record CharacterSheet(
         checked((int)((long)value * (10_000 + increasedBasisPoints) / 10_000));
 }
 
-public sealed class ResourceState
+public sealed partial class ResourceState
 {
     private sealed class LeechInstance(int remaining, int basePerSecond)
     {
@@ -226,8 +227,10 @@ public sealed class ResourceState
         CharacterSheet sheet,
         int? initialLife = null,
         int? initialMana = null,
-        int? initialShield = null)
+        int? initialShield = null,
+        Ascendancies.CombatProfile? ascendancy = null)
     {
+        _ascendancy = ascendancy ?? Ascendancies.CombatProfile.Empty;
         Sheet = sheet;
         MaximumLife = sheet.MaximumLife().Value;
         MaximumMana = sheet.MaximumMana().Value;
@@ -248,6 +251,7 @@ public sealed class ResourceState
         ReservedMana = Math.Min(ReservedMana, MaximumMana);
         Mana = Math.Min(Mana, AvailableMaximumMana);
         Shield = Math.Min(Shield, MaximumShield);
+        Overcharge = Math.Min(Overcharge, MaximumOvercharge);
     }
     public GameForWork.Core.Combat.HarmfulStatus HarmfulStatus { get; } = new();
     public int MaximumLife { get; private set; }
@@ -273,6 +277,7 @@ public sealed class ResourceState
     {
         Life = Math.Max(1, (int)((long)MaximumLife * Math.Clamp(basisPoints, 0, 10_000) / 10_000));
         Shield = (int)((long)MaximumShield * Math.Clamp(basisPoints, 0, 10_000) / 10_000);
+        Overcharge = 0; ShieldGate = false;
         _lifeLeech.Clear(); _manaLeech.Clear(); _shieldLeech.Clear();
     }
 
@@ -377,16 +382,19 @@ public sealed class ResourceState
         AdvanceLeech(_manaLeech, MaximumMana, RestoreMana);
         AdvanceLeech(_shieldLeech, MaximumShield, RestoreShield);
 
-        int rechargeDelay = Math.Max(0, 2 * ticksPerSecond * (10_000 - Sheet.ReducedShieldRechargeDelayBasisPoints) / 10_000);
+        int rechargeDelay = Math.Max(0, (AegisNode("recharge", "core") ? 20 : 40) * (10_000 - Sheet.ReducedShieldRechargeDelayBasisPoints) / 10_000);
         if (tick - LastDamageTick < rechargeDelay)
         {
             _shieldRecoveryRemainder = 0;
+            DecayOvercharge(tick);
             return;
         }
 
         int shieldPerSecond = Sheet.ShieldRecoveryPerSecond().Value;
         _shieldRecoveryRemainder += shieldPerSecond;
-        Shield = Math.Min(MaximumShield, Shield + (_shieldRecoveryRemainder / ticksPerSecond));
+        int recovery = _shieldRecoveryRemainder / ticksPerSecond;
+        int restored = RestoreShield(recovery);
+        RechargeOvercharge(recovery - restored, tick);
         _shieldRecoveryRemainder %= ticksPerSecond;
     }
 

@@ -270,7 +270,7 @@ public static class WarriorAscendancyRules
 
     public static int AttackBlockChanceBasisPoints(int baseChance, CombatProfile profile, bool hasShield)
     {
-        if (!hasShield) return 0;
+        if (!hasShield) return baseChance;
         int result = baseChance;
         if (profile.Has(WarriorNodeIds.BastionAttackBlockSmall)) result = checked(result + 800);
         if (profile.Has(WarriorNodeIds.BastionAttackBlockCore)) result = checked(result + 1_200);
@@ -285,9 +285,8 @@ public static class WarriorAscendancyRules
     public static int SpellBlockChanceBasisPoints(int baseChance, int finalAttackBlockChance,
         CombatProfile profile, bool hasShield)
     {
-        if (!hasShield) return 0;
         int result = baseChance;
-        if (profile.Has(WarriorNodeIds.BastionSpellBlockSmall)) result = checked(result + 800);
+        if (hasShield && profile.Has(WarriorNodeIds.BastionSpellBlockSmall)) result = checked(result + 800);
         if (profile.Has(WarriorNodeIds.BastionSpellBlockCore))
             result = checked(result + finalAttackBlockChance * 6 / 10);
         return result;

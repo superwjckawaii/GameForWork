@@ -13,7 +13,8 @@ public sealed class ChannelCostState
         var key = (skill.SkillId, life);
         int numerator = (life ? skill.LifeCost : skill.ManaCost) - _credit.GetValueOrDefault(key);
         paid = Math.Max(0, (numerator + 3) / 4);
-        if (!(life ? hero.TryPayLifeCost(paid) : hero.TryPayMana(paid))) return false;
+        if (!(life ? hero.TryPayLifeCost(paid) : SkillDefinitions.Get(skill.SkillId).Tags.HasFlag(SkillTag.Spell)
+            ? hero.TryPaySpellMana(paid) : hero.TryPayMana(paid))) return false;
         _credit[key] = paid * 4 - numerator;
         return true;
     }

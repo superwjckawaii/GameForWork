@@ -1,3 +1,4 @@
+using GameForWork.Core.Campaign.Combat;
 using GameForWork.Core.Campaign;
 using GameForWork.Core.Campaign.Progression;
 using GameForWork.Core.Endgame;
@@ -8,6 +9,30 @@ namespace GameForWork.Tests;
 
 public sealed class CharactersFeatureTests
 {
+    [Theory]
+    [InlineData(BaseClass.Hermit, Ascendancy.Spellarmor, "spellarmor.hybrid")]
+    [InlineData(BaseClass.Occultist, Ascendancy.AegisMage, "aegis_mage.maximum")]
+    public void SessionRestoreAppliesAscendancyToTheActualHeroBuild(BaseClass baseClass, Ascendancy ascendancy, string branch)
+    {
+        var session = GameSession.CreateNew(new("资源回归", CharacterGender.Androgynous,
+            CharacterSkinTone.Umber, CharacterHairStyle.Cropped, baseClass), 0x2311);
+        var snapshot = session.Capture();
+        var restored = GameSession.Restore(snapshot with
+        {
+            Endgame = snapshot.Endgame! with
+            {
+                SelectedAscendancy = ascendancy,
+                BreakthroughPoints = 2,
+                AscendancyPassives = [$"core.ascendancy.{branch}.small", $"core.ascendancy.{branch}.core"],
+            }
+        });
+        Assert.True(restored.HeroBuild.Sheet.MaximumShield().Value > session.HeroBuild.Sheet.MaximumShield().Value);
+        if (ascendancy == Ascendancy.Spellarmor)
+            Assert.True(restored.HeroBuild.Sheet.Attributes.Physique >= session.HeroBuild.Sheet.Attributes.Physique + 80);
+        else
+            Assert.Equal(session.HeroBuild.Sheet.IncreasedShieldBasisPoints + 2_000, restored.HeroBuild.Sheet.IncreasedShieldBasisPoints);
+    }
+
     [Fact]
     public void SixClassesHaveStableIdsBalancedStartingAttributesAndThreeAscendancies()
     {
@@ -129,16 +154,14 @@ public sealed class CharactersFeatureTests
         Assert.Equal(3, CombatLimits.Maximum(CombatEntityKind.Construct));
         Assert.Equal(3, CombatLimits.Maximum(CombatEntityKind.Trap));
 
-        var shield = new EnergyShieldState(100);
-        Assert.Equal(0, shield.AbsorbHit(40));
-        Assert.Equal(60, shield.Current);
-        Assert.Equal(40, shield.AbsorbHit(100));
-        Assert.Equal(0, shield.Current);
-        for (int index = 0; index < EnergyShieldState.RechargeDelayTicks - 1; index++) shield.AdvanceTick();
-        Assert.False(shield.IsRecharging);
-        shield.AdvanceTick();
-        Assert.True(shield.IsRecharging);
-        shield.AdvanceTick();
-        Assert.True(shield.Current > 0);
+        var shield = new ResourceState(new(1, new(0, 0, 0, 0), new(0, 0, 100)));
+        Assert.Equal(40, shield.ApplyEnemyDamage(40, true, 0));
+        Assert.Equal(60, shield.Shield);
+        Assert.Equal(100, shield.ApplyEnemyDamage(100, true, 0));
+        Assert.Equal(0, shield.Shield);
+        for (int tick = 1; tick < 40; tick++) shield.AdvanceRegenerationTick(tick);
+        Assert.Equal(0, shield.Shield);
+        shield.AdvanceRegenerationTick(40);
+        Assert.True(shield.Shield > 0);
     }
 }

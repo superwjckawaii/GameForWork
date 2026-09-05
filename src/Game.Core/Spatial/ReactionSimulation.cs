@@ -69,6 +69,9 @@ public sealed partial class SpatialCombatRunner
         IList<PendingProjectile> projectiles, IList<PersistentArea> areas)
     {
         ResolveShieldBurst(request, enemies, hero, origin, tick, events);
+        foreach (var replay in request.Guard!.TakeAegisReplays())
+            if (request.Reactions!.LastSelfSpellId is { } id)
+                request.Reactions.Enqueue(new(id, replay.Target, replay.Multiplier));
         foreach (var reaction in request.Reactions!.Drain())
         {
             if (!hero.IsAlive || ReactionConfiguration(request, reaction.SkillId) is not { } config) continue;
@@ -76,7 +79,7 @@ public sealed partial class SpatialCombatRunner
             if (reaction.PayCost)
             {
                 skill = request.EquipmentRuntime!.Resolve(ApplyAscendancyCost(skill, config, hero.MaximumLife, request.AscendancyRuntime!.Profile));
-                if (hero.Shield < GuardState.ShieldCost(skill.SkillId, hero.MaximumShield) || !CombatSkillRules.TryPay(hero, skill))
+                if (hero.Shield < GuardState.ShieldCost(skill.SkillId, hero.MaximumShield) || !CombatSkillRules.TryPay(hero, skill, allowOvercharge: false))
                 {
                     events.Add(Event(tick, SpatialEventKind.SkillFailed, "hero", reaction.TargetId, 0, origin, origin, $"reaction:{skill.SkillId}|resource"));
                     continue;
@@ -98,7 +101,7 @@ public sealed partial class SpatialCombatRunner
             {
                 if (skill.Role == SkillRole.Guard)
                 {
-                    if (!request.Guard!.Activate(skill.SkillId, hero, config.Level, config.Quality, tick)) return;
+                    if (!request.Guard!.Activate(skill.SkillId, hero, config.Level, config.Quality, tick, free: !reaction.PayCost)) return;
                     request.Guard.ApplySupports(config, hero);
                     events.Add(Event(tick, SpatialEventKind.Guard, "hero", "hero", request.Guard.Remaining, origin, origin, $"skill:{skill.SkillId}|triggered-guard"));
                     if (skill.SkillId != "archetypes.skill.aegis_pulse") return;

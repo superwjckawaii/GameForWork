@@ -429,6 +429,9 @@ public partial class WorldView : Control
                 (float)current.HeroShield / current.HeroMaximumShield, new Color("76c7d9"));
         }
         DrawVirtueViceIcons(actor, current.HeroVirtueViceLayers);
+        if (current.HeroMaximumOvercharge > 0)
+            DrawBar(new Rect2(actor + new Vector2(-30, 21), new Vector2(60, 2)),
+                (float)current.HeroOvercharge / current.HeroMaximumOvercharge, new Color("d5fbff"));
 
         DrawSpatialNumbers(field, _positions, _recentEvents, elapsed);
         DrawRewardStrip(bounds, hero);
@@ -870,9 +873,14 @@ public partial class WorldView : Control
 
     private static string AilmentGlyph(Ailment ailment) => ailment switch
     {
-        Ailment.Ignite => "燃", Ailment.Erosion => "蚀", Ailment.Wither => "凋",
-        Ailment.Chill or Ailment.Freeze => "冰", Ailment.Shock => "电",
-        Ailment.Paralysis => "麻", Ailment.ArmorBreak => "破", _ => "异",
+        Ailment.Ignite => "燃",
+        Ailment.Erosion => "蚀",
+        Ailment.Wither => "凋",
+        Ailment.Chill or Ailment.Freeze => "冰",
+        Ailment.Shock => "电",
+        Ailment.Paralysis => "麻",
+        Ailment.ArmorBreak => "破",
+        _ => "异",
     };
 
     private static Color AilmentColor(Ailment ailment) => ailment switch
@@ -949,9 +957,17 @@ public partial class WorldView : Control
 
     private static string AilmentText(string? value) => value switch
     {
-        "bleed" => "流血", "ignite" => "点燃", "chill" => "冰缓", "freeze" => "冻结",
-        "shock" => "感电", "paralysis" => "麻痹", "erosion" => "侵蚀", "wither" => "凋零",
-        "stun" => "眩晕", "armorbreak" or "armor-break" => "破甲", _ => "异常",
+        "bleed" => "流血",
+        "ignite" => "点燃",
+        "chill" => "冰缓",
+        "freeze" => "冻结",
+        "shock" => "感电",
+        "paralysis" => "麻痹",
+        "erosion" => "侵蚀",
+        "wither" => "凋零",
+        "stun" => "眩晕",
+        "armorbreak" or "armor-break" => "破甲",
+        _ => "异常",
     };
 
     private static string DamageGroup(SceneEvent item)
