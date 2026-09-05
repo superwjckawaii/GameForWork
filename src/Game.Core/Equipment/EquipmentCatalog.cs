@@ -1,7 +1,7 @@
 using System.Reflection;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using GameForWork.Core.P1.Items;
+using GameForWork.Core.Campaign.Items;
 
 namespace GameForWork.Core.Equipment;
 
@@ -28,14 +28,22 @@ public static class EquipmentCatalog
 
     public static ItemBaseDefinition GetBase(string id)
     {
-        string canonical = BaseAliases.GetValueOrDefault(id, id);
+        string canonical = ResolveBaseId(id);
         return BaseById.TryGetValue(canonical, out ItemBaseDefinition? value)
             ? value
             : throw new KeyNotFoundException($"Unknown item base: {id}");
     }
 
-    public static string ResolveBaseId(string id) => BaseAliases.GetValueOrDefault(id, id);
-    public static string ResolveAffixId(string id) => AffixAliases.GetValueOrDefault(id, id);
+    public static string ResolveBaseId(string id)
+    {
+        id = Persistence.SaveIdentifierMigration.Normalize(id);
+        return BaseAliases.GetValueOrDefault(id, id);
+    }
+    public static string ResolveAffixId(string id)
+    {
+        id = Persistence.SaveIdentifierMigration.Normalize(id);
+        return AffixAliases.GetValueOrDefault(id, id);
+    }
 
     public static AffixDefinition GetAffix(string id, int tier)
     {

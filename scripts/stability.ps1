@@ -1,4 +1,4 @@
-[CmdletBinding()]
+﻿[CmdletBinding()]
 param(
     [ValidateSet('Visible', 'Tray', 'Offline48h')]
     [string]$Mode = 'Visible',
@@ -16,25 +16,25 @@ Set-DotnetEnvironment -DotnetBinary $dotnetBinary
 if ($Mode -eq 'Offline48h') {
     Invoke-NativeChecked -FilePath $dotnetBinary -Arguments @('test',
         (Join-Path $repositoryRoot 'src\Game.Tests\Game.Tests.csproj'), '--configuration', 'Release', '--filter',
-        'FullyQualifiedName~P15FeatureTests.OfflineFortyEightHours|FullyQualifiedName~P22FeatureTests.OfflineFortyEightHour') `
+        'FullyQualifiedName~SimulationParityFeatureTests.OfflineFortyEightHours|FullyQualifiedName~ReleaseFeatureTests.OfflineFortyEightHour') `
         -Label '48 hour offline-equivalent test'
     return
 }
 if ($Seconds -lt 10) { throw 'Seconds must be at least 10.' }
 $GodotPath = Resolve-GodotBinary -RequestedPath $GodotPath
-& (Join-Path $repositoryRoot 'scripts\verify_p21_assets.ps1') -RepositoryRoot $repositoryRoot
-& (Join-Path $repositoryRoot 'scripts\verify_p31_assets.ps1') -RepositoryRoot $repositoryRoot
+& (Join-Path $repositoryRoot 'scripts\verify_art_assets.ps1') -RepositoryRoot $repositoryRoot
+& (Join-Path $repositoryRoot 'scripts\verify_presentation_assets.ps1') -RepositoryRoot $repositoryRoot
 Invoke-NativeChecked -FilePath $dotnetBinary -Arguments @('build', (Join-Path $projectPath 'GameForWork.csproj'), '--configuration', 'Debug') -Label 'Godot C# build'
 Invoke-NativeChecked -FilePath $GodotPath -Arguments @('--headless', '--path', $projectPath, '--editor', '--quit') `
     -Label 'Godot asset import before stability run' -RejectGodotErrors
-$modeArgument = if ($Mode -eq 'Tray') { '--p22-stability-tray' } else { '--p22-stability-visible' }
+$modeArgument = if ($Mode -eq 'Tray') { '--release-stability-tray' } else { '--release-stability-visible' }
 New-Item -ItemType Directory -Path $artifactsRoot -Force | Out-Null
-$reportPath = Join-Path $artifactsRoot "p22-stability-$($Mode.ToLowerInvariant()).json"
+$reportPath = Join-Path $artifactsRoot "release-stability-$($Mode.ToLowerInvariant()).json"
 if (Test-Path -LiteralPath $reportPath) { Remove-Item -LiteralPath $reportPath -Force }
 Invoke-NativeChecked -FilePath $GodotPath -Arguments @('--path', $projectPath, '--', $modeArgument,
-    "--p22-stability-seconds=$Seconds", "--p22-stability-report=$reportPath") `
+    "--release-stability-seconds=$Seconds", "--release-stability-report=$reportPath") `
     -Label "$Mode stability run" -RejectGodotErrors
-if (-not (Test-Path -LiteralPath $reportPath)) { throw "P22 stability report was not created: $reportPath" }
+if (-not (Test-Path -LiteralPath $reportPath)) { throw "Release stability report was not created: $reportPath" }
 $report = Get-Content -LiteralPath $reportPath -Raw | ConvertFrom-Json
 $megabyte = 1MB
 if ([double]$report.PeakWorkingSetBytes -gt 700 * $megabyte) {

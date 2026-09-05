@@ -16,7 +16,7 @@ public sealed class BattleRunner
 
     public BattleRun RunAutomatic(ulong seed)
     {
-        BattleState state = P0BattleFactory.Create(seed);
+        BattleState state = BattleFactory.Create(seed);
         BattleState initial = state.Clone();
         var commands = new List<BattleCommand>();
         var events = new List<BattleEvent>();
@@ -32,7 +32,7 @@ public sealed class BattleRunner
 
     public BattleOutcomeResult RunOutcomeOnly(ulong seed)
     {
-        BattleState state = P0BattleFactory.Create(seed);
+        BattleState state = BattleFactory.Create(seed);
         while (!state.IsFinished)
         {
             IReadOnlyList<BattleCommand> commands = _engine.BuildAutomaticCommands(state);

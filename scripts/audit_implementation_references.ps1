@@ -1,4 +1,4 @@
-param([string]$RepositoryRoot=(Split-Path -Parent $PSScriptRoot))
+﻿param([string]$RepositoryRoot=(Split-Path -Parent $PSScriptRoot))
 $ErrorActionPreference='Stop'
 # Reference inventory is a navigation aid, never an assertion of behavioral completeness.
 $root=Join-Path $RepositoryRoot 'src/Game.Core'
@@ -16,7 +16,7 @@ foreach($entry in $sources.GetEnumerator()){
 }
 $json=Get-Content (Join-Path $root 'Equipment/Data/equipment_catalog.json') -Raw
 $kinds=@([regex]::Matches($json,'"kind"\s*:\s*"(\w+)"')|ForEach-Object {$_.Groups[1].Value}|Sort-Object -Unique)
-$enumBody=[regex]::Match((Get-Content (Join-Path $root 'P1/Items/ItemDefinitions.cs') -Raw),'(?s)public enum ItemModifierKind\s*\{(.*?)\}').Groups[1].Value
+$enumBody=[regex]::Match((Get-Content (Join-Path $root 'Campaign/Items/ItemDefinitions.cs') -Raw),'(?s)public enum ItemModifierKind\s*\{(.*?)\}').Groups[1].Value
 $kinds=@($kinds|Where-Object {$enumBody -match ('\b'+[regex]::Escape($_)+'\b')})
 $output=Join-Path $RepositoryRoot 'artifacts/implementation-audit'
 New-Item -ItemType Directory -Force $output|Out-Null

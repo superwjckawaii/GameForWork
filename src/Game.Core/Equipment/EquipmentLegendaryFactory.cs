@@ -1,8 +1,8 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
-using GameForWork.Core.P1.Items;
-using GameForWork.Core.P14;
+using GameForWork.Core.Campaign.Items;
+using GameForWork.Core.Content;
 
 namespace GameForWork.Core.Equipment;
 
@@ -32,7 +32,7 @@ public static class EquipmentLegendaryFactory
             .Select((text, index) => FixedAffix(entry, itemBase, text, index)).ToArray();
         int implicitValue = itemBase.ImplicitMaximumValue;
         string variant = entry.DisplayName == "两极德印" ? ResolvePairedVirtueVariant(seed) : string.Empty;
-        string publicRuleId = P14UniqueItems.All.FirstOrDefault(value => value.DisplayName == entry.DisplayName)?.StableId ?? entry.RuleId;
+        string publicRuleId = UniqueItems.All.FirstOrDefault(value => value.DisplayName == entry.DisplayName)?.StableId ?? entry.RuleId;
         return new ItemInstance(instanceId, itemBase, Math.Clamp(itemLevel, 1, 120), ItemRarity.Legendary, affixes,
             new LegendaryRule(publicRuleId, entry.DisplayName == "回响破誓者" ? 7_000 : 10_000,
                 entry.DisplayName == "回响破誓者" ? 7_000 : 0, entry.RuleText), ImplicitValue: implicitValue,

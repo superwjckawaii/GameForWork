@@ -14,4 +14,4 @@ public sealed record BattleCommand(
     int XRaw = 0,
     int YRaw = 0,
     ulong TargetActorId = 0,
-    string SkillId = "core.p0.basic_attack");
+    string SkillId = "core.foundation.basic_attack");

@@ -1,10 +1,10 @@
 using System.Text.Json;
 using GameForWork.Core.Diagnostics;
 using GameForWork.Core.Offline;
-using GameForWork.Core.P1;
-using GameForWork.Core.P1.World;
+using GameForWork.Core.Campaign;
+using GameForWork.Core.Campaign.World;
 using GameForWork.Core.Persistence;
-using GameForWork.Core.P23;
+using GameForWork.Core.Characters;
 using Godot;
 
 namespace GameForWork.GodotClient;
@@ -20,13 +20,13 @@ public partial class Main : Node
     private JsonLineLogger? _logger;
     private SaveRepository? _saveRepository;
     private SettingsStore? _settingsStore;
-    private P1GameSession? _session;
-    private P2Dashboard? _dashboard;
+    private GameSession? _session;
+    private Dashboard? _dashboard;
     private HFlowContainer? _standardToolbar;
-    private P3PixelTitleBar? _pixelTitleBar;
-    private P22InformationWindow? _informationWindow;
+    private PixelTitleBar? _pixelTitleBar;
+    private InformationWindow? _informationWindow;
     private AcceptDialog? _displaySettingsDialog;
-    private P3ToastOverlay? _toast;
+    private ToastOverlay? _toast;
     private VBoxContainer? _interfaceRoot;
     private HBoxContainer? _miniToolbar;
     private HFlowContainer? _testHarness;
@@ -46,7 +46,7 @@ public partial class Main : Node
     private double _simulationAccumulator;
     private double _autoSaveAccumulator;
     private readonly object _saveSync = new();
-    private P1GameSessionSnapshot? _pendingSave;
+    private GameSessionSnapshot? _pendingSave;
     private Task? _saveWorker;
     private bool _saveWorkerRunning;
     private bool _saveNoticePending;
@@ -91,7 +91,7 @@ public partial class Main : Node
         _logger.Write(GameLogLevel.Information, "application.start", "application", "Application started.");
         string[] userArguments = OS.GetCmdlineUserArgs();
         bool stabilityRun = userArguments.Any(argument =>
-            argument is "--p22-stability-visible" or "--p22-stability-tray");
+            argument is "--release-stability-visible" or "--release-stability-tray");
         string displayDriver = DisplayServer.GetName();
         bool headlessRun = displayDriver.Equals("headless", StringComparison.OrdinalIgnoreCase) ||
                            OS.HasFeature("headless");
@@ -126,9 +126,9 @@ public partial class Main : Node
         UpdateWindowModeInterface();
         UpdateTrayState();
         string? stabilitySeconds = userArguments.FirstOrDefault(argument =>
-            argument.StartsWith("--p22-stability-seconds=", StringComparison.Ordinal));
+            argument.StartsWith("--release-stability-seconds=", StringComparison.Ordinal));
         if (stabilitySeconds is not null &&
-            int.TryParse(stabilitySeconds.AsSpan("--p22-stability-seconds=".Length), out int seconds) && seconds >= 10)
+            int.TryParse(stabilitySeconds.AsSpan("--release-stability-seconds=".Length), out int seconds) && seconds >= 10)
         {
             _stabilityStartTimestamp = System.Diagnostics.Stopwatch.GetTimestamp();
             _stabilityDeadlineTimestamp = _stabilityStartTimestamp +
@@ -137,14 +137,14 @@ public partial class Main : Node
             _stabilityInitialWorkingSet = process.WorkingSet64;
             _stabilityPeakWorkingSet = _stabilityInitialWorkingSet;
             _stabilityStartCpu = process.TotalProcessorTime;
-            _stabilityMode = userArguments.Contains("--p22-stability-tray", StringComparer.Ordinal)
+            _stabilityMode = userArguments.Contains("--release-stability-tray", StringComparer.Ordinal)
                 ? "Tray" : "Visible";
-            const string reportPrefix = "--p22-stability-report=";
+            const string reportPrefix = "--release-stability-report=";
             _stabilityReportPath = userArguments.FirstOrDefault(argument =>
                     argument.StartsWith(reportPrefix, StringComparison.Ordinal))?[reportPrefix.Length..]
                 ?? string.Empty;
         }
-        if (userArguments.Contains("--p22-stability-tray", StringComparer.Ordinal))
+        if (userArguments.Contains("--release-stability-tray", StringComparer.Ordinal))
             Callable.From(() => _windowController?.HideToTray()).CallDeferred();
     }
 
@@ -236,7 +236,7 @@ public partial class Main : Node
         if (_autoSaveAccumulator >= 10.0)
         {
             _autoSaveAccumulator = 0;
-            SaveP1State(showNotice: false);
+            SaveCampaignState(showNotice: false);
         }
     }
 
@@ -312,14 +312,14 @@ public partial class Main : Node
         root.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
         root.AddThemeConstantOverride("separation", 6);
         int initialFontScale = Math.Clamp(_settingsStore?.Load().FontScalePercent ?? 100, 80, 150);
-        root.Theme = P2ThemeFactory.Create(initialFontScale);
+        root.Theme = ThemeFactory.Create(initialFontScale);
         _interfaceRoot = root;
         AddChild(root);
 
-        _toast = new P3ToastOverlay();
+        _toast = new ToastOverlay();
         AddChild(_toast);
 
-        _pixelTitleBar = new P3PixelTitleBar();
+        _pixelTitleBar = new PixelTitleBar();
         _pixelTitleBar.Initialize(
             ToggleLargeWindow,
             ToggleAlwaysOnTop,
@@ -334,7 +334,7 @@ public partial class Main : Node
         AddButton(_standardToolbar, "标准/迷你", ToggleWindowMode);
         _largeWindowButton = AddButton(_standardToolbar, "大窗口 1920×1280", ToggleLargeWindow);
         AddButton(_standardToolbar, "暂停战斗", TogglePause);
-        AddButton(_standardToolbar, "保存", () => SaveP1State(showNotice: true));
+        AddButton(_standardToolbar, "保存", () => SaveCampaignState(showNotice: true));
         AddButton(_standardToolbar, "重新开始", () => _resetDialog?.PopupCentered(new Vector2I(520, 220)));
         var slots = new OptionButton { TooltipText = "三个独立存档槽" };
         for (int slot = 1; slot <= 3; slot++)
@@ -453,12 +453,12 @@ public partial class Main : Node
         _performanceLabel = new Label { Text = "性能：等待采样…", TooltipText = "仅测试栏显示；正式小窗自动隐藏" };
         _testHarness.AddChild(_performanceLabel);
 
-        _dashboard = new P2Dashboard();
+        _dashboard = new Dashboard();
         _dashboard.Initialize(_session, CreateCharacter, OnSessionChanged, ShowNotice, EnsureStandardWindow);
         root.AddChild(_dashboard);
         root.AddChild(_testHarness);
 
-        _informationWindow = new P22InformationWindow { Theme = root.Theme };
+        _informationWindow = new InformationWindow { Theme = root.Theme };
         AddChild(_informationWindow);
         _informationWindow.Initialize(() => _session);
 
@@ -472,7 +472,7 @@ public partial class Main : Node
             OkButtonText = "退出",
             CancelButtonText = "缩到托盘",
             MinSize = new Vector2I(460, 200),
-            Theme = P2ThemeFactory.Create(initialFontScale),
+            Theme = ThemeFactory.Create(initialFontScale),
         };
         var closeContent = new VBoxContainer
         {
@@ -502,7 +502,7 @@ public partial class Main : Node
             OkButtonText = "备份并重新开始",
             CancelButtonText = "取消",
             MinSize = new Vector2I(520, 220),
-            Theme = P2ThemeFactory.Create(initialFontScale),
+            Theme = ThemeFactory.Create(initialFontScale),
         };
         _resetDialog.Confirmed += ResetCurrentSlot;
         AddChild(_resetDialog);
@@ -581,9 +581,9 @@ public partial class Main : Node
 
     private static void ApplyVisualPreferences(GameSettings settings)
     {
-        P31VisualPreferences.EffectDensity = (P31EffectDensity)Math.Clamp(settings.CombatEffectDensity, 0, 2);
-        P31VisualPreferences.DamageNumbers = (P31DamageNumberMode)Math.Clamp(settings.DamageNumberMode, 0, 2);
-        P31VisualPreferences.ScreenShake = settings.CombatScreenShake;
+        VisualPreferences.EffectDensity = (EffectDensity)Math.Clamp(settings.CombatEffectDensity, 0, 2);
+        VisualPreferences.DamageNumbers = (DamageNumberMode)Math.Clamp(settings.DamageNumberMode, 0, 2);
+        VisualPreferences.ScreenShake = settings.CombatScreenShake;
     }
 
     private void SetFontScale(int percent)
@@ -591,19 +591,19 @@ public partial class Main : Node
         int clamped = Math.Clamp(percent, 80, 150);
         if (_interfaceRoot is not null)
         {
-            _interfaceRoot.Theme = P2ThemeFactory.Create(clamped);
+            _interfaceRoot.Theme = ThemeFactory.Create(clamped);
         }
 
         if (_closeDialog is not null)
         {
-            _closeDialog.Theme = P2ThemeFactory.Create(clamped);
+            _closeDialog.Theme = ThemeFactory.Create(clamped);
         }
         if (_informationWindow is not null)
         {
-            _informationWindow.Theme = P2ThemeFactory.Create(clamped);
+            _informationWindow.Theme = ThemeFactory.Create(clamped);
         }
-        if (_displaySettingsDialog is not null) _displaySettingsDialog.Theme = P2ThemeFactory.Create(clamped);
-        if (_resetDialog is not null) _resetDialog.Theme = P2ThemeFactory.Create(clamped);
+        if (_displaySettingsDialog is not null) _displaySettingsDialog.Theme = ThemeFactory.Create(clamped);
+        if (_resetDialog is not null) _resetDialog.Theme = ThemeFactory.Create(clamped);
 
         if (_settingsStore is not null)
         {
@@ -616,9 +616,9 @@ public partial class Main : Node
 
     private void CreateCharacter(PlayerIdentity identity, bool tutorialEnabled)
     {
-        _session = P1GameSession.CreateNew(identity, unchecked(DefaultSeed + (ulong)(_activeSlot - 1)), tutorialEnabled);
+        _session = GameSession.CreateNew(identity, unchecked(DefaultSeed + (ulong)(_activeSlot - 1)), tutorialEnabled);
         _dashboard?.SetSession(_session);
-        SaveP1State(showNotice: false);
+        SaveCampaignState(showNotice: false);
         ShowNotice($"{identity.Name} 已与古代门扉建立契约；第一幕“余烬营地”开始自动推进。");
     }
 
@@ -631,7 +631,7 @@ public partial class Main : Node
 
     private void OnSessionChanged()
     {
-        SaveP1State(showNotice: false);
+        SaveCampaignState(showNotice: false);
         UpdateTrayState();
     }
 
@@ -672,7 +672,7 @@ public partial class Main : Node
         }
         _characterHeaderLabel!.Text = _session is null
             ? "尚未创建角色"
-            : $"{_session.Player.Name} · Lv.{_session.World.Hero.Progression.Level} · {P23ClassCatalog.Get(_session.Player.BaseClass).DisplayName}";
+            : $"{_session.Player.Name} · Lv.{_session.World.Hero.Progression.Level} · {ClassCatalog.Get(_session.Player.BaseClass).DisplayName}";
     }
 
     private void ToggleLargeWindow()
@@ -720,9 +720,9 @@ public partial class Main : Node
             FlushPendingSave();
             _saveRepository?.CreateBackup();
             var watch = System.Diagnostics.Stopwatch.StartNew();
-            P1OfflineResult result = _session.AdvanceOffline(OfflineTime.MaximumMilliseconds);
+            GameForWork.Core.Campaign.World.OfflineResult result = _session.AdvanceOffline(OfflineTime.MaximumMilliseconds);
             watch.Stop();
-            SaveP1State(showNotice: false);
+            SaveCampaignState(showNotice: false);
             ShowNotice(
                 $"48h离线结算完成：成功 {result.TotalMapsCompleted}，失败 {result.TotalMapsFailed}，" +
                 $"耗时 {watch.ElapsedMilliseconds} ms，哈希 {result.FinalHash[..12]}…");
@@ -733,7 +733,7 @@ public partial class Main : Node
         }
     }
 
-    private void SaveP1State(bool showNotice)
+    private void SaveCampaignState(bool showNotice)
     {
         if (_session is null || _saveRepository is null)
         {
@@ -745,7 +745,7 @@ public partial class Main : Node
             return;
         }
 
-        P1GameSessionSnapshot snapshot = _session.Capture();
+        GameSessionSnapshot snapshot = _session.Capture();
         lock (_saveSync)
         {
             _pendingSave = snapshot;
@@ -760,7 +760,7 @@ public partial class Main : Node
     {
         while (true)
         {
-            P1GameSessionSnapshot? snapshot;
+            GameSessionSnapshot? snapshot;
             SaveRepository? repository;
             lock (_saveSync)
             {
@@ -777,7 +777,7 @@ public partial class Main : Node
             try
             {
                 var watch = System.Diagnostics.Stopwatch.StartNew();
-                repository.SaveP1SessionJson(JsonSerializer.Serialize(snapshot, SaveJsonOptions));
+                repository.SaveCampaignSessionJson(JsonSerializer.Serialize(snapshot, SaveJsonOptions));
                 watch.Stop();
                 Interlocked.Exchange(ref _lastSaveMilliseconds, watch.ElapsedMilliseconds);
             }
@@ -811,7 +811,7 @@ public partial class Main : Node
 
     private void FlushPendingSave()
     {
-        SaveP1State(showNotice: false);
+        SaveCampaignState(showNotice: false);
         Task? worker;
         lock (_saveSync) worker = _saveWorker;
         worker?.GetAwaiter().GetResult();
@@ -824,15 +824,14 @@ public partial class Main : Node
         {
             _saveRepository = new SaveRepository(_savesRoot, slot);
             _saveRepository.Initialize();
-            string? json = _saveRepository.LoadP1SessionJson();
-            P1GameSessionSnapshot? loadedSnapshot = null;
+            string? json = _saveRepository.LoadCampaignSessionJson();
+            GameSessionSnapshot? loadedSnapshot = null;
             try
             {
                 if (!string.IsNullOrWhiteSpace(json))
                 {
-                    loadedSnapshot = JsonSerializer.Deserialize<P1GameSessionSnapshot>(json, SaveJsonOptions) ??
-                        throw new InvalidDataException("Save JSON was empty.");
-                    _session = P1GameSession.Restore(loadedSnapshot);
+                    loadedSnapshot = SaveIdentifierMigration.Deserialize(json);
+                    _session = GameSession.Restore(loadedSnapshot);
                 }
                 else
                 {
@@ -844,7 +843,7 @@ public partial class Main : Node
                 string archived = _saveRepository.ArchiveLegacyAndReset();
                 loadedSnapshot = null;
                 _session = null;
-                _logger?.Write(GameLogLevel.Warning, "p12.legacy_save_archived", "persistence",
+                _logger?.Write(GameLogLevel.Warning, "maps.legacy_save_archived", "persistence",
                     "An incompatible test save was archived and a clean database was created.",
                     new Dictionary<string, object?> { ["archive"] = archived, ["error"] = exception.Message });
                 ShowNotice("旧测试档与当前结构不兼容，已保留到 recovery/legacy；本槽位将重新开始。");
@@ -856,7 +855,7 @@ public partial class Main : Node
             }
             catch (Exception exception) when (loadedSnapshot is not null)
             {
-                _session = P1GameSession.Restore(loadedSnapshot);
+                _session = GameSession.Restore(loadedSnapshot);
                 if (!DeveloperFeaturesEnabled) _session.DebugTwentyTimes = false;
                 _battlePaused = true;
                 _logger?.Write(GameLogLevel.Error, "offline.startup_failed", "offline",
@@ -913,8 +912,8 @@ public partial class Main : Node
         long lastObservedUtcMs = _saveRepository.GetLastObservedUtcMs();
         long nowUtcMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
         OfflineElapsed elapsed = OfflineTime.Calculate(lastObservedUtcMs, nowUtcMs);
-        P1OfflineResult? result = _session?.AdvanceOffline(elapsed.EffectiveMilliseconds);
-        string intervalId = $"p1a-startup-{_activeSlot}-{lastObservedUtcMs}-{nowUtcMs}";
+        GameForWork.Core.Campaign.World.OfflineResult? result = _session?.AdvanceOffline(elapsed.EffectiveMilliseconds);
+        string intervalId = $"campaigna-startup-{_activeSlot}-{lastObservedUtcMs}-{nowUtcMs}";
         _saveRepository.TryCommitOfflineSession(
             intervalId,
             lastObservedUtcMs,
@@ -923,7 +922,7 @@ public partial class Main : Node
             result is null ? "{}" : JsonSerializer.Serialize(result, SaveJsonOptions));
         if (_session is not null)
         {
-            _saveRepository.SaveP1SessionJson(JsonSerializer.Serialize(_session.Capture(), SaveJsonOptions));
+            _saveRepository.SaveCampaignSessionJson(JsonSerializer.Serialize(_session.Capture(), SaveJsonOptions));
         }
 
         _logger?.Write(
@@ -987,7 +986,7 @@ public partial class Main : Node
         }
         catch (Exception exception)
         {
-            ReportError("p8.reset_slot_failed", "Resetting the current save slot failed.", exception);
+            ReportError("journey.reset_slot_failed", "Resetting the current save slot failed.", exception);
         }
     }
 
@@ -1041,7 +1040,7 @@ public partial class Main : Node
     {
         _quitting = true;
         _quitAfterSave = true;
-        SaveP1State(showNotice: false);
+        SaveCampaignState(showNotice: false);
         ShowNotice("正在后台保存并安全退出…");
     }
 
@@ -1082,7 +1081,7 @@ public partial class Main : Node
 
     private void ReportError(string eventId, string message, Exception exception)
     {
-        _logger?.Write(GameLogLevel.Error, eventId, "p1a", message, exception: exception);
+        _logger?.Write(GameLogLevel.Error, eventId, "campaigna", message, exception: exception);
         _windowController?.SetTrayStatus(TrayStatus.Stopped);
         ShowNotice($"错误：{message} {exception.Message}");
     }

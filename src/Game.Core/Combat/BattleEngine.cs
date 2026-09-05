@@ -118,7 +118,7 @@ public sealed class BattleEngine
         BattleCommand command,
         ICollection<BattleEvent> events)
     {
-        if (actor.CooldownRemainingTicks != 0 || command.SkillId != "core.p0.basic_attack" ||
+        if (actor.CooldownRemainingTicks != 0 || command.SkillId != "core.foundation.basic_attack" ||
             !state.Actors.TryGetValue(command.TargetActorId, out ActorState? target) ||
             !target.IsAlive || target.Team == actor.Team)
         {

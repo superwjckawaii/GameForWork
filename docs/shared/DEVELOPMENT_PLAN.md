@@ -1,4 +1,6 @@
-# GameForWork P0～P27 开发计划
+# GameForWork 开发计划
+
+> 当前先关闭已确认机制的遗留项，完成领域重构与回归后再讨论 v0.5。最新状态见 [机制修复与领域重构复核](../v0.4/MECHANICS_REFACTOR_REVIEW.md)；测试通过不代表剩余机制全部实现。
 
 > 状态：已确认  
 > 更新日期：2026-08-30
@@ -9,15 +11,15 @@
 - 用户每周预计投入约 5 小时，主要用于详细设计、方案确认和最终人工验收。
 - Codex 负责已确认范围内的代码实现、自动测试、本地运行验证、问题修复和验收材料整理。
 - 用户负责在 Codex 本地验证通过后进行实际体验与最终确认。
-- P0 代码一次性完成并统一验收；只有在用户确认 `OK` 后才推送，并在推送且 GitHub Actions 通过后进入 P1A。
+- Foundation 代码一次性完成并统一验收；只有在用户确认 `OK` 后才推送，并在推送且 GitHub Actions 通过后进入 CampaignA。
 - 未经确认，不把当前开发项扩大到相邻系统。
 
 标准开发循环：
 
 ```text
-共同确定 P0 的详细设计和验收条件
+共同确定 Foundation 的详细设计和验收条件
                     ↓
-Codex 在本地一次性实现完整 P0
+Codex 在本地一次性实现完整 Foundation
                     ↓
 Codex 运行编译、自动测试和实际启动验证
                     ↓
@@ -29,16 +31,16 @@ Codex 提供可执行验证步骤、结果与已知边界
              ↓
        GitHub Actions 通过
              ↓
-          进入 P1A
+          进入 CampaignA
 ```
 
 文档决策可以在确认后直接提交并推送；以上人工门禁主要约束游戏代码和可玩内容。
 
-## 2. P0 技术原型
+## 2. Foundation 技术原型
 
-P0 只验证技术风险，不投入正式美术。
+Foundation 只验证技术风险，不投入正式美术。
 
-P0 不拆分为多次用户验收。Codex 在本地一次完成工程骨架、确定性战斗、桌面窗口、存档离线和集成验收，全部本地检查通过后再提供一份统一验收构建。
+Foundation 不拆分为多次用户验收。Codex 在本地一次完成工程骨架、确定性战斗、桌面窗口、存档离线和集成验收，全部本地检查通过后再提供一份统一验收构建。
 
 ### 2.1 范围
 
@@ -77,14 +79,14 @@ P0 不拆分为多次用户验收。Codex 在本地一次完成工程骨架、�
 - 本地编译、`dotnet test` 和 Godot 无界面启动全部通过。
 - GitHub Actions 执行相同三类检查并通过。
 - 提供统一 PowerShell 验证入口 `scripts/verify.ps1`。
-- P0 日常开发使用 Debug 构建；最终验收同时验证 Release 构建。
+- Foundation 日常开发使用 Debug 构建；最终验收同时验证 Release 构建。
 - 结构化运行日志写入仓库外的用户数据目录，用户反馈时只需提供日志路径。
 
-## 3. P1 功能垂直切片
+## 3. Campaign 功能垂直切片
 
-P1 最终需要形成具有精细像素表现的完整小循环。开发分为 P1A 功能切片和 P1B 美术接入。
+Campaign 最终需要形成具有精细像素表现的完整小循环。开发分为 CampaignA 功能切片和 CampaignB 美术接入。
 
-### 3.1 P1A 功能切片
+### 3.1 CampaignA 功能切片
 
 先用占位或临时素材完成全部玩法闭环，验证通过后再批量投入正式美术。
 
@@ -131,7 +133,7 @@ P1 最终需要形成具有精细像素表现的完整小循环。开发分为 P
 #### 装备与掉落
 
 - 数据结构保留全部正式装备槽位。
-- P1 只产出双手武器、胸甲、头盔、戒指和生命药剂。
+- Campaign 只产出双手武器、胸甲、头盔、戒指和生命药剂。
 - 实现基础、魔法、稀有和传奇四档物品。
 - 每种装备约 4～6 种词缀。
 - 实现 1 件规则型传奇双手武器：重击攻击速度总降 30%，在目标身后产生一次 70% 伤害的余震。
@@ -139,14 +141,14 @@ P1 最终需要形成具有精细像素表现的完整小循环。开发分为 P
 - 实现自动保留、分解、出售和入库。
 - 暂不实现神话、附魔和腐化。
 
-### 3.2 P1B 精细像素美术接入
+### 3.2 CampaignB 精细像素美术接入
 
-- P1A 功能闭环通过后，由 Codex 统一生成概念与像素美术素材并接入游戏。
+- CampaignA 功能闭环通过后，由 Codex 统一生成概念与像素美术素材并接入游戏。
 - 如生成素材无法达到一致性或动画质量要求，后期再寻找专业像素美术进行重绘。
-- 第一版对外展示的 P1 必须已经完成精细像素美术接入，不能以程序占位图作为最终展示。
-- P1 正式像素资产先制作四方向动作；正式大规模内容阶段再扩展为八方向。
+- 第一版对外展示的 Campaign 必须已经完成精细像素美术接入，不能以程序占位图作为最终展示。
+- Campaign 正式像素资产先制作四方向动作；正式大规模内容阶段再扩展为八方向。
 
-P1B 最小资产范围：
+CampaignB 最小资产范围：
 
 - 主角 1 套基础身体与 4 种外观组合
 - 4 种可显示装备外观
@@ -158,7 +160,7 @@ P1B 最小资产范围：
 - 1 张城镇背景
 - 基础攻击、技能和掉落特效
 
-## 4. P1 性能目标
+## 4. Campaign 性能目标
 
 - 标准窗口稳定 60 FPS。
 - 小窗失焦稳定 30 FPS。
@@ -171,97 +173,97 @@ P1B 最小资产范围：
 
 性能数据需要记录测试机器、构建类型和采样方式；未注明环境的单次数值不能作为验收结论。
 
-## 5. P2 主线与管理纵向切片
+## 5. Management 主线与管理纵向切片
 
-P2 的完整产品、交互、迁移和验收规则见 [`P2_SPECIFICATION.md`](../v0.1/P2_SPECIFICATION.md)。开发采用四个本地提交边界：
+Management 的完整产品、交互、迁移和验收规则见 [`Management_SPECIFICATION.md`](../v0.1/Management_SPECIFICATION.md)。开发采用四个本地提交边界：
 
 1. 数据模型与旧档迁移
 2. 角色与物品管理界面
 3. 精简五幕主线与远征配置
 4. 低密度像素美术、性能与统一验收
 
-P2 不进行中途用户验收。四个批次全部实现并完成本地验证后，提供一个统一构建给用户体验；用户确认 `OK` 后推送游戏代码。
+Management 不进行中途用户验收。四个批次全部实现并完成本地验证后，提供一个统一构建给用户体验；用户确认 `OK` 后推送游戏代码。
 
-P2 美术从 P1 的高细节像素插画调整为适合任务栏尺度的低密度像素风：强轮廓、大色块、少量颜色和极小尺寸清晰度。参考《TBH: Task Bar Hero》的任务栏可读性，不复制其具体资产。
+Management 美术从 Campaign 的高细节像素插画调整为适合任务栏尺度的低密度像素风：强轮廓、大色块、少量颜色和极小尺寸清晰度。参考《TBH: Task Bar Hero》的任务栏可读性，不复制其具体资产。
 
 ## 6. 阶段完成定义
 
-### P0 完成
+### Foundation 完成
 
-P0 全部本地自动检查通过后创建本地提交但不推送；用户进行一次统一人工验收。用户确认后推送，GitHub Actions 通过后创建 `v0.0.1-p0` 标签并进入 P1A。
+Foundation 全部本地自动检查通过后创建本地提交但不推送；用户进行一次统一人工验收。用户确认后推送，GitHub Actions 通过后创建 `v0.0.1-foundation` 标签并进入 CampaignA。
 
-### P1A 完成
+### CampaignA 完成
 
 完整玩法循环可以使用占位素材运行；两支队伍、城镇、地图、掉落、保存与离线结算均通过验收。
 
-P1A 内部保留四个本地提交：正式战斗规则、构筑与物品、地图与城镇闭环、UI 与统一验收。四个提交完成后只进行一次用户人工验收。
+CampaignA 内部保留四个本地提交：正式战斗规则、构筑与物品、地图与城镇闭环、UI 与统一验收。四个提交完成后只进行一次用户人工验收。
 
-### P1 完成
+### Campaign 完成
 
-P1A 功能闭环通过，P1B 精细像素素材生成、接入和视觉验收完成，性能目标达到，用户确认后推送最终 P1 进度并创建 `v0.1.0-p1` 标签。
+CampaignA 功能闭环通过，CampaignB 精细像素素材生成、接入和视觉验收完成，性能目标达到，用户确认后推送最终 Campaign 进度并创建 `v0.1.0-campaign` 标签。
 
-### P2 完成
+### Management 完成
 
-精简五幕主线、通关解锁远征、正式角色与物品管理、旧档迁移和低密度像素视觉全部达到 [`P2_SPECIFICATION.md`](../v0.1/P2_SPECIFICATION.md) 的验收条件。用户统一验收确认后推送，并在自动检查通过后创建 `v0.2.0-p2` 标签。
+精简五幕主线、通关解锁远征、正式角色与物品管理、旧档迁移和低密度像素视觉全部达到 [`Management_SPECIFICATION.md`](../v0.1/Management_SPECIFICATION.md) 的验收条件。用户统一验收确认后推送，并在自动检查通过后创建 `v0.2.0-management` 标签。
 
-### P3～P5 完成
+### Scenes～Expeditions 完成
 
-- P3 的完整规则见 [`P3_SPECIFICATION.md`](../v0.1/P3_SPECIFICATION.md)。
-- P4 的空间群战与角色工坊规则见 [`P4_SPECIFICATION.md`](../v0.1/P4_SPECIFICATION.md)。
-- P5 的单页远征、碎片 Boss、装备技能链和天赋交互规则见 [`P5_SPECIFICATION.md`](../v0.1/P5_SPECIFICATION.md)。
+- Scenes 的完整规则见 [`Scenes_SPECIFICATION.md`](../v0.1/Scenes_SPECIFICATION.md)。
+- Spatial 的空间群战与角色工坊规则见 [`Spatial_SPECIFICATION.md`](../v0.1/Spatial_SPECIFICATION.md)。
+- Expeditions 的单页远征、碎片 Boss、装备技能链和天赋交互规则见 [`Expeditions_SPECIFICATION.md`](../v0.1/Expeditions_SPECIFICATION.md)。
 
-### P6 已确认
+### Skills 已确认
 
-P6 的装备实例孔组、技能石唯一位置、标签兼容、AI 执行、技能经验、三套方案、连接锻造、金属制作、构筑摘要、掉落过滤和战斗报告规则见 [`P6_SPECIFICATION.md`](../v0.1/P6_SPECIFICATION.md)。P6 明确不制作构筑训练场。
+Skills 的装备实例孔组、技能石唯一位置、标签兼容、AI 执行、技能经验、三套方案、连接锻造、金属制作、构筑摘要、掉落过滤和战斗报告规则见 [`Skills_SPECIFICATION.md`](../v0.1/Skills_SPECIFICATION.md)。Skills 明确不制作构筑训练场。
 
-### P7～P8 完成定义
+### Offline～Journey 完成定义
 
-- P7 的技能页收敛、逐技能攻击目标、20 Hz/60 FPS 表现、后台战斗预演与后台存档规则见 [`P7_SPECIFICATION.md`](../v0.1/P7_SPECIFICATION.md)。
-- P8 的单线 Demo 旅程、强制聚焦教学、页面解锁、停止警告、深渊监守者结算和旧档迁移规则见 [`P8_SPECIFICATION.md`](../v0.1/P8_SPECIFICATION.md)。
+- Offline 的技能页收敛、逐技能攻击目标、20 Hz/60 FPS 表现、后台战斗预演与后台存档规则见 [`Offline_SPECIFICATION.md`](../v0.1/Offline_SPECIFICATION.md)。
+- Journey 的单线 Demo 旅程、强制聚焦教学、页面解锁、停止警告、深渊监守者结算和旧档迁移规则见 [`Journey_SPECIFICATION.md`](../v0.1/Journey_SPECIFICATION.md)。
 
-### P9 完成定义
+### Town 完成定义
 
-P9 的七座固定建筑、施工队列、城镇方针、酒馆候选与名册、单支 2×3 佣兵队、19 种金属仓、完整装备加工和高阶工坊附魔规则见 [`P9_SPECIFICATION.md`](../v0.1/P9_SPECIFICATION.md)。
+Town 的七座固定建筑、施工队列、城镇方针、酒馆候选与名册、单支 2×3 佣兵队、19 种金属仓、完整装备加工和高阶工坊附魔规则见 [`Town_SPECIFICATION.md`](../v0.1/Town_SPECIFICATION.md)。
 
-### P10 完成定义
+### Endgame 完成定义
 
-P10 的周期卡顿与布局修复、1,624 节点主天赋树、专精和记忆珠宝、T11～T20、360 节点异界树、四类地图收益路线、灰烬天垒攻坚与铁誓突破树见 [`P10_SPECIFICATION.md`](../v0.1/P10_SPECIFICATION.md)。
+Endgame 的周期卡顿与布局修复、1,624 节点主天赋树、专精和记忆珠宝、T11～T20、360 节点异界树、四类地图收益路线、灰烬天垒攻坚与铁誓突破树见 [`Endgame_SPECIFICATION.md`](../v0.1/Endgame_SPECIFICATION.md)。
 
-### P11～P15 完成定义
+### Playback～SimulationParity 完成定义
 
-首个完整可玩 Demo 的终点、内容目标、测试期存档策略与 P11～P15 阶段依赖见 [`DEMO_ROADMAP.md`](../v0.1/DEMO_ROADMAP.md)。P11、P12 的封版实现规则分别见 [`P11_SPECIFICATION.md`](../v0.1/P11_SPECIFICATION.md) 与 [`P12_SPECIFICATION.md`](../v0.1/P12_SPECIFICATION.md)；P14 的异界机制、突破和攻坚规则见 [`P14_SPECIFICATION.md`](../v0.1/P14_SPECIFICATION.md)，P15 的内容封版、稳定性、性能和 Windows 分发规则见 [`P15_SPECIFICATION.md`](../v0.1/P15_SPECIFICATION.md)。
+首个完整可玩 Demo 的终点、内容目标、测试期存档策略与 Playback～SimulationParity 阶段依赖见 [`DEMO_ROADMAP.md`](../v0.1/DEMO_ROADMAP.md)。Playback、Maps 的封版实现规则分别见 [`Playback_SPECIFICATION.md`](../v0.1/Playback_SPECIFICATION.md) 与 [`Maps_SPECIFICATION.md`](../v0.1/Maps_SPECIFICATION.md)；Content 的异界机制、突破和攻坚规则见 [`Content_SPECIFICATION.md`](../v0.1/Content_SPECIFICATION.md)，SimulationParity 的内容封版、稳定性、性能和 Windows 分发规则见 [`SimulationParity_SPECIFICATION.md`](../v0.1/SimulationParity_SPECIFICATION.md)。
 
-### P16～P22：v0.2 核心战斗与构筑扩充
+### Inventory～Release：v0.2 核心战斗与构筑扩充
 
 v0.2 的完整范围、数据规模、难度等级、阶段依赖和验收口径见 [`V0_2_SPECIFICATION.md`](../v0.2/V0_2_SPECIFICATION.md)。阶段固定为：
 
-1. P16：48 种非 Boss 怪物、18 个怪物词缀、剧情至 T20 难度曲线、文档版本化、仓库批处理和过滤器收敛；详见 [`P16_SPECIFICATION.md`](../v0.2/P16_SPECIFICATION.md)。
-2. P17：技能标签/行为/辅助规则拆分，累计 30 主动与 48 辅助技能石。
-3. P18：血征者、壁垒使、破阵者三套完整升华、六套基准构筑及药剂/法力资源循环；详见 [`P18_SPECIFICATION.md`](../v0.2/P18_SPECIFICATION.md)。
-4. P19：直接导入 PoE 基础底材与基础显式词缀，完成混沌→虚空、第四属性能量、约80种底材、正式词缀模型与图鉴；详见 [`P19_SPECIFICATION.md`](../v0.2/P19_SPECIFICATION.md)。
-5. P20：逐怪掉落预算、节点批量结算、地图续航、传奇保底和经济模拟；详见 [`P20_SPECIFICATION.md`](../v0.2/P20_SPECIFICATION.md) 与 [`P20_ECONOMY_AUDIT.md`](../v0.2/P20_ECONOMY_AUDIT.md)。
-6. P21/P21.1/P21.2：技能石、装备底材、怪物主体、四方向动作、战斗特效、数据同源的三类天赋盘、像素 UI、正式品牌图标、战斗观察与布局修订；详见 [`P21_SPECIFICATION.md`](../v0.2/P21_SPECIFICATION.md)。
-7. P22：完整流程、六构筑平衡、性能与长稳、最终测试存档格式、高阶底材视觉分级及 `v0.2.0` 便携分发封版；细节见 [`P22_SPECIFICATION.md`](../v0.2/P22_SPECIFICATION.md)。
+1. Inventory：48 种非 Boss 怪物、18 个怪物词缀、剧情至 T20 难度曲线、文档版本化、仓库批处理和过滤器收敛；详见 [`Inventory_SPECIFICATION.md`](../v0.2/Inventory_SPECIFICATION.md)。
+2. SkillCatalog：技能标签/行为/辅助规则拆分，累计 30 主动与 48 辅助技能石。
+3. Ascendancies：血征者、壁垒使、破阵者三套完整升华、六套基准构筑及药剂/法力资源循环；详见 [`Ascendancies_SPECIFICATION.md`](../v0.2/Ascendancies_SPECIFICATION.md)。
+4. EquipmentImport：直接导入 PoE 基础底材与基础显式词缀，完成混沌→虚空、第四属性能量、约80种底材、正式词缀模型与图鉴；详见 [`EquipmentImport_SPECIFICATION.md`](../v0.2/EquipmentImport_SPECIFICATION.md)。
+5. Economy：逐怪掉落预算、节点批量结算、地图续航、传奇保底和经济模拟；详见 [`Economy_SPECIFICATION.md`](../v0.2/Economy_SPECIFICATION.md) 与 [`Economy_ECONOMY_AUDIT.md`](../v0.2/Economy_ECONOMY_AUDIT.md)。
+6. Art/Art.1/Art.2：技能石、装备底材、怪物主体、四方向动作、战斗特效、数据同源的三类天赋盘、像素 UI、正式品牌图标、战斗观察与布局修订；详见 [`Art_SPECIFICATION.md`](../v0.2/Art_SPECIFICATION.md)。
+7. Release：完整流程、六构筑平衡、性能与长稳、最终测试存档格式、高阶底材视觉分级及 `v0.2.0` 便携分发封版；细节见 [`Release_SPECIFICATION.md`](../v0.2/Release_SPECIFICATION.md)。
 
 亡旗战场、沉金港和无光矿脉不属于上述阶段；亡旗战阵顺延到 v0.4，沉金港和无光矿脉最终延期到 v0.5。
 
-### P23～P25：v0.3 六职业、十八升华与主天赋树 V3
+### Characters～EquipmentArt：v0.3 六职业、十八升华与主天赋树 V3
 
 v0.3 的完整范围、职业矩阵、天赋重构方向、内容预算和验收边界见 [`V0_3_SPECIFICATION.md`](../v0.3/V0_3_SPECIFICATION.md)。阶段固定为：
 
-1. P23：六职业数据与创建底层、六个天赋起点、主天赋树 V3、旧档迁移及新职业共用的战斗执行能力；实施明细见 [`P23_SPECIFICATION.md`](../v0.3/P23_SPECIFICATION.md)。
-2. P23.1：作为 P23 内容子阶段，完整实现十八套升华；保留并复核斗士三套既有机制，补齐其余十五套的节点、规则、数值、界面和测试。
-3. P24：侠客、灵能使、秘术师、僧侣和隐士的技能、辅助、装备、词缀、AI、美术与完整构筑链。
-4. P25：36 套基准构筑、完整流程平衡、迁移兼容、性能长稳和 `v0.3.0` 分发封版。
+1. Characters：六职业数据与创建底层、六个天赋起点、主天赋树 V3、旧档迁移及新职业共用的战斗执行能力；实施明细见 [`Characters_SPECIFICATION.md`](../v0.3/Characters_SPECIFICATION.md)。
+2. Characters.1：作为 Characters 内容子阶段，完整实现十八套升华；保留并复核斗士三套既有机制，补齐其余十五套的节点、规则、数值、界面和测试。
+3. Archetypes：侠客、灵能使、秘术师、僧侣和隐士的技能、辅助、装备、词缀、AI、美术与完整构筑链。
+4. EquipmentArt：36 套基准构筑、完整流程平衡、迁移兼容、性能长稳和 `v0.3.0` 分发封版。
 
 v0.3 不增加大型异界玩法循环。亡旗战阵进入 v0.4；沉金港和无光矿脉进入 v0.5。
 
-### P26～P31：v0.4 玩法与数值打磨
+### Atlas～Presentation：v0.4 玩法与数值打磨
 
-v0.4 总范围见 [`V0_4_SPECIFICATION.md`](../v0.4/V0_4_SPECIFICATION.md)。P26 已确认并实施地图系统、统一筛选器、连续远征、地图打造/出售、腐化与 120 点金币异界天赋，完整规格见 [`P26_SPECIFICATION.md`](../v0.4/P26_SPECIFICATION.md)。后续依赖顺序为：
+v0.4 总范围见 [`V0_4_SPECIFICATION.md`](../v0.4/V0_4_SPECIFICATION.md)。Atlas 已确认并实施地图系统、统一筛选器、连续远征、地图打造/出售、腐化与 120 点金币异界天赋，完整规格见 [`Atlas_SPECIFICATION.md`](../v0.4/Atlas_SPECIFICATION.md)。后续依赖顺序为：
 
-1. P27：五幕与异界怪物族群、战阵首次遭遇、剧情/异界数值曲线（已实施，见 [`P27_SPECIFICATION.md`](../v0.4/P27_SPECIFICATION.md)）。
-2. P28：深渊、命能花园、赤誓、苍誓与战阵玩法差异化（已实施：逐节点流程、策略快照、实际技能、失败收益、逐图离线结算、命能打造与军需兑换；见 [`P28_SPECIFICATION.md`](../v0.4/P28_SPECIFICATION.md)）。
-3. P29：掉落池、掉落率、地图续航与经济审计（已实施：族群/稀有度来源池、36件传奇、技能石上限、玩法资源直接做装、18种战功底材、续航与保底；见 [`P29_SPECIFICATION.md`](../v0.4/P29_SPECIFICATION.md)）。
-4. P30：天赋、升华、装备词缀和技能构筑平衡（已实施）。
-5. P31：装备效果、技能动画、战斗反馈、性能与 v0.4 封版（已实施，等待玩家侧复核）；沉金港与无光矿脉延期到 v0.5，见 [`P31_SPECIFICATION.md`](../v0.4/P31_SPECIFICATION.md)。
+1. Monsters：五幕与异界怪物族群、战阵首次遭遇、剧情/异界数值曲线（已实施，见 [`Monsters_SPECIFICATION.md`](../v0.4/Monsters_SPECIFICATION.md)）。
+2. Encounters：深渊、命能花园、赤誓、苍誓与战阵玩法差异化（已实施：逐节点流程、策略快照、实际技能、失败收益、逐图离线结算、命能打造与军需兑换；见 [`Encounters_SPECIFICATION.md`](../v0.4/Encounters_SPECIFICATION.md)）。
+3. Resources：掉落池、掉落率、地图续航与经济审计（已实施：族群/稀有度来源池、36件传奇、技能石上限、玩法资源直接做装、18种战功底材、续航与保底；见 [`Resources_SPECIFICATION.md`](../v0.4/Resources_SPECIFICATION.md)）。
+4. Builds：天赋、升华、装备词缀和技能构筑平衡（已实施）。
+5. Presentation：装备效果、技能动画、战斗反馈、性能与 v0.4 封版（已实施，等待玩家侧复核）；沉金港与无光矿脉延期到 v0.5，见 [`Presentation_SPECIFICATION.md`](../v0.4/Presentation_SPECIFICATION.md)。

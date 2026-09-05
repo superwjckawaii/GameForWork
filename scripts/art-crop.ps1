@@ -1,4 +1,4 @@
-# Shared deterministic sprite extraction. Connectivity removes neighbouring-cell fragments;
+﻿# Shared deterministic sprite extraction. Connectivity removes neighbouring-cell fragments;
 # source bounds remain explicit so a wrong grid cannot silently become a tiny valid icon.
 Add-Type -AssemblyName System.Drawing
 if (-not ('ArtCrop' -as [type])) {

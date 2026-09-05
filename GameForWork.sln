@@ -1,4 +1,4 @@
-﻿Microsoft Visual Studio Solution File, Format Version 12.00
+Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.0.31903.59
 MinimumVisualStudioVersion = 10.0.40219.1
@@ -8,17 +8,17 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Game.Godot", "src\Game.Godo
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Game.Tests", "src\Game.Tests\Game.Tests.csproj", "{B69002A5-CC60-4DC7-A3EB-85364266A357}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "P20Audit", "tools\P20Audit\P20Audit.csproj", "{2CBDF051-D042-4D86-B35A-854DE61A9073}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EconomyAudit", "tools\EconomyAudit\EconomyAudit.csproj", "{2CBDF051-D042-4D86-B35A-854DE61A9073}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tools", "tools", "{8680ADC7-96A4-4395-929B-A33A3BAFC15A}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "P21TreeExport", "tools\P21TreeExport\P21TreeExport.csproj", "{52BCE351-8942-43BB-B875-635018367EB3}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ArtTreeExport", "tools\ArtTreeExport\ArtTreeExport.csproj", "{52BCE351-8942-43BB-B875-635018367EB3}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "P22Audit", "tools\P22Audit\P22Audit.csproj", "{34B2BC44-AA16-4FCF-A354-C8008E7C2A2F}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ReleaseAudit", "tools\ReleaseAudit\ReleaseAudit.csproj", "{34B2BC44-AA16-4FCF-A354-C8008E7C2A2F}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "P30Audit", "tools\P30Audit\P30Audit.csproj", "{B4E16C63-C100-4973-B1D6-3DB54FE067D1}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BuildsAudit", "tools\BuildsAudit\BuildsAudit.csproj", "{B4E16C63-C100-4973-B1D6-3DB54FE067D1}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "P32Audit", "tools\P32Audit\P32Audit.csproj", "{2F9BC499-FF17-486E-A8B9-D3B368558C76}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EquipmentAudit", "tools\EquipmentAudit\EquipmentAudit.csproj", "{2F9BC499-FF17-486E-A8B9-D3B368558C76}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

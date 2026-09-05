@@ -19,7 +19,7 @@
 - 需要 Windows 10/11 x64。
 - 解压后运行 `GameForWork.exe`；不要直接从 ZIP 内运行。
 - 存档、设置和日志位于 `%LOCALAPPDATA%\Godot\app_userdata\GameForWork`，更新游戏包不会覆盖该目录。
-- 当前候选版固定存档格式 18。P22 之前的内部测试档会归档到 `recovery/legacy/` 后重新开始。
+- 当前候选版固定存档格式 18。Release 之前的内部测试档会归档到 `recovery/legacy/` 后重新开始。
 
 ## 暂不包含
 

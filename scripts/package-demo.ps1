@@ -1,4 +1,4 @@
-[CmdletBinding()]
+﻿[CmdletBinding()]
 param(
     [string]$GodotPath = $env:GODOT_BIN,
     [string]$Version = '0.4.0'
@@ -15,8 +15,8 @@ $dotnetBinary = Resolve-DotnetBinary
 Set-DotnetEnvironment -DotnetBinary $dotnetBinary
 $GodotPath = Resolve-GodotBinary -RequestedPath $GodotPath
 
-& (Join-Path $repositoryRoot 'scripts\verify_p21_assets.ps1') -RepositoryRoot $repositoryRoot
-& (Join-Path $repositoryRoot 'scripts\verify_p31_assets.ps1') -RepositoryRoot $repositoryRoot
+& (Join-Path $repositoryRoot 'scripts\verify_art_assets.ps1') -RepositoryRoot $repositoryRoot
+& (Join-Path $repositoryRoot 'scripts\verify_presentation_assets.ps1') -RepositoryRoot $repositoryRoot
 Invoke-NativeChecked -FilePath $GodotPath -Arguments @('--headless', '--path', $projectPath, '--editor', '--quit') `
     -Label 'Godot asset import before release export' -RejectGodotErrors
 

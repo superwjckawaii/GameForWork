@@ -1,0 +1,17 @@
+{
+  "version": "0.4.0",
+  "source": "art-source/presentation/imagegen/presentation-vfx-master.png",
+  "generated": "assets/presentation/vfx/presentation-combat-vfx.png",
+  "grid": "4x4",
+  "cell": "64x64",
+  "isolation": "per-cell alpha bounds with 4px destination padding",
+  "sha256": "a61d394bf3a3ef4a16a6495aff444f77a906caea330efa5270400453414083b6",
+  "trees": {
+    "passive": "assets/presentation/trees/presentation-passive-backdrop.png",
+    "atlas": "assets/presentation/trees/presentation-atlas-backdrop.png",
+    "ascendancyDirectory": "assets/presentation/trees/ascendancy",
+    "ascendancyCount": 18,
+    "ascendancySize": "768x768",
+    "geometrySource": "tools/ArtTreeExport"
+  }
+}

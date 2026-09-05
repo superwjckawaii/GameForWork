@@ -1,6 +1,6 @@
-using GameForWork.Core.P1.Items;
-using GameForWork.Core.P1.Combat;
-using GameForWork.Core.P17;
+using GameForWork.Core.Campaign.Items;
+using GameForWork.Core.Campaign.Combat;
+using GameForWork.Core.SkillCatalog;
 
 namespace GameForWork.Core.Equipment;
 
@@ -11,7 +11,7 @@ public sealed record EquipmentCombatLoadout(
     IReadOnlyDictionary<string, int> Enchantments,
     int ShieldArmor = 0,
     int UnarmedMoreDamageBasisPoints = 0,
-    int PhysicalIncreaseIncludedInAttack = 0)
+    int PhysicalIncreaseIncludedInAttack = 0, IReadOnlyList<Combat.EquippedFlask>? Flasks = null)
 {
     public static EquipmentCombatLoadout Empty { get; } = new(
         new Dictionary<ItemModifierKind, int>(), [], new Dictionary<string, int>());
@@ -30,33 +30,22 @@ public sealed record EquipmentCombatLoadout(
         {
             var defense = EquipmentLoadout.CalculateLocalDefense(item);
             return EquipmentRuleEngine.UnarmedMoreDamageBasisPoints(defense.Armor + defense.Evasion + defense.Shield + defense.SpiritBarrier);
-        }), summary.Modifiers.IncreasedPhysicalDamageBasisPoints);
+        }), summary.Modifiers.IncreasedPhysicalDamageBasisPoints,
+        loadout.Items.Where(pair => pair.Key is >= EquipmentSlot.Flask1 and <= EquipmentSlot.Flask5)
+            .Where(pair => FlaskRules.KindForBase(pair.Value.Base.StableId).HasValue)
+            .Select(pair => new Combat.EquippedFlask(FlaskRules.KindForBase(pair.Value.Base.StableId)!.Value, pair.Value.InstanceId, (int)pair.Key,
+                pair.Value.EffectiveImplicitComponents.Concat(pair.Value.Affixes.SelectMany(affix => affix.Effects)).Concat(pair.Value.CorruptionComponents)
+                    .Select(effect => (effect.Kind, effect.Value, effect.Scope))
+                    .Concat((pair.Value.Enchantment?.EffectComponents ?? []).Select(effect => (effect.Kind, Value: effect.MinimumValue, effect.Scope)))
+                    .Where(effect => effect.Scope is ItemModifierScope.Flask or ItemModifierScope.Rule).GroupBy(effect => effect.Kind)
+                    .ToDictionary(group => group.Key, group => group.Sum(effect => effect.Value)), pair.Value.Quality)).ToArray());
 
-    public int DamageIncrease(SkillTag tags, P17DamageType type, bool damageOverTime)
+    public int Penetration(SkillDamageType type) => Value(type switch
     {
-        int value = type switch
-        {
-            P17DamageType.Fire => Value(ItemModifierKind.IncreasedFireDamageBasisPoints),
-            P17DamageType.Cold => Value(ItemModifierKind.IncreasedColdDamageBasisPoints),
-            P17DamageType.Lightning => Value(ItemModifierKind.IncreasedLightningDamageBasisPoints),
-            P17DamageType.Void => Value(ItemModifierKind.IncreasedVoidDamageBasisPoints),
-            P17DamageType.Physical => Value(ItemModifierKind.IncreasedPhysicalDamageBasisPoints),
-            _ => 0,
-        };
-        if (type is P17DamageType.Fire or P17DamageType.Cold or P17DamageType.Lightning)
-            value += Value(ItemModifierKind.IncreasedElementalDamageBasisPoints);
-        if (tags.HasFlag(SkillTag.Melee)) value += Value(ItemModifierKind.IncreasedMeleeDamageBasisPoints);
-        if (tags.HasFlag(SkillTag.Projectile)) value += Value(ItemModifierKind.IncreasedProjectileDamageBasisPoints);
-        if (tags.HasFlag(SkillTag.Area)) value += Value(ItemModifierKind.IncreasedAreaDamageBasisPoints);
-        if (damageOverTime) value += Value(ItemModifierKind.IncreasedDamageOverTimeBasisPoints);
-        return value;
-    }
-    public int Penetration(P17DamageType type) => Value(type switch
-    {
-        P17DamageType.Fire => ItemModifierKind.FirePenetrationBasisPoints,
-        P17DamageType.Cold => ItemModifierKind.ColdPenetrationBasisPoints,
-        P17DamageType.Lightning => ItemModifierKind.LightningPenetrationBasisPoints,
-        P17DamageType.Void => ItemModifierKind.VoidPenetrationBasisPoints,
+        SkillDamageType.Fire => ItemModifierKind.FirePenetrationBasisPoints,
+        SkillDamageType.Cold => ItemModifierKind.ColdPenetrationBasisPoints,
+        SkillDamageType.Lightning => ItemModifierKind.LightningPenetrationBasisPoints,
+        SkillDamageType.Void => ItemModifierKind.VoidPenetrationBasisPoints,
         _ => ItemModifierKind.None,
     });
 }

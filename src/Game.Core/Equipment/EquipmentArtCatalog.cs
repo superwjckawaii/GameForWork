@@ -1,4 +1,4 @@
-using GameForWork.Core.P1.Items;
+using GameForWork.Core.Campaign.Items;
 using GameForWork.Core.Equipment;
 
 namespace GameForWork.Core.Equipment;
@@ -25,7 +25,7 @@ public static class EquipmentLegendaryArt
 {
     public const int Columns = 5;
     public const int Rows = 11;
-    public static IReadOnlyList<string> StableIds { get; } = P14.P14UniqueItems.All.Select(value => value.StableId).ToArray();
+    public static IReadOnlyList<string> StableIds { get; } = Content.UniqueItems.All.Select(value => value.StableId).ToArray();
     private static readonly IReadOnlyDictionary<string, int> Indices = StableIds
         .Select((stableId, index) => (stableId, index)).ToDictionary(pair => pair.stableId, pair => pair.index,
             StringComparer.Ordinal);
@@ -41,8 +41,8 @@ public static class SkillStoneArt
 {
     public const int Columns = 10;
     public const int Rows = 19;
-    public static IReadOnlyList<string> StableIds { get; } = P30.P30SkillCatalog.Active
-        .Select(skill => skill.Combat.StoneId).Concat(P30.P30SkillCatalog.Supports.Select(skill => skill.StoneId)).ToArray();
+    public static IReadOnlyList<string> StableIds { get; } = Builds.ActiveSkillCatalog.Active
+        .Select(skill => skill.Combat.StoneId).Concat(Builds.ActiveSkillCatalog.Supports.Select(skill => skill.StoneId)).ToArray();
     private static readonly IReadOnlyDictionary<string, int> Indices = StableIds
         .Select((id, index) => (id, index)).ToDictionary(pair => pair.id, pair => pair.index, StringComparer.Ordinal);
 

@@ -66,7 +66,7 @@ public sealed class BattleState
     };
 }
 
-public static class P0BattleFactory
+public static class BattleFactory
 {
     public static BattleState Create(ulong seed) => new()
     {

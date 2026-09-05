@@ -1,6 +1,6 @@
-using GameForWork.Core.P1.Items;
+using GameForWork.Core.Campaign.Items;
 using GameForWork.Core.Equipment;
-using GameForWork.Core.P29;
+using GameForWork.Core.Resources;
 using Godot;
 
 namespace GameForWork.GodotClient;
@@ -66,15 +66,15 @@ public partial class EquipmentAffixPanel : VBoxContainer
         IReadOnlyList<EquipmentAffixView> rows = EquipmentAffixBrowser.Query(new(level, category, baseId, position, query));
         var lines = new List<string>
         {
-            $"[color=#d5c79a]当前显示 {rows.Count} 个真实档位 / 实时目录总计 {P1Affixes.All.Count(affix => affix.SourceId.Length > 0)}" +
-            $"{(baseId is null ? string.Empty : $" · {Escape(P1ItemBases.Get(baseId).DisplayName)}专用 T 级与权重")}[/color]"
+            $"[color=#d5c79a]当前显示 {rows.Count} 个真实档位 / 实时目录总计 {Affixes.All.Count(affix => affix.SourceId.Length > 0)}" +
+            $"{(baseId is null ? string.Empty : $" · {Escape(ItemBases.Get(baseId).DisplayName)}专用 T 级与权重")}[/color]"
         };
         foreach (EquipmentAffixView row in rows)
         {
             AffixDefinition affix = row.Definition;
             string side = affix.Position == AffixPosition.Prefix ? "前" : "后";
             string tags = string.Join(",", affix.ModTags ?? []);
-            string color = P1UiText.AffixTierColor(row.Tier).ToHtml(false);
+            string color = UiText.AffixTierColor(row.Tier).ToHtml(false);
             lines.Add($"[color=#{color}]{Escape(affix.DisplayName)} T{row.Tier}[/color] · {side}缀 · " +
                 $"{Escape(ComponentRanges(affix))} · 需求物等 {affix.MinimumItemLevel} · 权重 {row.Weight} · " +
                 $"组 {Escape(affix.GroupId)} · 标签 {Escape(tags)} · 来源 {Escape(affix.Source)}");
@@ -89,11 +89,11 @@ public partial class EquipmentAffixPanel : VBoxContainer
         _base.Clear();
         _base.AddItem("任意底材");
         _baseIds.Clear();
-        foreach (ItemBaseDefinition item in P1ItemBases.All
+        foreach (ItemBaseDefinition item in ItemBases.All
                      .Where(item => category is null || item.Category == category)
                      .OrderBy(item => item.DisplayName, StringComparer.Ordinal))
         {
-            _base.AddItem($"{item.DisplayName} · {P29DropCatalog.BaseTierName(P29DropCatalog.BaseTier(item))}");
+            _base.AddItem($"{item.DisplayName} · {DropCatalog.BaseTierName(DropCatalog.ResolveBaseTier(item))}");
             _baseIds.Add(item.StableId);
         }
         _base.Select(0);
@@ -111,7 +111,7 @@ public partial class EquipmentAffixPanel : VBoxContainer
     private static string Escape(string text) => text.Replace("[", "[​", StringComparison.Ordinal);
 
     private static string ComponentRanges(AffixDefinition affix) => string.Join("；", affix.EffectComponents.Select(component =>
-        $"{P1UiText.AffixComponentRange(component.Kind, component.MinimumValue, component.MaximumValue)} [{ScopeName(component.Scope)}]"));
+        $"{UiText.AffixComponentRange(component.Kind, component.MinimumValue, component.MaximumValue)} [{ScopeName(component.Scope)}]"));
 
     private static string ScopeName(ItemModifierScope scope) => scope switch
     {

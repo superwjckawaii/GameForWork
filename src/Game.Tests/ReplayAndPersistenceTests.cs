@@ -9,7 +9,7 @@ public sealed class ReplayAndPersistenceTests
     [Fact]
     public void SnapshotRoundTripPreservesCanonicalHash()
     {
-        BattleState state = P0BattleFactory.Create(123);
+        BattleState state = BattleFactory.Create(123);
         var engine = new BattleEngine();
         engine.Step(state, engine.BuildAutomaticCommands(state));
 
@@ -58,7 +58,7 @@ public sealed class ReplayAndPersistenceTests
             using (var repository = new SaveRepository(root, 1))
             {
                 repository.Initialize();
-                byte[] payload = BattleStateCodec.Serialize(P0BattleFactory.Create(77));
+                byte[] payload = BattleStateCodec.Serialize(BattleFactory.Create(77));
                 repository.SaveSnapshot(0, payload);
 
                 Assert.Equal(payload, repository.LoadLatestSnapshot());
@@ -75,19 +75,19 @@ public sealed class ReplayAndPersistenceTests
     }
 
     [Fact]
-    public void P1SessionJsonUsesSchemaTwoSingletonState()
+    public void CampaignSessionJsonUsesSchemaTwoSingletonState()
     {
         string root = CreateTemporaryDirectory();
         try
         {
             using var repository = new SaveRepository(root, 1);
             repository.Initialize();
-            Assert.Null(repository.LoadP1SessionJson());
+            Assert.Null(repository.LoadCampaignSessionJson());
 
-            repository.SaveP1SessionJson("{\"version\":1}");
-            repository.SaveP1SessionJson("{\"version\":2}");
+            repository.SaveCampaignSessionJson("{\"version\":1}");
+            repository.SaveCampaignSessionJson("{\"version\":2}");
 
-            Assert.Equal("{\"version\":2}", repository.LoadP1SessionJson());
+            Assert.Equal("{\"version\":2}", repository.LoadCampaignSessionJson());
             Assert.Equal(SaveRepository.CurrentSchemaVersion, repository.GetSchemaVersion());
         }
         finally
@@ -102,7 +102,7 @@ public sealed class ReplayAndPersistenceTests
         string root = CreateTemporaryDirectory();
         try
         {
-            byte[] expected = BattleStateCodec.Serialize(P0BattleFactory.Create(88));
+            byte[] expected = BattleStateCodec.Serialize(BattleFactory.Create(88));
             string databasePath;
             using (var repository = new SaveRepository(root, 1))
             {
@@ -158,7 +158,7 @@ public sealed class ReplayAndPersistenceTests
             using (var repository = new SaveRepository(root, 1))
             {
                 repository.Initialize();
-                repository.SaveP1SessionJson(JsonSerializer.Serialize(new
+                repository.SaveCampaignSessionJson(JsonSerializer.Serialize(new
                 {
                     World = new
                     {
@@ -173,7 +173,7 @@ public sealed class ReplayAndPersistenceTests
 
             using var reopened = new SaveRepository(root, 1);
             reopened.Initialize();
-            using JsonDocument document = JsonDocument.Parse(reopened.LoadP1SessionJson()!);
+            using JsonDocument document = JsonDocument.Parse(reopened.LoadCampaignSessionJson()!);
             JsonElement maps = document.RootElement.GetProperty("World").GetProperty("MapInventory");
 
             Assert.Equal(2, maps.GetArrayLength());
@@ -192,7 +192,7 @@ public sealed class ReplayAndPersistenceTests
         string root = CreateTemporaryDirectory();
         try
         {
-            byte[] expected = BattleStateCodec.Serialize(P0BattleFactory.Create(89));
+            byte[] expected = BattleStateCodec.Serialize(BattleFactory.Create(89));
             using (var repository = new SaveRepository(root, 1))
             {
                 repository.Initialize();

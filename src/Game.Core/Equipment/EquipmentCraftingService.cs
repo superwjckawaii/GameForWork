@@ -2,8 +2,8 @@ using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
-using GameForWork.Core.P1.Items;
-using GameForWork.Core.P9;
+using GameForWork.Core.Campaign.Items;
+using GameForWork.Core.Town;
 using GameForWork.Core.Simulation;
 
 namespace GameForWork.Core.Equipment;
@@ -92,23 +92,23 @@ public static class EquipmentCraftingService
         if (operation.DisplayName is "淬刃打造" or "守壁打造" or "活血打造")
             return AddCraftedAffix(item, operation, resource, cost);
 
-        P9CraftOperation? legacy = operation.DisplayName switch
+        ItemCraftOperation? legacy = operation.DisplayName switch
         {
-            "启灵" => P9CraftOperation.AwakenMagic, "添铸" => P9CraftOperation.AugmentMagic,
-            "易变重铸" => P9CraftOperation.RerollMagic, "命铸" => P9CraftOperation.FatefulUpgrade,
-            "炼真" => P9CraftOperation.AlchemicalRare, "王铸" => P9CraftOperation.RegalUpgrade,
-            "混沌重铸" => P9CraftOperation.ChaosReroll, "崇高增附" => P9CraftOperation.ExaltedAdd,
-            "消解" => P9CraftOperation.DissolveAffix, "洗炼" => P9CraftOperation.Scour,
-            "神铸重掷" => P9CraftOperation.DivineReroll, "祝铸重掷" => P9CraftOperation.BlessedReroll,
-            "破裂" => P9CraftOperation.Fracture, "精磨品质" => P9CraftOperation.PolishQuality,
-            "赤蚀腐化" => P9CraftOperation.Corrupt,
+            "启灵" => ItemCraftOperation.AwakenMagic, "添铸" => ItemCraftOperation.AugmentMagic,
+            "易变重铸" => ItemCraftOperation.RerollMagic, "命铸" => ItemCraftOperation.FatefulUpgrade,
+            "炼真" => ItemCraftOperation.AlchemicalRare, "王铸" => ItemCraftOperation.RegalUpgrade,
+            "混沌重铸" => ItemCraftOperation.ChaosReroll, "崇高增附" => ItemCraftOperation.ExaltedAdd,
+            "消解" => ItemCraftOperation.DissolveAffix, "洗炼" => ItemCraftOperation.Scour,
+            "神铸重掷" => ItemCraftOperation.DivineReroll, "祝铸重掷" => ItemCraftOperation.BlessedReroll,
+            "破裂" => ItemCraftOperation.Fracture, "精磨品质" => ItemCraftOperation.PolishQuality,
+            "赤蚀腐化" => ItemCraftOperation.Corrupt,
             _ => null,
         };
         if (legacy is not null)
         {
-            if (legacy == P9CraftOperation.FatefulUpgrade) return Fateful(item, seed, resource, cost);
-            if (legacy == P9CraftOperation.Corrupt) return Corrupt(item, seed, resource, cost);
-            P9CraftResult result = P9CraftingRules.Preview(item, legacy.Value, seed);
+            if (legacy == ItemCraftOperation.FatefulUpgrade) return Fateful(item, seed, resource, cost);
+            if (legacy == ItemCraftOperation.Corrupt) return Corrupt(item, seed, resource, cost);
+            CraftResult result = ItemCraftingRules.Preview(item, legacy.Value, seed);
             if (!result.Succeeded) return Fail(result.FailureReason, result.Summary, resource, cost);
             ItemInstance? protectedResult = result.Result is null ? null : ApplyProtections(item, result.Result, ChangesExplicitAffixes(legacy.Value));
             return new(true, string.Empty, result.Summary, protectedResult, resource, cost, result.Destroyed);
@@ -287,7 +287,7 @@ public static class EquipmentCraftingService
 
     private static EquipmentCraftingResult BiasedReroll(ItemInstance item, string tag, ulong seed, string resource, int cost, AffixRoll? extra = null)
     {
-        AffixDefinition[] targets = P1Affixes.For(item.Base, item.ItemLevel).Where(value => HasDirection(value, tag)).ToArray();
+        AffixDefinition[] targets = Affixes.For(item.Base, item.ItemLevel).Where(value => HasDirection(value, tag)).ToArray();
         if (targets.Length == 0) return Fail("no_direction_candidate", $"没有合法{tag}词缀。", resource, cost);
         var random = new Pcg32(seed ^ 0x9e3779b97f4a7c15UL);
         var affixes = item.Affixes.Where(value => value.Crafted || item.IsFractured(value) ||
@@ -296,7 +296,7 @@ public static class EquipmentCraftingService
         bool hasTarget = affixes.Any(value => HasDirection(value.Definition, tag));
         while (affixes.Count < desiredCount)
         {
-            AffixDefinition[] legal = P1Affixes.For(item.Base, item.ItemLevel)
+            AffixDefinition[] legal = Affixes.For(item.Base, item.ItemLevel)
                 .Where(candidate => affixes.Count(value => value.Definition.Position == candidate.Position) < 3)
                 .Where(candidate => affixes.All(value => value.Definition.StableFamilyId != candidate.StableFamilyId &&
                     value.Definition.MutualExclusionGroup != candidate.MutualExclusionGroup))
@@ -315,7 +315,7 @@ public static class EquipmentCraftingService
 
     private static EquipmentCraftingResult BiasedReplace(ItemInstance item, string tag, ulong seed, string resource, int cost)
     {
-        AffixDefinition[] candidates = P1Affixes.For(item.Base, item.ItemLevel).Where(value => HasDirection(value, tag)).ToArray();
+        AffixDefinition[] candidates = Affixes.For(item.Base, item.ItemLevel).Where(value => HasDirection(value, tag)).ToArray();
         if (candidates.Length == 0) return Fail("no_direction_candidate", $"没有合法{tag}词缀。", resource, cost);
         (AffixRoll Removed, AffixDefinition[] Candidates)[] choices = BiasedReplaceChoices(item, tag, candidates);
         if (choices.Length == 0) return Fail("no_replaceable_affix", "没有可替换且能产生合法目标词缀的非目标自然词缀。", resource, cost);
@@ -370,7 +370,7 @@ public static class EquipmentCraftingService
     {
         AffixRoll? selected = item.Affixes.FirstOrDefault(value => EquipmentCatalog.ResolveAffixId(value.Definition.StableFamilyId) == EquipmentCatalog.ResolveAffixId(familyId));
         if (selected is null || selected.Crafted || item.IsFractured(selected)) return Fail("invalid_tier_target", "请选择可升降的自然词缀。", resource, cost);
-        AffixDefinition[] tiers = P1Affixes.For(item.Base, item.ItemLevel).Where(value => value.StableFamilyId == selected.Definition.StableFamilyId).OrderBy(value => value.Tier).ToArray();
+        AffixDefinition[] tiers = Affixes.For(item.Base, item.ItemLevel).Where(value => value.StableFamilyId == selected.Definition.StableFamilyId).OrderBy(value => value.Tier).ToArray();
         int index = Array.FindIndex(tiers, value => value.Tier == selected.Definition.Tier);
         if (index < 0 || tiers.Length < 2) return Fail("adjacent_tier_unavailable", "没有相邻阶级。", resource, cost);
         bool improve = index == tiers.Length - 1 || index > 0 && new Pcg32(seed).NextBasisPoints() < 5_000;
@@ -380,7 +380,7 @@ public static class EquipmentCraftingService
         AffixRoll replacement = Roll(tiers[next], random);
         ItemInstance changed = item with { Affixes = item.Affixes.Select(value => ReferenceEquals(value, selected) ? replacement : value).ToArray() };
         return Ok(ApplyProtections(item, changed, true),
-            $"词缀移动至 T{P1Affixes.TierFor(item.Base, tiers[next])}", resource, cost);
+            $"词缀移动至 T{Affixes.TierFor(item.Base, tiers[next])}", resource, cost);
     }
 
     private static ItemInstance ApplyProtections(ItemInstance original, ItemInstance changed, bool explicitCraft)
@@ -478,7 +478,7 @@ public static class EquipmentCraftingService
         if (operation.Kind == "LifeEnergy" && operation.DisplayName.Contains("偏向打造", StringComparison.Ordinal))
         {
             string tag = DirectionFrom(operation.DisplayName);
-            AffixDefinition[] candidates = P1Affixes.For(item.Base, item.ItemLevel)
+            AffixDefinition[] candidates = Affixes.For(item.Base, item.ItemLevel)
                 .Where(value => HasDirection(value, tag)).ToArray();
             if (candidates.Length == 0) return "no_direction_candidate";
             if (BiasedReplaceChoices(item, tag, candidates).Length == 0) return "no_replaceable_affix";
@@ -507,7 +507,7 @@ public static class EquipmentCraftingService
         return (resource, cost);
     }
 
-    private static bool ChangesExplicitAffixes(P9CraftOperation operation) => operation is not (P9CraftOperation.BlessedReroll or P9CraftOperation.PolishQuality);
+    private static bool ChangesExplicitAffixes(ItemCraftOperation operation) => operation is not (ItemCraftOperation.BlessedReroll or ItemCraftOperation.PolishQuality);
     private static int RollInclusive(Pcg32 random, int minimum, int maximum) => minimum == maximum ? minimum : minimum + (int)(random.NextUInt() % (uint)(maximum - minimum + 1));
     private static ulong StableSeed(ItemInstance item, string operation)
     {

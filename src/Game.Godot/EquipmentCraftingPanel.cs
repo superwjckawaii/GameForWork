@@ -1,22 +1,22 @@
-using GameForWork.Core.P1;
-using GameForWork.Core.P1.Items;
-using GameForWork.Core.P2;
-using GameForWork.Core.P4;
-using GameForWork.Core.P6;
-using GameForWork.Core.P9;
-using GameForWork.Core.P14;
-using GameForWork.Core.P29;
+using GameForWork.Core.Campaign;
+using GameForWork.Core.Campaign.Items;
+using GameForWork.Core.Management;
+using GameForWork.Core.Spatial;
+using GameForWork.Core.Skills;
+using GameForWork.Core.Town;
+using GameForWork.Core.Content;
+using GameForWork.Core.Resources;
 using GameForWork.Core.Equipment;
 using Godot;
 
 namespace GameForWork.GodotClient;
 
 public sealed record EquipmentCraftTarget(ItemContainerKind Container, int Index, ItemInstance Item,
-    P2CharacterKind Character, string MercenaryId);
+    CharacterKind Character, string MercenaryId);
 
 public partial class EquipmentCraftingPanel : VBoxContainer
 {
-    private Func<P1GameSession>? _session;
+    private Func<GameSession>? _session;
     private Func<EquipmentCraftTarget?>? _target;
     private Action<string>? _changed;
     private GridContainer? _grid;
@@ -28,13 +28,13 @@ public partial class EquipmentCraftingPanel : VBoxContainer
     private Texture2D? _metalAtlas;
     private string _signature = string.Empty;
 
-    public void Initialize(Func<P1GameSession> session, Func<EquipmentCraftTarget?> target, Action<string> changed)
+    public void Initialize(Func<GameSession> session, Func<EquipmentCraftTarget?> target, Action<string> changed)
     {
         _session = session;
         _target = target;
         _changed = changed;
-        const string p21 = "res://assets/p21/ui/p21-metal-atlas.png";
-        _metalAtlas = ResourceLoader.Exists(p21) ? GD.Load<Texture2D>(p21) : null;
+        const string art = "res://assets/art/ui/art-metal-atlas.png";
+        _metalAtlas = ResourceLoader.Exists(art) ? GD.Load<Texture2D>(art) : null;
         Name = "打造";
         SizeFlagsVertical = SizeFlags.ExpandFill;
         var outerScroll = new ScrollContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill, SizeFlagsVertical = SizeFlags.ExpandFill };
@@ -60,17 +60,17 @@ public partial class EquipmentCraftingPanel : VBoxContainer
     public void Refresh(bool force = false)
     {
         if (_session is null) return;
-        P1GameSession session = _session();
+        GameSession session = _session();
         EquipmentCraftTarget? target = _target?.Invoke();
-        string signature = string.Join('|', P4MetalCurrencies.All.Select(metal => session.World.Economy.MetalAmount(metal.Kind))) +
-            $"|{session.World.Economy.Gold}|{session.Endgame.LifeForce}|{session.Town.Level(P9BuildingKind.Workshop)}|{session.Town.Level(P9BuildingKind.Alchemy)}|{TargetSignature(target)}";
+        string signature = string.Join('|', MetalCurrencies.All.Select(metal => session.World.Economy.MetalAmount(metal.Kind))) +
+            $"|{session.World.Economy.Gold}|{session.Endgame.LifeForce}|{session.Town.Level(BuildingKind.Workshop)}|{session.Town.Level(BuildingKind.Alchemy)}|{TargetSignature(target)}";
         if (!force && signature == _signature) return;
         _signature = signature;
         _status!.Text = target is null ? "尚未选择装备：将装备拖到工艺台，或在装备栏、整理背包、仓库中单击一件物品。" :
             $"当前目标：{target.Item.Base.DisplayName} · {target.Item.Rarity} · {target.Item.Affixes.Count} 词缀 · 品质 {target.Item.Quality}%" +
             (target.Item.IsCorrupted ? " · 已腐化" : string.Empty);
         foreach (Node child in _grid!.GetChildren()) child.QueueFree();
-        foreach (MetalCurrencyDefinition metal in P4MetalCurrencies.All)
+        foreach (MetalCurrencyDefinition metal in MetalCurrencies.All)
         {
             int count = session.World.Economy.MetalAmount(metal.Kind);
             var cell = new VBoxContainer { CustomMinimumSize = new Vector2(88, 78) };
@@ -110,15 +110,15 @@ public partial class EquipmentCraftingPanel : VBoxContainer
         if (operation is null) { _changed?.Invoke("该金属没有正式做装操作。"); return; }
         EquipmentCraftingPreview preview = EquipmentCraftingService.Preview(target.Item, new(operation.Id));
         if (!preview.Available) { _changed?.Invoke(preview.Summary); return; }
-        EquipmentCraftingResult result = new P2ItemCommandService(_session!(), target.Character, target.MercenaryId)
+        EquipmentCraftingResult result = new ItemCommandService(_session!(), target.Character, target.MercenaryId)
             .CraftEquipment(target.Container, target.Index, operation.DisplayName);
         _changed?.Invoke(result.Summary);
     }
 
-    private void RebuildEnchantments(P1GameSession session, EquipmentCraftTarget? target)
+    private void RebuildEnchantments(GameSession session, EquipmentCraftTarget? target)
     {
         foreach (Node child in _enchants!.GetChildren()) child.QueueFree();
-        foreach (ItemEnchantment enchantment in P9EnchantmentCatalog.All)
+        foreach (ItemEnchantment enchantment in EnchantmentCatalog.All)
         {
             EquipmentEnchantmentEntry entry = EquipmentEnchantmentCatalog.Entry(enchantment);
             var button = new Button
@@ -129,7 +129,7 @@ public partial class EquipmentCraftingPanel : VBoxContainer
                               $"适用装备：{entry.ApplicableEquipment}\n" +
                               $"获得方式：工坊 Lv.{entry.WorkshopLevel} · 消耗 {entry.GoldCost:N0} 金币\n" +
                               "覆盖现有附魔；点击即执行；失败不扣费。",
-                Disabled = target is null || session.Town.Level(P9BuildingKind.Workshop) < enchantment.WorkshopLevel || session.World.Economy.Gold < enchantment.GoldCost,
+                Disabled = target is null || session.Town.Level(BuildingKind.Workshop) < enchantment.WorkshopLevel || session.World.Economy.Gold < enchantment.GoldCost,
             };
             button.Pressed += () =>
             {
@@ -138,10 +138,10 @@ public partial class EquipmentCraftingPanel : VBoxContainer
                 EquipmentCraftingOperationEntry operation = EquipmentCatalog.CraftingOperations.Single(value =>
                     value.Kind == "Enchantment" && value.DisplayName == $"附魔：{enchantment.DisplayName}");
                 var request = new EquipmentCraftingRequest(operation.Id, enchantment.StableId,
-                    WorkshopLevel: session.Town.Level(P9BuildingKind.Workshop));
+                    WorkshopLevel: session.Town.Level(BuildingKind.Workshop));
                 EquipmentCraftingPreview preview = EquipmentCraftingService.Preview(current.Item, request);
                 if (!preview.Available) { _changed?.Invoke(preview.Summary); return; }
-                EquipmentCraftingResult result = new P2ItemCommandService(_session!(), current.Character, current.MercenaryId)
+                EquipmentCraftingResult result = new ItemCommandService(_session!(), current.Character, current.MercenaryId)
                     .CraftEquipment(current.Container, current.Index, operation.DisplayName, enchantment.StableId);
                 _changed?.Invoke(result.Summary);
             };
@@ -149,19 +149,19 @@ public partial class EquipmentCraftingPanel : VBoxContainer
         }
     }
 
-    private void RebuildAlchemy(P1GameSession session)
+    private void RebuildAlchemy(GameSession session)
     {
         foreach (Node child in _alchemy!.GetChildren()) child.QueueFree();
-        foreach (P9MetalTransmutationRecipe recipe in P9TownState.AlchemyRecipes)
+        foreach (MetalTransmutationRecipe recipe in TownState.AlchemyRecipes)
         {
-            string input = P4MetalCurrencies.Get(recipe.Input).DisplayName;
-            string output = P4MetalCurrencies.Get(recipe.Output).DisplayName;
+            string input = MetalCurrencies.Get(recipe.Input).DisplayName;
+            string output = MetalCurrencies.Get(recipe.Output).DisplayName;
             var button = new Button
             {
                 Text = $"Lv.{recipe.AlchemyLevel}  {recipe.InputCount}×{input} + {recipe.GoldCost:N0} 金\n→ 1×{output}",
                 TooltipText = $"完整炼金效果\n消耗：{recipe.InputCount}×{input} + {recipe.GoldCost:N0} 金币\n" +
                               $"获得：1×{output}\n需要炼金所 Lv.{recipe.AlchemyLevel} · 固定配方，不受随机数影响",
-                Disabled = session.Town.Level(P9BuildingKind.Alchemy) < recipe.AlchemyLevel ||
+                Disabled = session.Town.Level(BuildingKind.Alchemy) < recipe.AlchemyLevel ||
                     session.World.Economy.MetalAmount(recipe.Input) < recipe.InputCount ||
                     session.World.Economy.Gold < recipe.GoldCost,
             };
@@ -171,7 +171,7 @@ public partial class EquipmentCraftingPanel : VBoxContainer
         }
     }
 
-    private void RebuildGarden(P1GameSession session, EquipmentCraftTarget? target)
+    private void RebuildGarden(GameSession session, EquipmentCraftTarget? target)
     {
         foreach (Node child in _garden!.GetChildren()) child.QueueFree();
         foreach (EquipmentCraftingOperationEntry operation in EquipmentCatalog.CraftingOperations
@@ -191,7 +191,7 @@ public partial class EquipmentCraftingPanel : VBoxContainer
         void AddOperation(EquipmentCraftingOperationEntry operation, string familyId, string title)
         {
             EquipmentCraftingPreview? preview = target is null ? null : EquipmentCraftingService.Preview(target.Item,
-                new P2ItemCommandService(session, target.Character, target.MercenaryId)
+                new ItemCommandService(session, target.Character, target.MercenaryId)
                     .CreateCraftingRequest(operation.Id, familyId: familyId));
             string resource = preview?.Resource ?? CostResource(operation.CostText);
             int cost = preview?.Cost ?? CostAmount(operation.CostText);
@@ -205,7 +205,7 @@ public partial class EquipmentCraftingPanel : VBoxContainer
             {
                 EquipmentCraftTarget? current = _target?.Invoke();
                 if (current is null) return;
-                EquipmentCraftingResult result = new P2ItemCommandService(_session!(), current.Character, current.MercenaryId)
+                EquipmentCraftingResult result = new ItemCommandService(_session!(), current.Character, current.MercenaryId)
                     .CraftEquipment(current.Container, current.Index, operation.DisplayName,
                         selectedAffixFamilyId: familyId);
                 _changed?.Invoke(result.Summary);
@@ -214,9 +214,9 @@ public partial class EquipmentCraftingPanel : VBoxContainer
         }
     }
 
-    private static bool HasResource(P1GameSession session, string resource, int cost)
+    private static bool HasResource(GameSession session, string resource, int cost)
     {
-        MetalCurrencyDefinition? metal = P4MetalCurrencies.All.FirstOrDefault(value => value.DisplayName == resource);
+        MetalCurrencyDefinition? metal = MetalCurrencies.All.FirstOrDefault(value => value.DisplayName == resource);
         if (metal is not null) return session.World.Economy.MetalAmount(metal.Kind) >= cost;
         return resource switch
         {

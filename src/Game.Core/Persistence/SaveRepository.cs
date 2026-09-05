@@ -5,7 +5,7 @@ namespace GameForWork.Core.Persistence;
 
 public sealed class SaveRepository : IDisposable
 {
-    public const int CurrentSchemaVersion = 4;
+    public const int CurrentSchemaVersion = 5;
     private const int AutoBackupLimit = 5;
     private const int RecoveryLimit = 10;
     private readonly object _backupSync = new();
@@ -48,6 +48,7 @@ public sealed class SaveRepository : IDisposable
 
         OpenConnection();
         ApplyMigrations();
+        ImportLegacyCampaignTable();
         NormalizeOversizedMapIds();
     }
 
@@ -127,14 +128,14 @@ public sealed class SaveRepository : IDisposable
         return Convert.ToInt32(command.ExecuteScalar(), System.Globalization.CultureInfo.InvariantCulture);
     }
 
-    public string? LoadP1SessionJson()
+    public string? LoadCampaignSessionJson()
     {
         using SqliteCommand command = RequireConnection().CreateCommand();
-        command.CommandText = "SELECT state_json FROM p1_state WHERE id = 1;";
+        command.CommandText = "SELECT state_json FROM campaign_state WHERE id = 1;";
         return command.ExecuteScalar() as string;
     }
 
-    public void SaveP1SessionJson(string stateJson)
+    public void SaveCampaignSessionJson(string stateJson)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(stateJson);
         long now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
@@ -142,7 +143,7 @@ public sealed class SaveRepository : IDisposable
         using SqliteCommand command = RequireConnection().CreateCommand();
         command.Transaction = transaction;
         command.CommandText = """
-            INSERT INTO p1_state(id, updated_utc_ms, state_json) VALUES (1, $now, $json)
+            INSERT INTO campaign_state(id, updated_utc_ms, state_json) VALUES (1, $now, $json)
             ON CONFLICT(id) DO UPDATE SET updated_utc_ms = excluded.updated_utc_ms, state_json = excluded.state_json;
             UPDATE save_meta SET last_observed_utc_ms = $now WHERE id = 1;
             """;
@@ -483,7 +484,7 @@ public sealed class SaveRepository : IDisposable
                 map_json TEXT NOT NULL,
                 PRIMARY KEY(team, ordinal)
             );
-            CREATE TABLE IF NOT EXISTS p1_state(
+            CREATE TABLE IF NOT EXISTS campaign_state(
                 id INTEGER PRIMARY KEY CHECK(id = 1),
                 updated_utc_ms INTEGER NOT NULL,
                 state_json TEXT NOT NULL
@@ -492,6 +493,7 @@ public sealed class SaveRepository : IDisposable
             INSERT OR IGNORE INTO schema_migrations(version, applied_utc_ms) VALUES (2, $now);
             INSERT OR IGNORE INTO schema_migrations(version, applied_utc_ms) VALUES (3, $now);
             INSERT OR IGNORE INTO schema_migrations(version, applied_utc_ms) VALUES (4, $now);
+            INSERT OR IGNORE INTO schema_migrations(version, applied_utc_ms) VALUES (5, $now);
             INSERT OR IGNORE INTO save_meta(id, schema_version, created_utc_ms, last_observed_utc_ms)
             VALUES (1, $schema, $now, $now);
             UPDATE save_meta SET schema_version = $schema WHERE id = 1 AND schema_version < $schema;
@@ -502,12 +504,38 @@ public sealed class SaveRepository : IDisposable
         transaction.Commit();
     }
 
+    private void ImportLegacyCampaignTable()
+    {
+        using SqliteCommand tables = RequireConnection().CreateCommand();
+        tables.CommandText = "SELECT name FROM sqlite_master WHERE type = 'table';";
+        var legacyTables = new List<string>();
+        using (SqliteDataReader reader = tables.ExecuteReader())
+            while (reader.Read())
+            {
+                string name = reader.GetString(0);
+                if (name != "campaign_state" && SaveIdentifierMigration.Normalize(name) == "campaign_state")
+                    legacyTables.Add(name);
+            }
+        // Retain the original table as a recovery copy; repeated startup cannot replace a newer save.
+        foreach (string name in legacyTables)
+        {
+            using SqliteCommand import = RequireConnection().CreateCommand();
+            import.CommandText = $"""
+                INSERT INTO campaign_state(id, updated_utc_ms, state_json)
+                SELECT id, updated_utc_ms, state_json FROM "{name.Replace("\"", "\"\"")}" WHERE id = 1
+                ON CONFLICT(id) DO UPDATE SET updated_utc_ms = excluded.updated_utc_ms, state_json = excluded.state_json
+                WHERE excluded.updated_utc_ms > campaign_state.updated_utc_ms;
+                """;
+            import.ExecuteNonQuery();
+        }
+    }
+
     private void NormalizeOversizedMapIds()
     {
         SqliteConnection connection = RequireConnection();
         using (SqliteCommand validJson = connection.CreateCommand())
         {
-            validJson.CommandText = "SELECT COALESCE((SELECT json_valid(state_json) FROM p1_state WHERE id = 1), 0);";
+            validJson.CommandText = "SELECT COALESCE((SELECT json_valid(state_json) FROM campaign_state WHERE id = 1), 0);";
             if (Convert.ToInt32(validJson.ExecuteScalar(), System.Globalization.CultureInfo.InvariantCulture) == 0)
             {
                 return;
@@ -517,7 +545,7 @@ public sealed class SaveRepository : IDisposable
         using SqliteCommand countCommand = connection.CreateCommand();
         countCommand.CommandText = """
             SELECT COUNT(*)
-            FROM json_each(json_extract((SELECT state_json FROM p1_state WHERE id = 1), '$.World.MapInventory'))
+            FROM json_each(json_extract((SELECT state_json FROM campaign_state WHERE id = 1), '$.World.MapInventory'))
             WHERE length(CAST(json_extract(value, '$.InstanceId') AS TEXT)) > 128;
             """;
         int oversized = Convert.ToInt32(countCommand.ExecuteScalar(), System.Globalization.CultureInfo.InvariantCulture);
@@ -539,9 +567,9 @@ public sealed class SaveRepository : IDisposable
                             'legacy-map-' || $token || '-' || printf('%06d', CAST(key AS INTEGER)))
                         ELSE value
                     END))
-                FROM json_each(json_extract((SELECT state_json FROM p1_state WHERE id = 1), '$.World.MapInventory'))
+                FROM json_each(json_extract((SELECT state_json FROM campaign_state WHERE id = 1), '$.World.MapInventory'))
             )
-            UPDATE p1_state
+            UPDATE campaign_state
             SET state_json = json_set(state_json, '$.World.MapInventory', json((SELECT maps FROM normalized))),
                 updated_utc_ms = $now
             WHERE id = 1;

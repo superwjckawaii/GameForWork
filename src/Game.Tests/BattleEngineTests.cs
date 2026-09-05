@@ -24,7 +24,7 @@ public sealed class BattleEngineTests
     [Fact]
     public void MovementUsesTwentyHertzSpeed()
     {
-        BattleState state = P0BattleFactory.Create(1);
+        BattleState state = BattleFactory.Create(1);
         var engine = new BattleEngine();
         ActorState hero = state.Actors[1];
 
@@ -37,7 +37,7 @@ public sealed class BattleEngineTests
     [Fact]
     public void OutOfRangeAttackDoesNotStart()
     {
-        BattleState state = P0BattleFactory.Create(1);
+        BattleState state = BattleFactory.Create(1);
         var engine = new BattleEngine();
 
         IReadOnlyList<BattleEvent> events = engine.Step(state, [Attack(state, 1, 2)]);
@@ -110,7 +110,7 @@ public sealed class BattleEngineTests
 
     private static BattleState CreateDuel(int hitChance, int windupTicks)
     {
-        BattleState state = P0BattleFactory.Create(7);
+        BattleState state = BattleFactory.Create(7);
         state.Actors[1].XRaw = 5 * FixedPoint.Scale;
         state.Actors[1].YRaw = 5 * FixedPoint.Scale;
         state.Actors[2].XRaw = 6 * FixedPoint.Scale;

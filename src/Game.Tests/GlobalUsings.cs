@@ -1,2 +1,2 @@
 global using Xunit;
-global using GameForWork.Core.P23;
+global using GameForWork.Core.Characters;

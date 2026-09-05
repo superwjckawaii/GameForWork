@@ -1,4 +1,4 @@
-param([string]$RepositoryRoot=(Split-Path -Parent $PSScriptRoot))
+﻿param([string]$RepositoryRoot=(Split-Path -Parent $PSScriptRoot))
 $ErrorActionPreference='Stop'
 . (Join-Path $PSScriptRoot 'art-crop.ps1')
 $assetRoot=Join-Path $RepositoryRoot 'src/Game.Godot/assets'
@@ -18,6 +18,6 @@ foreach($asset in $manifest.assets){
     if((Get-FileHash $path).Hash.ToLowerInvariant() -ne $asset.sha256){throw "Unreviewed asset hash: $($asset.path)"}
     $cells+=$asset.count
 }
-$skills=Get-Content (Join-Path $assetRoot 'p25/ui/skill-art-manifest.json') -Raw|ConvertFrom-Json
+$skills=Get-Content (Join-Path $assetRoot 'equipmentArt/ui/skill-art-manifest.json') -Raw|ConvertFrom-Json
 if($skills.skills.Count -ne 184 -or @($skills.skills.id|Select-Object -Unique).Count -ne 184){throw 'Skill art requires 184 unique runtime identities.'}
 Write-Host "[current-assets] PASS: $($files.Count) PNGs, $cells occupied crops, dimensions, gutters, identities and hashes."

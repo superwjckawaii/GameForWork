@@ -1,4 +1,4 @@
-param([string]$RepositoryRoot = (Split-Path -Parent $PSScriptRoot))
+﻿param([string]$RepositoryRoot = (Split-Path -Parent $PSScriptRoot))
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Drawing
 $output = Join-Path $RepositoryRoot 'artifacts/art-audit'
@@ -26,11 +26,11 @@ function Contact([string]$path, [int]$columns, [int]$rows, [int]$cw, [int]$ch, [
         } finally {$font.Dispose();$g.Dispose();$sheet.Dispose()}
     }} finally {$source.Dispose()}
 }
-Contact 'src/Game.Godot/assets/p25/ui/p25-equipment-atlas.png' 13 19 32 32 @($catalog.bases.displayName) 'equipment'
-Contact 'src/Game.Godot/assets/p25/ui/p25-legendary-atlas.png' 5 11 32 32 @($catalog.legendaryItems.displayName) 'legendary'
-Contact 'src/Game.Godot/assets/p21/characters/p21-actor-animation.png' 31 20 48 64 @(0..19|ForEach-Object {"actor row $_"}) 'actors' 31
-Contact 'src/Game.Godot/assets/p21/enemies/p21-enemy-animation.png' 31 104 48 64 @(0..103|ForEach-Object {"enemy row $_"}) 'enemies' 31
-Contact 'src/Game.Godot/assets/p21/enemies/p21-boss-animation.png' 31 48 72 80 @(0..47|ForEach-Object {"boss row $_"}) 'bosses' 31
-Contact 'src/Game.Godot/assets/p21/town/p21-building-atlas.png' 4 2 160 120 @(0..6|ForEach-Object {"building $_"}) 'buildings'
-Contact 'src/Game.Godot/assets/p31/vfx/p31-combat-vfx.png' 4 4 64 64 @(0..15|ForEach-Object {"effect $_"}) 'vfx'
+Contact 'src/Game.Godot/assets/equipmentArt/ui/equipmentArt-equipment-atlas.png' 13 19 32 32 @($catalog.bases.displayName) 'equipment'
+Contact 'src/Game.Godot/assets/equipmentArt/ui/equipmentArt-legendary-atlas.png' 5 11 32 32 @($catalog.legendaryItems.displayName) 'legendary'
+Contact 'src/Game.Godot/assets/art/characters/art-actor-animation.png' 31 20 48 64 @(0..19|ForEach-Object {"actor row $_"}) 'actors' 31
+Contact 'src/Game.Godot/assets/art/enemies/art-enemy-animation.png' 31 104 48 64 @(0..103|ForEach-Object {"enemy row $_"}) 'enemies' 31
+Contact 'src/Game.Godot/assets/art/enemies/art-boss-animation.png' 31 48 72 80 @(0..47|ForEach-Object {"boss row $_"}) 'bosses' 31
+Contact 'src/Game.Godot/assets/art/town/art-building-atlas.png' 4 2 160 120 @(0..6|ForEach-Object {"building $_"}) 'buildings'
+Contact 'src/Game.Godot/assets/presentation/vfx/presentation-combat-vfx.png' 4 4 64 64 @(0..15|ForEach-Object {"effect $_"}) 'vfx'
 Write-Host "Contacts: $output"

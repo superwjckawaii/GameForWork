@@ -1,4 +1,4 @@
-using GameForWork.Core.P1.Items;
+using GameForWork.Core.Campaign.Items;
 
 namespace GameForWork.Core.Equipment;
 

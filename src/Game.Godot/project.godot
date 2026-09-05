@@ -6,7 +6,7 @@ config_version=5
 [application]
 
 config/name="暗门远征 · GameForWork"
-config/icon="res://assets/p21/brand/p21-app-icon.png"
+config/icon="res://assets/art/brand/art-app-icon.png"
 run/main_scene="res://Main.tscn"
 config/features=PackedStringArray("4.7", "C#", "GL Compatibility")
 

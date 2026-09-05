@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "assets": [
     {
-      "path": "p21/brand/p21-app-icon.png",
+      "path": "art/brand/art-app-icon.png",
       "width": 256,
       "height": 256,
       "columns": 1,
@@ -13,7 +13,7 @@
       "sha256": "f44d3805fdb322e19fc228cb169ea7158891ef358a68c94cb8b491d653f14db5"
     },
     {
-      "path": "p21/brand/p21-tray-error.png",
+      "path": "art/brand/art-tray-error.png",
       "width": 32,
       "height": 32,
       "columns": 1,
@@ -24,7 +24,7 @@
       "sha256": "9227810405ae0f8edce210b1870847d802af1ade74dce6e59c5db5d7ec6c4401"
     },
     {
-      "path": "p21/brand/p21-tray-normal.png",
+      "path": "art/brand/art-tray-normal.png",
       "width": 32,
       "height": 32,
       "columns": 1,
@@ -35,7 +35,7 @@
       "sha256": "c8982781948cefad043f29cfa6157ca6e89e84dcdb00a4fe5ae01f4608812fbc"
     },
     {
-      "path": "p21/brand/p21-tray-paused.png",
+      "path": "art/brand/art-tray-paused.png",
       "width": 32,
       "height": 32,
       "columns": 1,
@@ -46,7 +46,7 @@
       "sha256": "0cf3979fc784564164cd1d07212d6b76c5eba05035718ffb845424cce8455e8d"
     },
     {
-      "path": "p21/brand/p21-tray-waiting.png",
+      "path": "art/brand/art-tray-waiting.png",
       "width": 32,
       "height": 32,
       "columns": 1,
@@ -57,7 +57,7 @@
       "sha256": "64deea3be559d9c5e475723daceb7d0fe90edf963898ffe7d5425317488beea7"
     },
     {
-      "path": "p21/characters/p21-actor-animation.png",
+      "path": "art/characters/art-actor-animation.png",
       "width": 1488,
       "height": 1280,
       "columns": 31,
@@ -68,7 +68,7 @@
       "sha256": "8185483bdb0aea490e44a31daf7ff906f506e791e63f16f844d5c48e13caae90"
     },
     {
-      "path": "p21/enemies/p21-boss-animation.png",
+      "path": "art/enemies/art-boss-animation.png",
       "width": 2232,
       "height": 3840,
       "columns": 31,
@@ -79,7 +79,7 @@
       "sha256": "28d08da3de7d3521d162e5a98cd7dfc10a3d2fa75bffddffbb85986cb9724393"
     },
     {
-      "path": "p21/enemies/p21-enemy-animation.png",
+      "path": "art/enemies/art-enemy-animation.png",
       "width": 1488,
       "height": 6656,
       "columns": 31,
@@ -90,7 +90,7 @@
       "sha256": "3564f9ff0852053aa426c3f0703770ed216e70e9111aad0bfc0942480b48504e"
     },
     {
-      "path": "p21/regions/act-1.png",
+      "path": "art/regions/act-1.png",
       "width": 256,
       "height": 144,
       "columns": 1,
@@ -101,7 +101,7 @@
       "sha256": "a39720c5b8639ce999c4aa91a95a2502c80a4c7ed9a1477ef18e68b18a00bb5a"
     },
     {
-      "path": "p21/regions/act-2.png",
+      "path": "art/regions/act-2.png",
       "width": 256,
       "height": 144,
       "columns": 1,
@@ -112,7 +112,7 @@
       "sha256": "08f211204294d3998b16fa07c01e63296cd1f5f9001fc0629a23701abaa23840"
     },
     {
-      "path": "p21/regions/act-3.png",
+      "path": "art/regions/act-3.png",
       "width": 256,
       "height": 144,
       "columns": 1,
@@ -123,7 +123,7 @@
       "sha256": "3c0d49831a3bb326ecaed2eef15f0233d076e74f3b1748e608a92d82809f7eae"
     },
     {
-      "path": "p21/regions/act-4.png",
+      "path": "art/regions/act-4.png",
       "width": 256,
       "height": 144,
       "columns": 1,
@@ -134,7 +134,7 @@
       "sha256": "6268568e8c11e6718c8a36a8fb102f4ee82c39c827be1cb69df7e8ab393e8803"
     },
     {
-      "path": "p21/regions/act-5.png",
+      "path": "art/regions/act-5.png",
       "width": 256,
       "height": 144,
       "columns": 1,
@@ -145,7 +145,7 @@
       "sha256": "8a5c693770f9454ebb133cd7fe1c481623e51dfcd1defb4f97c01e9617cfc0d4"
     },
     {
-      "path": "p21/regions/p21-region-atlas.png",
+      "path": "art/regions/art-region-atlas.png",
       "width": 1024,
       "height": 432,
       "columns": 4,
@@ -156,7 +156,7 @@
       "sha256": "a9c8068afbe9d99c623d39b7218ee63ac535e39c12fb73553ca20f8f353de2a4"
     },
     {
-      "path": "p21/town/p21-building-atlas.png",
+      "path": "art/town/art-building-atlas.png",
       "width": 640,
       "height": 240,
       "columns": 4,
@@ -167,7 +167,7 @@
       "sha256": "2d9f3b957080e4f178cbdd3615e4a8f5afb65ce68d466247862bcce8b43ca6f2"
     },
     {
-      "path": "p21/town/p21-town-district.png",
+      "path": "art/town/art-town-district.png",
       "width": 480,
       "height": 270,
       "columns": 1,
@@ -178,7 +178,7 @@
       "sha256": "52f5fc7fef0abc8c087668a1d1f19eea88c8c6a41c41067fd86a700fa5d4a2f1"
     },
     {
-      "path": "p21/ui/p21-metal-atlas.png",
+      "path": "art/ui/art-metal-atlas.png",
       "width": 160,
       "height": 128,
       "columns": 5,
@@ -189,7 +189,7 @@
       "sha256": "a59fa45ab022e5bc91185a51d87a9cf7d3802fb09810e1199c6ca866c6404f31"
     },
     {
-      "path": "p21/ui/p21-skill-gems.png",
+      "path": "art/ui/art-skill-gems.png",
       "width": 320,
       "height": 256,
       "columns": 10,
@@ -200,7 +200,7 @@
       "sha256": "c77752616c49993e9512a077427cdc79e8079856eb204f6271a2a4f524e489d1"
     },
     {
-      "path": "p21/ui/p21-ui-skin.png",
+      "path": "art/ui/art-ui-skin.png",
       "width": 256,
       "height": 64,
       "columns": 4,
@@ -211,7 +211,7 @@
       "sha256": "97488c4a434b3c04f59ec12f4de5c9ff849e33628425f6c38d1f5d9c5e37a4f7"
     },
     {
-      "path": "p25/ui/p25-equipment-atlas.png",
+      "path": "equipmentArt/ui/equipmentArt-equipment-atlas.png",
       "width": 416,
       "height": 608,
       "columns": 13,
@@ -222,7 +222,7 @@
       "sha256": "5f4821cd018ae5c328dcd7d5328b57525bd7705eb00a9f54fb76d97788e074d7"
     },
     {
-      "path": "p25/ui/p25-legendary-atlas.png",
+      "path": "equipmentArt/ui/equipmentArt-legendary-atlas.png",
       "width": 160,
       "height": 352,
       "columns": 5,
@@ -233,7 +233,7 @@
       "sha256": "41be56274b05143f1ad55826009853760773d77e4c2edd63ecbe7be15328c69d"
     },
     {
-      "path": "p25/ui/p25-skill-stones.png",
+      "path": "equipmentArt/ui/equipmentArt-skill-stones.png",
       "width": 320,
       "height": 608,
       "columns": 10,
@@ -244,7 +244,7 @@
       "sha256": "b756f7f70d9afdf8654ab481ac88c32f028047c3dc297c8f1cc5413a85627217"
     },
     {
-      "path": "p31/trees/ascendancy/p31-ascendancy-01-blood-fighter.png",
+      "path": "presentation/trees/ascendancy/presentation-ascendancy-01-blood-fighter.png",
       "width": 768,
       "height": 768,
       "columns": 1,
@@ -255,7 +255,7 @@
       "sha256": "a13306ac362f9cb77d72a7a2cde12da8781883b9fb897f4ab2548087e26f0ab4"
     },
     {
-      "path": "p31/trees/ascendancy/p31-ascendancy-02-iron-guardian.png",
+      "path": "presentation/trees/ascendancy/presentation-ascendancy-02-iron-guardian.png",
       "width": 768,
       "height": 768,
       "columns": 1,
@@ -266,7 +266,7 @@
       "sha256": "7ee46dce57a8dc148848cc261e984cd01e85f0cf18a72fd5d69e8cd4343ce116"
     },
     {
-      "path": "p31/trees/ascendancy/p31-ascendancy-03-warbreaker.png",
+      "path": "presentation/trees/ascendancy/presentation-ascendancy-03-warbreaker.png",
       "width": 768,
       "height": 768,
       "columns": 1,
@@ -277,7 +277,7 @@
       "sha256": "b0088c10c0f0b4921ec8df3d64d2caba1d70ccdc28cac79df8e8bf17e131009d"
     },
     {
-      "path": "p31/trees/ascendancy/p31-ascendancy-04-marksman.png",
+      "path": "presentation/trees/ascendancy/presentation-ascendancy-04-marksman.png",
       "width": 768,
       "height": 768,
       "columns": 1,
@@ -288,7 +288,7 @@
       "sha256": "4f4ed5ca4ecc72bf8ddf581e3c35ecf8a8523f6f89a7e56af145e8ade4288187"
     },
     {
-      "path": "p31/trees/ascendancy/p31-ascendancy-05-shadowblade.png",
+      "path": "presentation/trees/ascendancy/presentation-ascendancy-05-shadowblade.png",
       "width": 768,
       "height": 768,
       "columns": 1,
@@ -299,7 +299,7 @@
       "sha256": "4efcf4b7eddfc4731baef536548361511b0badbe953e08727a95259c5ba65a15"
     },
     {
-      "path": "p31/trees/ascendancy/p31-ascendancy-06-venomist.png",
+      "path": "presentation/trees/ascendancy/presentation-ascendancy-06-venomist.png",
       "width": 768,
       "height": 768,
       "columns": 1,
@@ -310,7 +310,7 @@
       "sha256": "4fb3dbdfa218626a15dc8430853ed2ce1f84993e07dfc3d1cfed5915e9337bc1"
     },
     {
-      "path": "p31/trees/ascendancy/p31-ascendancy-07-soul-shepherd.png",
+      "path": "presentation/trees/ascendancy/presentation-ascendancy-07-soul-shepherd.png",
       "width": 768,
       "height": 768,
       "columns": 1,
@@ -321,7 +321,7 @@
       "sha256": "a13306ac362f9cb77d72a7a2cde12da8781883b9fb897f4ab2548087e26f0ab4"
     },
     {
-      "path": "p31/trees/ascendancy/p31-ascendancy-08-spirit-cantor.png",
+      "path": "presentation/trees/ascendancy/presentation-ascendancy-08-spirit-cantor.png",
       "width": 768,
       "height": 768,
       "columns": 1,
@@ -332,7 +332,7 @@
       "sha256": "7ee46dce57a8dc148848cc261e984cd01e85f0cf18a72fd5d69e8cd4343ce116"
     },
     {
-      "path": "p31/trees/ascendancy/p31-ascendancy-09-hexbinder.png",
+      "path": "presentation/trees/ascendancy/presentation-ascendancy-09-hexbinder.png",
       "width": 768,
       "height": 768,
       "columns": 1,
@@ -343,7 +343,7 @@
       "sha256": "b0088c10c0f0b4921ec8df3d64d2caba1d70ccdc28cac79df8e8bf17e131009d"
     },
     {
-      "path": "p31/trees/ascendancy/p31-ascendancy-10-elementalist.png",
+      "path": "presentation/trees/ascendancy/presentation-ascendancy-10-elementalist.png",
       "width": 768,
       "height": 768,
       "columns": 1,
@@ -354,7 +354,7 @@
       "sha256": "4f4ed5ca4ecc72bf8ddf581e3c35ecf8a8523f6f89a7e56af145e8ade4288187"
     },
     {
-      "path": "p31/trees/ascendancy/p31-ascendancy-11-void-scholar.png",
+      "path": "presentation/trees/ascendancy/presentation-ascendancy-11-void-scholar.png",
       "width": 768,
       "height": 768,
       "columns": 1,
@@ -365,7 +365,7 @@
       "sha256": "4efcf4b7eddfc4731baef536548361511b0badbe953e08727a95259c5ba65a15"
     },
     {
-      "path": "p31/trees/ascendancy/p31-ascendancy-12-aegis-mage.png",
+      "path": "presentation/trees/ascendancy/presentation-ascendancy-12-aegis-mage.png",
       "width": 768,
       "height": 768,
       "columns": 1,
@@ -376,7 +376,7 @@
       "sha256": "4fb3dbdfa218626a15dc8430853ed2ce1f84993e07dfc3d1cfed5915e9337bc1"
     },
     {
-      "path": "p31/trees/ascendancy/p31-ascendancy-13-martial-monk.png",
+      "path": "presentation/trees/ascendancy/presentation-ascendancy-13-martial-monk.png",
       "width": 768,
       "height": 768,
       "columns": 1,
@@ -387,7 +387,7 @@
       "sha256": "a13306ac362f9cb77d72a7a2cde12da8781883b9fb897f4ab2548087e26f0ab4"
     },
     {
-      "path": "p31/trees/ascendancy/p31-ascendancy-14-beast-keeper.png",
+      "path": "presentation/trees/ascendancy/presentation-ascendancy-14-beast-keeper.png",
       "width": 768,
       "height": 768,
       "columns": 1,
@@ -398,7 +398,7 @@
       "sha256": "7ee46dce57a8dc148848cc261e984cd01e85f0cf18a72fd5d69e8cd4343ce116"
     },
     {
-      "path": "p31/trees/ascendancy/p31-ascendancy-15-phantom-master.png",
+      "path": "presentation/trees/ascendancy/presentation-ascendancy-15-phantom-master.png",
       "width": 768,
       "height": 768,
       "columns": 1,
@@ -409,7 +409,7 @@
       "sha256": "b0088c10c0f0b4921ec8df3d64d2caba1d70ccdc28cac79df8e8bf17e131009d"
     },
     {
-      "path": "p31/trees/ascendancy/p31-ascendancy-16-runecarver.png",
+      "path": "presentation/trees/ascendancy/presentation-ascendancy-16-runecarver.png",
       "width": 768,
       "height": 768,
       "columns": 1,
@@ -420,7 +420,7 @@
       "sha256": "4f4ed5ca4ecc72bf8ddf581e3c35ecf8a8523f6f89a7e56af145e8ade4288187"
     },
     {
-      "path": "p31/trees/ascendancy/p31-ascendancy-17-spellarmor.png",
+      "path": "presentation/trees/ascendancy/presentation-ascendancy-17-spellarmor.png",
       "width": 768,
       "height": 768,
       "columns": 1,
@@ -431,7 +431,7 @@
       "sha256": "4efcf4b7eddfc4731baef536548361511b0badbe953e08727a95259c5ba65a15"
     },
     {
-      "path": "p31/trees/ascendancy/p31-ascendancy-18-idol-forger.png",
+      "path": "presentation/trees/ascendancy/presentation-ascendancy-18-idol-forger.png",
       "width": 768,
       "height": 768,
       "columns": 1,
@@ -442,7 +442,7 @@
       "sha256": "4fb3dbdfa218626a15dc8430853ed2ce1f84993e07dfc3d1cfed5915e9337bc1"
     },
     {
-      "path": "p31/trees/p31-atlas-backdrop.png",
+      "path": "presentation/trees/presentation-atlas-backdrop.png",
       "width": 2048,
       "height": 2048,
       "columns": 1,
@@ -453,7 +453,7 @@
       "sha256": "4b75eb8c0cb49747c5d4dfca53e085c4b973bbe4ef5f083652134ee7ce33aa20"
     },
     {
-      "path": "p31/trees/p31-passive-backdrop.png",
+      "path": "presentation/trees/presentation-passive-backdrop.png",
       "width": 2048,
       "height": 2048,
       "columns": 1,
@@ -464,7 +464,7 @@
       "sha256": "f15e0e7c709323e2fbcd7e0d64b2254a6c6640b4f0b6380c2755f1d8f10d32ab"
     },
     {
-      "path": "p31/vfx/p31-combat-vfx.png",
+      "path": "presentation/vfx/presentation-combat-vfx.png",
       "width": 256,
       "height": 256,
       "columns": 4,

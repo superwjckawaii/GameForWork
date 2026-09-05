@@ -1,6 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
-using GameForWork.Core.P1.Items;
+using GameForWork.Core.Campaign.Items;
 using GameForWork.Core.Simulation;
 
 namespace GameForWork.Core.Equipment;

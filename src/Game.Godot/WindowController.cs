@@ -402,7 +402,7 @@ public sealed class WindowController : IDisposable
             TrayStatus.Paused => "paused",
             _ => throw new ArgumentOutOfRangeException(nameof(status)),
         };
-        string path = $"res://assets/p21/brand/p21-tray-{name}.png";
+        string path = $"res://assets/art/brand/art-tray-{name}.png";
         return ResourceLoader.Exists(path) ? GD.Load<Texture2D>(path) : CreateSolidIcon(new Color("4d9fd1"));
     }
 

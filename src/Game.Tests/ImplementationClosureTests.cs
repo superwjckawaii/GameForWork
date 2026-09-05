@@ -1,13 +1,13 @@
 using GameForWork.Core.Equipment;
-using GameForWork.Core.P1.Combat;
-using GameForWork.Core.P1.Items;
-using GameForWork.Core.P1.Progression;
-using GameForWork.Core.P1.World;
-using GameForWork.Core.P17;
-using GameForWork.Core.P21;
-using GameForWork.Core.P30;
-using GameForWork.Core.P4;
-using GameForWork.Core.P6;
+using GameForWork.Core.Campaign.Combat;
+using GameForWork.Core.Campaign.Items;
+using GameForWork.Core.Campaign.Progression;
+using GameForWork.Core.Campaign.World;
+using GameForWork.Core.SkillCatalog;
+using GameForWork.Core.Art;
+using GameForWork.Core.Builds;
+using GameForWork.Core.Spatial;
+using GameForWork.Core.Skills;
 
 namespace GameForWork.Tests;
 
@@ -16,11 +16,11 @@ public sealed class ImplementationClosureTests
     [Fact]
     public void EveryCurrentSkillStoneHasOneDistinctCellAndUnknownIdsFail()
     {
-        string[] ids = P30SkillCatalog.Active.Select(skill => skill.Combat.StoneId)
-            .Concat(P30SkillCatalog.Supports.Select(skill => skill.StoneId)).ToArray();
+        string[] ids = ActiveSkillCatalog.Active.Select(skill => skill.Combat.StoneId)
+            .Concat(ActiveSkillCatalog.Supports.Select(skill => skill.StoneId)).ToArray();
         Assert.Equal(184, ids.Length);
-        Assert.Equal(Enumerable.Range(0, 184), ids.Select(P21ArtContract.SkillStoneIndex).Order());
-        Assert.Throws<KeyNotFoundException>(() => P21ArtContract.SkillStoneIndex("missing.stone"));
+        Assert.Equal(Enumerable.Range(0, 184), ids.Select(ArtContract.SkillStoneIndex).Order());
+        Assert.Throws<KeyNotFoundException>(() => ArtContract.SkillStoneIndex("missing.stone"));
     }
 
     [Fact]
@@ -39,16 +39,16 @@ public sealed class ImplementationClosureTests
     }
 
     [Theory]
-    [InlineData("无名谦冠", EquipmentSlot.Helmet, P30VirtueViceKind.Humility)]
-    [InlineData("傲慢之握", EquipmentSlot.Gloves, P30VirtueViceKind.Arrogance)]
-    [InlineData("怒节同契", EquipmentSlot.Chest, P30VirtueViceKind.Rage)]
-    public void LegendarySignaturesActuallyHoldTheirLayers(string name, EquipmentSlot slot, P30VirtueViceKind kind)
+    [InlineData("无名谦冠", EquipmentSlot.Helmet, VirtueViceKind.Humility)]
+    [InlineData("傲慢之握", EquipmentSlot.Gloves, VirtueViceKind.Arrogance)]
+    [InlineData("怒节同契", EquipmentSlot.Chest, VirtueViceKind.Rage)]
+    public void LegendarySignaturesActuallyHoldTheirLayers(string name, EquipmentSlot slot, VirtueViceKind kind)
     {
         var loadout = new EquipmentLoadout();
         Assert.True(loadout.TryEquip(slot, EquipmentLegendaryFactory.CreateByName(name, 100, "closure")));
-        P30VirtueViceLoadout virtues = Assemble(loadout).VirtueViceLoadout!;
+        VirtueViceLoadout virtues = Assemble(loadout).VirtueViceLoadout!;
         Assert.Contains(kind, virtues.HeldAtMaximum);
-        var state = new P30VirtueViceState(virtues.AdditionalMaximum, virtues.HeldAtMaximum);
+        var state = new VirtueViceState(virtues.AdditionalMaximum, virtues.HeldAtMaximum);
         state.Advance(60_000);
         Assert.Equal(state.Maximum(kind), state.Layers(kind));
     }
@@ -81,14 +81,14 @@ public sealed class ImplementationClosureTests
     [Fact]
     public void SpellDamageNoLongerReceivesAttackOnlyIncreasesAndCastSpeedChangesDelay()
     {
-        var config = new SkillConfiguration(P1SkillIds.EmberNova, SkillSupport.None);
-        P6ResolvedSkill skill = P6CombatSkillRules.Resolve(config, 1000);
-        P1TeamBuild build = Team();
-        int baseline = P6CombatSkillRules.ScaleOffensiveDamage(100, skill, config, build, SkillTag.Spell | SkillTag.Fire, 100, 100);
-        Assert.Equal(baseline, P6CombatSkillRules.ScaleOffensiveDamage(100, skill, config,
+        var config = new SkillConfiguration(SkillIds.EmberNova, SkillSupport.None);
+        ResolvedSkill skill = CombatSkillRules.Resolve(config, 1000);
+        TeamBuild build = Team();
+        int baseline = CombatSkillRules.ScaleOffensiveDamage(100, skill, config, build, SkillTag.Spell | SkillTag.Fire, 100, 100);
+        Assert.Equal(baseline, CombatSkillRules.ScaleOffensiveDamage(100, skill, config,
             build with { IncreasedDamageBasisPoints = 50_000 }, SkillTag.Spell | SkillTag.Fire, 100, 100));
         var fast = build with { CombatEquipment = Loadout(modifiers: new() { [ItemModifierKind.IncreasedCastSpeedBasisPoints] = 10_000 }) };
-        Assert.Equal(10, P6CombatSkillRules.ActionDelay(fast, 20, SkillTag.Spell));
+        Assert.Equal(10, CombatSkillRules.ActionDelay(fast, 20, SkillTag.Spell));
     }
 
     [Fact]
@@ -110,18 +110,18 @@ public sealed class ImplementationClosureTests
     public void EnchantmentRollsOncePerActionAndLayersExpire()
     {
         var runtime = new EquipmentCombatRuntime(Loadout(enchantments: new() { ["傲慢之印"] = 3 }), 42);
-        var state = new P30VirtueViceState(new Dictionary<P30VirtueViceKind, int> { [P30VirtueViceKind.Arrogance] = 3 }, []);
+        var state = new VirtueViceState(new Dictionary<VirtueViceKind, int> { [VirtueViceKind.Arrogance] = 3 }, []);
         var hero = new ResourceState(Sheet());
         for (int action = 0; action < 100; action++)
         {
-            runtime.BeginAction(P1SkillIds.HeavyStrike, 0, 1, false, state);
-            int before = state.Layers(P30VirtueViceKind.Arrogance);
+            runtime.BeginAction(SkillIds.HeavyStrike, 0, 1, false, state);
+            int before = state.Layers(VirtueViceKind.Arrogance);
             for (int hit = 0; hit < 30; hit++) runtime.OnHit(hero, SkillTag.Attack, "enemy", false, true, 1, state);
-            Assert.InRange(state.Layers(P30VirtueViceKind.Arrogance) - before, 0, 1);
+            Assert.InRange(state.Layers(VirtueViceKind.Arrogance) - before, 0, 1);
         }
-        Assert.Equal(state.Maximum(P30VirtueViceKind.Arrogance), state.Layers(P30VirtueViceKind.Arrogance));
+        Assert.Equal(state.Maximum(VirtueViceKind.Arrogance), state.Layers(VirtueViceKind.Arrogance));
         state.Advance(12_001);
-        Assert.Equal(0, state.Layers(P30VirtueViceKind.Arrogance));
+        Assert.Equal(0, state.Layers(VirtueViceKind.Arrogance));
     }
 
     [Fact]
@@ -155,12 +155,12 @@ public sealed class ImplementationClosureTests
     [Fact]
     public void ActualSpatialBattleConsumesConditionalLegendaryDamage()
     {
-        P1TeamBuild baseline = Team() with { AlwaysHit = true, CannotCrit = true, UseWarCry = false };
-        P4NodeCombatRequest Request(P1TeamBuild build) => new(build, 1, 1, 1, false, false, false, 0,
+        TeamBuild baseline = Team() with { AlwaysHit = true, CannotCrit = true, UseWarCry = false };
+        NodeCombatRequest Request(TeamBuild build) => new(build, 1, 1, 1, false, false, false, 0,
             MaximumTicks: 300, EnemyLifeBasisPoints: 100_000);
-        var plain = new P4SpatialCombatRunner().Run(Request(baseline), 73);
-        var equipped = new P4SpatialCombatRunner().Run(Request(baseline with { CombatEquipment = Loadout("统帅之负") }), 73);
-        int FirstHit(P4NodeCombatResult result) => result.Events.First(e => e.Kind == P4SpatialEventKind.HeavyStrike && e.Value > 0).Value;
+        var plain = new SpatialCombatRunner().Run(Request(baseline), 73);
+        var equipped = new SpatialCombatRunner().Run(Request(baseline with { CombatEquipment = Loadout("统帅之负") }), 73);
+        int FirstHit(NodeCombatResult result) => result.Events.First(e => e.Kind == SpatialEventKind.HeavyStrike && e.Value > 0).Value;
         Assert.True(FirstHit(equipped) > FirstHit(plain));
     }
 
@@ -170,33 +170,33 @@ public sealed class ImplementationClosureTests
     public void SummonsExistBeforeActionsAndDealTheirOwnDamage()
     {
         var build = Team() with { UseWarCry = false,
-            ActiveSkills = [new("p24.skill.summon_boneguard", SkillSupport.None)],
+            ActiveSkills = [new("archetypes.skill.summon_boneguard", SkillSupport.None)],
             CombatEquipment = Loadout() };
-        P4NodeCombatResult Run(P1TeamBuild team) => new P4SpatialCombatRunner().Run(new(team,
+        NodeCombatResult Run(TeamBuild team) => new SpatialCombatRunner().Run(new(team,
             1, 1, 1, false, false, false, 0, MaximumTicks: 300, EnemyLifeBasisPoints: 100_000,
-            EnemyPool: [P1Enemies.CorruptedWorker with { Life = 10_000,
+            EnemyPool: [Enemies.CorruptedWorker with { Life = 10_000,
                 Skills = [new(EnemySkillKind.BasicStrike, "attack", EnemyDamageType.Physical, 10_000)] }]), 821);
         var first = Run(build);
         var second = Run(build with { Weapon = new("huge", 100_000, 100_000, 1000, 10_000),
             IncreasedDamageBasisPoints = 100_000 });
-        Assert.Equal(6, first.Frames[0].Allies!.Count(a => a.SkillId == "p24.skill.summon_boneguard"));
+        Assert.Equal(6, first.Frames[0].Allies!.Count(a => a.SkillId == "archetypes.skill.summon_boneguard"));
         Assert.DoesNotContain(first.Events, e => e.SourceId == "hero" && e.Detail.Contains("summon_boneguard") && e.Value > 0);
         var hits = first.Events.Where(e => e.SourceId.StartsWith("army:") && e.Value > 0).Select(e => e.Value).ToArray();
         Assert.NotEmpty(hits);
         Assert.Equal(hits, second.Events.Where(e => e.SourceId.StartsWith("army:") && e.Value > 0).Select(e => e.Value));
-        Assert.Contains(first.Events, e => e.Kind == P4SpatialEventKind.EnemyAttack && e.TargetId.StartsWith("army:"));
+        Assert.Contains(first.Events, e => e.Kind == SpatialEventKind.EnemyAttack && e.TargetId.StartsWith("army:"));
     }
 
     [Fact]
     public void AutomaticArmySplitsGroupsAndHonorsHardCap()
     {
-        var build = Team() with { ActiveSkills = [new("p24.skill.summon_boneguard", SkillSupport.None),
-            new("p24.skill.summon_soulbow", SkillSupport.None), new("p24.skill.summon_spirit_beast", SkillSupport.None)],
+        var build = Team() with { ActiveSkills = [new("archetypes.skill.summon_boneguard", SkillSupport.None),
+            new("archetypes.skill.summon_soulbow", SkillSupport.None), new("archetypes.skill.summon_spirit_beast", SkillSupport.None)],
             CombatEquipment = Loadout(modifiers: new() { [ItemModifierKind.AdditionalMinionMaximum] = 100 }) };
-        var result = new P4SpatialCombatRunner().Run(new(build, 1, 1, 1, false, false, false, 0, MaximumTicks: 1), 1);
-        Assert.Equal(8, result.Frames[0].Allies!.Count(a => a.SkillId == "p24.skill.summon_boneguard"));
-        Assert.Equal(8, result.Frames[0].Allies!.Count(a => a.SkillId == "p24.skill.summon_soulbow"));
-        Assert.Single(result.Frames[0].Allies!, a => a.SkillId == "p24.skill.summon_spirit_beast");
+        var result = new SpatialCombatRunner().Run(new(build, 1, 1, 1, false, false, false, 0, MaximumTicks: 1), 1);
+        Assert.Equal(8, result.Frames[0].Allies!.Count(a => a.SkillId == "archetypes.skill.summon_boneguard"));
+        Assert.Equal(8, result.Frames[0].Allies!.Count(a => a.SkillId == "archetypes.skill.summon_soulbow"));
+        Assert.Single(result.Frames[0].Allies!, a => a.SkillId == "archetypes.skill.summon_spirit_beast");
     }
 
     [Fact]
@@ -228,10 +228,10 @@ public sealed class ImplementationClosureTests
     [Fact]
     public void LastPageCourtUsesUnusedSlotsBeforeForcingOneMinion()
     {
-        var build = Team() with { ActiveSkills = [new("p24.skill.summon_boneguard", SkillSupport.None)],
+        var build = Team() with { ActiveSkills = [new("archetypes.skill.summon_boneguard", SkillSupport.None)],
             CombatEquipment = Loadout("末页王庭") };
-        var result = new P4SpatialCombatRunner().Run(new(build, 1, 1, 1, false, false, false, 0, MaximumTicks: 1), 1);
-        var unit = Assert.Single(result.Frames[0].Allies!, a => a.SkillId == "p24.skill.summon_boneguard");
+        var result = new SpatialCombatRunner().Run(new(build, 1, 1, 1, false, false, false, 0, MaximumTicks: 1), 1);
+        var unit = Assert.Single(result.Frames[0].Allies!, a => a.SkillId == "archetypes.skill.summon_boneguard");
         Assert.Equal(450, unit.MaximumLife);
     }
 
@@ -282,11 +282,11 @@ public sealed class ImplementationClosureTests
         for (int tick = 0; tick < 80; tick++) baseline.AdvanceRegenerationTick(tick);
         Assert.Equal(60, baseline.Life);
     }
-    private static P1TeamBuild Team() => new(Sheet(), new("audit-weapon", 80, 100, 1000, 0),
-        new(P1SkillIds.HeavyStrike, SkillSupport.None), FlatAccuracy: 10_000,
-        ActiveSkills: [new(P1SkillIds.HeavyStrike, SkillSupport.None)]);
+    private static TeamBuild Team() => new(Sheet(), new("audit-weapon", 80, 100, 1000, 0),
+        new(SkillIds.HeavyStrike, SkillSupport.None), FlatAccuracy: 10_000,
+        ActiveSkills: [new(SkillIds.HeavyStrike, SkillSupport.None)]);
     private static AssembledCharacterBuild Assemble(EquipmentLoadout loadout) => CharacterBuildAssembler.Assemble(20,
-        new(100, 100, 100, 100), loadout, new PassiveTreeAllocation(0), new(P1SkillIds.HeavyStrike, SkillSupport.None));
+        new(100, 100, 100, 100), loadout, new PassiveTreeAllocation(0), new(SkillIds.HeavyStrike, SkillSupport.None));
     private static AffixRoll Fixed(ItemInstance item, ItemModifierKind kind, int value) => new(
         new("audit-affix", "audit", item.Base.Category, AffixPosition.Suffix, 1, 1, value, value, 1, kind), value);
     private static EquipmentCombatLoadout Loadout(params string[] names) => Loadout(names, null, null);

@@ -1,0 +1,375 @@
+using GameForWork.Core.Campaign.Progression;
+using GameForWork.Core.Presentation;
+using Godot;
+
+namespace GameForWork.GodotClient;
+
+/// <summary>One canvas and one spatial index; no per-node Godot controls.</summary>
+public partial class PassiveTreeView : Control
+{
+    private static readonly Color LockedColor = new("333843");
+    private static readonly Color AvailableColor = new("477d79");
+    private static readonly Color AllocatedColor = new("c28b3c");
+    private static readonly Color SelectedColor = new("f0cf72");
+    private static readonly Color PlannedColor = new("8e78c8");
+    private const float DragThreshold = 7f;
+    private const float SpatialCell = 140f;
+    private readonly Dictionary<string, Vector2> _centers = new(StringComparer.Ordinal);
+    private readonly Dictionary<Vector2I, List<PassiveNodeDefinition>> _spatial = [];
+    private readonly HashSet<string> _planned = new(StringComparer.Ordinal);
+    private Texture2D? _backdrop;
+    private PassiveNodeDefinition[] _nodes = [];
+    private IReadOnlySet<string> _allocated = new HashSet<string>();
+    private IReadOnlyDictionary<string, string> _socketedJewels = new Dictionary<string, string>();
+    private IReadOnlyDictionary<string, string> _socketedJewelTooltips = new Dictionary<string, string>();
+    private IReadOnlyDictionary<string, int> _socketedJewelRadii = new Dictionary<string, int>();
+    private int _earnedPoints;
+    private PassiveStartKind _start = PassiveStartKind.Physique;
+    private string _search = string.Empty;
+    private Vector2 _pan;
+    private float _zoom = 0.42f;
+    private bool _leftPressed;
+    private bool _dragging;
+    private Vector2 _pressPosition;
+    private string? _hovered;
+    private string _stateSignature = string.Empty;
+
+    public event Action<string>? NodeSelected;
+    public event Action<string>? NodeAllocateRequested;
+    public event Action<string>? NodeRefundRequested;
+    public event Action<string, string>? JewelDropRequested;
+    public string? SelectedStableId { get; private set; }
+
+    public override void _Ready()
+    {
+        MouseFilter = MouseFilterEnum.Stop;
+        const string backdropPath = "res://assets/presentation/trees/presentation-passive-backdrop.png";
+        _backdrop = ResourceLoader.Exists(backdropPath) ? GD.Load<Texture2D>(backdropPath) : null;
+        _nodes = PassiveTree.Nodes.OrderBy(node => node.StableId, StringComparer.Ordinal).ToArray();
+        BuildLayoutAndIndex();
+        Resized += () => { ClampView(); QueueRedraw(); };
+        QueueRedraw();
+    }
+
+    public override void _Draw()
+    {
+        DrawRect(new Rect2(Vector2.Zero, Size), new Color("11151d"), true);
+        DrawBackdrop();
+        DrawSocketedJewelRanges();
+        var drawnEdges = new HashSet<string>(StringComparer.Ordinal);
+        foreach (PassiveNodeDefinition node in _nodes)
+        {
+            Vector2 to = ToScreen(_centers[node.StableId]);
+            if (!VisibleWithMargin(to, 80)) continue;
+            foreach (string neighbor in PassiveTree.Neighbors(node.StableId))
+            {
+                string edge = string.CompareOrdinal(node.StableId, neighbor) < 0 ? node.StableId + '|' + neighbor : neighbor + '|' + node.StableId;
+                if (!drawnEdges.Add(edge) || !_centers.TryGetValue(neighbor, out Vector2 linked)) continue;
+                bool active = _allocated.Contains(node.StableId) && _allocated.Contains(neighbor);
+                Vector2 linkedScreen = ToScreen(linked);
+                if (!VisibleWithMargin(linkedScreen, 80) && !VisibleWithMargin(to, 80)) continue;
+                if (active)
+                {
+                    DrawLine(to, linkedScreen, new Color("6e3f16"), 5.2f, true);
+                    DrawLine(to, linkedScreen, new Color("f0b84e"), 2.2f, true);
+                }
+                else
+                {
+                    DrawLine(to, linkedScreen, new Color("29313d"), Math.Max(.7f, 1.2f * _zoom), true);
+                }
+            }
+        }
+
+        if (SelectedStableId is { } selectedId && PassiveTree.Get(selectedId).Kind == PassiveNodeKind.JewelSocket &&
+            _socketedJewelRadii.GetValueOrDefault(selectedId) <= 0)
+        {
+            DrawCircle(ToScreen(_centers[selectedId]), 150f * _zoom, new Color("6b84ad44"));
+            DrawCircle(ToScreen(_centers[selectedId]), 150f * _zoom, new Color("86a3cf"), false, 1.5f);
+        }
+
+        foreach (PassiveNodeDefinition node in _nodes)
+        {
+            Vector2 center = ToScreen(_centers[node.StableId]);
+            if (!VisibleWithMargin(center, 30)) continue;
+            if (_zoom < .28f && node.Kind == PassiveNodeKind.Small && node.Start == PassiveStartKind.None &&
+                !_allocated.Contains(node.StableId) && !_planned.Contains(node.StableId)) continue;
+            float radius = NodeRadius(node) * Math.Clamp(_zoom, 0.62f, 1.25f);
+            bool allocated = _allocated.Contains(node.StableId);
+            bool available = IsAvailable(node);
+            bool selected = SelectedStableId == node.StableId;
+            bool search = SearchMatch(node);
+            bool socketed = _socketedJewels.ContainsKey(node.StableId);
+            Color fill = allocated ? AllocatedColor : available ? AvailableColor : LockedColor;
+            if (socketed)
+            {
+                fill = new Color("9f66d2");
+                DrawCircle(center, radius + 7, new Color("9d6bd64a"));
+                DrawCircle(center, radius + 4, new Color("d1a5f0"), false, 2.2f);
+            }
+            Color border = selected || search ? SelectedColor : _planned.Contains(node.StableId) ? PlannedColor : fill.Lightened(0.3f);
+            DrawCircle(center, radius, fill);
+            DrawCircle(center, radius, border, false, selected || search ? 3 : 1.5f);
+            if ((node.Kind != PassiveNodeKind.Small || node.Start != PassiveStartKind.None) && radius >= 5)
+            {
+                string glyph = node.Kind switch
+                { PassiveNodeKind.Notable => "◆", PassiveNodeKind.Mastery => "专", PassiveNodeKind.Rule => "律", PassiveNodeKind.JewelSocket => socketed ? "◆" : "◇", _ => "始" };
+                DrawString(ThemeDB.FallbackFont, center + new Vector2(-radius * .55f, radius * .4f), glyph,
+                    HorizontalAlignment.Center, radius * 1.1f, Math.Max(8, (int)(radius * .9f)), new Color("f2e3bd"));
+            }
+        }
+
+        DrawMiniMap();
+    }
+
+    public override void _GuiInput(InputEvent inputEvent)
+    {
+        switch (inputEvent)
+        {
+            case InputEventMouseButton { ButtonIndex: MouseButton.WheelUp or MouseButton.WheelDown, Pressed: true } wheel:
+                ZoomAt(wheel.Position, wheel.ButtonIndex == MouseButton.WheelUp ? 1.12f : .89f); AcceptEvent(); break;
+            case InputEventMouseButton { ButtonIndex: MouseButton.Left } left:
+                HandleLeft(left); AcceptEvent(); break;
+            case InputEventMouseButton { ButtonIndex: MouseButton.Right, Pressed: true, DoubleClick: true } right:
+                if (HitTest(right.Position) is { } refund) { SelectNode(refund.StableId); NodeRefundRequested?.Invoke(refund.StableId); }
+                AcceptEvent(); break;
+            case InputEventMouseMotion motion:
+                HandleMotion(motion); break;
+        }
+    }
+
+    public void SetState(IReadOnlySet<string> allocated, int earnedPoints, PassiveStartKind start = PassiveStartKind.Physique,
+        IReadOnlyDictionary<string, string>? socketedJewels = null,
+        IReadOnlyDictionary<string, string>? socketedJewelTooltips = null,
+        IReadOnlyDictionary<string, int>? socketedJewelRadii = null)
+    {
+        socketedJewels ??= new Dictionary<string, string>();
+        socketedJewelTooltips ??= new Dictionary<string, string>();
+        socketedJewelRadii ??= new Dictionary<string, int>();
+        string signature = earnedPoints + "|" + start + "|" + string.Join('|', allocated.OrderBy(id => id, StringComparer.Ordinal)) +
+                           "|" + string.Join('|', socketedJewels.OrderBy(pair => pair.Key).Select(pair =>
+                               $"{pair.Key}:{pair.Value}:{socketedJewelTooltips.GetValueOrDefault(pair.Key)}:" +
+                               socketedJewelRadii.GetValueOrDefault(pair.Key)));
+        if (signature == _stateSignature) return;
+        _stateSignature = signature; _allocated = allocated; _earnedPoints = earnedPoints; _start = start;
+        _socketedJewels = socketedJewels; _socketedJewelTooltips = socketedJewelTooltips;
+        _socketedJewelRadii = socketedJewelRadii; QueueRedraw();
+    }
+
+    public void SetSearch(string query) { _search = query?.Trim() ?? string.Empty; QueueRedraw(); }
+
+    public bool PlanPathToSelected()
+    {
+        if (SelectedStableId is null) return false;
+        IReadOnlyList<string> path = PassiveTree.FindShortestPath(SelectedStableId, _allocated, _start);
+        if (path.Count == 0) return false;
+        _planned.Clear();
+        foreach (string id in path) _planned.Add(id);
+        QueueRedraw(); return true;
+    }
+
+    public int PlannedCost => _planned.Count;
+
+    public void CenterOnStart()
+    {
+        PassiveNodeDefinition start = PassiveTree.Get(PassiveTree.StartNode(_start));
+        _zoom = .72f;
+        _pan = -new Vector2(start.X, start.Y) * _zoom;
+        ClampView();
+        QueueRedraw();
+    }
+
+    public void FitAll()
+    {
+        float available = Math.Max(180f, Math.Min(Size.X, Size.Y) - 24f);
+        _zoom = Math.Clamp(available / (PassiveTree.LayoutExtent * 2f), .11f, .6f);
+        _pan = Vector2.Zero;
+        ClampView();
+        QueueRedraw();
+    }
+
+    public void ClearPlan() { _planned.Clear(); QueueRedraw(); }
+
+    public override bool _CanDropData(Vector2 atPosition, Variant data) =>
+        TryParseJewel(data, out _) && HitTest(atPosition) is { Kind: PassiveNodeKind.JewelSocket } node &&
+        _allocated.Contains(node.StableId);
+
+    public override void _DropData(Vector2 atPosition, Variant data)
+    {
+        if (TryParseJewel(data, out string jewel) &&
+            HitTest(atPosition) is { Kind: PassiveNodeKind.JewelSocket } node && _allocated.Contains(node.StableId))
+            JewelDropRequested?.Invoke(node.StableId, jewel);
+    }
+
+    private void HandleLeft(InputEventMouseButton input)
+    {
+        if (input.Pressed)
+        {
+            _leftPressed = true; _dragging = false; _pressPosition = input.Position;
+            if (input.DoubleClick && HitTest(input.Position) is { } node)
+            { SelectNode(node.StableId); NodeAllocateRequested?.Invoke(node.StableId); _leftPressed = false; }
+            return;
+        }
+        if (_leftPressed && !_dragging)
+        { if (HitTest(input.Position) is { } node) SelectNode(node.StableId); else SelectNode(null); }
+        _leftPressed = false; _dragging = false;
+    }
+
+    private void HandleMotion(InputEventMouseMotion motion)
+    {
+        if (_leftPressed)
+        {
+            if (!_dragging && motion.Position.DistanceTo(_pressPosition) >= DragThreshold) _dragging = true;
+            if (_dragging) { _pan += motion.Relative; ClampView(); QueueRedraw(); AcceptEvent(); return; }
+        }
+        PassiveNodeDefinition? hovered = HitTest(motion.Position);
+        string? next = hovered?.StableId;
+        if (next == _hovered) return;
+        _hovered = next;
+        TooltipText = hovered is null ? string.Empty : UiText.PassiveTooltip(hovered, _allocated.Contains(hovered.StableId), IsAvailable(hovered)) +
+            (_socketedJewelTooltips.TryGetValue(hovered.StableId, out string? jewel) ? $"\n\n已装备珠宝\n{jewel}" : string.Empty);
+    }
+
+    private void BuildLayoutAndIndex()
+    {
+        foreach (IGrouping<PassiveBranch, PassiveNodeDefinition> branch in _nodes.Where(node => node.X == 0 && node.Y == 0).GroupBy(node => node.Branch))
+        {
+            PassiveNodeDefinition[] legacy = branch.ToArray();
+            float clusterAngle = -MathF.PI / 2 + (int)branch.Key * MathF.Tau / 10;
+            Vector2 cluster = new(MathF.Cos(clusterAngle) * 310, MathF.Sin(clusterAngle) * 245);
+            for (int index = 0; index < legacy.Length; index++)
+            {
+                float orbit = 42 + index / 8 * 29;
+                float angle = clusterAngle + index % 8 * MathF.Tau / 8 + index / 8 * .18f;
+                _centers[legacy[index].StableId] = cluster + new Vector2(MathF.Cos(angle), MathF.Sin(angle)) * orbit;
+            }
+        }
+        foreach (PassiveNodeDefinition node in _nodes.Where(node => node.X != 0 || node.Y != 0)) _centers[node.StableId] = new Vector2(node.X, node.Y);
+        foreach (PassiveNodeDefinition node in _nodes)
+        {
+            Vector2 center = _centers[node.StableId];
+            var key = new Vector2I(Mathf.FloorToInt(center.X / SpatialCell), Mathf.FloorToInt(center.Y / SpatialCell));
+            if (!_spatial.TryGetValue(key, out List<PassiveNodeDefinition>? bucket)) _spatial[key] = bucket = [];
+            bucket.Add(node);
+        }
+    }
+
+    private PassiveNodeDefinition? HitTest(Vector2 screen)
+    {
+        Vector2 world = ToWorld(screen);
+        var cell = new Vector2I(Mathf.FloorToInt(world.X / SpatialCell), Mathf.FloorToInt(world.Y / SpatialCell));
+        PassiveNodeDefinition? best = null; float bestDistance = float.MaxValue;
+        for (int y = -1; y <= 1; y++) for (int x = -1; x <= 1; x++)
+        {
+            if (!_spatial.TryGetValue(cell + new Vector2I(x, y), out List<PassiveNodeDefinition>? bucket)) continue;
+            foreach (PassiveNodeDefinition node in bucket)
+            {
+                float distance = world.DistanceTo(_centers[node.StableId]);
+                if (distance <= NodeRadius(node) / Math.Max(_zoom, .42f) + 7 / _zoom && distance < bestDistance)
+                { best = node; bestDistance = distance; }
+            }
+        }
+        return best;
+    }
+
+    private void ZoomAt(Vector2 position, float factor)
+    { Vector2 before = ToWorld(position); _zoom = Math.Clamp(_zoom * factor, .11f, 1.5f); _pan = position - Size / 2 - before * _zoom; ClampView(); QueueRedraw(); }
+
+    private void ClampView()
+    {
+        float half = PassiveTree.LayoutExtent * _zoom;
+        float limitX = Math.Max(0, half - Size.X / 2);
+        float limitY = Math.Max(0, half - Size.Y / 2);
+        _pan = new Vector2(Math.Clamp(_pan.X, -limitX, limitX), Math.Clamp(_pan.Y, -limitY, limitY));
+    }
+
+    private void SelectNode(string? stableId)
+    { SelectedStableId = stableId; if (stableId is not null) NodeSelected?.Invoke(stableId); QueueRedraw(); }
+
+    private bool IsAvailable(PassiveNodeDefinition node) => node.Kind != PassiveNodeKind.Start && !_allocated.Contains(node.StableId) &&
+        (PassiveTree.Neighbors(PassiveTree.StartNode(_start)).Contains(node.StableId) ||
+         PassiveTree.Neighbors(node.StableId).Any(_allocated.Contains)) &&
+        _allocated.Count < Math.Min(_earnedPoints, PassiveTreeAllocation.MaximumAllocatedPoints);
+    private bool SearchMatch(PassiveNodeDefinition node) => _search.Length > 0 &&
+        (node.DisplayName.Contains(_search, StringComparison.OrdinalIgnoreCase) || node.Effects.Any(effect => UiText.PassiveEffect(effect).Contains(_search, StringComparison.OrdinalIgnoreCase)));
+    private Vector2 ToScreen(Vector2 world)
+    {
+        Vector2 center = Size / 2 + _pan;
+        ProjectedPoint point = TreeProjection.WorldToScreen(world.X, world.Y, center.X, center.Y, _zoom);
+        return new Vector2(point.X, point.Y);
+    }
+
+    private Vector2 ToWorld(Vector2 screen)
+    {
+        Vector2 center = Size / 2 + _pan;
+        ProjectedPoint point = TreeProjection.ScreenToWorld(screen.X, screen.Y, center.X, center.Y, _zoom);
+        return new Vector2(point.X, point.Y);
+    }
+    private bool VisibleWithMargin(Vector2 point, float margin) => point.X >= -margin && point.Y >= -margin && point.X <= Size.X + margin && point.Y <= Size.Y + margin;
+    private static float NodeRadius(PassiveNodeDefinition node) => node.Kind switch
+    { PassiveNodeKind.Start => 16, PassiveNodeKind.Small => 7, PassiveNodeKind.Notable => 11, PassiveNodeKind.Mastery => 13, PassiveNodeKind.Rule => 15, _ => 12 };
+
+    private static bool TryParseJewel(Variant data, out string jewel)
+    {
+        jewel = string.Empty;
+        if (data.VariantType != Variant.Type.String) return false;
+        string[] parts = data.AsString().Split('|');
+        if (parts.Length != 2 || parts[0] != "builds-jewel" || string.IsNullOrWhiteSpace(parts[1])) return false;
+        jewel = parts[1];
+        return true;
+    }
+
+    private void DrawMiniMap()
+    {
+        Rect2 area = new(Size.X - 132, Math.Max(86, Size.Y - 198), 120, 86);
+        DrawRect(area, new Color("0b0e14cc"), true);
+        DrawRect(area, new Color("596473"), false, 1);
+        foreach (PassiveNodeDefinition node in _nodes.Where(node => node.Kind != PassiveNodeKind.Small))
+        {
+            Vector2 point = area.GetCenter() + new Vector2(node.X, node.Y) / PassiveTree.LayoutExtent * area.Size * .44f;
+            DrawCircle(point, node.Kind == PassiveNodeKind.Start ? 2.4f : 1.2f,
+                node.Kind == PassiveNodeKind.Start ? AvailableColor : _allocated.Contains(node.StableId) ? AllocatedColor : LockedColor.Lightened(.25f));
+        }
+    }
+
+    private void DrawSocketedJewelRanges()
+    {
+        foreach ((string socketId, int radius) in _socketedJewelRadii
+                     .Where(pair => pair.Value > 0)
+                     .OrderByDescending(pair => pair.Value)
+                     .ThenBy(pair => pair.Key, StringComparer.Ordinal))
+        {
+            if (!_centers.TryGetValue(socketId, out Vector2 worldCenter)) continue;
+            Vector2 center = ToScreen(worldCenter);
+            float screenRadius = radius * _zoom;
+            bool selected = SelectedStableId == socketId;
+            DrawCircle(center, screenRadius, selected ? new Color("986ad13b") : new Color("76559c25"));
+            DrawCircle(center, screenRadius, selected ? new Color("ddb5ff") : new Color("a982cf"), false,
+                selected ? 2.4f : Math.Max(1f, 1.5f * _zoom));
+        }
+    }
+
+    private void DrawBackdrop()
+    {
+        if (_backdrop is not null)
+        {
+            Vector2 backdropCenter = Size / 2 + _pan;
+            ProjectedSquare square = TreeProjection.BackdropSquare(backdropCenter.X, backdropCenter.Y,
+                PassiveTree.LayoutExtent, _zoom);
+            DrawTextureRect(_backdrop, new Rect2(square.X, square.Y, square.Side, square.Side), false);
+            return;
+        }
+
+        Vector2 center = ToScreen(Vector2.Zero);
+        float extent = PassiveTree.LayoutExtent;
+        DrawCircle(center, extent * _zoom, new Color("202936"), false, Math.Max(1, 2 * _zoom));
+        foreach (float radius in new[] { 150f, 330f, 510f, 690f, 850f })
+            DrawCircle(center, radius * _zoom, new Color("1d263244"), false, Math.Max(.6f, 1.1f * _zoom));
+        for (int sector = 0; sector < 12; sector++)
+        {
+            float angle = -MathF.PI / 2 + sector * MathF.Tau / 12;
+            Vector2 direction = new(MathF.Cos(angle), MathF.Sin(angle));
+            DrawLine(ToScreen(direction * 105), ToScreen(direction * 875), new Color("1a222d66"),
+                Math.Max(.5f, _zoom), true);
+        }
+    }
+}
