@@ -221,11 +221,13 @@ public static class CombatSkillRules
         long value = rawDamage;
         if (applyIncreased)
         {
-            DamageModifiers increases = OffensiveIncreases(skill, configuration, build, tags, additionalIncreasedBasisPoints);
+            DamageModifiers increases = OffensiveIncreases(build, tags, skill.Role == SkillRole.DamageOverTime, additionalIncreasedBasisPoints);
             DamageType type = (damageType ?? skill.DamageType) switch
             {
-                SkillDamageType.Fire => DamageType.Fire, SkillDamageType.Cold => DamageType.Cold,
-                SkillDamageType.Lightning => DamageType.Lightning, SkillDamageType.Void => DamageType.Void,
+                SkillDamageType.Fire => DamageType.Fire,
+                SkillDamageType.Cold => DamageType.Cold,
+                SkillDamageType.Lightning => DamageType.Lightning,
+                SkillDamageType.Void => DamageType.Void,
                 _ => DamageType.Physical,
             };
             value = Scale(value, 10_000L + increases.InitialIncreasedBasisPoints + increases.IncreasedByType!.GetValueOrDefault(type) +
@@ -263,20 +265,25 @@ public static class CombatSkillRules
         return SaturatingInt(Scale(value, actionMultiplierBasisPoints));
     }
 
-    public static DamageModifiers OffensiveIncreases(ResolvedSkill skill, SkillConfiguration configuration,
-        TeamBuild build, SkillTag tags, int additionalIncreasedBasisPoints = 0)
+    public static DamageModifiers OffensiveIncreases(TeamBuild build, SkillTag tags,
+        bool damageOverTime = false, int additionalIncreasedBasisPoints = 0)
     {
         var equipment = build.CombatEquipment ?? Equipment.EquipmentCombatLoadout.Empty;
         int common = (tags.HasFlag(SkillTag.Attack) ? build.IncreasedDamageBasisPoints - equipment.PhysicalIncreaseIncludedInAttack : 0) +
-            (build.PassiveProfile ?? PassiveModifiers.Empty).DamageFor(tags, skill.Role == SkillRole.DamageOverTime) + additionalIncreasedBasisPoints;
+            (build.PassiveProfile ?? PassiveModifiers.Empty).DamageFor(tags, damageOverTime) + additionalIncreasedBasisPoints;
         if (tags.HasFlag(SkillTag.Attack)) common += Ascendancies.WarriorAscendancyRules.IncreasedAttackDamageBasisPoints(
             build.Ascendancy ?? Ascendancies.CombatProfile.Empty, build.Sheet.Attributes.Physique);
         if (tags.HasFlag(SkillTag.Spell)) common += build.IncreasedSpellDamageBasisPoints;
+        if (build.Ascendancy?.Has("core.ascendancy.spellarmor.hybrid.core") == true)
+        {
+            if (tags.HasFlag(SkillTag.Attack)) common += build.Sheet.Attributes.Physique / 100 * 5_000;
+            if (tags.HasFlag(SkillTag.Spell)) common += build.Sheet.Attributes.Energy / 100 * 5_000;
+        }
         int Value(Campaign.Items.ItemModifierKind kind) => equipment.Value(kind);
         if (tags.HasFlag(SkillTag.Melee)) common += Value(Campaign.Items.ItemModifierKind.IncreasedMeleeDamageBasisPoints);
         if (tags.HasFlag(SkillTag.Projectile)) common += Value(Campaign.Items.ItemModifierKind.IncreasedProjectileDamageBasisPoints);
         if (tags.HasFlag(SkillTag.Area)) common += Value(Campaign.Items.ItemModifierKind.IncreasedAreaDamageBasisPoints);
-        if (skill.Role == SkillRole.DamageOverTime) common += Value(Campaign.Items.ItemModifierKind.IncreasedDamageOverTimeBasisPoints);
+        if (damageOverTime) common += Value(Campaign.Items.ItemModifierKind.IncreasedDamageOverTimeBasisPoints);
         return new(new Dictionary<DamageType, int>
         {
             [DamageType.Physical] = Value(Campaign.Items.ItemModifierKind.IncreasedPhysicalDamageBasisPoints),
@@ -293,7 +300,7 @@ public static class CombatSkillRules
         int masterySpeed = MasteryRuntime.ActionSpeedMultiplier(passive, tags, build.Weapon);
         int increasedSpeed = build.IncreasedActionSpeedBasisPoints;
         if (tags.HasFlag(SkillTag.Attack)) increasedSpeed = checked(increasedSpeed + build.IncreasedAttackSpeedBasisPoints);
-        if (tags.HasFlag(SkillTag.Spell)) increasedSpeed = checked(increasedSpeed +
+        if (tags.HasFlag(SkillTag.Spell)) increasedSpeed = checked(increasedSpeed + build.IncreasedCastSpeedBasisPoints +
             (build.CombatEquipment?.Value(GameForWork.Core.Campaign.Items.ItemModifierKind.IncreasedCastSpeedBasisPoints) ?? 0));
         return Math.Max(1, checked((int)((long)Math.Max(1, baseTicks) * 10_000 * 10_000 /
             Math.Max(10_000_000, (long)(10_000 + increasedSpeed) * masterySpeed))));

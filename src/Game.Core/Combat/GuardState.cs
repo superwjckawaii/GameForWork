@@ -2,11 +2,13 @@ using GameForWork.Core.Builds;
 using GameForWork.Core.Campaign.Combat;
 using GameForWork.Core.Archetypes;
 using GameForWork.Core.Skills;
+using GameForWork.Core.Ascendancies;
 
 namespace GameForWork.Core.Combat;
 
-public sealed class GuardState
+public sealed partial class GuardState(CombatProfile? profile = null)
 {
+    private readonly CombatProfile _profile = profile ?? CombatProfile.Empty;
     public int Remaining { get; private set; }
     public int Expires { get; private set; }
     public bool ElementalOnly { get; private set; }
@@ -20,7 +22,12 @@ public sealed class GuardState
         "archetypes.skill.aegis_pulse" => Math.Max(1, (int)((long)maximumShield * 800 / 10_000)),
         _ => 0,
     };
-    public void Extend(int ticks) => Expires += Math.Max(0, ticks);
+    public void Extend(int ticks)
+    {
+        int extension = Math.Max(0, ticks);
+        Expires += extension;
+        _guardExpires += extension;
+    }
     public void ApplySupports(SkillConfiguration config, ResourceState hero)
     {
         if (!LinkedSupportRules.Support(config, SupportMechanic.SpellArmorFusion)) return;
@@ -54,6 +61,7 @@ public sealed class GuardState
             duration = elemental ? 80 : CombatRules.ApplyIncreased(60, quality * 100);
         }
         Remaining = capacity; Expires = tick + duration; ElementalOnly = elemental;
+        StartGuard(hero, tick, duration);
         return true;
     }
     public int Absorb(int damage, EnemyDamageType type, int tick)

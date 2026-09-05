@@ -68,6 +68,7 @@ public sealed partial class SpatialCombatRunner
         ResourceState hero, Point origin, Pcg32 random, int tick, ICollection<SpatialEvent> events,
         IList<PendingProjectile> projectiles, IList<PersistentArea> areas)
     {
+        ResolveShieldBurst(request, enemies, hero, origin, tick, events);
         foreach (var reaction in request.Reactions!.Drain())
         {
             if (!hero.IsAlive || ReactionConfiguration(request, reaction.SkillId) is not { } config) continue;
@@ -116,6 +117,47 @@ public sealed partial class SpatialCombatRunner
                             additionalBaseDamage: skill.SkillId == "archetypes.skill.aegis_pulse" ? request.Guard!.LastPaidShield : 0);
             });
             events.Add(Event(tick, SpatialEventKind.SkillEffect, "hero", target.EntityId, 0, origin, target.Position, $"reaction:{skill.SkillId}"));
+        }
+    }
+
+    private static void ResolveShieldBurst(NodeCombatRequest request, IReadOnlyList<EnemyUnit> enemies,
+        ResourceState hero, Point origin, int tick, ICollection<SpatialEvent> events)
+    {
+        var (raw, empowered) = request.Guard!.TakeShieldBurst();
+        if (raw == 0 || !hero.IsAlive) return;
+        var build = request.Build;
+        var passive = build.PassiveProfile ?? GameForWork.Core.Campaign.Progression.PassiveModifiers.Empty;
+        var equipment = build.CombatEquipment ?? EquipmentCombatLoadout.Empty;
+        var modifiers = CombatSkillRules.OffensiveIncreases(build, SkillTag.Area | SkillTag.Lightning);
+        foreach (var enemy in enemies.Where(enemy => enemy.Life > 0 && InRange(origin, enemy.Position, 4_000)))
+        {
+            var damage = DamagePacketRules.ResolveMixed(raw, SkillDamageType.Lightning, default, SkillSupport.None,
+                enemy.Scaled.Armor, EnemyResistance(enemy, request, SkillDamageType.Fire),
+                EnemyResistance(enemy, request, SkillDamageType.Cold), EnemyResistance(enemy, request, SkillDamageType.Lightning),
+                EnemyResistance(enemy, request, SkillDamageType.Void), equipment: equipment.Modifiers, modifiers: modifiers,
+                scaleBranch: branch =>
+                {
+                    int value = ScaleCombatValue(branch.BaseDamage, 10_000 + passive.MoreDamageBasisPoints);
+                    value = ScaleCombatValue(value, 10_000 + build.MoreElementalDamageBasisPoints);
+                    if (branch.CurrentType == DamageType.Void) value = ScaleCombatValue(value, 10_000 + build.MoreVoidDamageBasisPoints);
+                    if (enemy.Rarity is EnemyRarity.Rare or EnemyRarity.Boss) value = ScaleCombatValue(value, 10_000 + build.MoreRareBossDamageBasisPoints);
+                    value = ScaleCombatValue(value, 10_000 + enemy.ShockEffect);
+                    return ScaleCombatValue(value, 10_000 + enemy.Curses.Effect("archetypes.skill.death_mark", tick));
+                }, allowAddedHitDamage: false);
+            int actual = Math.Min(enemy.Life, damage.Total);
+            enemy.Life -= actual;
+            if (empowered && actual > 0)
+            {
+                if (enemy.Boss)
+                {
+                    enemy.ArmorBreakStacks = Math.Min(request.AscendancyRuntime!.ArmorBreakMaximum, enemy.ArmorBreakStacks + 5);
+                    enemy.ArmorBreakUntil = tick + 100;
+                }
+                else enemy.StunnedUntilTick = Math.Max(enemy.StunnedUntilTick, tick + 12);
+            }
+            events.Add(Event(tick, SpatialEventKind.SkillEffect, "hero", enemy.EntityId, actual, origin, enemy.Position,
+                $"spellarmor-break|damage:{damage.Compact}"));
+            if (enemy.Life == 0) events.Add(Event(tick, SpatialEventKind.EnemyDefeated, "hero", enemy.EntityId, 0, origin, enemy.Position, enemy.Profile.StableId));
         }
     }
 }

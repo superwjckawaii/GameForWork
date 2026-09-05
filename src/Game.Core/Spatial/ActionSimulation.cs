@@ -12,7 +12,8 @@ public sealed partial class SpatialCombatRunner
     private static void ResolveCopies(NodeCombatRequest request, IReadOnlyList<EnemyUnit> enemies,
         ResourceState hero, Point heroPosition, Pcg32 random, int tick, ICollection<SpatialEvent> events)
     {
-        foreach (DeferredCombatCopy copy in request.Actions!.TakeDue(tick * TickMilliseconds))
+        foreach (DeferredCombatCopy copy in request.Actions!.TakeDue(tick * TickMilliseconds,
+                     position => request.Buffs!.ForUnit(tick, heroPosition, position).ActionSpeed))
         {
             var context = request.EquipmentRuntime!.CreateTriggeredAction("", copy: true);
             var assigned = new Dictionary<string, EnemyUnit>();

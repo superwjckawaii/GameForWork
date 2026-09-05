@@ -63,7 +63,8 @@ public static class CharacterBuildAssembler
         EquipmentLoadout loadout,
         PassiveTreeAllocation passiveTree,
         SkillConfiguration heavyStrikeConfiguration,
-        JewelState? jewelState = null)
+        JewelState? jewelState = null,
+        Ascendancies.CombatProfile? ascendancy = null)
     {
         ArgumentNullException.ThrowIfNull(baseAttributes);
         ArgumentNullException.ThrowIfNull(loadout);
@@ -78,15 +79,16 @@ public static class CharacterBuildAssembler
         PassiveModifiers advanced = passive.Advanced ?? PassiveModifiers.Empty;
         JewelModifiers jewel = jewelState is null ? new() : JewelCatalog.CalculateModifiers(jewelState, passiveTree);
         int specializedWeaponDamage = WeaponPassiveIncrease(loadout, passive, advanced);
-        int physique = ScaleAttribute(baseAttributes.Physique + item.Physique + advanced.Physique + jewel.Physique,
+        bool armorFoundation = ascendancy?.Has("core.ascendancy.spellarmor.hybrid.small") == true;
+        int physique = ScaleAttribute(baseAttributes.Physique + item.Physique + advanced.Physique + jewel.Physique + (armorFoundation ? 80 : 0),
             item.Value(ItemModifierKind.IncreasedPhysiqueBasisPoints) + item.Value(ItemModifierKind.IncreasedAllAttributesBasisPoints) +
-            jewel.IncreasedPhysiqueBasisPoints);
+            jewel.IncreasedPhysiqueBasisPoints + (armorFoundation ? 500 : 0));
         int dexterity = ScaleAttribute(baseAttributes.Dexterity + item.Dexterity + advanced.Dexterity + jewel.Dexterity,
             item.Value(ItemModifierKind.IncreasedDexterityBasisPoints) + item.Value(ItemModifierKind.IncreasedAllAttributesBasisPoints));
         int spirit = ScaleAttribute(baseAttributes.Spirit + item.Spirit + advanced.Spirit + jewel.Spirit,
             item.Value(ItemModifierKind.IncreasedSpiritBasisPoints) + item.Value(ItemModifierKind.IncreasedAllAttributesBasisPoints));
-        int energy = ScaleAttribute(baseAttributes.Energy + item.Energy + advanced.Energy + jewel.Energy,
-            item.Value(ItemModifierKind.IncreasedEnergyBasisPoints) + item.Value(ItemModifierKind.IncreasedAllAttributesBasisPoints));
+        int energy = ScaleAttribute(baseAttributes.Energy + item.Energy + advanced.Energy + jewel.Energy + (armorFoundation ? 80 : 0),
+            item.Value(ItemModifierKind.IncreasedEnergyBasisPoints) + item.Value(ItemModifierKind.IncreasedAllAttributesBasisPoints) + (armorFoundation ? 500 : 0));
         if (MasteryRuntime.Has(advanced, "属性", 3))
         {
             int maximum = Math.Max(Math.Max(physique, dexterity), Math.Max(spirit, energy));
@@ -114,9 +116,10 @@ public static class CharacterBuildAssembler
             };
         }
         DefensiveEquipment defense = equipment.Defense;
+        bool armorHybrid = ascendancy?.Has("core.ascendancy.spellarmor.hybrid.core") == true;
         defense = defense with
         {
-            Armor = checked(defense.Armor * MasteryRuntime.ArmorMultiplier(advanced, weapon) / 10_000),
+            Armor = checked((defense.Armor + (armorHybrid ? physique / 100 * 200 : 0)) * MasteryRuntime.ArmorMultiplier(advanced, weapon) / 10_000),
             Evasion = checked(defense.Evasion * MasteryRuntime.EvasionMultiplier(
                 advanced, weapon, equipment.HasShield) / 10_000),
         };
@@ -152,7 +155,7 @@ public static class CharacterBuildAssembler
             item.IncreasedMovementSpeedBasisPoints,
             checked(item.IncreasedMaximumManaBasisPoints + jewel.IncreasedMaximumManaBasisPoints +
                 attributeMemory.IncreasedMaximumManaBasisPoints),
-            item.Value(ItemModifierKind.FlatShield) + (combatEquipment.Has("第四圣约") ? (spirit + energy) / 5 : 0),
+            item.Value(ItemModifierKind.FlatShield) + (combatEquipment.Has("第四圣约") ? (spirit + energy) / 5 : 0) + (armorHybrid ? energy / 100 * 200 : 0),
             equipment.SpiritBarrier,
             item.Value(ItemModifierKind.FlatSpiritBarrier),
             checked(item.Value(ItemModifierKind.IncreasedSpiritBarrierBasisPoints) + jewel.IncreasedSpiritBarrierBasisPoints),

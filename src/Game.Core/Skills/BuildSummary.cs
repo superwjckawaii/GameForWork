@@ -125,7 +125,7 @@ public static class BuildSummaryRules
         var spellRange = SpellHitRules.DamageRange(skill, configuration.Level);
         int raw = spell ? (spellRange.Minimum + spellRange.Maximum) / 2 :
             CombatSkillRules.BaseDamage(skill, tags, build.Weapon, build.AddedPhysicalDamage);
-        var increases = CombatSkillRules.OffensiveIncreases(skill, configuration, build, tags);
+        var increases = CombatSkillRules.OffensiveIncreases(build, tags, skill.Role == SkillRole.DamageOverTime);
         int accuracy = build.Sheet.Accuracy(build.FlatAccuracy).Value;
         int hitChance = build.AlwaysHit || spell ? 10_000 : DamageRules.HitChance(accuracy, 20, false).Value;
         var criticalSupport = configuration.Supports.HasFlag(SkillSupport.CriticalStrikes) ? CombatSkillRules.SupportLink(configuration, SkillSupport.CriticalStrikes) : null;

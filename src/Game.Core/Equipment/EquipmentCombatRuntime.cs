@@ -8,6 +8,8 @@ using GameForWork.Core.Simulation;
 
 namespace GameForWork.Core.Equipment;
 
+public sealed record EnemyDamageResult(int Damage, int ShieldLoss, bool Hit, bool Blocked, bool ShieldBroken, int Tick);
+
 public sealed record EquipmentActionContext(string Id, bool LifePaid, bool FallingStar, bool Triggered,
     HashSet<string> Triggers, string ProjectilePrimaryTarget = "", bool Copy = false);
 public sealed record EquipmentOffenseSnapshot(bool FullLife, bool CompanionAlive, bool LifePaid, bool FallingStar, int Rekindles);
@@ -83,12 +85,15 @@ public sealed class EquipmentCombatRuntime(EquipmentCombatLoadout loadout, ulong
     public Func<bool>? CompanionAlive { get; set; }
     public int LastEnemyShieldLoss { get; private set; }
     public bool LastEnemyHitBrokeShield { get; private set; }
+    public Func<int, int, int>? AbsorbEnemyDamage { get; set; }
+    public Action<ResourceState, EnemyDamageResult>? EnemyDamageApplied { get; set; }
 
     public int ApplyEnemyDamage(ResourceState hero, int damage, bool hit, int tick, VirtueViceState? virtues, bool blocked = false)
     {
         LastEnemyShieldLoss = 0;
         LastEnemyHitBrokeShield = false;
         if (!hero.IsAlive || damage <= 0) return 0;
+        damage = AbsorbEnemyDamage?.Invoke(damage, tick) ?? damage;
         damage = RedirectDamage?.Invoke(damage, hit) ?? damage;
         if (damage <= 0) return 0;
         int shieldBefore = hero.Shield;
@@ -97,7 +102,10 @@ public sealed class EquipmentCombatRuntime(EquipmentCombatLoadout loadout, ulong
         LastEnemyShieldLoss = Math.Min(shieldBefore, damage);
         LastEnemyHitBrokeShield = hit && shieldBroken;
         bool lifeLost = !hit && shieldBefore == 0 && actual > 0;
+        int generation = hero.HarmfulStatus.Generation;
         hero.ApplyDamage(damage, tick);
+        if (hero.IsAlive && generation == hero.HarmfulStatus.Generation)
+            EnemyDamageApplied?.Invoke(hero, new(actual, LastEnemyShieldLoss, hit, blocked, shieldBroken, tick));
         DamageTaken(actual, hit && !blocked, tick, virtues);
         if (Has("静海双壁") && tick >= _seaReady && (shieldBroken || lifeLost))
         {
@@ -142,7 +150,8 @@ public sealed class EquipmentCombatRuntime(EquipmentCombatLoadout loadout, ulong
         int cost = Scale(Has("怒节同契") ? 12_000 : 10_000, ExternalSkillCostMultiplier);
         return skill with
         {
-            ManaCost = Scale(skill.ManaCost, cost), LifeCost = Scale(skill.LifeCost, cost),
+            ManaCost = Scale(skill.ManaCost, cost),
+            LifeCost = Scale(skill.LifeCost, cost),
             RangeRaw = Scale(skill.RangeRaw, 10_000 + Value(ItemModifierKind.SkillRangeBasisPoints) +
                 (SkillDefinitions.Get(skill.SkillId).Tags.HasFlag(SkillTag.Area) ? Value(ItemModifierKind.SkillAreaBasisPoints) : 0)),
             CooldownTicks = skill.CooldownTicks <= 0 ? 0 : Math.Max(1, Scale(skill.CooldownTicks,

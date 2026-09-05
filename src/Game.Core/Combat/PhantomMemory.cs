@@ -41,12 +41,16 @@ public sealed partial class CombatActionQueue
         };
         int ratio = phantom.Ratio * (mode == PhantomReplayMode.Focus ? 6_000 : mode == PhantomReplayMode.Reverse ? 12_000 : 10_000) / 10_000;
         if (mode == PhantomReplayMode.Reverse) interval = interval * 3 / 2;
+        phantom.ReplayInterval = interval;
+        phantom.LastReplayTick = milliseconds;
+        phantom.ReplayWork = interval * 10_000L;
         var ready = new Dictionary<string, int>();
         foreach (var action in sequence)
         {
             int due = Math.Max(milliseconds, ready.GetValueOrDefault(action.SkillId));
             if (due >= phantom.Expires * 50) break;
-            Enqueue(action with { Hits = action.Hits.Select(hit => hit with { Origin = phantom.Position }).ToArray() }, due, ratio, false, phantom.Id);
+            phantom.MemoryReplays.Enqueue(new($"copy:{++_sequence}",
+                action with { Hits = action.Hits.Select(hit => hit with { Origin = phantom.Position }).ToArray() }, due, ratio, false, phantom.Id));
             ready[action.SkillId] = due + 1_000;
             milliseconds = due + interval;
         }

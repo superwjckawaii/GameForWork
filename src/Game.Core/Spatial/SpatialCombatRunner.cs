@@ -186,7 +186,8 @@ public sealed record NodeCombatRequest(
     Combat.CombatActionQueue? Actions = null, Combat.AuraCombatProfile? Auras = null,
     Combat.FlaskRack? FlaskState = null, Combat.GuardState? Guard = null, Combat.CombatBuffState? Buffs = null,
     Combat.ReactionState? Reactions = null, Combat.ChannelCostState? ChannelCosts = null,
-    EquipmentOffenseSnapshot? OffenseSnapshot = null, Combat.RuneFieldState? RuneFields = null);
+    EquipmentOffenseSnapshot? OffenseSnapshot = null, Combat.RuneFieldState? RuneFields = null,
+    int? ActionMultiplierSnapshot = null, int? SpellEnergyIncreaseSnapshot = null);
 
 public sealed record NodeCombatResult(
     BattleOutcome Outcome,
@@ -217,7 +218,9 @@ public sealed partial class SpatialCombatRunner
         var equipment = request.EquipmentRuntime ?? new EquipmentCombatRuntime(request.Build.CombatEquipment ?? EquipmentCombatLoadout.Empty, seed);
         TeamBuild originalBuild = request.Build;
         request = request with { RuneFields = new(request.Build.Ascendancy) };
-        request = request with { EquipmentRuntime = equipment, Actions = new Combat.CombatActionQueue(request.Build.Ascendancy), Guard = new Combat.GuardState(), Buffs = new Combat.CombatBuffState(), Reactions = new Combat.ReactionState(), ChannelCosts = new Combat.ChannelCostState() };
+        request = request with { EquipmentRuntime = equipment, Actions = new Combat.CombatActionQueue(request.Build.Ascendancy), Guard = new Combat.GuardState(request.Build.Ascendancy), Buffs = new Combat.CombatBuffState(), Reactions = new Combat.ReactionState(), ChannelCosts = new Combat.ChannelCostState() };
+        equipment.AbsorbEnemyDamage = request.Guard.AbsorbBarriers;
+        equipment.EnemyDamageApplied = request.Guard.ObserveEnemyDamage;
         var hero = new ResourceState(
             request.Build.Sheet,
             request.InitialHeroLife,
@@ -399,7 +402,9 @@ public sealed partial class SpatialCombatRunner
                         Math.Max(1, request.Build.MovementSpeedBasisPoints * 300 / 10_000));
                 }
             }
-            TeamBuild buffedBuild = request.Actions!.ApplyPhantomBonuses(request.Buffs!.Apply(originalBuild, tick), tick);
+            if (request.Guard!.TryOverload(hero, tick))
+                events.Add(Event(tick, SpatialEventKind.Ascendancy, "hero", "hero", 0, heroPosition, heroPosition, "spellarmor-overload|duration:6000"));
+            TeamBuild buffedBuild = request.Guard.ApplyArmorBonuses(request.Actions!.ApplyPhantomBonuses(request.Buffs!.Apply(originalBuild, tick), tick), hero, tick);
             request = request with
             {
                 Build = buffedBuild with
@@ -735,6 +740,7 @@ public sealed partial class SpatialCombatRunner
                 chargeReadyTick = 0;
             if (tick < rootedUntilTick) heroPosition = beforeMovement;
             equipment.Advance(tick, hero, heroPosition != beforeMovement);
+            guardUntilTick = Math.Max(guardUntilTick, request.Guard.Expires);
             heroPosition = ResolveEnemies(request, enemies, hero, heroPosition, random, tick, events, flasks,
                 guardUntilTick, guardReductionBasisPoints, shieldCounter, shieldCounterConfiguration,
                 ref shieldCounterReadyTick, ascendancyRuntime, hazards, ref rootedUntilTick, fortificationLayers, army,
@@ -958,6 +964,7 @@ public sealed partial class SpatialCombatRunner
             {
                 guardUntilTick = tick + 60;
                 guardReductionBasisPoints = 2_000;
+                request.Guard!.StartGuard(hero, tick, 60);
                 hero.HealLife(Math.Max(1, (hero.MaximumLife - hero.Life) / 10));
             }
             else
@@ -1108,6 +1115,8 @@ public sealed partial class SpatialCombatRunner
         SkillTag tags = SkillDefinitions.Get(skill.SkillId).Tags;
         EquipmentCombatRuntime? equipment = request.EquipmentRuntime;
         request.Actions?.Begin(equipment!.ActionId, skill, request.Build, tick, equipment.CaptureAction().Triggered);
+        if (tags.HasFlag(SkillTag.Spell)) additionalIncreasedBasisPoints += request.SpellEnergyIncreaseSnapshot ??
+            (equipment!.CaptureAction().Triggered ? request.Guard?.SpellDamageIncrease ?? 0 : request.Reactions?.SpellIncrease(equipment.ActionId) ?? 0);
         bool hunted = enemy.Rarity is EnemyRarity.Rare or EnemyRarity.Boss && request.Auras?.HunterAlwaysHits == true;
         bool missed = tags.HasFlag(SkillTag.Attack) && !request.Build.AlwaysHit && !hunted && random.NextBasisPoints() >=
             DamageRules.HitChance(request.Build.Sheet.Accuracy(request.Build.FlatAccuracy).Value, enemy.Scaled.Evasion, false).Value;
@@ -1117,8 +1126,8 @@ public sealed partial class SpatialCombatRunner
             if (request.Build.Ascendancy?.Ascendancy != Ascendancy.PhantomMaster) return null;
         }
         int distanceRaw = (int)Math.Sqrt(Point.DistanceSquared(source, enemy.Position));
-        if (equipment?.CaptureAction().Triggered != true)
-            multiplier = ScaleCombatValue(multiplier, request.Reactions?.AttackMultiplier(equipment!.ActionId) ?? 10_000);
+        multiplier = ScaleCombatValue(multiplier, request.ActionMultiplierSnapshot ??
+            (equipment?.CaptureAction().Triggered != true ? request.Reactions?.ActionMultiplier(equipment!.ActionId) ?? 10_000 : 10_000));
         multiplier = ScaleCombatValue(multiplier, equipment?.HitMultiplier(request.Build, hero, tags, enemy.EntityId,
             enemy.Life, enemy.MaximumLife, enemy.Rarity is EnemyRarity.Rare or EnemyRarity.Boss, enemy.Boss, enemy.BleedRemaining > 0,
             distanceRaw, equipment.NearbyEnemyCount?.Invoke() ?? 0, tick, chainIndex, request.OffenseSnapshot) ?? 10_000);
@@ -1163,7 +1172,7 @@ public sealed partial class SpatialCombatRunner
             EnemyResistance(enemy, request, SkillDamageType.Void),
             enemy.Scaled.PhysicalResistanceBasisPoints + request.EnemyPhysicalReductionBasisPoints,
             equipment?.Loadout.Modifiers,
-            CombatSkillRules.OffensiveIncreases(skill, configuration, request.Build, tags,
+            CombatSkillRules.OffensiveIncreases(request.Build, tags, skill.Role == SkillRole.DamageOverTime,
                 additionalIncreasedBasisPoints + (request.RuneFields?.DamageIncrease(source) ?? 0)),
             branch =>
             {
@@ -1574,6 +1583,8 @@ public sealed partial class SpatialCombatRunner
                 enemy.Position, impactPoint, attackDetail));
             if (hero.IsAlive && !substituted && !areaAvoided)
                 ScheduleSupportedReactions(request, hero, enemy.EntityId, block: blocked, hitDamage: damage);
+            if (hero.IsAlive && hit.Hit && !substituted && !areaAvoided && hero.HarmfulStatus.Generation == statusGeneration)
+                request.Guard?.EnemyHit(tick);
             if (hero.IsAlive && !substituted && damage > 0 && request.EquipmentRuntime?.LastEnemyShieldLoss > 0)
             {
                 if (ReactionConfiguration(request, Combat.ReactionState.Mirror) is { } mirror)
@@ -1655,12 +1666,13 @@ public sealed partial class SpatialCombatRunner
         {
             if (request.ChannelCosts?.TryPay(hero, skill, out int paid) != true) return false;
             request.EquipmentRuntime?.BeginAction(skill.SkillId, skill.LifeCost > 0 ? paid : 0, skill.LifeCost > 0 ? 0 : paid, false, request.VirtueVice);
+            request.Reactions?.Begin(request.EquipmentRuntime?.ActionId ?? "", skill.SkillId, request.Guard);
             return true;
         }
         if (!CombatSkillRules.TryPay(hero, skill)) return false;
         request.EquipmentRuntime?.BeginAction(skill.SkillId, skill.LifeCost, skill.ManaCost,
             SkillDefinitions.Get(skill.SkillId).Tags.HasFlag(SkillTag.Trigger), request.VirtueVice);
-        request.Reactions?.Begin(request.EquipmentRuntime?.ActionId ?? "", skill.SkillId);
+        request.Reactions?.Begin(request.EquipmentRuntime?.ActionId ?? "", skill.SkillId, request.Guard);
         return true;
     }
 
@@ -1670,7 +1682,7 @@ public sealed partial class SpatialCombatRunner
         skill = skill with { LifeCost = ScaleCombatValue(skill.LifeCost, multiplier), ManaCost = ScaleCombatValue(skill.ManaCost, multiplier) };
         if (!SkillRules.TryPaySkillCost(hero, skill)) return false;
         request.EquipmentRuntime?.BeginAction(skill.SkillId, skill.LifeCost, skill.ManaCost, false, request.VirtueVice);
-        request.Reactions?.Begin(request.EquipmentRuntime?.ActionId ?? "", skill.SkillId);
+        request.Reactions?.Begin(request.EquipmentRuntime?.ActionId ?? "", skill.SkillId, request.Guard);
         return true;
     }
 

@@ -16,7 +16,7 @@ using System.Text.Json;
 
 namespace GameForWork.Tests;
 
-public sealed class CombatClosureTests
+public sealed partial class CombatClosureTests
 {
     [Fact]
     public void DurationHitDoesNotGainDamageOverTimeIncreasesInProduction()
@@ -48,8 +48,11 @@ public sealed class CombatClosureTests
     {
         var skill = Team().HeavyStrike;
         var physical = BuildSummaryRules.CalculateOffense(Team(), skill);
-        var converted = Team() with { CombatEquipment = Equipment(new()
-            { [ItemModifierKind.PhysicalToFireConversionBasisPoints] = 10_000, [ItemModifierKind.IncreasedFireDamageBasisPoints] = 10_000 }) };
+        var converted = Team() with
+        {
+            CombatEquipment = Equipment(new()
+            { [ItemModifierKind.PhysicalToFireConversionBasisPoints] = 10_000, [ItemModifierKind.IncreasedFireDamageBasisPoints] = 10_000 })
+        };
         var fire = BuildSummaryRules.CalculateOffense(converted, skill);
         Assert.True(fire.DamagePerSecond > physical.DamagePerSecond * 2);
         Assert.Equal(10_000, fire.EffectiveIncreaseBasisPoints);
@@ -244,8 +247,11 @@ public sealed class CombatClosureTests
         var hero = new ResourceState(Team().Sheet);
         hero.ApplyDamage(hero.MaximumShield + 1_000, 0);
         int life = hero.Life;
-        var equipment = new EquipmentCombatRuntime(Equipment(new() { [ItemModifierKind.LifeOnHit] = 100,
-            [ItemModifierKind.LifeLeechBasisPoints] = 5_000 }), 3);
+        var equipment = new EquipmentCombatRuntime(Equipment(new()
+        {
+            [ItemModifierKind.LifeOnHit] = 100,
+            [ItemModifierKind.LifeLeechBasisPoints] = 5_000
+        }), 3);
         equipment.InAction(equipment.CreateTriggeredAction("enemy", copy: true), () =>
             equipment.OnHit(hero, SkillTag.Attack, "enemy", false, true, 1_000, null));
         Assert.Equal(life, hero.Life);
@@ -254,8 +260,12 @@ public sealed class CombatClosureTests
     [Fact]
     public void ShieldCountersFollowTheEnemyHitAndPaymentCannotTriggerThem()
     {
-        var team = Team() with { HasUsableWeapon = false, ActiveSkills =
-            [new(SkillIds.HeavyStrike, SkillSupport.None), new(ReactionState.Mirror, SkillSupport.None), new(ReactionState.ShieldBreak, SkillSupport.None)] };
+        var team = Team() with
+        {
+            HasUsableWeapon = false,
+            ActiveSkills =
+            [new(SkillIds.HeavyStrike, SkillSupport.None), new(ReactionState.Mirror, SkillSupport.None), new(ReactionState.ShieldBreak, SkillSupport.None)]
+        };
         var result = new SpatialCombatRunner().Run(new(team, 1, 1, 1, false, false, false, 0, MaximumTicks: 200,
             EnemyPool: [Enemies.CorruptedWorker with { Life = 1_000_000, MinimumPhysicalDamage = 15_000, MaximumPhysicalDamage = 15_000 }]), 731);
         Assert.Contains(result.Events, e => e.Detail == $"reaction:{ReactionState.Mirror}");
@@ -314,14 +324,14 @@ public sealed class CombatClosureTests
         state.Begin("buff", ReactionState.Overload);
         Assert.Empty(state.Drain());
         state.Begin("missed-attack", SkillIds.HeavyStrike);
-        Assert.Equal(17_000, state.AttackMultiplier("missed-attack"));
+        Assert.Equal(17_000, state.ActionMultiplier("missed-attack"));
         Assert.Equal(ReactionState.Overload, Assert.Single(state.Drain()).SkillId);
         state.Begin("next", SkillIds.HeavyStrike);
-        Assert.Equal(10_000, state.AttackMultiplier("next"));
+        Assert.Equal(10_000, state.ActionMultiplier("next"));
         Assert.Empty(state.Drain());
         guard.GainEnergy(5); state.Arm(config, guard); state.Tick = 80;
         state.Begin("expired", SkillIds.HeavyStrike);
-        Assert.Equal(10_000, state.AttackMultiplier("expired"));
+        Assert.Equal(10_000, state.ActionMultiplier("expired"));
     }
 
     [Fact]
@@ -419,8 +429,11 @@ public sealed class CombatClosureTests
         NodeCombatResult RunBleed(int increase) => Run(Team() with { IncreasedDamageBasisPoints = increase, CombatEquipment = baseline });
         string first = RunBleed(0).Events.First(e => e.Detail.Contains("ailment:bleed|dps:")).Detail;
         Assert.Equal(first, RunBleed(20_000).Events.First(e => e.Detail.Contains("ailment:bleed|dps:")).Detail);
-        var converted = Run(Team() with { CombatEquipment = Equipment(new()
-        { [ItemModifierKind.BleedChanceBasisPoints] = 10_000, [ItemModifierKind.PhysicalToFireConversionBasisPoints] = 10_000 }) });
+        var converted = Run(Team() with
+        {
+            CombatEquipment = Equipment(new()
+            { [ItemModifierKind.BleedChanceBasisPoints] = 10_000, [ItemModifierKind.PhysicalToFireConversionBasisPoints] = 10_000 })
+        });
         Assert.DoesNotContain(converted.Events, e => e.Kind == SpatialEventKind.Bleed);
     }
 
@@ -459,8 +472,11 @@ public sealed class CombatClosureTests
     [Fact]
     public void ReservationCannotBeRecoveredAndUnaffordableAurasStayInactive()
     {
-        var build = Team() with { ActiveSkills = [new("builds.skill.undying_sanctuary", SkillSupport.None),
-            new("builds.skill.hundred_soul_army", SkillSupport.None), new("builds.skill.hunter_banner", SkillSupport.None)] };
+        var build = Team() with
+        {
+            ActiveSkills = [new("builds.skill.undying_sanctuary", SkillSupport.None),
+            new("builds.skill.hundred_soul_army", SkillSupport.None), new("builds.skill.hunter_banner", SkillSupport.None)]
+        };
         var aura = AuraCombatProfile.Resolve(build);
         Assert.Equal(2, aura.ActiveIds.Count);
         var hero = new ResourceState(aura.Build.Sheet);
@@ -473,9 +489,15 @@ public sealed class CombatClosureTests
     [Fact]
     public void FlaskPaymentIsAtomicAndIdenticalKindsKeepIndependentCharges()
     {
-        TeamBuild build = Team() with { CombatEquipment = Equipment([]) with { Flasks = [
+        TeamBuild build = Team() with
+        {
+            CombatEquipment = Equipment([]) with
+            {
+                Flasks = [
             new(FlaskKind.Life, "expensive", 0, new Dictionary<ItemModifierKind, int> { [ItemModifierKind.FlaskLifeRemovedFromManaBasisPoints] = 10_000 }),
-            new(FlaskKind.Life, "plain", 1, new Dictionary<ItemModifierKind, int>())] } };
+            new(FlaskKind.Life, "plain", 1, new Dictionary<ItemModifierKind, int>())]
+            }
+        };
         var rack = new FlaskRack(build); var hero = new ResourceState(build.Sheet); var rng = new GameForWork.Core.Simulation.Pcg32(9);
         hero.ApplyDamage(hero.MaximumLife / 2, 0); hero.TryPayMana(hero.Mana);
         Assert.Equal("plain", rack.TryUse(FlaskKind.Life, hero, rng)!.Id);
@@ -490,9 +512,15 @@ public sealed class CombatClosureTests
     [Fact]
     public void FlaskSpeedChangesDurationWithoutIncreasingTotalAndEchoDoesNotSpendCharges()
     {
-        TeamBuild build = Team() with { CombatEquipment = Equipment([]) with { Flasks = [new(FlaskKind.Life, "echo", 0,
+        TeamBuild build = Team() with
+        {
+            CombatEquipment = Equipment([]) with
+            {
+                Flasks = [new(FlaskKind.Life, "echo", 0,
             new Dictionary<ItemModifierKind, int> { [ItemModifierKind.IncreasedFlaskRecoveryRateBasisPoints] = 10_000,
-                [ItemModifierKind.FlaskRepeatEffect] = 1, [ItemModifierKind.FlaskRecoveryAtEnd] = 1 })] } };
+                [ItemModifierKind.FlaskRepeatEffect] = 1, [ItemModifierKind.FlaskRecoveryAtEnd] = 1 })]
+            }
+        };
         var rack = new FlaskRack(build); var hero = new ResourceState(build.Sheet);
         hero.TryPayLifeCost(hero.MaximumLife - 1);
         rack.TryUse(FlaskKind.Life, hero, new GameForWork.Core.Simulation.Pcg32(9));
@@ -573,8 +601,11 @@ public sealed class CombatClosureTests
     [InlineData("追猎", 350)]
     public void BeastFormsUseTheirOwnLifePool(string form, int maximum)
     {
-        var result = Run(Team() with { ActiveSkills = [new("archetypes.skill.summon_spirit_beast", SkillSupport.None),
-            new("archetypes.skill.beast_shapeshift", SkillSupport.None, Mode: form)] }, 250);
+        var result = Run(Team() with
+        {
+            ActiveSkills = [new("archetypes.skill.summon_spirit_beast", SkillSupport.None),
+            new("archetypes.skill.beast_shapeshift", SkillSupport.None, Mode: form)]
+        }, 250);
         Assert.Contains(result.Events, e => e.Detail == $"beast-form:{form}" && e.Value == maximum);
     }
 
@@ -611,9 +642,15 @@ public sealed class CombatClosureTests
     [Fact]
     public void FlaskCleanseRemovesActualAilmentsAndEchoDoesNotRefreshImmunity()
     {
-        var build = Team() with { CombatEquipment = Equipment([]) with { Flasks = [new(FlaskKind.Armor, "cleanser", 0,
+        var build = Team() with
+        {
+            CombatEquipment = Equipment([]) with
+            {
+                Flasks = [new(FlaskKind.Armor, "cleanser", 0,
             new Dictionary<ItemModifierKind, int> { [ItemModifierKind.FlaskCleanseBleedPoison] = 400,
-                [ItemModifierKind.FlaskRepeatEffect] = 1 })] } };
+                [ItemModifierKind.FlaskRepeatEffect] = 1 })]
+            }
+        };
         var hero = new ResourceState(build.Sheet); var rack = new FlaskRack(build);
         Assert.True(hero.HarmfulStatus.ApplyDot(Ailment.Poison, DamageType.Void, 100, 10_000, "enemy"));
         rack.TryUse(FlaskKind.Armor, hero, new GameForWork.Core.Simulation.Pcg32(1));
@@ -629,9 +666,15 @@ public sealed class CombatClosureTests
     [Fact]
     public void EnemyAilmentProfilesDealPersistentDamageThroughProductionSimulation()
     {
-        var enemy = Enemies.CorruptedWorker with { Life = 1_000_000, MinimumPhysicalDamage = 800, MaximumPhysicalDamage = 800,
-            Accuracy = 10_000, Skills = [new(EnemySkillKind.BasicStrike, "poison", EnemyDamageType.Physical, 10_000,
-                RangeRaw: 40_000, Ailment: Ailment.Poison, AilmentChanceBasisPoints: 10_000)] };
+        var enemy = Enemies.CorruptedWorker with
+        {
+            Life = 1_000_000,
+            MinimumPhysicalDamage = 800,
+            MaximumPhysicalDamage = 800,
+            Accuracy = 10_000,
+            Skills = [new(EnemySkillKind.BasicStrike, "poison", EnemyDamageType.Physical, 10_000,
+                RangeRaw: 40_000, Ailment: Ailment.Poison, AilmentChanceBasisPoints: 10_000)]
+        };
         var result = new SpatialCombatRunner().Run(new(Team(), 1, 1, 1, false, false, false, 0,
             MaximumTicks: 150, EnemyPool: [enemy]), 73);
         Assert.Contains(result.Events, e => e.TargetId == "hero" && e.Detail == "dot:Poison" && e.Value > 0);
@@ -654,7 +697,8 @@ public sealed class CombatClosureTests
         return new SpatialCombatRunner().Run(new(team with
         {
             Sheet = team.Sheet with { IncreasedManaRegenerationBasisPoints = -10_000 },
-            ActiveSkills = [new(skillId, SkillSupport.None)], CombatEquipment = Equipment([]) with { Flasks = [] },
+            ActiveSkills = [new(skillId, SkillSupport.None)],
+            CombatEquipment = Equipment([]) with { Flasks = [] },
         }, 1, 1, 1, false, false, false, 0, InitialHeroMana: mana, MaximumTicks: ticks,
             EnemyPool: [Enemies.CorruptedWorker with { Life = 1_000_000, MovementSpeedRawPerSecond = 0,
                 MinimumPhysicalDamage = 0, MaximumPhysicalDamage = 0 }]), 731);

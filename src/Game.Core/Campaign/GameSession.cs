@@ -1316,7 +1316,7 @@ public sealed class GameSession
             hypothetical,
             Passives,
             new SkillConfiguration(SkillIds.HeavyStrike, HeavyStrikeSupports),
-            Jewels);
+            Jewels, AscendancyProfile());
         CombatPreview currentPreview = GetCombatPreview();
         CombatPreview proposedPreview = Preview(proposed);
         EquipmentSummary current = HeroEquipment.CalculateSummary();

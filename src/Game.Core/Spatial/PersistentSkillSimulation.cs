@@ -41,9 +41,18 @@ public sealed partial class SpatialCombatRunner
             "archetypes.skill.void_rift" or "archetypes.skill.corrosive_trap" or "archetypes.skill.thunderstorm" or "archetypes.skill.doom_brand")) return false;
         bool doom = id == "archetypes.skill.doom_brand";
         int fieldIncrease = request.RuneFields?.DamageIncrease(origin) ?? 0;
-        request = request with { OffenseSnapshot = request.EquipmentRuntime!.SnapshotOffense(hero), RuneFields = null,
-            Build = request.Build with { IncreasedDamageBasisPoints = request.Build.IncreasedDamageBasisPoints + fieldIncrease,
-                IncreasedSpellDamageBasisPoints = request.Build.IncreasedSpellDamageBasisPoints + fieldIncrease } };
+        request = request with
+        {
+            OffenseSnapshot = request.EquipmentRuntime!.SnapshotOffense(hero),
+            RuneFields = null,
+            ActionMultiplierSnapshot = request.EquipmentRuntime.CaptureAction().Triggered ? 10_000 : request.Reactions?.ActionMultiplier(request.EquipmentRuntime.ActionId) ?? 10_000,
+            SpellEnergyIncreaseSnapshot = request.EquipmentRuntime.CaptureAction().Triggered ? request.Guard?.SpellDamageIncrease ?? 0 : request.Reactions?.SpellIncrease(request.EquipmentRuntime.ActionId) ?? 0,
+            Build = request.Build with
+            {
+                IncreasedDamageBasisPoints = request.Build.IncreasedDamageBasisPoints + fieldIncrease,
+                IncreasedSpellDamageBasisPoints = request.Build.IncreasedSpellDamageBasisPoints + fieldIncrease
+            }
+        };
         bool brand = id == SkillIds.StormBrand, thunder = id == "archetypes.skill.thunderstorm";
         bool trap = id == "archetypes.skill.corrosive_trap", flame = id == SkillIds.FlameStep;
         if (brand || doom) target = enemies.Where(enemy => enemy.Life > 0 && InRange(origin, enemy.Position, skill.RangeRaw) &&
@@ -61,7 +70,8 @@ public sealed partial class SpatialCombatRunner
         while (areas.Count(area => area.Skill.SkillId == id) >= maximum)
             areas.Remove(areas.First(area => area.Skill.SkillId == id));
         var area = new PersistentArea(request, skill, configuration, flame ? origin : target.Position,
-            flame ? destination : target.Position, target.EntityId, radius, tick, duration, interval, multiplier) { Armed = trap };
+            flame ? destination : target.Position, target.EntityId, radius, tick, duration, interval, multiplier)
+        { Armed = trap };
         if (!brand && !thunder && !doom)
         {
             int weapon = request.Build.Weapon.MinimumPhysicalDamage + (int)(random.NextUInt() %
@@ -95,12 +105,13 @@ public sealed partial class SpatialCombatRunner
         }
         return DamagePacketRules.ResolveMixed(raw, weaponDerived ? SkillDamageType.Physical : skill.DamageType, default,
             configuration.Supports, 0, 0, 0, 0, 0, equipment: modifiers,
-            modifiers: CombatSkillRules.OffensiveIncreases(skill, configuration with { Quality = 0 }, request.Build, tags),
+            modifiers: CombatSkillRules.OffensiveIncreases(request.Build, tags, true,
+                tags.HasFlag(SkillTag.Spell) ? request.SpellEnergyIncreaseSnapshot ?? 0 : 0),
             scaleBranch: branch =>
             {
                 if (request.Auras?.ExclusiveElement is { } allowed && branch.CurrentType is DamageType.Fire or DamageType.Cold or DamageType.Lightning && branch.CurrentType != allowed) return 0;
                 int scaled = CombatSkillRules.ScaleOffensiveDamage(branch.BaseDamage, skill, configuration, request.Build, tags,
-                    1, 1, multiplier, targetRareOrBoss: rare, applyIncreased: false, damageHistory: branch.History);
+                    1, 1, ScaleCombatValue(multiplier, request.ActionMultiplierSnapshot ?? 10_000), targetRareOrBoss: rare, applyIncreased: false, damageHistory: branch.History);
                 return ScaleCombatValue(scaled, 10_000 + modifiers.GetValueOrDefault(ItemModifierKind.DamageOverTimeMultiplierBasisPoints));
             }, configuration: configuration, allowAddedHitDamage: false);
     }
