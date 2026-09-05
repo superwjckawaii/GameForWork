@@ -15,6 +15,9 @@ public partial class AscendancyPanel : Control
     private Button? _select;
     private BaseClass? _pathClass;
     private AscendancyTreeView? _tree;
+    private HFlowContainer? _combatOptions;
+    private OptionButton? _phantomMode, _firstModule, _secondModule;
+    private Button? _applyCombat;
 
     public void Initialize(Func<GameSession> session, Action<string> changed)
     {
@@ -49,6 +52,25 @@ public partial class AscendancyPanel : Control
         reset.Pressed += () => { changed(session().TryResetAscendancy(false) ? "升华节点已全部重置。" : "没有可重置节点，或金币不足。"); Refresh(); };
         var change = new Button { Text = "更换路线（100000金币）" }; bar.AddChild(change);
         change.Pressed += () => { changed(session().TryResetAscendancy(true) ? "升华路线已清除，可以重新选择。" : "尚未选择路线，或金币不足。"); Refresh(); };
+        _combatOptions = new HFlowContainer();
+        _phantomMode = new OptionButton();
+        foreach (string name in new[] { "循序复演", "专注复演", "逆序复演" }) _phantomMode.AddItem(name);
+        _firstModule = new OptionButton(); _secondModule = new OptionButton();
+        foreach (string name in new[] { "火力模块", "守护模块", "长程模块", "稳定器", "爆裂核心", "重铸模块" })
+        { _firstModule.AddItem(name); _secondModule.AddItem(name); }
+        _applyCombat = new Button { Text = "保存战斗配置（城镇）" };
+        _applyCombat.Pressed += () =>
+        {
+            var current = session();
+            CombatConfiguration config = current.Endgame.CombatConfiguration;
+            config = current.Endgame.SelectedAscendancy == Ascendancy.PhantomMaster
+                ? config with { PhantomMode = (PhantomReplayMode)_phantomMode.Selected }
+                : config with { Modules = new[] { (ConstructModule)_firstModule.Selected, (ConstructModule)_secondModule.Selected } };
+            changed(current.TryConfigureAscendancyCombat(config) ? "战斗配置已保存，下次出征生效。" : "请在城镇选择两个不同模块；远征期间不能更换。");
+            Refresh();
+        };
+        _combatOptions.AddChild(_phantomMode); _combatOptions.AddChild(_firstModule); _combatOptions.AddChild(_secondModule); _combatOptions.AddChild(_applyCombat);
+        top.AddChild(_combatOptions);
         overlay.AddChild(Hud(top));
         overlay.AddChild(new Control { SizeFlagsVertical = SizeFlags.ExpandFill, MouseFilter = MouseFilterEnum.Ignore });
         overlay.AddChild(Hud(new Label
@@ -65,6 +87,15 @@ public partial class AscendancyPanel : Control
         RefreshPaths(current);
         var state = current.Endgame;
         _summary!.Text = $"{WarriorAscendancyCatalog.DisplayName(state.SelectedAscendancy)} · 已用 {state.AscendancyPassives.Count}/{state.BreakthroughPoints}（上限8） · 金币 {current.World.Economy.Gold}";
+        _combatOptions!.Visible = state.SelectedAscendancy is Ascendancy.PhantomMaster or Ascendancy.IdolForger;
+        _phantomMode!.Visible = state.SelectedAscendancy == Ascendancy.PhantomMaster;
+        _firstModule!.Visible = _secondModule!.Visible = state.SelectedAscendancy == Ascendancy.IdolForger;
+        bool configurable = current.CanConfigureAscendancyCombat;
+        _phantomMode.Disabled = !configurable || !state.AscendancyPassives.Contains("core.ascendancy.phantom_master.afterimage.core");
+        _firstModule.Disabled = _secondModule.Disabled = _applyCombat!.Disabled = !configurable;
+        _phantomMode.Select((int)state.CombatConfiguration.PhantomMode);
+        var modules = state.CombatConfiguration.Modules ?? new[] { ConstructModule.Firepower, ConstructModule.Guardian };
+        _firstModule.Select((int)modules[0]); _secondModule.Select((int)modules[1]);
         _tree?.QueueRedraw();
     }
 

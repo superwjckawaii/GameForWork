@@ -40,7 +40,10 @@ public sealed partial class SpatialCombatRunner
         if (id is not (SkillIds.FlameStep or SkillIds.VoidDecayField or SkillIds.StormBrand or
             "archetypes.skill.void_rift" or "archetypes.skill.corrosive_trap" or "archetypes.skill.thunderstorm" or "archetypes.skill.doom_brand")) return false;
         bool doom = id == "archetypes.skill.doom_brand";
-        request = request with { OffenseSnapshot = request.EquipmentRuntime!.SnapshotOffense(hero) };
+        int fieldIncrease = request.RuneFields?.DamageIncrease(origin) ?? 0;
+        request = request with { OffenseSnapshot = request.EquipmentRuntime!.SnapshotOffense(hero), RuneFields = null,
+            Build = request.Build with { IncreasedDamageBasisPoints = request.Build.IncreasedDamageBasisPoints + fieldIncrease,
+                IncreasedSpellDamageBasisPoints = request.Build.IncreasedSpellDamageBasisPoints + fieldIncrease } };
         bool brand = id == SkillIds.StormBrand, thunder = id == "archetypes.skill.thunderstorm";
         bool trap = id == "archetypes.skill.corrosive_trap", flame = id == SkillIds.FlameStep;
         if (brand || doom) target = enemies.Where(enemy => enemy.Life > 0 && InRange(origin, enemy.Position, skill.RangeRaw) &&

@@ -137,12 +137,12 @@ public static class ClassAscendancyCatalog
         ]),
         new(Ascendancy.PhantomMaster, "phantom_master",
         [
-            B("spawn", "残影步", "使用位移技能生成1个幻身，持续4秒，最多2个", "万相分身", "幻身上限提高至4个，幻身造成本体40%的伤害"),
-            B("copy", "招式映刻", "幻身复制主角最近使用的攻击，造成30%伤害", "镜技同施", "幻身复制所有非保留技能，伤害提高至50%，但同一技能每秒只复制1次"),
-            B("swap", "移形印", "可与最远幻身交换位置，冷却5秒", "无定真身", "交换冷却缩短至2秒，交换后1秒内无法被选为目标"),
-            B("afterimage", "追迹残光", "移动每3米在原地留下残影攻击一次", "遍地留形", "残影攻击范围提高50%，并使幻身持续时间刷新2秒"),
-            B("sustain", "虚实轮转", "幻身消失时主角回复2%生命和护盾", "替身受难", "主角受到击中时由最近幻身承担该次伤害并消失，冷却3秒"),
-            B("unity", "同调", "每个在场幻身使主角伤害提高5%", "百影合击", "消耗全部幻身发动合击，每个幻身造成本体100%伤害；至少4个时造成50%更多伤害"),
+            B("spawn", "残影步", "每完成4个合法技能动作生成幻身，上限2个", "万相分身", "每完成3个合法技能动作生成幻身，持续8秒，上限4个"),
+            B("copy", "招式映刻", "幻身复演攻击，造成快照伤害30%；同一幻身同一技能每秒至多一次", "镜技同施", "幻身也可复演法术，比例提高至50%；不能偷取、击回或获得施放收益"),
+            B("swap", "移形印", "敌方单次击中实际损失达到最大生命与护盾之和20%后，与最远幻身换位，冷却5秒", "无定真身", "换位冷却2秒，换位后1秒不能被选为新目标，已开始的攻击仍可命中"),
+            B("afterimage", "追忆成列", "技能记忆长度提高至4，相邻复演基础间隔降至0.4秒", "轮回演武", "城镇选择顺演、聚焦或回溯；聚焦最新技能3次且伤害总降40%；回溯伤害总增20%、间隔延长50%"),
+            B("sustain", "虚实轮转", "幻身到期或规则移除恢复2%最大生命和护盾，每0.5秒至多一次", "替身受难", "最近幻身替代下一次敌方击中并消失，冷却3秒；不触发恢复或受击收益"),
+            B("unity", "同调", "每个幻身使主角伤害提高6%、移动速度提高2%，最多4个；幻身对主角当前稀有或Boss目标伤害总增30%", "百影合击", "4个幻身在场且自行命中稀有或Boss时消耗全部幻身，各复演最新合法记忆的75%快照伤害；冷却8秒，不触发消失恢复或复演链"),
         ]),
         new(Ascendancy.Runecarver, "runecarver",
         [
@@ -164,12 +164,12 @@ public static class ClassAscendancyCatalog
         ]),
         new(Ascendancy.IdolForger, "idol_forger",
         [
-            B("construct", "增殖铸模", "构装体上限+1，构装体生命提高25%", "群像工坊", "构装体上限再+2；每个在场构装体使其攻击和施法速度提高8%"),
-            B("turret", "远射校具", "远程构装射程提高30%，投射物速度提高25%", "炮台", "远程构装优先攻击稀有怪和Boss，并对稀有怪和Boss造成30%更多伤害"),
+            B("construct", "增殖铸模", "构装体上限+1，构装体生命提高25%", "群像工坊", "构装体上限再+2；每个在场构装使所有构装行动速度提高6%，最多6个"),
+            B("turret", "远射校具", "远程构装射程提高30%，投射物速度提高25%，命中提高300", "炮台协议", "优先稀有和Boss，对其造成50%更多伤害；热量至少50时额外1个投射物，同动作不能重复命中"),
             B("rune_field", "阵地刻线", "构装体周围形成符文阵，使友军护甲和护盾提高15%", "重叠阵列", "符文阵可以叠加3层，每层使友军伤害提高10%、受到伤害降低5%"),
-            B("command", "操偶指令", "构装体切换目标速度提高50%，移动速度提高20%", "全机集火", "获得构装集火指令；被指令目标受到构装体35%更多伤害"),
-            B("detonate", "过载核心", "构装体死亡时造成其最大生命20%的范围伤害", "自毁协议", "可主动引爆构装体，造成最大生命100%的伤害；对Boss总降50%"),
-            B("rebuild", "备用铸件", "构装体被摧毁后8秒自动重铸", "永续工坊", "重铸延迟缩短至4秒；重铸后4秒内获得50%更多伤害和50%更少承受伤害"),
+            B("command", "操偶指令", "切换目标所需时间降低50%，移动速度提高20%", "全机集火", "优先主角当前目标，对该目标造成50%更多伤害；没有合法目标时恢复普通AI"),
+            B("detonate", "过载核心", "过热前最后动作伤害总增80%、范围提高40%；稳压模块改为每第10个动作强化", "自毁协议", "死亡爆炸为最大生命100%，物理火焰各半，对Boss总降50%；替代爆芯，不叠加；规则移除不触发"),
+            B("rebuild", "备用铸件", "被摧毁8秒后重铸；回炉模块缩短为6秒", "永续工坊", "重铸延迟统一4秒；重铸后4秒伤害总增50%、承伤总降50%，热量归零"),
         ]),
     ];
 
@@ -303,31 +303,7 @@ public static class ClassAscendancyRules
         profile.Has(ClassNodeIds.IdolTurretCore) && rarity is EnemyRarity.Rare or EnemyRarity.Boss;
 
     public static int ConstructDamageMultiplier(EnemyRarity rarity, CombatProfile profile) =>
-        ConstructPrioritizes(rarity, profile) ? 13_000 : 10_000;
-}
-
-public sealed class MechanicRuntime(CombatProfile profile)
-{
-    private readonly Dictionary<string, int> _stacks = new(StringComparer.Ordinal);
-
-    public int Count(string resource) => _stacks.GetValueOrDefault(resource);
-
-    public int Gain(string resource, int amount, int maximum)
-    {
-        if (amount <= 0 || maximum <= 0) return Count(resource);
-        int next = Math.Min(maximum, checked(Count(resource) + amount));
-        _stacks[resource] = next;
-        return next;
-    }
-
-    public int Consume(string resource, int amount = int.MaxValue)
-    {
-        int consumed = Math.Min(Count(resource), Math.Max(0, amount));
-        _stacks[resource] = Count(resource) - consumed;
-        return consumed;
-    }
-
-    public bool Has(string nodeId) => profile.Has(nodeId);
+        ConstructPrioritizes(rarity, profile) ? 15_000 : 10_000;
 }
 
 public static class ClassBenchmarkBuilds

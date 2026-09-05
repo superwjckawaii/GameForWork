@@ -102,8 +102,8 @@ public sealed class ClassAscendanciesFeatureTests
     [Theory]
     [InlineData(EnemyRarity.Normal, false, 10000)]
     [InlineData(EnemyRarity.Magic, false, 10000)]
-    [InlineData(EnemyRarity.Rare, true, 13000)]
-    [InlineData(EnemyRarity.Boss, true, 13000)]
+    [InlineData(EnemyRarity.Rare, true, 15000)]
+    [InlineData(EnemyRarity.Boss, true, 15000)]
     public void TurretOnlyPrioritizesAndMultipliesRareAndBoss(
         EnemyRarity rarity, bool prioritized, int multiplier)
     {

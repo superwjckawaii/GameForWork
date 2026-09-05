@@ -40,7 +40,7 @@ public sealed record AscendancyNode(
     int X,
     int Y);
 
-public sealed record CombatProfile(Ascendancy Ascendancy, IReadOnlyList<string> AllocatedNodes)
+public sealed record CombatProfile(Ascendancy Ascendancy, IReadOnlyList<string> AllocatedNodes, CombatConfiguration? Configuration = null)
 {
     public bool Has(string stableId) => AllocatedNodes.Contains(stableId, StringComparer.Ordinal);
     public static CombatProfile Empty { get; } = new(Ascendancy.None, []);

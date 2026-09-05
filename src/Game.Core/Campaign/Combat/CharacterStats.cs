@@ -237,10 +237,21 @@ public sealed class ResourceState
         Shield = Math.Clamp(initialShield ?? MaximumShield, 0, MaximumShield);
     }
 
-    public CharacterSheet Sheet { get; }
+    public CharacterSheet Sheet { get; private set; }
+    public void UpdateSheet(CharacterSheet sheet)
+    {
+        Sheet = sheet;
+        MaximumLife = sheet.MaximumLife().Value;
+        MaximumMana = sheet.MaximumMana().Value;
+        MaximumShield = sheet.MaximumShield().Value;
+        Life = Math.Min(Life, MaximumLife);
+        ReservedMana = Math.Min(ReservedMana, MaximumMana);
+        Mana = Math.Min(Mana, AvailableMaximumMana);
+        Shield = Math.Min(Shield, MaximumShield);
+    }
     public GameForWork.Core.Combat.HarmfulStatus HarmfulStatus { get; } = new();
-    public int MaximumLife { get; }
-    public int MaximumMana { get; }
+    public int MaximumLife { get; private set; }
+    public int MaximumMana { get; private set; }
     public int ReservedMana { get; private set; }
     public int AvailableMaximumMana => MaximumMana - ReservedMana;
     public bool ReserveMana(int amount)
@@ -250,7 +261,7 @@ public sealed class ResourceState
         Mana = Math.Min(Mana, AvailableMaximumMana);
         return true;
     }
-    public int MaximumShield { get; }
+    public int MaximumShield { get; private set; }
     public int Life { get; private set; }
     public int Mana { get; private set; }
     public int Shield { get; private set; }

@@ -95,7 +95,7 @@ public sealed record EndgameSnapshot(
     bool WarfrontGuaranteeIssued = false,
     IReadOnlyDictionary<RewardPreference, int>? BlueMisses = null,
     long GameplayOperationSequence = 0,
-    string LastWarfrontBaseId = "");
+    string LastWarfrontBaseId = "", CombatConfiguration? CombatConfiguration = null);
 
 public sealed record AtlasSchemeSnapshot(string Name, IReadOnlyList<string> AllocatedPassives);
 
@@ -129,6 +129,13 @@ public sealed class EndgameState
     public int BreakthroughVictories { get; private set; }
     public int BonusAtlasPoints { get; private set; }
     public Ascendancy SelectedAscendancy { get; private set; }
+    public CombatConfiguration CombatConfiguration { get; private set; } = new();
+    public bool ConfigureCombat(CombatConfiguration configuration)
+    {
+        if (!configuration.Valid || SelectedAscendancy is not (Ascendancy.PhantomMaster or Ascendancy.IdolForger)) return false;
+        CombatConfiguration = configuration.Snapshot();
+        return true;
+    }
     public bool Act3AscendancyAwarded { get; private set; }
     public bool Act5AscendancyAwarded { get; private set; }
     public bool WarfrontDiscovered { get; private set; }
@@ -244,7 +251,7 @@ public sealed class EndgameState
     public void ResetAscendancy(bool clearSelection)
     {
         _ascendancy.Clear();
-        if (clearSelection) SelectedAscendancy = Ascendancy.None;
+        if (clearSelection) { SelectedAscendancy = Ascendancy.None; CombatConfiguration = new(); }
     }
 
     public bool AwardCampaignAscendancyPoints(int act)
@@ -317,7 +324,7 @@ public sealed class EndgameState
         0, CitadelVictories, MythicReforgeMaterials, MythicGranted,
         BreakthroughAttempts, BreakthroughVictories, BonusAtlasPoints, SelectedAscendancy,
         Act3AscendancyAwarded, Act5AscendancyAwarded, WarfrontDiscovered,
-        WarfrontMerit, WarfrontReputation, WarfrontGuaranteeIssued, new Dictionary<RewardPreference, int>(_blueMisses), GameplayOperationSequence, LastWarfrontBaseId);
+        WarfrontMerit, WarfrontReputation, WarfrontGuaranteeIssued, new Dictionary<RewardPreference, int>(_blueMisses), GameplayOperationSequence, LastWarfrontBaseId, CombatConfiguration.Snapshot());
 
     public static EndgameState Restore(EndgameSnapshot? snapshot)
     {
@@ -348,6 +355,11 @@ public sealed class EndgameState
         state.BreakthroughVictories = snapshot.BreakthroughVictories;
         state.BonusAtlasPoints = snapshot.BonusAtlasPoints > 0 ? snapshot.BonusAtlasPoints : snapshot.CitadelDefeated ? 5 : 0;
         state.SelectedAscendancy = snapshot.SelectedAscendancy;
+        if (snapshot.CombatConfiguration is { } configuration)
+        {
+            if (!configuration.Valid) throw new InvalidDataException("Invalid ascendancy combat configuration.");
+            state.CombatConfiguration = configuration.Snapshot();
+        }
         state.Act3AscendancyAwarded = snapshot.Act3AscendancyAwarded;
         state.Act5AscendancyAwarded = snapshot.Act5AscendancyAwarded;
         state.WarfrontDiscovered = snapshot.WarfrontDiscovered;

@@ -10,11 +10,170 @@ using GameForWork.Core.Encounters;
 using GameForWork.Core.Maps;
 using GameForWork.Core.Content;
 using GameForWork.Core.Skills;
+using GameForWork.Core.Ascendancies;
+using GameForWork.Core.Endgame;
+using System.Text.Json;
 
 namespace GameForWork.Tests;
 
 public sealed class CombatClosureTests
 {
+    [Fact]
+    public void HeatUsesCompletedActionsThenStopsForTwoSecondsAndResets()
+    {
+        var heat = new ConstructHeatState(new());
+        for (int tick = 0; tick < 9; tick++) heat.Complete(tick);
+        Assert.Equal(90, heat.Heat);
+        Assert.True(heat.FinalAction);
+        Assert.Equal(4_500, heat.DamageIncrease);
+        Assert.Equal(9_100, heat.HitMultiplier);
+        heat.Complete(9);
+        Assert.False(heat.CanAct(48));
+        heat.Advance(48); Assert.Equal(100, heat.Heat);
+        heat.Advance(49); Assert.Equal(0, heat.Heat);
+        Assert.True(heat.CanAct(49));
+        heat.Complete(50); heat.Advance(70); Assert.Equal(10, heat.Heat);
+        heat.Advance(75); Assert.Equal(5, heat.Heat);
+    }
+
+    [Fact]
+    public void StabilizerCapsHeatWithoutStoppingAndCountsEveryTenthAction()
+    {
+        var heat = new ConstructHeatState(new(Modules: [ConstructModule.Stabilizer, ConstructModule.Reforge]));
+        for (int tick = 0; tick < 29; tick++)
+        {
+            Assert.Equal((tick + 1) % 10 == 0, heat.FinalAction);
+            heat.Complete(tick);
+            Assert.True(heat.CanAct(tick));
+            Assert.InRange(heat.Heat, 0, 70);
+        }
+        Assert.True(heat.FinalAction);
+        heat.Reset(100); Assert.Equal(0, heat.Heat); Assert.False(heat.FinalAction);
+    }
+
+    [Fact]
+    public void ModuleConfigurationRejectsDuplicatesAndSnapshotsTheSelectedPair()
+    {
+        var state = new EndgameState(); state.AwardBreakthroughPoint(4);
+        Assert.True(state.TrySelectAscendancy(Ascendancy.IdolForger));
+        var pair = new[] { ConstructModule.Stabilizer, ConstructModule.Reforge };
+        Assert.True(state.ConfigureCombat(new(PhantomReplayMode.Reverse, pair)));
+        pair[0] = ConstructModule.Firepower;
+        Assert.True(state.CombatConfiguration.Has(ConstructModule.Stabilizer));
+        Assert.False(state.ConfigureCombat(new(Modules: [ConstructModule.Reforge, ConstructModule.Reforge])));
+        Assert.False(state.ConfigureCombat(new(Modules: [ConstructModule.Reforge])));
+        var restored = EndgameState.Restore(JsonSerializer.Deserialize<EndgameSnapshot>(JsonSerializer.Serialize(state.Capture())));
+        Assert.True(restored.CombatConfiguration.Has(ConstructModule.Stabilizer));
+        Assert.Equal(PhantomReplayMode.Reverse, restored.CombatConfiguration.PhantomMode);
+        Assert.True(EndgameState.Restore(state.Capture() with { CombatConfiguration = null }).CombatConfiguration.Has(ConstructModule.Firepower));
+    }
+
+    [Fact]
+    public void PhantomMemoryFocusSnapshotsLatestActionAndDoesNotRecurse()
+    {
+        var profile = new CombatProfile(Ascendancy.PhantomMaster,
+            ["core.ascendancy.phantom_master.spawn.small", "core.ascendancy.phantom_master.spawn.core",
+             "core.ascendancy.phantom_master.afterimage.small", "core.ascendancy.phantom_master.afterimage.core",
+             "core.ascendancy.phantom_master.copy.core"], new(PhantomReplayMode.Focus));
+        var queue = new CombatActionQueue(profile);
+        var action = RecordedAttack().LatestAttack!;
+        for (int index = 0; index < 3; index++)
+        {
+            queue.Record($"action-{index}", action.Hits[0], index * 20, false);
+            queue.CompleteReady((index + 1) * 1_000, new HashSet<string>(), false, false);
+        }
+        Assert.Equal(3, queue.Memory.Count);
+        Assert.Single(queue.PhantomFrames(60));
+        Assert.Equal(new[] { 3_000, 4_000, 5_000 }, queue.Pending.Select(copy => copy.DueMilliseconds));
+        Assert.All(queue.Pending, copy => { Assert.Equal("action-2", copy.Action.Id); Assert.Equal(3_000, copy.Multiplier); });
+        foreach (var copy in queue.TakeDue(5_000)) queue.Replayed(copy, copy.Action.Hits);
+        queue.Record("triggered", action.Hits[0], 110, true);
+        queue.CompleteReady(6_000, new HashSet<string>(), false, false);
+        Assert.Equal(3, queue.Memory.Count); Assert.Empty(queue.Pending);
+    }
+
+    [Fact]
+    public void PhantomSwapUsesActualLossFarthestPositionAndSharedCooldown()
+    {
+        var queue = new CombatActionQueue(new(Ascendancy.PhantomMaster,
+            ["core.ascendancy.phantom_master.swap.small", "core.ascendancy.phantom_master.swap.core"]));
+        queue.SpawnPhantom(new(1_000, 0), 0, 200, 4, 3_000);
+        queue.SpawnPhantom(new(4_000, 0), 0, 200, 4, 3_000);
+        Assert.Null(queue.TrySwap(new(0, 0), 10, 199, 1_000));
+        Assert.Equal(new Point(4_000, 0), queue.TrySwap(new(0, 0), 10, 200, 1_000));
+        Assert.Equal(30, queue.UntargetableUntil);
+        Assert.Contains(queue.PhantomFrames(10), phantom => phantom.Position == new Point(0, 0));
+        Assert.Null(queue.TrySwap(new(4_000, 0), 49, 200, 1_000));
+        Assert.Equal(new Point(0, 0), queue.TrySwap(new(4_000, 0), 50, 200, 1_000));
+    }
+
+    [Fact]
+    public void UnityConsumesAllPhantomsForTerminalCopiesWithoutRecoveryOrSacrifice()
+    {
+        var queue = new CombatActionQueue(new(Ascendancy.PhantomMaster, ["core.ascendancy.phantom_master.unity.core"]));
+        var action = RecordedAttack().LatestAttack!;
+        queue.Record("latest", action.Hits[0], 0, false);
+        queue.CompleteReady(1_000, new HashSet<string>(), false, false);
+        for (int index = 0; index < 4; index++) queue.SpawnPhantom(new(index * 1_000, 0), 20, 200, 4, 3_000, sacrifice: 5_000);
+        Assert.True(queue.TryUnity(21));
+        Assert.Empty(queue.PhantomFrames(21));
+        Assert.Equal(4, queue.Pending.Count);
+        Assert.All(queue.Pending, copy => { Assert.Equal(7_500, copy.Multiplier); Assert.False(copy.Sacrifice); Assert.Equal("latest", copy.Action.Id); });
+        Assert.False(queue.TryUnity(22));
+    }
+
+    [Fact]
+    public void RuneFieldStacksCapAtThreeAndLeavingImmediatelyRemovesBonusesWithoutHealing()
+    {
+        var state = new RuneFieldState(new(Ascendancy.IdolForger,
+            ["core.ascendancy.idol_forger.rune_field.small", "core.ascendancy.idol_forger.rune_field.core"]));
+        state.Update([new(0, 0), new(0, 0), new(0, 0), new(0, 0)]);
+        Assert.Equal(3_000, state.DamageIncrease(new(3_000, 0)));
+        Assert.Equal(8_500, state.HitMultiplier(new(3_000, 0)));
+        Assert.Equal(10_000, state.HitMultiplier(new(3_001, 0)));
+        var sheet = Team().Sheet;
+        Assert.Equal(sheet.IncreasedShieldBasisPoints + 1_500, state.Apply(sheet, new(0, 0)).IncreasedShieldBasisPoints);
+        var hero = new ResourceState(sheet); int shield = hero.Shield;
+        hero.UpdateSheet(state.Apply(sheet, new(0, 0)));
+        Assert.Equal(shield, hero.Shield);
+        hero.RestoreShield(hero.MaximumShield);
+        hero.UpdateSheet(state.Apply(sheet, new(3_001, 0)));
+        Assert.Equal(shield, hero.Shield);
+        state.Update([]); Assert.Equal(0, state.Layers(new(0, 0)));
+    }
+
+    [Fact]
+    public void ProductionCombatCreatesMemoryPhantomsAndConstructHeat()
+    {
+        var phantom = Run(Team() with { Ascendancy = new(Ascendancy.PhantomMaster, []) }, 250);
+        Assert.Contains(phantom.Frames, frame => frame.Allies?.Any(ally => ally.EntityId.StartsWith("phantom:", StringComparison.Ordinal)) == true);
+        var turrets = Run(Team() with { Ascendancy = new(Ascendancy.IdolForger, []), ActiveSkills = [new("archetypes.skill.forge_turret", SkillSupport.None)] }, 350);
+        Assert.Contains(turrets.Events, e => e.Detail.StartsWith("construct-heat:100|", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void UnitProjectilesTravelAndQualityIncreasesTheirSpeed()
+    {
+        NodeCombatResult Bow(int quality) => Run(Team() with { ActiveSkills = [new("archetypes.skill.summon_soulbow", SkillSupport.None, Quality: quality)] }, 100);
+        var ordinary = Bow(0); var quality = Bow(20);
+        var launched = ordinary.Events.First(e => e.Detail.Contains("|projectile-launch|", StringComparison.Ordinal));
+        var impact = ordinary.Events.First(e => e.SourceId == launched.SourceId && e.Detail.EndsWith("|projectile-hit", StringComparison.Ordinal));
+        Assert.True(impact.AtMilliseconds > launched.AtMilliseconds);
+        Assert.EndsWith("|speed:12000", launched.Detail);
+        Assert.Contains(quality.Events, e => e.Detail.EndsWith("|projectile-launch|speed:15600", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void ProductionOverheatedConstructCannotLaunchUntilItsStopEnds()
+    {
+        var result = Run(Team() with { Ascendancy = new(Ascendancy.IdolForger, []), ActiveSkills = [new("archetypes.skill.forge_turret", SkillSupport.None)] }, 350);
+        var overheated = result.Events.First(e => e.Detail.StartsWith("construct-heat:100|", StringComparison.Ordinal));
+        Assert.DoesNotContain(result.Events, e => e.SourceId == overheated.SourceId &&
+            e.AtMilliseconds > overheated.AtMilliseconds && e.AtMilliseconds < overheated.AtMilliseconds + 2_000 &&
+            e.Detail.Contains("|projectile-launch|", StringComparison.Ordinal));
+        Assert.Contains(result.Events, e => e.SourceId == overheated.SourceId && e.AtMilliseconds >= overheated.AtMilliseconds + 2_000 &&
+            e.Detail.StartsWith("construct-heat:10|", StringComparison.Ordinal));
+    }
     [Fact]
     public void DurationTagDoesNotRemoveHitMasteriesAndDistanceIsExplicit()
     {

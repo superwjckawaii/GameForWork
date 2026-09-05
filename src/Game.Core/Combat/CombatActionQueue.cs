@@ -4,6 +4,7 @@ using GameForWork.Core.Campaign.World;
 using GameForWork.Core.SkillCatalog;
 using GameForWork.Core.Skills;
 using GameForWork.Core.Spatial;
+using GameForWork.Core.Ascendancies;
 
 namespace GameForWork.Core.Combat;
 
@@ -16,12 +17,13 @@ public sealed record DeferredCombatCopy(string Id, CombatActionSnapshot Action, 
     int Multiplier, bool RollCritical, string Source, bool Sacrifice = false, int Radius = 0);
 
 /// <summary>Only original actions enter the recorder. Copies are terminal queue entries.</summary>
-public sealed class CombatActionQueue
+public sealed partial class CombatActionQueue(CombatProfile? profile = null)
 {
+    private readonly CombatProfile _profile = profile ?? CombatProfile.Empty;
     private sealed class Phantom(string id, Point position, int expires, int sacrifice, int radius, int ratio)
     {
         public string Id { get; } = id;
-        public Point Position { get; } = position;
+        public Point Position { get; set; } = position;
         public int Expires { get; } = expires;
         public int Sacrifice { get; } = sacrifice;
         public int Radius { get; } = radius;
@@ -49,7 +51,8 @@ public sealed class CombatActionQueue
     public IReadOnlyList<AllyFrame> PhantomFrames(int tick) => _phantoms.Where(phantom => phantom.Expires > tick)
         .Select(phantom => new AllyFrame(phantom.Id, phantom.Position, false, "archetypes.skill.phantom_step")).ToArray();
     public void SpawnPhantom(Point origin, int tick, int duration, int maximum, int ratio,
-        int sacrifice = 0, int radius = 3_000, ResourceState? hero = null, bool recovery = false)
+        int sacrifice = 0, int radius = 3_000, ResourceState? hero = null, bool recovery = false,
+        IReadOnlyList<CombatActionSnapshot>? memory = null, PhantomReplayMode mode = PhantomReplayMode.Sequential, int interval = 500)
     {
         ExpirePhantoms(tick, hero, recovery);
         if (maximum <= 0) return;
@@ -57,6 +60,7 @@ public sealed class CombatActionQueue
             RemovePhantom(_phantoms.MinBy(phantom => phantom.Expires)!, tick, hero, recovery, false);
         string id = $"phantom:{++_sequence}";
         _phantoms.Add(new(id, origin, tick + duration, sacrifice, radius, ratio));
+        if (memory is not null) { ReplayMemory(_phantoms[^1], memory, mode, tick * 50, interval); return; }
         if (LatestAttack is { } attack) Enqueue(attack with { Hits = attack.Hits.Select(hit => hit with { Origin = origin }).ToArray() },
             tick * 50 + 300, ratio, false, id);
     }
@@ -112,7 +116,8 @@ public sealed class CombatActionQueue
         if (!_recording.TryGetValue(actionId, out var action)) return;
         _recording[actionId] = action with { Hits = action.Hits.Append(hit).ToArray() };
     }
-    public void CompleteReady(int milliseconds, IReadOnlySet<string> flyingActions, bool hundredReturn, bool alternatingCopy)
+    public void CompleteReady(int milliseconds, IReadOnlySet<string> flyingActions, bool hundredReturn, bool alternatingCopy,
+        Point? origin = null, ResourceState? hero = null)
     {
         foreach (var action in _recording.Values.Where(action => action.CompletesMilliseconds <= milliseconds && !flyingActions.Contains(action.Id)).ToArray())
         {
@@ -127,6 +132,7 @@ public sealed class CombatActionQueue
             if (alternatingCopy && _previousCategory != 0 && _previousCategory != category)
                 Enqueue(action, milliseconds + 250, 6_000, false, "equipment:攻法回文");
             _previousCategory = category;
+            Remember(action, milliseconds, origin ?? action.Hits.FirstOrDefault()?.Origin ?? default, hero);
         }
     }
     public void Enqueue(CombatActionSnapshot action, int dueMilliseconds, int multiplier, bool rollCritical, string source) =>
@@ -135,6 +141,7 @@ public sealed class CombatActionQueue
     {
         var due = _pending.Where(copy => copy.DueMilliseconds <= milliseconds).OrderBy(copy => copy.DueMilliseconds).ThenBy(copy => copy.Id, StringComparer.Ordinal).ToArray();
         _pending.RemoveAll(due.Contains);
-        return due;
+        return due.Select(copy => _phantoms.FirstOrDefault(phantom => phantom.Id == copy.Source) is { } phantom ?
+            copy with { Action = copy.Action with { Hits = copy.Action.Hits.Select(hit => hit with { Origin = phantom.Position }).ToArray() } } : copy).ToArray();
     }
 }

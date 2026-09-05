@@ -36,6 +36,9 @@ public sealed partial class SpatialCombatRunner
                 {
                     if (!copy.Sacrifice && hit.Skill.Shape == SkillShape.Cone && !InCleaveCone(origin, selected!.Position, enemy.Position, hit.Skill.RangeRaw)) continue;
                     int multiplier = copy.Multiplier;
+                    if (copy.Source.StartsWith("phantom:", StringComparison.Ordinal) && !copy.Sacrifice)
+                        multiplier = ScaleCombatValue(multiplier, request.Actions.PhantomTargetMultiplier(
+                            enemy == SelectTarget(enemies, heroPosition) && enemy.Rarity is EnemyRarity.Rare or EnemyRarity.Boss));
                     bool critical = hit.Critical;
                     if (copy.RollCritical)
                     {

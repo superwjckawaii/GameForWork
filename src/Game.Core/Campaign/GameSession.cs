@@ -1394,7 +1394,7 @@ public sealed class GameSession
         ToTeamBuild(_heroBuild, HeavyStrikeSupports, HeroAi, BuildActiveSkills(), AscendancyProfile()));
 
     private CombatProfile AscendancyProfile() => new(Endgame.SelectedAscendancy,
-        Endgame.AscendancyPassives.Order(StringComparer.Ordinal).ToArray());
+        Endgame.AscendancyPassives.Order(StringComparer.Ordinal).ToArray(), Endgame.CombatConfiguration.Snapshot());
 
     private void RefreshMercenaryBuild()
     {
@@ -1572,6 +1572,13 @@ public sealed class GameSession
         bool changed = Endgame.TrySelectAscendancy(ascendancy);
         if (changed) RefreshHeroBuild();
         return changed;
+    }
+    public bool CanConfigureAscendancyCombat => Campaign.Completed && World.Hero.ActiveMap is null;
+    public bool TryConfigureAscendancyCombat(CombatConfiguration configuration)
+    {
+        if (!CanConfigureAscendancyCombat || !Endgame.ConfigureCombat(configuration)) return false;
+        RefreshHeroBuild();
+        return true;
     }
 
     public bool TryRefundAscendancyPassive(string stableId)
