@@ -9,7 +9,8 @@ using GameForWork.Core.Simulation;
 namespace GameForWork.Core.Equipment;
 
 public sealed record EquipmentActionContext(string Id, bool LifePaid, bool FallingStar, bool Triggered,
-    HashSet<string> Triggers, string ProjectilePrimaryTarget = "");
+    HashSet<string> Triggers, string ProjectilePrimaryTarget = "", bool Copy = false);
+public sealed record EquipmentOffenseSnapshot(bool FullLife, bool CompanionAlive, bool LifePaid, bool FallingStar, int Rekindles);
 
 /// <summary>One battle's mutable equipment state. No state is shared between simulations.</summary>
 public sealed class EquipmentCombatRuntime(EquipmentCombatLoadout loadout, ulong seed)
@@ -28,9 +29,10 @@ public sealed class EquipmentCombatRuntime(EquipmentCombatLoadout loadout, ulong
     private bool _hunt, _fallingStar, _actionFallingStar, _lifePaid;
     private string _action = "";
     private bool _triggered;
-    public EquipmentActionContext CaptureAction() => new(_action, _lifePaid, _actionFallingStar, _triggered, _actionTriggers, _projectilePrimaryTarget);
-    public EquipmentActionContext CreateTriggeredAction(string primaryTarget) =>
-        new($"equipment-action:{++_actionSequence}", false, false, true, [], primaryTarget);
+    private bool _copy;
+    public EquipmentActionContext CaptureAction() => new(_action, _lifePaid, _actionFallingStar, _triggered, _actionTriggers, _projectilePrimaryTarget, _copy);
+    public EquipmentActionContext CreateTriggeredAction(string primaryTarget, bool copy = false) =>
+        new($"equipment-action:{++_actionSequence}", false, false, true, [], primaryTarget, copy);
     public void InAction(EquipmentActionContext action, Action resolve)
     {
         EquipmentActionContext previous = CaptureAction();
@@ -42,6 +44,7 @@ public sealed class EquipmentCombatRuntime(EquipmentCombatLoadout loadout, ulong
             _action = value.Id; _lifePaid = value.LifePaid; _actionFallingStar = value.FallingStar;
             _triggered = value.Triggered; _actionTriggers = value.Triggers;
             _projectilePrimaryTarget = value.ProjectilePrimaryTarget;
+            _copy = value.Copy;
         }
     }
     public EquipmentCombatLoadout Loadout { get; } = loadout;
@@ -78,14 +81,21 @@ public sealed class EquipmentCombatRuntime(EquipmentCombatLoadout loadout, ulong
     public int SpiritBarrier(CharacterSheet sheet, int tick) => Scale(sheet.SpiritBarrier().Value, tick < _seaUntil ? 20_000 : 10_000);
     public Func<int, bool, int>? RedirectDamage { get; set; }
     public Func<bool>? CompanionAlive { get; set; }
+    public int LastEnemyShieldLoss { get; private set; }
+    public bool LastEnemyHitBrokeShield { get; private set; }
 
     public int ApplyEnemyDamage(ResourceState hero, int damage, bool hit, int tick, VirtueViceState? virtues, bool blocked = false)
     {
+        LastEnemyShieldLoss = 0;
+        LastEnemyHitBrokeShield = false;
         if (!hero.IsAlive || damage <= 0) return 0;
         damage = RedirectDamage?.Invoke(damage, hit) ?? damage;
+        if (damage <= 0) return 0;
         int shieldBefore = hero.Shield;
         int actual = Math.Min(damage, hero.Life + hero.Shield);
         bool shieldBroken = shieldBefore > 0 && damage >= shieldBefore;
+        LastEnemyShieldLoss = Math.Min(shieldBefore, damage);
+        LastEnemyHitBrokeShield = hit && shieldBroken;
         bool lifeLost = !hit && shieldBefore == 0 && actual > 0;
         hero.ApplyDamage(damage, tick);
         DamageTaken(actual, hit && !blocked, tick, virtues);
@@ -151,6 +161,7 @@ public sealed class EquipmentCombatRuntime(EquipmentCombatLoadout loadout, ulong
         _actionTriggers = [];
         _projectilePrimaryTarget = "";
         _triggered = triggered;
+        _copy = false;
         _lifePaid = lifeCost > 0;
         SkillTag tags = SkillDefinitions.Get(skillId).Tags;
         _actionFallingStar = !triggered && tags.HasFlag(SkillTag.Spell) && _fallingStar;
@@ -158,24 +169,26 @@ public sealed class EquipmentCombatRuntime(EquipmentCombatLoadout loadout, ulong
         if (lifeCost + manaCost > 0) Gain("节制之印", VirtueViceKind.Temperance, virtues);
     }
     public int ExtraActionChains => _actionFallingStar ? 3 : 0;
+    public EquipmentOffenseSnapshot SnapshotOffense(ResourceState hero) =>
+        new(hero.Life == hero.MaximumLife, CompanionAlive?.Invoke() == true, _lifePaid, _actionFallingStar, _rekindles);
 
     public int HitMultiplier(TeamBuild build, ResourceState hero, SkillTag tags, string enemyId,
         int enemyLife, int enemyMaximumLife, bool rareOrBoss, bool boss, bool bleeding,
-        int distanceRaw, int nearbyEnemies, int tick, int chainIndex = 0)
+        int distanceRaw, int nearbyEnemies, int tick, int chainIndex = 0, EquipmentOffenseSnapshot? snapshot = null)
     {
         int multiplier = 10_000;
         void More(int value) => multiplier = Scale(multiplier, 10_000 + value);
-        if (Has("铁月") && tags.HasFlag(SkillTag.Slam) && hero.Life == hero.MaximumLife) More(7_000);
-        if (Has("共生兽印") && CompanionAlive?.Invoke() == true) More(3_000);
+        if (Has("铁月") && tags.HasFlag(SkillTag.Slam) && (snapshot?.FullLife ?? hero.Life == hero.MaximumLife)) More(7_000);
+        if (Has("共生兽印") && (snapshot?.CompanionAlive ?? CompanionAlive?.Invoke() == true)) More(3_000);
         if (Has("裂渊獠牙") && tags.HasFlag(SkillTag.Melee) && rareOrBoss) More(5_500);
-        if (Has("复生之种") && hero.Life == hero.MaximumLife) More(2_500);
+        if (Has("复生之种") && (snapshot?.FullLife ?? hero.Life == hero.MaximumLife)) More(2_500);
         if (Has("行刑者之偿") && bleeding && enemyLife * 5L < enemyMaximumLife) More(10_000);
-        if (Has("血税契据") && _lifePaid) More(6_000);
+        if (Has("血税契据") && (snapshot?.LifePaid ?? _lifePaid)) More(6_000);
         if (Has("凝滞一刻") && boss && !_firstBossHits.Contains(enemyId)) More(4_000);
         if (Has("统帅之负") && nearbyEnemies == 1) More(4_500);
         if (Has("琉璃地平线") && tags.HasFlag(SkillTag.Attack) && distanceRaw >= 6_000) More(3_500);
         if (Has("深层回音") && tags.HasFlag(SkillTag.Projectile)) More(Math.Min(4, chainIndex) * 1_200);
-        if (_actionFallingStar && tags.HasFlag(SkillTag.Spell)) More(3_500);
+        if ((snapshot?.FallingStar ?? _actionFallingStar) && tags.HasFlag(SkillTag.Spell)) More(3_500);
         if (tick < _debuffUntil.GetValueOrDefault(enemyId)) More(3_000);
         if (Has("虚空天平") && EqualResistances(build.Sheet)) More(3_500);
         if (Has("沉默铁砧") && tags.HasFlag(SkillTag.Attack))
@@ -184,7 +197,7 @@ public sealed class EquipmentCombatRuntime(EquipmentCombatLoadout loadout, ulong
                 build.IncreasedAttackSpeedBasisPoints + build.IncreasedActionSpeedBasisPoints);
             More(Math.Clamp((1_500 - frequency) / 100, 0, 10) * 800);
         }
-        if (_rekindles > 0) More(_rekindles * 3_000);
+        if ((snapshot?.Rekindles ?? _rekindles) > 0) More((snapshot?.Rekindles ?? _rekindles) * 3_000);
         return multiplier;
     }
     public int BaseCriticalBonus(SkillTag tags, int distanceRaw) => Has("琉璃地平线") && tags.HasFlag(SkillTag.Attack)
@@ -195,6 +208,7 @@ public sealed class EquipmentCombatRuntime(EquipmentCombatLoadout loadout, ulong
     {
         if (damage <= 0) return 0;
         bool first = boss && Has("凝滞一刻") && _firstBossHits.Add(enemyId);
+        if (_copy) return 0;
         if (tags.HasFlag(SkillTag.Attack)) _hunt = false;
         if (critical) Gain("傲慢之印", VirtueViceKind.Arrogance, virtues);
         if (!_triggered && critical && tags.HasFlag(SkillTag.Spell) && Has("坠星透镜") && _actionTriggers.Add("falling-star")) _fallingStar = true;
@@ -255,7 +269,7 @@ public sealed class EquipmentCombatRuntime(EquipmentCombatLoadout loadout, ulong
         bool perAction = true, int chance = 1_000)
     {
         int count = Loadout.EnchantmentCount(enchantment);
-        if (state is null || count <= 0 || perAction && !_actionTriggers.Add(enchantment)) return;
+        if (state is null || count <= 0 || perAction && (_triggered || !_actionTriggers.Add(enchantment))) return;
         if (_random.NextBasisPoints() < Math.Min(10_000, chance * count)) state.Gain(kind);
     }
     private static bool EqualResistances(CharacterSheet s) => s.FireResistanceBasisPoints == s.ColdResistanceBasisPoints &&

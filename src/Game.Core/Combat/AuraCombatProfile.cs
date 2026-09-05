@@ -5,6 +5,9 @@ using GameForWork.Core.Campaign.Progression;
 using GameForWork.Core.Campaign.World;
 using GameForWork.Core.Equipment;
 using GameForWork.Core.SkillCatalog;
+using GameForWork.Core.Skills;
+using GameForWork.Core.Archetypes;
+using static GameForWork.Core.Skills.LinkedSupportRules;
 
 namespace GameForWork.Core.Combat;
 
@@ -49,16 +52,23 @@ public sealed record AuraCombatProfile(TeamBuild Build, int ReservedMana, IReadO
             };
             if (reservation < 0) continue;
             bool banner = id is SkillIds.IronOathBanner or SkillIds.BreachBanner or "builds.skill.hunter_banner";
+            if (banner && skill.Supports.HasFlag(SkillSupport.BannerPotency)) reservation += 500;
             if (banner && equipment.Has("末旗护符")) reservation = 0;
             int efficiency = equipment.Value(ItemModifierKind.ReservationEfficiencyBasisPoints);
             if (original.Ascendancy?.Has("core.ascendancy.spirit_cantor.reservation.core") == true) efficiency += 6_000;
             int amount = (int)(((long)maximumMana * reservation + Math.Max(1, 10_000 + efficiency) - 1) / Math.Max(1, 10_000 + efficiency));
+            if (Support(skill, SupportMechanic.AuraAmplify)) amount = (int)(((long)amount * 12_000 + 9_999) / 10_000);
             if (reserved + amount > maximumMana) continue;
             reserved += amount; active.Add(id);
             int effect = equipment.Value(ItemModifierKind.IncreasedAuraEffectBasisPoints);
             if (banner && equipment.Has("末旗护符")) effect += 8_000;
             if (original.Ascendancy?.Has("core.ascendancy.spirit_cantor.aura.core") == true) effect += 5_000;
-            if (skill.Supports.HasFlag(SkillSupport.BannerPotency)) effect += 2_500;
+            if (banner && skill.Supports.HasFlag(SkillSupport.BannerPotency))
+            {
+                var link = CombatSkillRules.SupportLink(skill, SkillSupport.BannerPotency);
+                effect += ActiveSkillCatalog.Interpolate(4_000, 7_000, link.Level, false) + link.Quality * 50;
+            }
+            effect += SupportValue(skill, SupportMechanic.AuraAmplify, 2_500, 4_500);
             int Value(int one, int twentyOne) => CombatRules.ApplyIncreased(ActiveSkillCatalog.Interpolate(one, twentyOne, skill.Level, false), effect);
             switch (id)
             {

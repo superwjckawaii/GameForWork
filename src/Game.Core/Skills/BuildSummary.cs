@@ -182,7 +182,7 @@ public static class BuildSummaryRules
         more = ScaleMultiplier(more, CombatSkillRules.DamageMultiplier(skill, 100_000, 100_000));
         more = ScaleMultiplier(more,
             MasteryRuntime.OffensiveMultiplier(passive, tags, build.Weapon, 100_000, 100_000,
-                hasOffHand: build.HasOffHand));
+                hasOffHand: build.HasOffHand, hit: skill.Role != SkillRole.DamageOverTime));
         return new OffenseBreakdown(
             checked((int)Math.Clamp(dps, 0, int.MaxValue)),
             Math.Max(1, baseMinimum),

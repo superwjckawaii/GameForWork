@@ -16,6 +16,175 @@ namespace GameForWork.Tests;
 public sealed class CombatClosureTests
 {
     [Fact]
+    public void DurationTagDoesNotRemoveHitMasteriesAndDistanceIsExplicit()
+    {
+        var profile = GameForWork.Core.Campaign.Progression.PassiveModifiers.Empty with
+        { MasteryMechanics = "builds.mastery.rule.攻击.0|builds.mastery.rule.近战打击.3" };
+        var tags = SkillTag.Attack | SkillTag.Melee | SkillTag.Duration;
+        Assert.Equal(18_900, MasteryRuntime.OffensiveMultiplier(profile, tags, Team().Weapon, 100, 100, distanceRaw: 1_000));
+        Assert.Equal(14_000, MasteryRuntime.OffensiveMultiplier(profile, tags, Team().Weapon, 100, 100, distanceRaw: 5_000));
+        Assert.Equal(10_000, MasteryRuntime.OffensiveMultiplier(profile, tags, Team().Weapon, 100, 100, hit: false));
+    }
+
+    [Fact]
+    public void PeriodicEquipmentSnapshotKeepsPaidLifeAndFullLifeConditions()
+    {
+        var build = Team(); var hero = new ResourceState(build.Sheet);
+        var loadout = Equipment([], "血税契据");
+        var equipment = new EquipmentCombatRuntime(loadout, 3);
+        equipment.BeginAction(SkillIds.EmberNova, 5, 0, false, null);
+        var snapshot = equipment.SnapshotOffense(hero);
+        equipment.BeginAction(SkillIds.HeavyStrike, 0, 1, false, null);
+        int Value(EquipmentOffenseSnapshot? state) => equipment.HitMultiplier(build, hero, SkillTag.Spell,
+            "enemy", 100, 100, false, false, false, 0, 2, 20, snapshot: state);
+        Assert.Equal(10_000, Value(null));
+        Assert.Equal(16_000, Value(snapshot));
+    }
+
+    [Fact]
+    public void TriggeredCopiesDoNotGrantEquipmentRecoveryOrLeech()
+    {
+        var hero = new ResourceState(Team().Sheet);
+        hero.ApplyDamage(hero.MaximumShield + 1_000, 0);
+        int life = hero.Life;
+        var equipment = new EquipmentCombatRuntime(Equipment(new() { [ItemModifierKind.LifeOnHit] = 100,
+            [ItemModifierKind.LifeLeechBasisPoints] = 5_000 }), 3);
+        equipment.InAction(equipment.CreateTriggeredAction("enemy", copy: true), () =>
+            equipment.OnHit(hero, SkillTag.Attack, "enemy", false, true, 1_000, null));
+        Assert.Equal(life, hero.Life);
+    }
+
+    [Fact]
+    public void ShieldCountersFollowTheEnemyHitAndPaymentCannotTriggerThem()
+    {
+        var team = Team() with { HasUsableWeapon = false, ActiveSkills =
+            [new(SkillIds.HeavyStrike, SkillSupport.None), new(ReactionState.Mirror, SkillSupport.None), new(ReactionState.ShieldBreak, SkillSupport.None)] };
+        var result = new SpatialCombatRunner().Run(new(team, 1, 1, 1, false, false, false, 0, MaximumTicks: 200,
+            EnemyPool: [Enemies.CorruptedWorker with { Life = 1_000_000, MinimumPhysicalDamage = 15_000, MaximumPhysicalDamage = 15_000 }]), 731);
+        Assert.Contains(result.Events, e => e.Detail == $"reaction:{ReactionState.Mirror}");
+        Assert.Contains(result.Events, e => e.Detail == $"reaction:{ReactionState.ShieldBreak}");
+        int reactionIndex = result.Events.ToList().FindIndex(e => e.Detail == $"reaction:{ReactionState.Mirror}");
+        Assert.Contains(result.Events.Take(reactionIndex), e => e.Kind == SpatialEventKind.EnemyAttack && e.Value > 0);
+        Assert.DoesNotContain(SingleCast(ReactionState.Mirror, 0).Events, e => e.Detail.StartsWith("reaction:"));
+    }
+
+    [Fact]
+    public void AttackTriggeredGuardPaysOnceAndDoesNotCastWithoutAnAttack()
+    {
+        var guard = new SkillConfiguration(SkillIds.PrismaticGuard, SkillSupport.None, SupportLinks:
+            [new(ActiveSkillCatalog.SupportFor(GameForWork.Core.Archetypes.SupportMechanic.AttackTrigger).StoneId, 1, 0)]);
+        var team = Team() with { ActiveSkills = [new(SkillIds.HeavyStrike, SkillSupport.None), guard] };
+        var result = Run(team, 100);
+        Assert.Contains(result.Events, e => e.Detail == $"skill:{SkillIds.PrismaticGuard}|triggered-guard");
+        var idle = Run(team with { ActiveSkills = [guard] }, 100);
+        Assert.DoesNotContain(idle.Events, e => e.Detail.Contains("triggered-guard"));
+    }
+
+    [Theory]
+    [InlineData("archetypes.skill.withering_ray", 10)]
+    [InlineData("archetypes.skill.shield_drain", 8)]
+    public void ChannelPulsesPayExactlyOneSecondOfManaAndStopWhenEmpty(string id, int mana)
+    {
+        var result = SingleCast(id, mana, 160);
+        var pulses = result.Events.Where(e => e.Detail.StartsWith($"skill:{id}|damage:")).ToArray();
+        Assert.Equal(4, pulses.Length);
+        Assert.All(pulses.Zip(pulses.Skip(1)), pair => Assert.Equal(250, pair.Second.AtMilliseconds - pair.First.AtMilliseconds));
+        Assert.Equal(0, result.Frames.Last().HeroMana);
+    }
+
+    [Fact]
+    public void DoomWaitsFiveSecondsAndExplodesOnceAtFiveStacks()
+    {
+        var result = SingleCast("archetypes.skill.doom_brand", 22, 180);
+        var placed = Assert.Single(result.Events, e => e.Detail.Contains("skill:archetypes.skill.doom_brand|area-created"));
+        var explosion = Assert.Single(result.Events, e => e.Detail == "doom-detonated");
+        Assert.Equal(5_000, explosion.AtMilliseconds - placed.AtMilliseconds);
+        Assert.Equal(5, explosion.Value);
+        var hit = Assert.Single(result.Events, e => e.Detail.StartsWith("skill:archetypes.skill.doom_brand|damage:"));
+        Assert.Equal(explosion.AtMilliseconds, hit.AtMilliseconds);
+        Assert.True(hit.Value > 0);
+    }
+
+    [Fact]
+    public void ArmorBoostIsConsumedAtActionStartAndItsShockwaveCannotArmItself()
+    {
+        var state = new ReactionState(); var guard = new GuardState();
+        var config = new SkillConfiguration(ReactionState.Overload, SkillSupport.None, Quality: 20);
+        Assert.False(state.Arm(config, guard));
+        guard.GainEnergy(10);
+        Assert.True(state.Arm(config, guard));
+        Assert.Equal(0, guard.ArmorEnergy);
+        state.Begin("buff", ReactionState.Overload);
+        Assert.Empty(state.Drain());
+        state.Begin("missed-attack", SkillIds.HeavyStrike);
+        Assert.Equal(17_000, state.AttackMultiplier("missed-attack"));
+        Assert.Equal(ReactionState.Overload, Assert.Single(state.Drain()).SkillId);
+        state.Begin("next", SkillIds.HeavyStrike);
+        Assert.Equal(10_000, state.AttackMultiplier("next"));
+        Assert.Empty(state.Drain());
+        guard.GainEnergy(5); state.Arm(config, guard); state.Tick = 80;
+        state.Begin("expired", SkillIds.HeavyStrike);
+        Assert.Equal(10_000, state.AttackMultiplier("expired"));
+    }
+
+    [Fact]
+    public void AnsweringFormulaTriggersAfterAttackDamageAndCannotTriggerItself()
+    {
+        var result = Run(Team() with { ActiveSkills = [new(SkillIds.HeavyStrike, SkillSupport.None), new(ReactionState.Answer, SkillSupport.None)] }, 160);
+        var reactions = result.Events.Where(e => e.Detail == $"reaction:{ReactionState.Answer}").ToArray();
+        Assert.NotEmpty(reactions);
+        Assert.All(reactions, reaction => Assert.Contains(result.Events, e => e.AtMilliseconds <= reaction.AtMilliseconds &&
+            e.Value > 0 && e.Detail.StartsWith($"skill:{SkillIds.HeavyStrike}|damage:")));
+        Assert.All(reactions.Zip(reactions.Skip(1)), pair => Assert.True(pair.Second.AtMilliseconds - pair.First.AtMilliseconds >= 2_200));
+        Assert.Contains(result.Events, e => e.Detail.StartsWith($"skill:{ReactionState.Answer}|damage:") && e.Value > 0);
+    }
+
+    [Fact]
+    public void PhantomSubstitutionSelectsNearestCancelsReplayAndDoesNotSacrifice()
+    {
+        var queue = RecordedAttack();
+        queue.SpawnPhantom(new(1_000, 0), 1, 100, 6, 3_000, 10_000);
+        queue.SpawnPhantom(new(4_000, 0), 1, 100, 6, 3_000, 10_000);
+        var first = queue.TakeDue(350);
+        foreach (var copy in first) queue.Replayed(copy, copy.Action.Hits);
+        queue.CommandPhantoms(8);
+        Assert.True(queue.TrySubstitute(new(0, 0), 8));
+        Assert.Equal(new Point(4_000, 0), Assert.Single(queue.PhantomFrames(8)).Position);
+        Assert.False(queue.TrySubstitute(new(0, 0), 9));
+        Assert.Single(queue.TakeDue(400));
+        Assert.DoesNotContain(queue.Pending, copy => copy.Sacrifice);
+        Assert.True(queue.TrySubstitute(new(0, 0), 68));
+        Assert.Empty(queue.Pending);
+    }
+
+    [Fact]
+    public void PhantomExpiryUsesLastReplayRatioAndRecoveryHasSharedCooldown()
+    {
+        var queue = RecordedAttack(); var hero = new ResourceState(Team().Sheet);
+        hero.ApplyDamage(hero.MaximumShield + 1_000, 0);
+        int life = hero.Life;
+        for (int i = 0; i < 2; i++) queue.SpawnPhantom(new(0, 0), 1, 20, 6, 3_000, 6_000);
+        foreach (var copy in queue.TakeDue(350)) queue.Replayed(copy, copy.Action.Hits);
+        queue.ExpirePhantoms(21, hero, true);
+        Assert.Equal(life + hero.MaximumLife / 50, hero.Life);
+        var explosions = queue.TakeDue(1_050);
+        Assert.Equal(2, explosions.Count);
+        Assert.All(explosions, copy => { Assert.True(copy.Sacrifice); Assert.Equal(1_800, copy.Multiplier); });
+        queue.ExpirePhantoms(22, hero, true);
+        Assert.Empty(queue.Pending);
+    }
+
+    private static CombatActionQueue RecordedAttack()
+    {
+        var queue = new CombatActionQueue(); var config = Team().HeavyStrike;
+        var skill = CombatSkillRules.Resolve(config, 10_000);
+        queue.Record("original", new("target", new(0, 0), skill, config, Team(),
+            new(100, 0, 0, 0, 0, [new(100, DamageType.Physical, [DamageType.Physical], [])], []), [], false), 0, false);
+        queue.CompleteReady(50_000, new HashSet<string>(), false, false);
+        return queue;
+    }
+
+    [Fact]
     public void StrongestAilmentExpiresAndWeakerCandidateTakesOverWithinTheSameStep()
     {
         var state = new AilmentState();

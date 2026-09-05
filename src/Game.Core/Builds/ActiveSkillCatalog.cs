@@ -264,6 +264,10 @@ public static class ActiveSkillCatalog
             "archetypes.skill.void_rift" => (15, 40, 9_000), "archetypes.skill.spellarmor_activate" => (8, 160, 0),
             "archetypes.skill.fellowship_blessing" => (10, 200, 9_000), "archetypes.skill.soul_warsong" => (8, 160, 10_000),
             "archetypes.skill.king_soul_command" => (10, 200, 10_000), "archetypes.skill.yin_yang_stance" => (1, 16, 0),
+            "archetypes.skill.spellarmor_overload" => (8, 80, 5_000), "archetypes.skill.shieldbreak_counter" => (1, 100, 4_000),
+            "archetypes.skill.mirror_counter" => (1, 30, 10_000), "archetypes.skill.answering_formula" => (1, 44, 8_000),
+            "archetypes.skill.doom_brand" => (12, 0, 9_000),
+            "archetypes.skill.withering_ray" => (5, 0, 9_000), "archetypes.skill.shield_drain" => (5, 0, 8_000),
             _ => null,
         };
         if (timing is { } time) active = active with { CastTimeTicks = time.Cast, CooldownTicks = time.Cooldown, RangeRaw = time.Range };

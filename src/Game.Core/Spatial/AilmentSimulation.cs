@@ -145,7 +145,9 @@ public sealed partial class SpatialCombatRunner
                     EnemyResistance(enemy, request, type == DamageType.Fire ? SkillDamageType.Fire : type == DamageType.Void ? SkillDamageType.Void : type == DamageType.Cold ? SkillDamageType.Cold : SkillDamageType.Lightning, penetrate: false);
                 damage *= (10_000 - Math.Clamp(resistance, CombatRules.MinimumResistance, type == DamageType.Physical ? 5_000 : 7_500)) / 10_000m;
                 damage *= (10_000 + enemy.ShockEffect) / 10_000m;
-                if (type == DamageType.Void) damage *= CombatRules.WitherMultiplier(enemy.Ailments.Stack(Ailment.Wither, tick)) / 10_000m;
+                if (type == DamageType.Void)
+                    damage *= CombatRules.WitherMultiplier(enemy.Ailments.Stack(Ailment.Wither, tick)) / 10_000m *
+                        (10_000 + enemy.Curses.Effect("archetypes.skill.doom_brand", tick)) / 10_000m;
                 damage *= (10_000 - CombatRules.SpiritBarrierReduction(enemy.Profile.SpiritBarrier, (int)Math.Min(int.MaxValue, damage))) / 10_000m;
                 return damage;
             }))

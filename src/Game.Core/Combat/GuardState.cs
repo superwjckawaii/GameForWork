@@ -1,5 +1,7 @@
 using GameForWork.Core.Builds;
 using GameForWork.Core.Campaign.Combat;
+using GameForWork.Core.Archetypes;
+using GameForWork.Core.Skills;
 
 namespace GameForWork.Core.Combat;
 
@@ -10,6 +12,8 @@ public sealed class GuardState
     public bool ElementalOnly { get; private set; }
     public int ArmorEnergy { get; private set; }
     public int LastPaidShield { get; private set; }
+    public void GainEnergy(int amount) => ArmorEnergy = Math.Clamp(ArmorEnergy + amount, 0, 10);
+    public int ConsumeEnergy() { int energy = ArmorEnergy; ArmorEnergy = 0; return energy; }
     public static int ShieldCost(string skillId, int maximumShield) => skillId switch
     {
         "archetypes.skill.spellarmor_activate" => Math.Max(1, maximumShield / 5),
@@ -17,6 +21,14 @@ public sealed class GuardState
         _ => 0,
     };
     public void Extend(int ticks) => Expires += Math.Max(0, ticks);
+    public void ApplySupports(SkillConfiguration config, ResourceState hero)
+    {
+        if (!LinkedSupportRules.Support(config, SupportMechanic.SpellArmorFusion)) return;
+        int ratio = LinkedSupportRules.SupportValue(config, SupportMechanic.SpellArmorFusion, 1_500, 2_500);
+        int extra = (int)Math.Min(int.MaxValue, ((long)hero.Sheet.Armor().Value + hero.MaximumShield) * ratio / 10_000);
+        Remaining = CombatRules.ApplyIncreased((int)Math.Min(int.MaxValue, (long)Remaining + extra),
+            LinkedSupportRules.SupportQuality(config, SupportMechanic.SpellArmorFusion) * 50);
+    }
     public bool Activate(string skillId, ResourceState hero, int level, int quality, int tick)
     {
         int capacity, duration;

@@ -1,3 +1,4 @@
+using static GameForWork.Core.Skills.LinkedSupportRules;
 using GameForWork.Core.Equipment;
 using GameForWork.Core.Campaign.Combat;
 using GameForWork.Core.Campaign.Items;
@@ -95,6 +96,8 @@ public sealed partial class SpatialCombatRunner
                 { dead.Resummoned = true; dead.ReviveAt = tick + 40; }
                 else if (dead.Kind == CombatUnitKind.Construct && _ascendancy.Has("core.ascendancy.idol_forger.rebuild.small"))
                     dead.ReviveAt = tick + (_ascendancy.Has("core.ascendancy.idol_forger.rebuild.core") ? 80 : 160);
+                if (dead.Kind == CombatUnitKind.Construct && dead.ReviveAt != int.MaxValue)
+                    ApplyRebuildSupport(dead, dead.Skill, tick);
                 events.Add(Event(tick, SpatialEventKind.SkillEffect, dead.Id, dead.Id, 0,
                     dead.Position, dead.Position, $"unit:{dead.Kind}|death"));
             }
@@ -161,7 +164,7 @@ public sealed partial class SpatialCombatRunner
                     DealUnitDamage(construct, enemy, enemy.Boss ? raw / 2 : raw, SkillDamageType.Fire, tick, events, "selfdestruct");
                 DamageUnit(construct, construct.Life, tick, events);
                 construct.ReviveAt = tick + (_ascendancy.Has("core.ascendancy.idol_forger.rebuild.core") ? 80 : 120) * (100 - Math.Min(20, skill.Quality)) / 100;
-                if (Support(skill, SupportMechanic.RapidRebuild)) construct.ReviveAt = tick + (construct.ReviveAt - tick) / 2;
+                ApplyRebuildSupport(construct, skill, tick);
                 return true;
             }
             if (skill.SkillId == Turret)
@@ -247,6 +250,11 @@ public sealed partial class SpatialCombatRunner
                 if (unit.Life <= 0)
                 {
                     if (tick < unit.ReviveAt) continue;
+                    if (unit.Kind == CombatUnitKind.Construct)
+                    {
+                        unit.MaximumLife = ScaleCombatValue(unit.BaseLife, unit.RebuildLifeMultiplier);
+                        unit.RapidRebuildUntil = tick + (unit.RebuildLifeMultiplier < 10_000 ? 60 : 0);
+                    }
                     unit.Life = unit.Kind == CombatUnitKind.Companion ? Math.Max(1, unit.MaximumLife / 2) : unit.MaximumLife;
                     unit.ReviveAt = int.MaxValue;
                     unit.RebuiltUntil = tick + 80;
@@ -294,6 +302,7 @@ public sealed partial class SpatialCombatRunner
                 bonus += _auras?.UnitSpeedIncrease ?? 0;
                 bonus += buff.ActionSpeed + SupportValue(unit.Skill, SupportMechanic.SwiftMinions, 3_000, 5_000) + SupportQuality(unit.Skill, SupportMechanic.SwiftMinions) * 50;
                 bonus += SupportValue(unit.Skill, SupportMechanic.FerociousBeast, 1_500, 2_500);
+                if (tick < unit.RapidRebuildUntil) bonus += 5_000;
                 if (unit.Skill.SkillId == Turret) bonus += unit.Skill.Quality * 100;
                 if (unit.Kind == CombatUnitKind.Companion && unit.Form == "猛攻") bonus += 2_500;
                 if (unit.Kind == CombatUnitKind.Construct && _ascendancy.Has("core.ascendancy.idol_forger.construct.core")) bonus += _units.Count(unit => unit.Life > 0 && unit.Kind == CombatUnitKind.Construct) * 800;
@@ -410,9 +419,7 @@ public sealed partial class SpatialCombatRunner
             if (random.NextBasisPoints() < block) return 0;
             int damage = raw;
             if (skill.DamageType == EnemyDamageType.Physical) damage = ScaleCombatValue(damage, 10_000 - CombatRules.ArmorReduction(unit.Armor, damage));
-            int resistance = unit.Resistance + (skill.DamageType == EnemyDamageType.Physical ? 0 :
-                _request.Buffs?.ForUnit(tick, _heroPosition, unit.Position).Resistance ?? 0);
-            damage = CombatRules.MitigateByResistance(damage, Math.Clamp(resistance, -50_000, 7_500));
+            damage = CombatRules.MitigateByResistance(damage, UnitResistance(unit, skill.DamageType, tick));
             if (skill.IsSpell && random.NextBasisPoints() < unit.Suppression) damage = CombatRules.SuppressedDamage(damage);
             if (unit.Kind == CombatUnitKind.Companion && unit.Form == "守护") damage = ScaleCombatValue(damage, 8_000);
             if (Support(unit.Skill, SupportMechanic.FerociousBeast)) damage = ScaleCombatValue(damage, 12_000);
@@ -424,7 +431,7 @@ public sealed partial class SpatialCombatRunner
         {
             foreach (var unit in _units.Where(unit => unit.Life > 0 && InRange(unit.Position, center, radius)).ToArray())
             {
-                int damage = damageOverTime ? CombatRules.MitigateByResistance(raw, unit.Resistance) : MitigateUnitHit(unit, enemy, skill, raw, random, tick);
+                int damage = damageOverTime ? MitigateUnitDot(unit, raw, skill.DamageType, 2, tick) : MitigateUnitHit(unit, enemy, skill, raw, random, tick);
                 DamageUnit(unit, damage, tick, events);
                 events.Add(Event(tick, SpatialEventKind.EnemyAttack, enemy.EntityId, unit.Id, damage, center, unit.Position,
                     $"{skill.DisplayName}|unit:{unit.Kind}|area:{radius}|dot:{damageOverTime}"));
@@ -434,26 +441,30 @@ public sealed partial class SpatialCombatRunner
         {
             foreach (var unit in _units.Where(unit => unit.Life > 0 && InRange(unit.Position, hazard.Position, hazard.Radius)).ToArray())
             {
-                int damage = CombatRules.MitigateByResistance(hazard.Damage, unit.Resistance);
-                if (hazard.DamageType == EnemyDamageType.Physical)
-                    damage = ScaleCombatValue(damage, 10_000 - CombatRules.PhysicalDotArmorReduction(unit.Armor, hazard.Damage * 2));
+                int damage = MitigateUnitDot(unit, hazard.Damage, hazard.DamageType, 2, tick);
                 DamageUnit(unit, damage, tick, events);
                 events.Add(Event(tick, SpatialEventKind.EnemyAttack, hazard.Source, unit.Id, damage, hazard.Position, unit.Position, "持续危险地面|unit"));
             }
         }
-        private static bool Support(SkillConfiguration skill, SupportMechanic support)
+        private int UnitResistance(ArmyUnit unit, EnemyDamageType type, int tick) => type == EnemyDamageType.Physical ? 0 :
+            Math.Clamp(unit.Resistance + (_request.Buffs?.ForUnit(tick, _heroPosition, unit.Position).Resistance ?? 0), -50_000, 7_500);
+        private int MitigateUnitDot(ArmyUnit unit, int raw, EnemyDamageType type, int frequency, int tick)
         {
-            string id = ActiveSkillCatalog.SupportFor(support).StoneId;
-            return skill.ExtendedSupports.Contains(support) || skill.ExtendedBuildsSupports.Contains(id) ||
-                skill.ExtendedBuildsSupportLinks.Any(link => link.StoneId == id);
+            int damage = CombatRules.MitigateByResistance(raw, UnitResistance(unit, type, tick));
+            if (type == EnemyDamageType.Physical) damage = ScaleCombatValue(damage,
+                10_000 - CombatRules.PhysicalDotArmorReduction(unit.Armor, raw * frequency));
+            if (Support(unit.Skill, SupportMechanic.FerociousBeast)) damage = ScaleCombatValue(damage, 12_000);
+            return damage;
         }
-        private static int SupportValue(SkillConfiguration skill, SupportMechanic support, int one, int maximum) => !Support(skill, support) ? 0 :
-            ActiveSkillCatalog.Interpolate(one, maximum, skill.ExtendedBuildsSupportLinks.FirstOrDefault(link =>
-                link.StoneId == ActiveSkillCatalog.SupportFor(support).StoneId)?.Level ?? skill.Level, false);
-        private static int SupportQuality(SkillConfiguration skill, SupportMechanic support) => !Support(skill, support) ? 0 :
-            Math.Clamp(skill.ExtendedBuildsSupportLinks.FirstOrDefault(link => link.StoneId == ActiveSkillCatalog.SupportFor(support).StoneId)?.Quality ?? skill.Quality, 0, 20);
-        private static int QualityOverride(SkillConfiguration skill, SupportMechanic support, int normal, int atTwenty) =>
-            normal + (atTwenty - normal) * SupportQuality(skill, support) / 20;
+        private static void ApplyRebuildSupport(ArmyUnit unit, SkillConfiguration config, int tick)
+        {
+            unit.RebuildLifeMultiplier = 10_000;
+            if (!Support(config, SupportMechanic.RapidRebuild)) return;
+            int delay = ScaleCombatValue(unit.ReviveAt - tick, 10_000 - SupportValue(config, SupportMechanic.RapidRebuild, 5_000, 7_000));
+            delay = ScaleCombatValue(delay, 10_000 - SupportQuality(config, SupportMechanic.RapidRebuild) * 50);
+            unit.ReviveAt = tick + Math.Max(1, delay);
+            unit.RebuildLifeMultiplier = 10_000 - SupportValue(config, SupportMechanic.RapidRebuild, 2_000, 1_000);
+        }
         private sealed class ArmyUnit(string id, CombatUnitKind kind, SkillConfiguration skill, int life, Point position, int tick)
         {
             public string Id { get; } = id;
@@ -463,6 +474,8 @@ public sealed partial class SpatialCombatRunner
             public int MaximumLife { get; set; } = life;
             public string Form { get; set; } = "猛攻";
             public int RebuiltUntil { get; set; }
+            public int RapidRebuildUntil { get; set; }
+            public int RebuildLifeMultiplier { get; set; } = 10_000;
             public int Armor { get; set; }
             public int Evasion { get; set; }
             public int Resistance { get; set; }

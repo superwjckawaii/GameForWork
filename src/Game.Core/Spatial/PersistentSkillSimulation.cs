@@ -26,6 +26,8 @@ public sealed partial class SpatialCombatRunner
         public int NextPulse { get; set; } = created + interval;
         public int Multiplier { get; } = multiplier;
         public bool Armed { get; set; }
+        public int InheritedStacks { get; init; }
+        public bool Propagated { get; init; }
         public DamageBreakdown? DamagePerSecond { get; set; }
         public DamageBreakdown? RareDamagePerSecond { get; set; }
     }
@@ -36,25 +38,28 @@ public sealed partial class SpatialCombatRunner
     {
         string id = skill.SkillId;
         if (id is not (SkillIds.FlameStep or SkillIds.VoidDecayField or SkillIds.StormBrand or
-            "archetypes.skill.void_rift" or "archetypes.skill.corrosive_trap" or "archetypes.skill.thunderstorm")) return false;
+            "archetypes.skill.void_rift" or "archetypes.skill.corrosive_trap" or "archetypes.skill.thunderstorm" or "archetypes.skill.doom_brand")) return false;
+        bool doom = id == "archetypes.skill.doom_brand";
+        request = request with { OffenseSnapshot = request.EquipmentRuntime!.SnapshotOffense(hero) };
         bool brand = id == SkillIds.StormBrand, thunder = id == "archetypes.skill.thunderstorm";
         bool trap = id == "archetypes.skill.corrosive_trap", flame = id == SkillIds.FlameStep;
-        if (brand) target = enemies.Where(enemy => enemy.Life > 0 && InRange(origin, enemy.Position, skill.RangeRaw) &&
+        if (brand || doom) target = enemies.Where(enemy => enemy.Life > 0 && InRange(origin, enemy.Position, skill.RangeRaw) &&
                 !areas.Any(area => area.Skill.SkillId == id && area.Target == enemy.EntityId && area.Expires >= tick))
             .OrderBy(enemy => Point.DistanceSquared(origin, enemy.Position)).FirstOrDefault() ?? target;
         int duration = flame ? 50 : brand ? 120 : thunder ? 100 : trap ? 160 : id == SkillIds.VoidDecayField ?
             CombatRules.ApplyIncreased(120, configuration.Quality * 100) : 100;
-        int radius = flame ? 750 : brand ? 5_000 : thunder ? 4_000 : id == SkillIds.VoidDecayField ? 3_500 : 3_000;
+        int radius = doom ? 3_200 : flame ? 750 : brand ? 5_000 : thunder ? 4_000 : id == SkillIds.VoidDecayField ? 3_500 : 3_000;
         if (id == "archetypes.skill.void_rift") radius = CombatRules.ApplyIncreased(radius, configuration.Quality * 100);
         int interval = brand ? 15 - Math.Clamp(configuration.Quality, 0, 20) / 10 :
             thunder ? 10 - Math.Clamp(configuration.Quality, 0, 20) / 20 : 0;
-        int maximum = brand ? 3 : id == "archetypes.skill.void_rift" ? 2 : flame || trap ? int.MaxValue : 1;
-        foreach (var old in areas.Where(area => area.Expires < tick || brand && area.Skill.SkillId == id && area.Target == target.EntityId).ToArray()) areas.Remove(old);
+        int maximum = brand || doom ? 3 : id == "archetypes.skill.void_rift" ? 2 : flame || trap ? int.MaxValue : 1;
+        if (doom && !ApplyDoomCurse(request, configuration, target, tick + duration, tick)) return true;
+        foreach (var old in areas.Where(area => area.Expires < tick || (brand || doom) && area.Skill.SkillId == id && area.Target == target.EntityId).ToArray()) areas.Remove(old);
         while (areas.Count(area => area.Skill.SkillId == id) >= maximum)
             areas.Remove(areas.First(area => area.Skill.SkillId == id));
         var area = new PersistentArea(request, skill, configuration, flame ? origin : target.Position,
             flame ? destination : target.Position, target.EntityId, radius, tick, duration, interval, multiplier) { Armed = trap };
-        if (!brand && !thunder)
+        if (!brand && !thunder && !doom)
         {
             int weapon = request.Build.Weapon.MinimumPhysicalDamage + (int)(random.NextUInt() %
                 (uint)Math.Max(1, request.Build.Weapon.MaximumPhysicalDamage - request.Build.Weapon.MinimumPhysicalDamage + 1));
@@ -102,6 +107,11 @@ public sealed partial class SpatialCombatRunner
     {
         foreach (var area in areas.ToArray())
         {
+            if (area.Skill.SkillId == "archetypes.skill.doom_brand")
+            {
+                AdvanceDoom(area, areas, enemies, hero, random, tick, events);
+                continue;
+            }
             if (tick > area.Expires) { areas.Remove(area); continue; }
             bool brand = area.Skill.SkillId == SkillIds.StormBrand;
             var attached = brand ? enemies.FirstOrDefault(enemy => enemy.EntityId == area.Target && enemy.Life > 0) : null;

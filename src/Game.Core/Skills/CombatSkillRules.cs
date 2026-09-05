@@ -148,8 +148,12 @@ public static class CombatSkillRules
             bleed += 5_000;
         }
         if (configuration.Supports.HasFlag(SkillSupport.Vengeance)) damage = checked(damage * 14_000 / 10_000);
-        if (configuration.Supports.HasFlag(SkillSupport.BlockTrigger)) damage = checked(damage * 7_500 / 10_000);
-        if (configuration.Supports.HasFlag(SkillSupport.CastWhenDamaged)) damage = checked(damage * 7_000 / 10_000);
+        if (configuration.Supports.HasFlag(SkillSupport.BlockTrigger)) damage = checked(damage *
+            (10_000 - ActiveSkillCatalog.Interpolate(3_500, 2_000, SupportLink(configuration, SkillSupport.BlockTrigger).Level, false)) / 10_000);
+        if (configuration.Supports.HasFlag(SkillSupport.CastWhenDamaged)) damage = checked(damage *
+            (10_000 - ActiveSkillCatalog.Interpolate(3_000, 2_000, SupportLink(configuration, SkillSupport.CastWhenDamaged).Level, false)) / 10_000);
+        if (LinkedSupportRules.Support(configuration, SupportMechanic.AttackTrigger)) damage = checked(damage *
+            (10_000 - LinkedSupportRules.SupportValue(configuration, SupportMechanic.AttackTrigger, 4_000, 2_500)) / 10_000);
         if (configuration.Supports.HasFlag(SkillSupport.FasterCasting) && definition.Tags.HasFlag(SkillTag.Spell))
         {
             var link = SupportLink(configuration, SkillSupport.FasterCasting);
@@ -211,7 +215,7 @@ public static class CombatSkillRules
         bool targetRareOrBoss = false, SkillDamageType? damageType = null,
         int additionalIncreasedBasisPoints = 0,
         bool applyIncreased = true,
-        IReadOnlyList<DamageType>? damageHistory = null)
+        IReadOnlyList<DamageType>? damageHistory = null, int nearbyEnemyCount = 1, int distanceRaw = 1_000)
     {
         PassiveModifiers passive = build.PassiveProfile ?? PassiveModifiers.Empty;
         long value = rawDamage;
@@ -255,7 +259,7 @@ public static class CombatSkillRules
             value = Scale(value, skill.BaseDamageBasisPoints);
         value = Scale(value, DamageMultiplier(skill, targetLife, targetMaximumLife));
         value = Scale(value, MasteryRuntime.OffensiveMultiplier(passive, tags, build.Weapon,
-            targetLife, targetMaximumLife, hasOffHand: build.HasOffHand));
+            targetLife, targetMaximumLife, nearbyEnemyCount, distanceRaw, hasOffHand: build.HasOffHand, hit: skill.Role != SkillRole.DamageOverTime));
         return SaturatingInt(Scale(value, actionMultiplierBasisPoints));
     }
 

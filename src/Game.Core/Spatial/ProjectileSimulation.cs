@@ -184,7 +184,7 @@ public sealed partial class SpatialCombatRunner
             var star = new ProjectileAction(action.Request,
                 action.Skill with { Returns = false, PierceCount = 0, ForkCount = 0, MaximumChains = 0 },
                 action.Configuration, action.Origin, action.Multiplier,
-                action.Request.EquipmentRuntime.CreateTriggeredAction(action.PrimaryTarget), action.PrimaryTarget, false)
+                action.Request.EquipmentRuntime.CreateTriggeredAction(action.PrimaryTarget, copy: true), action.PrimaryTarget, false)
             { Star = true, ReferenceHit = action.ReferenceHit };
             for (int index = 0; index < Math.Min(5, action.SuccessfulHits.Count); index++)
                 projectiles.Add(new(star, action.PrimaryTarget, action.Origin, tick));

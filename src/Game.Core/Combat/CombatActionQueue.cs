@@ -13,16 +13,28 @@ public sealed record CombatHitSnapshot(string TargetId, Point Origin, ResolvedSk
 public sealed record CombatActionSnapshot(string Id, string SkillId, SkillTag Tags, bool Unarmed,
     int StartedMilliseconds, int CompletesMilliseconds, IReadOnlyList<CombatHitSnapshot> Hits);
 public sealed record DeferredCombatCopy(string Id, CombatActionSnapshot Action, int DueMilliseconds,
-    int Multiplier, bool RollCritical, string Source);
+    int Multiplier, bool RollCritical, string Source, bool Sacrifice = false, int Radius = 0);
 
 /// <summary>Only original actions enter the recorder. Copies are terminal queue entries.</summary>
 public sealed class CombatActionQueue
 {
-    private readonly List<(string Id, Point Position, int Expires)> _phantoms = [];
+    private sealed class Phantom(string id, Point position, int expires, int sacrifice, int radius, int ratio)
+    {
+        public string Id { get; } = id;
+        public Point Position { get; } = position;
+        public int Expires { get; } = expires;
+        public int Sacrifice { get; } = sacrifice;
+        public int Radius { get; } = radius;
+        public int Ratio { get; } = ratio;
+        public CombatActionSnapshot? LastReplay { get; set; }
+        public int LastMultiplier { get; set; }
+    }
+    private readonly List<Phantom> _phantoms = [];
     private readonly Dictionary<string, CombatActionSnapshot> _recording = [];
     private readonly List<DeferredCombatCopy> _pending = [];
     private readonly HashSet<string> _completed = [];
     private int _unarmedCount, _sequence;
+    private int _substituteReady, _recoveryReady;
     private SkillTag _previousCategory;
     public CombatActionSnapshot? LatestAttack { get; private set; }
     public IReadOnlyList<DeferredCombatCopy> Pending => _pending;
@@ -36,21 +48,60 @@ public sealed class CombatActionQueue
     }
     public IReadOnlyList<AllyFrame> PhantomFrames(int tick) => _phantoms.Where(phantom => phantom.Expires > tick)
         .Select(phantom => new AllyFrame(phantom.Id, phantom.Position, false, "archetypes.skill.phantom_step")).ToArray();
-    public void SpawnPhantom(Point origin, int tick, int duration, int maximum, int ratio)
+    public void SpawnPhantom(Point origin, int tick, int duration, int maximum, int ratio,
+        int sacrifice = 0, int radius = 3_000, ResourceState? hero = null, bool recovery = false)
     {
-        _phantoms.RemoveAll(phantom => phantom.Expires <= tick);
+        ExpirePhantoms(tick, hero, recovery);
         if (maximum <= 0) return;
-        while (_phantoms.Count >= Math.Min(6, maximum)) _phantoms.RemoveAt(0);
+        while (_phantoms.Count >= Math.Min(6, maximum))
+            RemovePhantom(_phantoms.MinBy(phantom => phantom.Expires)!, tick, hero, recovery, false);
         string id = $"phantom:{++_sequence}";
-        _phantoms.Add((id, origin, tick + duration));
+        _phantoms.Add(new(id, origin, tick + duration, sacrifice, radius, ratio));
         if (LatestAttack is { } attack) Enqueue(attack with { Hits = attack.Hits.Select(hit => hit with { Origin = origin }).ToArray() },
             tick * 50 + 300, ratio, false, id);
     }
-    public void CommandPhantoms(int tick, int ratio)
+    public void ExpirePhantoms(int tick, ResourceState? hero = null, bool recovery = false)
+    {
+        foreach (var phantom in _phantoms.Where(phantom => phantom.Expires <= tick).ToArray())
+            RemovePhantom(phantom, tick, hero, recovery, false);
+    }
+    public bool TrySubstitute(Point heroPosition, int tick)
+    {
+        if (tick < _substituteReady) return false;
+        var phantom = _phantoms.Where(phantom => phantom.Expires > tick)
+            .MinBy(phantom => Point.DistanceSquared(heroPosition, phantom.Position));
+        if (phantom is null) return false;
+        RemovePhantom(phantom, tick, null, false, true);
+        _substituteReady = tick + 60;
+        return true;
+    }
+    private void RemovePhantom(Phantom phantom, int tick, ResourceState? hero, bool recovery, bool substitute)
+    {
+        _phantoms.Remove(phantom);
+        _pending.RemoveAll(copy => copy.Source == phantom.Id);
+        if (substitute) return;
+        if (recovery && hero is not null && tick >= _recoveryReady)
+        {
+            hero.HealLife(hero.MaximumLife / 50); hero.RestoreShield(hero.MaximumShield / 50);
+            _recoveryReady = tick + 10;
+        }
+        if (phantom.Sacrifice > 0 && phantom.LastReplay is { } replay)
+            _pending.Add(new($"copy:{++_sequence}", replay, tick * 50,
+                (int)((long)phantom.LastMultiplier * phantom.Sacrifice / 10_000), false,
+                phantom.Id, true, phantom.Radius));
+    }
+    public void Replayed(DeferredCombatCopy copy, IReadOnlyList<CombatHitSnapshot> hits)
+    {
+        var phantom = _phantoms.FirstOrDefault(phantom => phantom.Id == copy.Source);
+        if (phantom is null || hits.Count == 0) return;
+        phantom.LastReplay = copy.Action with { Hits = hits };
+        phantom.LastMultiplier = copy.Multiplier;
+    }
+    public void CommandPhantoms(int tick)
     {
         if (LatestAttack is not { } attack) return;
         foreach (var phantom in _phantoms.Where(phantom => phantom.Expires > tick).Take(6))
-            Enqueue(attack with { Hits = attack.Hits.Select(hit => hit with { Origin = phantom.Position }).ToArray() }, tick * 50, ratio, false, phantom.Id);
+            Enqueue(attack with { Hits = attack.Hits.Select(hit => hit with { Origin = phantom.Position }).ToArray() }, tick * 50, phantom.Ratio, false, phantom.Id);
     }
     public void Record(string actionId, CombatHitSnapshot hit, int tick, bool triggered)
     {

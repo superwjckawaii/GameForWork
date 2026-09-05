@@ -25,6 +25,9 @@ public static class SpellHitRules
         ["archetypes.skill.withering_ray"] = new(6, 18, 500, 3_500),
         ["archetypes.skill.shield_drain"] = new(5, 15, 500, 3_000),
         ["archetypes.skill.void_rift"] = new(28, 42, 500, 8_000),
+        ["archetypes.skill.mirror_counter"] = new(28, 84, 600, 10_000),
+        ["archetypes.skill.answering_formula"] = new(24, 48, 500, 9_000),
+        ["archetypes.skill.doom_brand"] = new(48, 72, 500, 12_000),
     };
 
     public static int Roll(ResolvedSkill skill, int level, Pcg32 random)

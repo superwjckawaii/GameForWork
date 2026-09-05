@@ -18,11 +18,10 @@ public static class MasteryRuntime
 
     public static int OffensiveMultiplier(PassiveModifiers profile, SkillTag tags, WeaponProfile weapon,
         int targetLife, int targetMaximumLife, int nearbyEnemyCount = 1, int distanceRaw = 1_000,
-        bool hasOffHand = false)
+        bool hasOffHand = false, bool hit = true)
     {
         int result = 10_000;
         bool attack = tags.HasFlag(SkillTag.Attack);
-        bool hit = !tags.HasFlag(SkillTag.Duration);
         bool twoHand = IsCategory(weapon, ItemCategory.TwoHandWeapon);
         if (attack && hit && Has(profile, "攻击", 0)) result = Multiply(result, 14_000);
         if (attack && hit && tags.HasFlag(SkillTag.Physical) && IsFamily(weapon, WeaponFamily.Axe) &&

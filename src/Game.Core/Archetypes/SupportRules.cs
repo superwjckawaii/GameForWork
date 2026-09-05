@@ -53,7 +53,6 @@ public static class SupportRules
                 case SupportMechanic.MinionAmplify or SupportMechanic.ConstructAmplify: damage = Mul(damage, 13_000); break;
                 case SupportMechanic.SwiftMinions: recovery = Mul(recovery, 13_000); break;
                 case SupportMechanic.ExpandedArmy: minions += 1; damage = Mul(damage, 8_500); break;
-                case SupportMechanic.AuraAmplify or SupportMechanic.StanceAmplify: damage = Mul(damage, 12_500); break;
                 case SupportMechanic.LastingBlessing or SupportMechanic.VoidDuration: recovery = Mul(recovery, 8_000); break;
                 case SupportMechanic.DeepHex or SupportMechanic.DeepWither: cast = Mul(cast, 8_500); damage = Mul(damage, 13_000); break;
                 case SupportMechanic.FirePenetration or SupportMechanic.ColdPenetration or SupportMechanic.LightningPenetration:
@@ -64,10 +63,8 @@ public static class SupportRules
                 case SupportMechanic.UnarmedFocus: damage = Mul(damage, 13_500); break;
                 case SupportMechanic.MovementEcho: repeats = true; damage = Mul(damage, 6_000); break;
                 case SupportMechanic.FerociousBeast: damage = Mul(damage, 13_500); break;
-                case SupportMechanic.PhantomCopy: phantoms += 1; damage = Mul(damage, 7_500); break;
-                case SupportMechanic.PhantomSacrifice: damage = Mul(damage, 12_000); break;
+                case SupportMechanic.PhantomCopy: phantoms += 1; break;
                 case SupportMechanic.Spellblade: damage = Mul(damage, 11_500); break;
-                case SupportMechanic.AttackTrigger: damage = Mul(damage, 6_500); break;
                 case SupportMechanic.ImprintGain: damage = Mul(damage, 8_500); break;
                 case SupportMechanic.ImprintBurst: damage = Mul(damage, 12_500); break;
                 case SupportMechanic.ShieldBreakAmplify: damage = Mul(damage, 14_000); break;

@@ -2,6 +2,9 @@ using GameForWork.Core.Builds;
 using GameForWork.Core.Campaign.Combat;
 using GameForWork.Core.Campaign.World;
 using GameForWork.Core.Spatial;
+using GameForWork.Core.Archetypes;
+using GameForWork.Core.Skills;
+using static GameForWork.Core.Skills.LinkedSupportRules;
 
 namespace GameForWork.Core.Combat;
 
@@ -25,11 +28,15 @@ public sealed class CombatBuffState
         if (id == "archetypes.skill.yin_yang_stance")
         {
             if (!unarmed || tick < _stanceReady) return false;
-            _stance = skill; _stanceReady = tick + 16;
+            _stance = skill;
+            _stanceReady = tick + (int)Math.Ceiling((16 + SupportValue(skill, SupportMechanic.StanceAmplify, 20, 10)) *
+                10_000d / (10_000 + SupportQuality(skill, SupportMechanic.StanceAmplify) * 100));
             return true;
         }
-        int Value(int one, int maximum) => ActiveSkillCatalog.Interpolate(one, maximum, skill.Level, false);
-        int duration = CombatRules.ApplyIncreased(id == "archetypes.skill.fellowship_blessing" ? 160 : 120, skill.Quality * 100);
+        int blessingEffect = id == "archetypes.skill.fellowship_blessing" ? SupportValue(skill, SupportMechanic.LastingBlessing, 2_000, 3_500) : 0;
+        int Value(int one, int maximum) => CombatRules.ApplyIncreased(ActiveSkillCatalog.Interpolate(one, maximum, skill.Level, false), blessingEffect);
+        int duration = CombatRules.ApplyIncreased(id == "archetypes.skill.fellowship_blessing" ? 160 : 120,
+            skill.Quality * 100 + (id == "archetypes.skill.fellowship_blessing" ? SupportValue(skill, SupportMechanic.LastingBlessing, 5_000, 10_000) : 0));
         _active[id] = id switch
         {
             "archetypes.skill.fellowship_blessing" => new(id, tick + duration, 9_000, Value(2_500, 4_000), Value(1_200, 2_000), Value(1_200, 2_000), Value(1_000, 1_500)),
@@ -70,10 +77,10 @@ public sealed class CombatBuffState
         if (!yin) return build with { IncreasedDamageBasisPoints = build.IncreasedDamageBasisPoints + StanceValue(stance, 2_500, 4_500),
             IncreasedAttackSpeedBasisPoints = build.IncreasedAttackSpeedBasisPoints + StanceValue(stance, 1_200, 2_000) };
         int block = StanceValue(stance, 600, 1_000);
-        return build with { MoreAttackDamageBasisPoints = CombatRules.CombineMoreBasisPoints(build.MoreAttackDamageBasisPoints, -2_000),
+        return build with { MoreAttackDamageBasisPoints = CombatRules.CombineMoreBasisPoints(build.MoreAttackDamageBasisPoints, -StanceValue(stance, 2_000, 2_000)),
             BlockChanceBasisPoints = build.BlockChanceBasisPoints + block,
             Sheet = build.Sheet with { SpellBlockChanceBasisPoints = build.Sheet.SpellBlockChanceBasisPoints + block } };
     }
     private static int StanceValue(SkillConfiguration skill, int one, int maximum) => CombatRules.ApplyIncreased(
-        ActiveSkillCatalog.Interpolate(one, maximum, skill.Level, false), skill.Quality * 50);
+        ActiveSkillCatalog.Interpolate(one, maximum, skill.Level, false), skill.Quality * 50 + SupportValue(skill, SupportMechanic.StanceAmplify, 3_000, 5_000));
 }
