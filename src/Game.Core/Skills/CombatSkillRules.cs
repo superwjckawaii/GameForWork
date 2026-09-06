@@ -38,7 +38,7 @@ public sealed record ResolvedSkill(
     bool ExplodesOnKill = false,
     bool OverloadRepeatsEveryThirdUse = false,
     int TemperanceLevelPerLayer = 0,
-    int TemperanceQualityPerLayer = 0, int BaseAreaRadiusRaw = 0, int AreaMoreBasisPoints = 10_000, int AreaIncreasedBasisPoints = 0, bool AlwaysHit = false, SkillTag AdditionalTags = SkillTag.None, int AdditionalAttackSpeedBasisPoints = 0)
+    int TemperanceQualityPerLayer = 0, int BaseAreaRadiusRaw = 0, int AreaMoreBasisPoints = 10_000, int AreaIncreasedBasisPoints = 0, bool AlwaysHit = false, SkillTag AdditionalTags = SkillTag.None, int AdditionalAttackSpeedBasisPoints = 0, int AdditionalCastSpeedBasisPoints = 0)
 {
     public int AreaMultiplierBasisPoints => Math.Max(2_500, CombatRules.ApplyMore(Math.Max(0, 10_000 + AreaIncreasedBasisPoints), [AreaMoreBasisPoints]));
     public int AreaRadiusRaw => AreaRules.Radius(BaseAreaRadiusRaw > 0 ? BaseAreaRadiusRaw : RangeRaw, AreaMultiplierBasisPoints);
@@ -128,10 +128,6 @@ public static class CombatSkillRules
         {
             damage = More(damage, SupportValue(configuration, SkillSupport.ConcentratedEffect));
         }
-        if (configuration.Supports.HasFlag(SkillSupport.AttackSpeed) && definition.Tags.HasFlag(SkillTag.Attack))
-        {
-            cooldown = Math.Max(1, cooldown * 10_000 / (10_000 + SupportValue(configuration, SkillSupport.AttackSpeed) * 100));
-        }
         if (configuration.Supports.HasFlag(SkillSupport.HeavyMomentum))
             damage = More(damage, SupportValue(configuration, SkillSupport.HeavyMomentum));
         if (configuration.Supports.HasFlag(SkillSupport.TripleImpact))
@@ -158,11 +154,6 @@ public static class CombatSkillRules
             (10_000 - ActiveSkillCatalog.Interpolate(3_000, 2_000, SupportLink(configuration, SkillSupport.CastWhenDamaged).Level, false)) / 10_000);
         if (LinkedSupportRules.Support(configuration, SupportMechanic.AttackTrigger)) damage = checked(damage *
             (10_000 - LinkedSupportRules.SupportValue(configuration, SupportMechanic.AttackTrigger, 4_000, 2_500)) / 10_000);
-        if (configuration.Supports.HasFlag(SkillSupport.FasterCasting) && definition.Tags.HasFlag(SkillTag.Spell))
-        {
-            var link = SupportLink(configuration, SkillSupport.FasterCasting);
-            castTime = Math.Max(1, castTime * 10_000 / (10_000 + SupportValue(configuration, SkillSupport.FasterCasting) * 100 + link.Quality * 50));
-        }
         if (configuration.Supports.HasFlag(SkillSupport.Pierce)) pierce += 2;
         if (configuration.Supports.HasFlag(SkillSupport.Fork)) fork += 2;
         if (configuration.Supports.HasFlag(SkillSupport.Return)) returns = true;
@@ -194,8 +185,9 @@ public static class CombatSkillRules
             buildsSupports.OverloadRepeatsEveryThirdUse, buildsSupports.TemperanceLevelPerLayer,
             buildsSupports.TemperanceQualityPerLayer, configuration.SkillId == SkillIds.SeismicCharge ? 1_800 : definition.RangeRaw, AreaRules.More(configuration, passive), AreaRules.Increased(configuration, passive),
             AdditionalTags: active.Role == SkillRole.Counter ? SkillTag.Counter : SkillTag.None,
-            AdditionalAttackSpeedBasisPoints: UnarmedRules.IsSkill(configuration.SkillId)
-                ? LinkedSupportRules.SupportValue(configuration, SupportMechanic.UnarmedFocus, 1_000, 2_000) : 0);
+            AdditionalAttackSpeedBasisPoints: SupportSpeed(configuration, SkillSupport.AttackSpeed, SkillTag.Attack) +
+                (UnarmedRules.IsSkill(configuration.SkillId) ? LinkedSupportRules.SupportValue(configuration, SupportMechanic.UnarmedFocus, 1_000, 2_000) : 0),
+            AdditionalCastSpeedBasisPoints: SupportSpeed(configuration, SkillSupport.FasterCasting, SkillTag.Spell));
     }
 
     public static bool TryPay(ResourceState resources, ResolvedSkill skill, bool allowOvercharge = true, bool selfCast = true) =>
@@ -316,22 +308,29 @@ public static class CombatSkillRules
             VoidDebuffIncreaseBasisPoints: MasteryRuntime.Has(passive, "虚空", 4) ? 6_000 : 0);
     }
 
-    public static int ActionDelay(TeamBuild build, int baseTicks, SkillTag tags, int additionalAttackSpeed = 0)
+    private static int SupportSpeed(SkillConfiguration configuration, SkillSupport support, SkillTag tag) =>
+        configuration.Supports.HasFlag(support) && SkillDefinitions.Get(configuration.SkillId).Tags.HasFlag(tag)
+            ? SupportValue(configuration, support) * 100 + SupportLink(configuration, support).Quality * 50 : 0;
+
+    public static int ActionDelay(TeamBuild build, ResolvedSkill skill, SkillTag tags) =>
+        ActionDelay(build, skill.CastTimeTicks, tags, skill.AdditionalAttackSpeedBasisPoints, skill.AdditionalCastSpeedBasisPoints);
+
+    public static int ActionDelay(TeamBuild build, int baseTicks, SkillTag tags, int additionalAttackSpeed = 0, int additionalCastSpeed = 0)
     {
         PassiveModifiers passive = build.PassiveProfile ?? PassiveModifiers.Empty;
         int masterySpeed = MasteryRuntime.ActionSpeedMultiplier(passive, tags, build.Weapon);
         int increasedSpeed = build.IncreasedActionSpeedBasisPoints;
         if (tags.HasFlag(SkillTag.Attack)) increasedSpeed = checked(increasedSpeed + build.IncreasedAttackSpeedBasisPoints + UnarmedRules.AttackSpeed(build) + additionalAttackSpeed);
-        if (tags.HasFlag(SkillTag.Spell)) increasedSpeed = checked(increasedSpeed + build.IncreasedCastSpeedBasisPoints +
+        if (tags.HasFlag(SkillTag.Spell)) increasedSpeed = checked(increasedSpeed + build.IncreasedCastSpeedBasisPoints + additionalCastSpeed +
             (build.CombatEquipment?.Value(GameForWork.Core.Campaign.Items.ItemModifierKind.IncreasedCastSpeedBasisPoints) ?? 0));
         return Math.Max(1, checked((int)((long)Math.Max(1, baseTicks) * 10_000 * 10_000 /
             Math.Max(10_000_000, (long)(10_000 + increasedSpeed) * masterySpeed))));
     }
 
     public static int ActionFrequencyMilliPerSecond(TeamBuild build, int baseTicks, int cooldownTicks,
-        SkillTag tags, int additionalAttackSpeed = 0)
+        SkillTag tags, int additionalAttackSpeed = 0, int additionalCastSpeed = 0)
     {
-        int actionDelay = ActionDelay(build, baseTicks, tags, additionalAttackSpeed);
+        int actionDelay = ActionDelay(build, baseTicks, tags, additionalAttackSpeed, additionalCastSpeed);
         if (!tags.HasFlag(SkillTag.Attack)) return checked(20_000 / actionDelay);
 
         PassiveModifiers passive = build.PassiveProfile ?? PassiveModifiers.Empty;

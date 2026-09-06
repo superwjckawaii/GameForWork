@@ -82,7 +82,7 @@ public sealed partial class CombatActionQueue(CombatProfile? profile = null)
         if (triggered || _completed.Contains(id) || _recording.ContainsKey(id) ||
             (tags & (SkillTag.Attack | SkillTag.Spell)) == 0 || skill.Role is SkillRole.Reservation or SkillRole.DamageOverTime) return;
         _recording.Add(id, new(id, skill.SkillId, tags, !build.HasUsableWeapon, tick * 50,
-            (tick + (tags.HasFlag(SkillTag.Channelling) ? 6 : CombatSkillRules.ActionDelay(build, skill.CastTimeTicks, tags, skill.AdditionalAttackSpeedBasisPoints))) * 50, []));
+            (tick + (tags.HasFlag(SkillTag.Channelling) ? 6 : CombatSkillRules.ActionDelay(build, skill.CastTimeTicks, tags, skill.AdditionalAttackSpeedBasisPoints, skill.AdditionalCastSpeedBasisPoints))) * 50, []));
     }
     public IReadOnlyList<AllyFrame> PhantomFrames(int tick) => _phantoms.Where(phantom => phantom.Expires > tick)
         .Select(phantom => new AllyFrame(phantom.Id, phantom.Position, false, "archetypes.skill.phantom_step")).ToArray();

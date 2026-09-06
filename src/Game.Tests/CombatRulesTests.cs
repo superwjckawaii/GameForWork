@@ -100,7 +100,7 @@ public sealed class CombatRulesTests
     }
 
     [Fact]
-    public void HeavyStrikeSupportsModifyRangeSpeedCostAndDamage()
+    public void HeavyStrikeUsesSharedSkillCostsAndDoesNotConfuseAreaWithRange()
     {
         CharacterSheet sheet = StartingSheet();
         SkillUseProfile profile = SkillRules.BuildHeavyStrike(
@@ -111,11 +111,11 @@ public sealed class CombatRulesTests
             sheet.MaximumLife().Value);
 
         Assert.Equal(0, profile.ManaCost);
-        Assert.Equal(8, profile.LifeCost);
-        Assert.Equal(2_025, profile.RangeRaw);
+        Assert.Equal(11, profile.LifeCost);
+        Assert.Equal(1_500, profile.RangeRaw);
         Assert.Equal(14, profile.AttackIntervalTicks);
         Assert.Equal(6_000, profile.BleedChanceBasisPoints);
-        Assert.Equal([14_000, 9_000, 13_000], profile.MoreDamageMultipliersBasisPoints);
+        Assert.Equal([16_000, 10_800], profile.MoreDamageMultipliersBasisPoints);
         Assert.True(SkillDefinitions.HeavyStrike.Tags.HasFlag(SkillTag.Physical));
         Assert.True(SkillDefinitions.HeavyStrike.Tags.HasFlag(SkillTag.Strike));
         Assert.True(SkillDefinitions.WarCry.Tags.HasFlag(SkillTag.WarCry));

@@ -607,7 +607,7 @@ public sealed partial class SpatialCombatRunner
                         if (skillCatalogTags.HasFlag(SkillTag.Attack))
                         {
                             int frequency = CombatSkillRules.ActionFrequencyMilliPerSecond(request.Build,
-                                skillCatalogSkill.CastTimeTicks, skillCatalogSkill.CooldownTicks, skillCatalogTags, skillCatalogSkill.AdditionalAttackSpeedBasisPoints);
+                                skillCatalogSkill.CastTimeTicks, skillCatalogSkill.CooldownTicks, skillCatalogTags, skillCatalogSkill.AdditionalAttackSpeedBasisPoints, skillCatalogSkill.AdditionalCastSpeedBasisPoints);
                             int carry = skillCatalogAttackFrequencyCarry.GetValueOrDefault(skillCatalogSkill.SkillId);
                             useCount = CombatRules.AttacksForScheduledSimulationTick(frequency, ref carry);
                             skillCatalogAttackFrequencyCarry[skillCatalogSkill.SkillId] = carry;
@@ -629,7 +629,7 @@ public sealed partial class SpatialCombatRunner
                         skillCatalogReadyTicks[chosen] = tick + Math.Max(1, skillCatalogSkill.CooldownTicks * 10_000 /
                             (10_000 + request.Buffs.CooldownRecovery(chosen)));
                         heroNextActionTick = tick + (skillCatalogTags.HasFlag(SkillTag.Channelling) ? 5 : CombatSkillRules.ActionDelay(request.Build, skillCatalogSkill.CastTimeTicks,
-                            skillCatalogTags, skillCatalogSkill.AdditionalAttackSpeedBasisPoints));
+                            skillCatalogTags, skillCatalogSkill.AdditionalAttackSpeedBasisPoints, skillCatalogSkill.AdditionalCastSpeedBasisPoints));
                         if (UnarmedRules.Repeats(chosen, request.Build)) heroNextActionTick += heroNextActionTick - tick;
                         if (request.Buffs.Instant(chosen)) heroNextActionTick = tick;
                     }
@@ -650,7 +650,7 @@ public sealed partial class SpatialCombatRunner
                         events.Add(Event(tick, SpatialEventKind.SeismicCharge, "hero", target.EntityId, 0,
                             heroPosition, target.Position, "movement"));
                         chargeReadyTick = tick + chargeSkill.CooldownTicks;
-                        heroNextActionTick = tick + ActionDelay(request.Build, chargeSkill.CastTimeTicks,
+                        heroNextActionTick = tick + CombatSkillRules.ActionDelay(request.Build, chargeSkill,
                             SkillDefinitions.Get(chargeSkill.SkillId).Tags);
                     }
                     else if (chosen == SkillIds.BloodTideSpin && TryPayEquipmentCost(request, hero, spin!))
@@ -663,7 +663,7 @@ public sealed partial class SpatialCombatRunner
                                 checked(3_500 + spinSkill.BleedChanceBasisPoints), hero, spinSkill.LifeLeechBasisPoints);
                         }
                         spinReadyTick = tick + spinSkill.CooldownTicks;
-                        heroNextActionTick = tick + ActionDelay(request.Build, spinSkill.CastTimeTicks,
+                        heroNextActionTick = tick + CombatSkillRules.ActionDelay(request.Build, spinSkill,
                             SkillDefinitions.Get(spinSkill.SkillId).Tags);
                     }
                     else if (chosen == SkillIds.EarthCleave && TryPayEquipmentCost(request, hero, cleave!))
@@ -681,7 +681,7 @@ public sealed partial class SpatialCombatRunner
                         }
 
                         cleaveReadyTick = tick + cleaveSkill.CooldownTicks;
-                        heroNextActionTick = tick + ActionDelay(request.Build, cleaveSkill.CastTimeTicks,
+                        heroNextActionTick = tick + CombatSkillRules.ActionDelay(request.Build, cleaveSkill,
                             SkillDefinitions.Get(cleaveSkill.SkillId).Tags);
                     }
                     else if (chosen == SkillIds.SpiritBlade && TryPayEquipmentCost(request, hero, blade!))
@@ -692,7 +692,7 @@ public sealed partial class SpatialCombatRunner
                         events.Add(Event(tick, SpatialEventKind.SpiritBladeLaunched, "hero", target.EntityId, 0,
                             heroPosition, target.Position, $"projectile:{bladeSkill.ProjectileCount}"));
                         bladeReadyTick = tick + bladeSkill.CooldownTicks;
-                        heroNextActionTick = tick + ActionDelay(request.Build, bladeSkill.CastTimeTicks,
+                        heroNextActionTick = tick + CombatSkillRules.ActionDelay(request.Build, bladeSkill,
                             SkillDefinitions.Get(bladeSkill.SkillId).Tags);
                     }
                     else if (chosen == SkillIds.AshJavelin && TryPayEquipmentCost(request, hero, ashJavelin!))
@@ -702,7 +702,7 @@ public sealed partial class SpatialCombatRunner
                             SpatialEventKind.AshJavelin, heroPosition, events, skill.BleedChanceBasisPoints, hero,
                             skill.LifeLeechBasisPoints);
                         ashJavelinReadyTick = tick + skill.CooldownTicks;
-                        heroNextActionTick = tick + ActionDelay(request.Build, skill.CastTimeTicks,
+                        heroNextActionTick = tick + CombatSkillRules.ActionDelay(request.Build, skill,
                             SkillDefinitions.Get(skill.SkillId).Tags);
                     }
                     else if (chosen == SkillIds.EmberNova && TryPayEquipmentCost(request, hero, emberNova!))
@@ -712,7 +712,7 @@ public sealed partial class SpatialCombatRunner
                             ApplyHeroHit(request, enemy, random, tick, bannerMultiplier,
                                 SpatialEventKind.EmberNova, heroPosition, events, 0, hero, skill.LifeLeechBasisPoints);
                         emberNovaReadyTick = tick + skill.CooldownTicks;
-                        heroNextActionTick = tick + ActionDelay(request.Build, skill.CastTimeTicks,
+                        heroNextActionTick = tick + CombatSkillRules.ActionDelay(request.Build, skill,
                             SkillDefinitions.Get(skill.SkillId).Tags);
                     }
                     else if (chosen == SkillIds.StormBrand && TryPayEquipmentCost(request, hero, stormBrand!))
@@ -721,7 +721,7 @@ public sealed partial class SpatialCombatRunner
                         CreatePersistentArea(request, skill, skills[chosen], target, enemies, hero, random, tick,
                             heroPosition, heroPosition, bannerMultiplier, persistentAreas, events);
                         stormBrandReadyTick = tick + skill.CooldownTicks;
-                        heroNextActionTick = tick + ActionDelay(request.Build, skill.CastTimeTicks,
+                        heroNextActionTick = tick + CombatSkillRules.ActionDelay(request.Build, skill,
                             SkillDefinitions.Get(skill.SkillId).Tags);
                     }
                     else if (chosen == SkillIds.HeavyStrike &&

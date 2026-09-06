@@ -274,55 +274,23 @@ public static class SkillRules
             throw new ArgumentException("Configuration is not Heavy Strike.", nameof(configuration));
         }
 
-        int range = SkillDefinitions.HeavyStrike.RangeRaw;
-        int manaCost = Ascendancies.WarriorAscendancyRules.AttackManaCost(SkillDefinitions.HeavyStrike.BaseManaCost, SkillDefinitions.HeavyStrike.Tags);
-        int lifeCost = 0;
-        int bleedChance = 0;
-        int increasedAttackSpeed = additionalIncreasedAttackSpeedBasisPoints;
-        var moreMultipliers = new List<int> { 14_000 };
-        if (configuration.Level > 1)
-        {
-            moreMultipliers.Add(checked(10_000 + (Math.Clamp(configuration.Level, 1, 40) - 1) * 250));
-        }
-
-        if (configuration.Supports.HasFlag(SkillSupport.IncreasedArea))
-        {
-            range = checked(range * 13_500 / 10_000);
-            moreMultipliers.Add(9_000);
-        }
-
-        if (configuration.Supports.HasFlag(SkillSupport.AttackSpeed))
-        {
-            increasedAttackSpeed += 2_500;
-        }
-
-        if (configuration.Supports.HasFlag(SkillSupport.Bleed))
-        {
-            bleedChance += 6_000;
-        }
-
-        if (configuration.Supports.HasFlag(SkillSupport.LifeCost))
-        {
-            manaCost = 0;
-            lifeCost = Math.Max(1, checked(maximumLife * 800 / 10_000));
-            moreMultipliers.Add(13_000);
-        }
-
+        Skills.ResolvedSkill resolved = Skills.CombatSkillRules.Resolve(configuration, maximumLife);
+        int increasedAttackSpeed = checked(additionalIncreasedAttackSpeedBasisPoints + resolved.AdditionalAttackSpeedBasisPoints);
         int uncappedRateMilli = CombatRules.ApplyIncreased(weapon.AttacksPerSecondMilli, increasedAttackSpeed);
         int adjustedRateMilli = Math.Clamp(uncappedRateMilli, 1,
             CombatRules.MaximumAttackFrequencyMilliPerSecond);
         int attackIntervalTicks = Math.Max(1, DivideRoundUp(20_000, adjustedRateMilli));
         return new SkillUseProfile(
             configuration.SkillId,
-            manaCost,
-            lifeCost,
-            range,
+            resolved.ManaCost,
+            resolved.LifeCost,
+            resolved.RangeRaw,
             attackIntervalTicks,
             uncappedRateMilli,
             0,
             0,
-            bleedChance,
-            moreMultipliers,
+            resolved.BleedChanceBasisPoints,
+            [resolved.BaseDamageBasisPoints, resolved.DamageMultiplierBasisPoints],
             increasedAttackSpeed);
     }
 

@@ -151,7 +151,7 @@ public static class BuildSummaryRules
         int criticalHit = Packet(armor, increases, true, criticalMultiplier).Total;
         long expected = ((long)hit * (10_000 - criticalChance) + (long)criticalHit * criticalChance) / 10_000;
         expected = expected * hitChance / 10_000;
-        int frequency = CombatSkillRules.ActionFrequencyMilliPerSecond(build, skill.CastTimeTicks, skill.CooldownTicks, tags, skill.AdditionalAttackSpeedBasisPoints);
+        int frequency = CombatSkillRules.ActionFrequencyMilliPerSecond(build, skill.CastTimeTicks, skill.CooldownTicks, tags, skill.AdditionalAttackSpeedBasisPoints, skill.AdditionalCastSpeedBasisPoints);
         long dps = expected * frequency / 1_000;
         int baseTotal = Packet(0, null, false).Total;
         int increasedTotal = Packet(0, increases, false).Total;
