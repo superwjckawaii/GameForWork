@@ -15,8 +15,7 @@ public sealed record SupportProfile(
     int EnergyShieldLeechBasisPoints = 0,
     bool MoveWhileUsing = false,
     bool PaysEnergyShield = false,
-    bool Propagates = false,
-    bool RepeatsAtDestination = false);
+    bool Propagates = false);
 
 public static class SupportRules
 {
@@ -37,7 +36,6 @@ public static class SupportRules
         bool moving = false;
         bool shieldCost = false;
         bool propagates = false;
-        bool repeats = false;
         foreach (SupportMechanic support in supports.Distinct())
         {
             switch (support)
@@ -60,7 +58,6 @@ public static class SupportRules
                 case SupportMechanic.ElementalAilment: damage = Mul(damage, 9_000); break;
                 case SupportMechanic.ShieldLeech: shieldLeech += 200; break;
                 case SupportMechanic.ShieldCasting: shieldCost = true; damage = Mul(damage, 12_000); break;
-                case SupportMechanic.MovementEcho: repeats = true; damage = Mul(damage, 6_000); break;
                 case SupportMechanic.FerociousBeast: damage = Mul(damage, 13_500); break;
                 case SupportMechanic.PhantomCopy: phantoms += 1; break;
                 case SupportMechanic.Spellblade: damage = Mul(damage, 11_500); break;
@@ -71,7 +68,7 @@ public static class SupportRules
             }
         }
         return new SupportProfile(damage, range, cast, recovery, projectiles, pierce, chains, minions, traps,
-            phantoms, penetration, shieldLeech, moving, shieldCost, propagates, repeats);
+            phantoms, penetration, shieldLeech, moving, shieldCost, propagates);
     }
 
     private static int Mul(int left, int right) => checked(left * right / 10_000);

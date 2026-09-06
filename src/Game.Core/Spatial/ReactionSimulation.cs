@@ -64,8 +64,9 @@ public sealed partial class SpatialCombatRunner
             "Lightning" or "闪电" => SkillDamageType.Lightning,
             _ => SkillDamageType.Fire,
         };
-    private static void ScheduleUnarmedCounter(NodeCombatRequest request, string target, int tick, bool attack)
+    private static void ScheduleUnarmedCounter(NodeCombatRequest request, ResourceState hero, string target, int tick, bool attack)
     {
+        request.Unarmed?.RecoverOnAvoid(request.Build, hero, tick);
         if (request.Unarmed?.Avoided(tick, attack, !request.Build.HasUsableWeapon) != true) return;
         var config = new SkillConfiguration("archetypes.skill.chain_fists", SkillSupport.None);
         var skill = CombatSkillRules.Resolve(config, request.Build.Sheet.MaximumLife().Value, request.Build.PassiveProfile) with

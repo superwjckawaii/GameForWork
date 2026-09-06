@@ -23,7 +23,7 @@ public sealed partial class SpatialCombatRunner
             var hits = copy.Sacrifice ? copy.Action.Hits.TakeLast(1) : copy.Action.Hits;
             foreach (CombatHitSnapshot recorded in hits)
             {
-                Point origin = copy.Source.StartsWith("phantom:", StringComparison.Ordinal) || copy.Source == "mastery:aftershock" ? recorded.Origin : heroPosition;
+                Point origin = copy.Source.StartsWith("phantom:", StringComparison.Ordinal) || copy.Source is "mastery:aftershock" or "support:movement-echo" ? recorded.Origin : heroPosition;
                 var hit = recorded with { Origin = origin };
                 if (!assigned.TryGetValue(hit.TargetId, out var selected))
                 {
@@ -51,6 +51,12 @@ public sealed partial class SpatialCombatRunner
                                 .GroupBy(item => item.TargetId).Max(group => group.Count())) : 1;
                         if (count >= maximum) continue;
                         areaHits[key] = count + 1;
+                    }
+                    if (copy.Source is "mastery:unarmed-repeat" or "support:movement-echo" && !hit.Build.AlwaysHit && !hit.Skill.AlwaysHit && random.NextBasisPoints() >=
+                        DamageRules.HitChance(hit.Build.Sheet.Accuracy(hit.Build.FlatAccuracy + UnarmedRules.Accuracy(hit.Skill.SkillId, hit.Build)).Value, enemy.Scaled.Evasion, false).Value)
+                    {
+                        events.Add(Event(tick, SpatialEventKind.SkillEffect, "hero", enemy.EntityId, 0, origin, enemy.Position, $"{copy.Source}|miss"));
+                        continue;
                     }
                     int multiplier = copy.Multiplier;
                     if (area)

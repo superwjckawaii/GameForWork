@@ -121,7 +121,7 @@ public static class BuildSummaryRules
             return OffenseBreakdown.Empty with { IsSpell = spell };
         var passive = build.PassiveProfile ?? PassiveModifiers.Empty;
         if (build.HasUsableWeapon && UnarmedRules.IsSkill(skill.SkillId)) return OffenseBreakdown.Empty;
-        var weapon = UnarmedRules.Source(skill.SkillId, build.Weapon);
+        var weapon = UnarmedRules.Source(skill.SkillId, build);
         var local = tags.HasFlag(SkillTag.Attack) && !UnarmedRules.IsSkill(skill.SkillId) ? build.LocalWeaponStats : null;
         int Average(LocalDamageRange? range) => range is { } value ? (value.Minimum + value.Maximum) / 2 : 0;
         var added = new AddedWeaponDamage(Average(local?.Fire), Average(local?.Cold), Average(local?.Lightning), Average(local?.Void));
@@ -131,7 +131,7 @@ public static class BuildSummaryRules
                 MasteryDamageRules.ExpectedPhysicalRoll(weapon.MinimumPhysicalDamage, weapon.MaximumPhysicalDamage,
                     MasteryRuntime.Has(passive, "物理", 5)));
         var increases = CombatSkillRules.OffensiveIncreases(build, tags, skill.Role == SkillRole.DamageOverTime);
-        int accuracy = build.Sheet.Accuracy(build.FlatAccuracy).Value;
+        int accuracy = build.Sheet.Accuracy(build.FlatAccuracy + UnarmedRules.Accuracy(skill.SkillId, build)).Value;
         int hitChance = build.AlwaysHit || spell ? 10_000 : DamageRules.HitChance(accuracy, 20, false).Value;
         var criticalSupport = configuration.Supports.HasFlag(SkillSupport.CriticalStrikes) ? CombatSkillRules.SupportLink(configuration, SkillSupport.CriticalStrikes) : null;
         int criticalChance = build.CannotCrit || MasteryRuntime.CannotCrit(passive) || skill.Role == SkillRole.DamageOverTime ? 0 :

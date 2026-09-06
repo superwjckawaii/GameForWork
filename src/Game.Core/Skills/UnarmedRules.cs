@@ -13,6 +13,18 @@ public static class UnarmedRules
     public static bool Has(CombatProfile? profile, string branch, string size = "small") =>
         profile?.Has($"core.ascendancy.martial_monk.{branch}.{size}") == true;
     public static WeaponProfile Source(string id, WeaponProfile weapon) => IsSkill(id) ? Base : weapon;
+    public static WeaponProfile Source(string id, TeamBuild build)
+    {
+        var source = Source(id, build.Weapon);
+        if (!IsSkill(id) || build.HasUsableWeapon || !MasteryRuntime.Has(build.PassiveProfile ?? Campaign.Progression.PassiveModifiers.Empty, "徒手", 1)) return source;
+        int stacks = build.Sheet.Attributes.Physique / 10;
+        return source with { MinimumPhysicalDamage = source.MinimumPhysicalDamage + stacks * 2, MaximumPhysicalDamage = source.MaximumPhysicalDamage + stacks * 3 };
+    }
+    public static int Accuracy(string id, TeamBuild build) => !build.HasUsableWeapon && IsSkill(id) &&
+        MasteryRuntime.Has(build.PassiveProfile ?? Campaign.Progression.PassiveModifiers.Empty, "徒手", 1) ? build.Sheet.Attributes.Dexterity / 10 * 20 : 0;
+    public static bool Repeats(string id, TeamBuild build) => !build.HasUsableWeapon && IsSkill(id) &&
+        ActiveSkillCatalog.ActiveForSkill(id).Combat.Capabilities.HasFlag(SkillCatalog.SkillCapability.Repeatable) &&
+        MasteryRuntime.Has(build.PassiveProfile ?? Campaign.Progression.PassiveModifiers.Empty, "徒手", 2);
     public static int CriticalBonus(SkillConfiguration configuration) => IsSkill(configuration.SkillId)
         ? LinkedSupportRules.SupportQuality(configuration, SupportMechanic.UnarmedFocus) * 10 : 0;
     public static int AttackSpeed(TeamBuild build) => !build.HasUsableWeapon && Has(build.Ascendancy, "unarmed") ? 2_000 : 0;

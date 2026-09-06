@@ -3,6 +3,9 @@ using GameForWork.Core.Archetypes;
 using GameForWork.Core.Builds;
 using GameForWork.Core.Campaign.Combat;
 using GameForWork.Core.Campaign.World;
+using GameForWork.Core.Campaign.Items;
+using GameForWork.Core.Equipment;
+using GameForWork.Core.Campaign.Progression;
 using GameForWork.Core.Combat;
 using GameForWork.Core.SkillCatalog;
 using GameForWork.Core.Skills;
@@ -62,6 +65,131 @@ public sealed class UnarmedCombatTests
         state.Hit("three", config, 4, false);
         Assert.Equal(5, state.Combo(203));
         Assert.Equal(0, state.Combo(204));
+    }
+
+    private static PassiveModifiers Mastery(int index) => PassiveModifiers.Empty with { MasteryMechanics = $"builds.mastery.rule.徒手.{index}" };
+
+    [Fact]
+    public void EmptyHandsMasteryRejectsAnyOffHandAndDoesNotAddAnIncrease()
+    {
+        var config = new SkillConfiguration(Fists, SkillSupport.None);
+        var skill = CombatSkillRules.Resolve(config, 1_000) with { BaseDamageBasisPoints = 10_000 };
+        var build = Build() with { PassiveProfile = Mastery(0) };
+        Assert.Equal(160, CombatSkillRules.ScaleOffensiveDamage(100, skill, config, build, SkillTag.Attack, 100, 100));
+        Assert.Equal(100, CombatSkillRules.ScaleOffensiveDamage(100, skill, config, build with { HasOffHand = true }, SkillTag.Attack, 100, 100));
+    }
+
+    [Fact]
+    public void AttributeMasteryAddsPhysicalRangeAndAccuracyBeforeDamageScaling()
+    {
+        var build = Build() with { PassiveProfile = Mastery(1) };
+        build = build with { Sheet = build.Sheet with { Attributes = new(25, 39, 0, 0) } };
+        Assert.Equal((9, 14), (UnarmedRules.Source(Fists, build).MinimumPhysicalDamage, UnarmedRules.Source(Fists, build).MaximumPhysicalDamage));
+        var preview = BuildSummaryRules.CalculateOffense(build, new(Fists, SkillSupport.None));
+        Assert.Equal((6, 9), (preview.BaseMinimumDamage, preview.BaseMaximumDamage));
+        Assert.Equal(build.Sheet.Accuracy(build.FlatAccuracy + 60).Value, preview.Accuracy);
+    }
+
+    [Fact]
+    public void LightningMasteryRetainsPhysicalSourceAndExtraUsesPreConversionBase()
+    {
+        var config = new SkillConfiguration(Fists, SkillSupport.None);
+        var result = DamagePacketRules.ResolveMixed(100, SkillDamageType.Physical, default, SkillSupport.None, 0, 0, 0, 0, 0,
+            configuration: config, mastery: new(Mastery(3)));
+        Assert.Equal((40, 80, 120), (result.Physical, result.Lightning, result.Total));
+        var unrelated = DamagePacketRules.ResolveMixed(100, SkillDamageType.Physical, default, SkillSupport.None, 0, 0, 0, 0, 0,
+            configuration: new(SkillIds.HeavyStrike, SkillSupport.None), mastery: new(Mastery(3)));
+        Assert.Equal((100, 0), (unrelated.Physical, unrelated.Lightning));
+    }
+
+    [Fact]
+    public void FinisherMasteryAndAscendancyShareOneConsumptionAndIndependentMultipliers()
+    {
+        var profile = Profile("finisher.core");
+        var state = new UnarmedCombatState(profile, true);
+        for (int index = 0; index < 10; index++) state.Hit($"hit:{index}", new(Fists, SkillSupport.None), index, false);
+        var bonus = state.Begin("finish", new(Finisher, SkillSupport.None), Build(profile) with { PassiveProfile = Mastery(4) }, "enemy", 10, false);
+        Assert.Equal(46_200, bonus.Multiplier);
+        Assert.Equal(10, bonus.ConsumedCombo);
+        Assert.Equal(0, state.Combo(10));
+    }
+
+    [Fact]
+    public void AvoidRecoverySharesTwoSecondCooldownAndRejectsArmedBuilds()
+    {
+        var build = Build() with { PassiveProfile = Mastery(5) };
+        var hero = new ResourceState(build.Sheet);
+        hero.ApplyDamage(50_000, 0);
+        int before = hero.Life;
+        var state = new UnarmedCombatState(null, false);
+        Assert.True(state.RecoverOnAvoid(build, hero, 0));
+        Assert.Equal(before + hero.MaximumLife / 20, hero.Life);
+        Assert.False(state.RecoverOnAvoid(build, hero, 39));
+        Assert.False(state.RecoverOnAvoid(build with { HasUsableWeapon = true }, hero, 40));
+        Assert.True(state.RecoverOnAvoid(build, hero, 40));
+    }
+
+    [Fact]
+    public void RepeatConsumesAnotherActionDurationAndCannotRepeatItself()
+    {
+        var build = Build() with { PassiveProfile = Mastery(2), CannotCrit = true };
+        var config = new SkillConfiguration(Fists, SkillSupport.None);
+        int delay = CombatSkillRules.ActionDelay(build, CombatSkillRules.Resolve(config, 1_000).CastTimeTicks, SkillTag.Attack) * 50;
+        var result = new SpatialCombatRunner().Run(new(build, 1, 1, 1, false, false, false, 0,
+            MaximumTicks: 180, EnemyPool: [Enemies.CorruptedWorker with { Life = 1_000_000, Armor = 0, MinimumPhysicalDamage = 0, MaximumPhysicalDamage = 0 }]), 731);
+        var originals = result.Events.Where(e => e.Detail == "unarmed-combo").ToArray();
+        var copies = result.Events.Where(e => e.SourceId == "mastery:unarmed-repeat" && e.Detail.StartsWith("copy:")).ToArray();
+        Assert.NotEmpty(copies);
+        Assert.NotEmpty(originals);
+        Assert.Equal(originals[0].AtMilliseconds + delay, copies[0].AtMilliseconds);
+        Assert.All(originals.Zip(originals.Skip(1)), pair => Assert.True(pair.Second.AtMilliseconds - pair.First.AtMilliseconds >= delay * 2));
+        Assert.True(copies.Length <= originals.Length);
+        Assert.All(copies, copy => Assert.Contains("|scale:6500", copy.Detail));
+    }
+
+    [Fact]
+    public void WideFistsOnlyExpandsAreasAndBoostsEquipmentGrantedAdditionalStrikes()
+    {
+        var fists = CombatSkillRules.Resolve(new(Fists, SkillSupport.None), 1_000, Mastery(6));
+        Assert.Equal(SkillShape.Single, fists.Shape);
+        Assert.Equal(1_500, fists.RangeRaw);
+        Assert.Equal(0, fists.AreaIncreasedBasisPoints);
+        Assert.Equal(8_000, CombatSkillRules.Resolve(new("archetypes.skill.skyquake_palm", SkillSupport.None), 1_000, Mastery(6)).AreaIncreasedBasisPoints);
+        var build = Build() with
+        {
+            CannotCrit = true,
+            AddedPhysicalDamage = 1_000,
+            PassiveProfile = Mastery(6) with { IncreasedSkillRangeBasisPoints = 100_000 },
+            CombatEquipment = EquipmentCombatLoadout.Empty with { Modifiers = new Dictionary<ItemModifierKind, int> { [ItemModifierKind.AdditionalStrikeTarget] = 1 } }
+        };
+        var result = new SpatialCombatRunner().Run(new(build, 1, 1, 2, false, false, false, 0,
+            MaximumTicks: 140, EnemyPool: [Enemies.CorruptedWorker with { Life = 1_000_000, Armor = 0, MinimumPhysicalDamage = 0, MaximumPhysicalDamage = 0 }]), 731);
+        var pair = result.Events.Where(e => e.Detail.StartsWith($"skill:{Fists}|damage:") && e.Value > 0)
+            .GroupBy(e => e.AtMilliseconds).First(group => group.Count() == 2).ToArray();
+        Assert.NotEqual(pair[0].TargetId, pair[1].TargetId);
+        Assert.InRange(pair[1].Value * 10_000 / pair[0].Value, 12_900, 13_100);
+    }
+
+    [Theory]
+    [InlineData(1, 0, 6_000)]
+    [InlineData(21, 0, 8_000)]
+    [InlineData(1, 20, 9_000)]
+    public void MovementEchoOnlyRepeatsDamageAtTheOriginalEndpoint(int level, int quality, int scale)
+    {
+        const string kick = "archetypes.skill.gale_kick";
+        var config = new SkillConfiguration(kick, SkillSupport.None, SupportLinks:
+            [new(ActiveSkillCatalog.SupportFor(SupportMechanic.MovementEcho).StoneId, level, quality)]);
+        Assert.Equal(10_000, CombatSkillRules.Resolve(config, 1_000).DamageMultiplierBasisPoints);
+        var build = Build(skill: kick) with { CannotCrit = true, ActiveSkills = [config] };
+        var result = new SpatialCombatRunner().Run(new(build, 1, 1, 1, false, false, false, 0,
+            MaximumTicks: 160, EnemyPool: [Enemies.CorruptedWorker with { Life = 1_000_000, Armor = 0, MinimumPhysicalDamage = 0, MaximumPhysicalDamage = 0 }]), 731);
+        var echo = result.Events.First(e => e.SourceId == "support:movement-echo" && e.Detail.StartsWith("copy:"));
+        var original = result.Events.First(e => e.Detail.StartsWith($"skill:{kick}|damage:") && e.Value > 0);
+        Assert.Contains($"|scale:{scale}", echo.Detail);
+        Assert.True(echo.AtMilliseconds > original.AtMilliseconds);
+        Assert.Equal(original.SourcePosition, echo.SourcePosition);
+        Assert.Equal(original.TargetId, echo.TargetId);
+        Assert.False(LinkedSupportRules.MovementEcho(config with { SkillId = SkillIds.FlameStep }));
     }
 
     [Fact]

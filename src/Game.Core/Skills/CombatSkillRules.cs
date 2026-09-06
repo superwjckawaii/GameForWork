@@ -215,7 +215,7 @@ public static class CombatSkillRules
         int addedPhysicalDamage, int? weaponRoll = null)
     {
         if (!tags.HasFlag(SkillTag.Attack)) return Math.Max(1, (skill.BaseDamageBasisPoints + 50) / 100);
-        weapon = UnarmedRules.Source(skill.SkillId, weapon);
+        if (weaponRoll is null) weapon = UnarmedRules.Source(skill.SkillId, weapon);
         int physical = weaponRoll ?? checked((weapon.MinimumPhysicalDamage + weapon.MaximumPhysicalDamage) / 2);
         return Math.Max(1, checked(physical + addedPhysicalDamage));
     }
@@ -246,6 +246,8 @@ public static class CombatSkillRules
         }
         if (UnarmedRules.IsSkill(skill.SkillId) && !build.HasUsableWeapon && UnarmedRules.Has(build.Ascendancy, "unarmed", "core"))
             value = Scale(value, 14_500);
+        if (UnarmedRules.IsSkill(skill.SkillId) && !build.HasUsableWeapon && !build.HasOffHand && MasteryRuntime.Has(passive, "徒手", 0))
+            value = Scale(value, 16_000);
         value = Scale(value, 10_000L + passive.MoreDamageBasisPoints);
         if (skill.Role == SkillRole.DamageOverTime)
             value = Scale(value, 10_000L + build.MoreDamageOverTimeBasisPoints);

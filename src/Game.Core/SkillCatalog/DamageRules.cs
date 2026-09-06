@@ -89,6 +89,12 @@ public static class DamagePacketRules
             conversions.Add(new(DamageType.Physical, DamageType.Void, 10_000, "skill.weapon_to_void"));
         }
 
+        if (configuration is not null && UnarmedRules.IsSkill(configuration.SkillId) && mastery is { } unarmed && MasteryRuntime.Has(unarmed.Profile, "徒手", 3))
+        {
+            conversions.Add(new(DamageType.Physical, DamageType.Lightning, 6_000, "mastery.unarmed.conversion"));
+            extras.Add(new(DamageType.Physical, DamageType.Lightning, 2_000, "mastery.unarmed.extra"));
+        }
+
         AddConversion(ItemModifierKind.PhysicalToFireConversionBasisPoints, DamageType.Physical, DamageType.Fire);
         AddConversion(ItemModifierKind.PhysicalToColdConversionBasisPoints, DamageType.Physical, DamageType.Cold);
         AddConversion(ItemModifierKind.PhysicalToLightningConversionBasisPoints, DamageType.Physical, DamageType.Lightning);

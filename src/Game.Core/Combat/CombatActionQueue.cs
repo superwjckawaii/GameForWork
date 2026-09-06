@@ -174,6 +174,11 @@ public sealed partial class CombatActionQueue(CombatProfile? profile = null)
             if (action.Tags.HasFlag(SkillTag.Attack)) LatestAttack = action;
             if (action.Tags.HasFlag(SkillTag.Spell) && !action.Tags.HasFlag(SkillTag.Channelling) && action.Hits.FirstOrDefault()?.Configuration.Supports.HasFlag(SkillSupport.SpellEcho) == true)
                 Enqueue(action, milliseconds + Math.Max(50, action.CompletesMilliseconds - action.StartedMilliseconds), 10_000, false, "support:spell-echo");
+            if (action.Hits.FirstOrDefault() is { } first && UnarmedRules.Repeats(action.SkillId, first.Build))
+                Enqueue(action, milliseconds, 6_500, true, "mastery:unarmed-repeat");
+            if (action.Hits.FirstOrDefault() is { } movement && LinkedSupportRules.MovementEcho(movement.Configuration))
+                Enqueue(action, milliseconds, 10_000 - LinkedSupportRules.QualityOverride(movement.Configuration,
+                    Archetypes.SupportMechanic.MovementEcho, LinkedSupportRules.SupportValue(movement.Configuration, Archetypes.SupportMechanic.MovementEcho, 4_000, 2_000), 1_000), true, "support:movement-echo");
             if (hundredReturn && action.Unarmed && action.Tags.HasFlag(SkillTag.Attack) && ++_unarmedCount % 5 == 0)
                 for (int repeat = 1; repeat <= 4; repeat++) Enqueue(action, milliseconds + repeat * 120, 3_500, true, "equipment:百式回身");
             SkillTag category = action.Tags.HasFlag(SkillTag.Attack) ? SkillTag.Attack : SkillTag.Spell;

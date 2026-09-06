@@ -11,7 +11,7 @@ public readonly record struct UnarmedActionBonus(int Multiplier, int IncreasedDa
 
 public sealed class UnarmedCombatState(CombatProfile? profile, bool baseCombo)
 {
-    private int _combo, _expires, _distance, _movementReady, _duration = 80, _counterUntil, _counterReady;
+    private int _combo, _expires, _distance, _movementReady, _duration = 80, _counterUntil, _counterReady, _recoveryReady;
     private readonly Dictionary<string, int> _linkedComboGains = [];
     private string _target = "", _action = "";
     private readonly HashSet<string> _hitActions = [];
@@ -60,6 +60,8 @@ public sealed class UnarmedCombatState(CombatProfile? profile, bool baseCombo)
         {
             _combo = 0;
             more = CombatRules.ApplyMore(more, [10_000 + consumed * (500 + Math.Clamp(config.Quality, 0, 20) * 10)]);
+            if (MasteryRuntime.Has(build.PassiveProfile ?? Campaign.Progression.PassiveModifiers.Empty, "徒手", 4))
+                more = CombatRules.ApplyMore(more, [10_000 + consumed * 400]);
             if (Has("finisher", "core")) more = CombatRules.ApplyMore(more, [10_000 + consumed * 1_200]);
         }
         _bonus = new(more, Has("finisher") ? consumed * 800 : 0, movement, consumed);
@@ -83,6 +85,13 @@ public sealed class UnarmedCombatState(CombatProfile? profile, bool baseCombo)
             LinkedSupportRules.SupportQuality(config, SupportMechanic.ComboDuration) * 150);
         if (_combo > 0) _expires = tick + _duration;
         return previous != _combo;
+    }
+    public bool RecoverOnAvoid(TeamBuild build, ResourceState hero, int tick)
+    {
+        if (build.HasUsableWeapon || tick < _recoveryReady || !MasteryRuntime.Has(build.PassiveProfile ?? Campaign.Progression.PassiveModifiers.Empty, "徒手", 5)) return false;
+        _recoveryReady = tick + 40;
+        hero.HealLife((int)((long)hero.MaximumLife * 500 / 10_000));
+        return true;
     }
     public int CounterIncrease(int tick) => Has("counter") && tick < _counterUntil ? 4_000 : 0;
     public bool Avoided(int tick, bool attack, bool unarmed)

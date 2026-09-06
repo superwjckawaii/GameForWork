@@ -12,6 +12,7 @@ public static class AreaRules
         var tags = SkillDefinitions.Get(configuration.SkillId).Tags;
         if (!tags.HasFlag(SkillTag.Area)) return 0;
         int increased = profile.SpecializedValue(PassiveEffectKind.IncreasedAreaEffectBasisPoints);
+        if (UnarmedRules.IsSkill(configuration.SkillId) && MasteryRuntime.Has(profile, "徒手", 6)) increased += 8_000;
         if (tags.HasFlag(SkillTag.Void) && MasteryRuntime.Has(profile, "虚空", 4)) increased += 8_000;
         if (configuration.Supports.HasFlag(SkillSupport.IncreasedArea))
         {

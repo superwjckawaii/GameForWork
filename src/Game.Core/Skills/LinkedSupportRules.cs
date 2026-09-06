@@ -6,6 +6,9 @@ namespace GameForWork.Core.Skills;
 
 public static class LinkedSupportRules
 {
+    public static bool MovementEcho(SkillConfiguration configuration) =>
+        (SkillDefinitions.Get(configuration.SkillId).Tags & (SkillTag.Attack | SkillTag.Movement)) == (SkillTag.Attack | SkillTag.Movement) &&
+        Support(configuration, SupportMechanic.MovementEcho);
     public static bool Support(SkillConfiguration skill, SupportMechanic support)
     {
         string id = ActiveSkillCatalog.SupportFor(support).StoneId;
