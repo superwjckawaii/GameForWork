@@ -59,4 +59,34 @@ public sealed class AilmentTransferTests
         Assert.Empty(state.Instances);
     }
 
+    [Fact]
+    public void AvoidedPropagationCannotRetryTheSameOriginalInstance()
+    {
+        var source = new AilmentState();
+        var target = new AilmentState();
+        source.Apply(Ailment.Bleed, DamageType.Physical, 100, 2_000, 0, "hero");
+        int attempts = 0;
+        source.SpreadTo(target, Ailment.Bleed, () => { attempts++; return false; });
+        source.SpreadTo(target, Ailment.Bleed, () => { attempts++; return true; });
+        Assert.Equal(1, attempts);
+        Assert.Empty(target.Instances);
+        source.Apply(Ailment.Bleed, DamageType.Physical, 200, 2_000, 0, "hero");
+        source.SpreadTo(target, Ailment.Bleed, () => true);
+        Assert.Equal(200, Assert.Single(target.Instances).DamagePerSecond);
+    }
+
+    [Fact]
+    public void SameActionCannotConsumeItsNewAilmentAndTargetsCountIndependently()
+    {
+        var first = new AilmentState();
+        var second = new AilmentState();
+        Assert.Equal(0, first.ConsumeForAction(Ailment.Bleed, "action", 6_500));
+        foreach (var target in new[] { first, second }) target.Apply(Ailment.Bleed, DamageType.Physical, 100, 2_000, 0, "hero");
+        Assert.Equal(0, first.ConsumeForAction(Ailment.Bleed, "action", 6_500));
+        Assert.Single(first.Instances);
+        Assert.Equal(130, second.ConsumeForAction(Ailment.Bleed, "action", 6_500));
+        Assert.Equal(150, first.ConsumeForAction(Ailment.Bleed, "next", 7_500));
+        Assert.Empty(first.Instances);
+    }
+
 }

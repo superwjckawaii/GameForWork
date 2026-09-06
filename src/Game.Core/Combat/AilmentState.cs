@@ -14,6 +14,7 @@ public sealed class AilmentState
     private readonly Dictionary<(Ailment, DamageType), decimal> _remainders = [];
     private readonly Dictionary<Ailment, (int Count, int Until)> _debuffs = [];
     private readonly HashSet<(AilmentState Source, string Instance)> _received = [];
+    private readonly HashSet<(Ailment Kind, string Action)> _settledActions = [];
     private int _sequence;
     public IReadOnlyList<DamageOverTimeInstance> Instances => _instances;
     public int BleedMaximum { get; set; } = 1;
@@ -62,6 +63,10 @@ public sealed class AilmentState
         _instances.RemoveAll(instance => instance.Kind == kind);
         return amount * Math.Clamp(portionBasisPoints, 0, 10_000) / 10_000;
     }
+    public decimal ConsumeForAction(Ailment kind, string actionId, int portionBasisPoints,
+        Func<DamageType, decimal, decimal>? defend = null, bool voidDebuffed = false) =>
+        _settledActions.Add((kind, actionId)) ? Consume(kind, portionBasisPoints, defend, voidDebuffed) : 0;
+
     public int ConsumeStacks(Ailment kind, int maximum, int tick)
     {
         if (kind == Ailment.Poison)
@@ -74,11 +79,11 @@ public sealed class AilmentState
         if (_debuffs.TryGetValue(kind, out var value)) _debuffs[kind] = (value.Count - count, value.Until);
         return count;
     }
-    public void SpreadTo(AilmentState target, Ailment kind)
+    public void SpreadTo(AilmentState target, Ailment kind, Func<bool>? targetAllows = null)
     {
         if (ReferenceEquals(this, target)) return;
         foreach (DamageOverTimeInstance instance in Active().Where(instance => instance.Kind == kind && !instance.Propagated))
-            if (target._received.Add((this, instance.InstanceId)))
+            if (target._received.Add((this, instance.InstanceId)) && (targetAllows?.Invoke() ?? true))
                 target._instances.Add(instance with { Propagated = true });
     }
 

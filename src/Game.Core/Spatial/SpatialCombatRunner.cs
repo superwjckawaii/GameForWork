@@ -779,7 +779,7 @@ public sealed partial class SpatialCombatRunner
 
             ResolveReactions(request, enemies, hero, heroPosition, random, tick, events, projectiles, persistentAreas);
             army.Advance(enemies, heroPosition, random, tick, events, heroTargetId, request.Build);
-            if (RechargeFlasksForKills(enemies, flasks, tick, heroPosition, events, ascendancyRuntime, hero, equipment))
+            if (RechargeFlasksForKills(enemies, flasks, tick, heroPosition, events, ascendancyRuntime, hero, equipment, random))
                 chargeReadyTick = 0;
             if (tick < rootedUntilTick) heroPosition = beforeMovement;
             equipment.Advance(tick, hero, heroPosition != beforeMovement);
@@ -1115,9 +1115,10 @@ public sealed partial class SpatialCombatRunner
         foreach (EnemyUnit enemy in affected)
         {
             int burstDamage = 0;
-            if (skill.SkillId == SkillIds.BloodBurst && enemy.BleedRemaining > 0)
+            if (skill.SkillId == SkillIds.BloodBurst)
             {
-                burstDamage = (int)Math.Min(int.MaxValue, enemy.Ailments.Consume(Ailment.Bleed, 6_500 + Math.Clamp(configuration.Quality, 0, 20) * 50,
+                burstDamage = (int)Math.Min(int.MaxValue, enemy.Ailments.ConsumeForAction(Ailment.Bleed,
+                    request.Actions?.CanonicalAction(request.EquipmentRuntime!.ActionId) ?? request.EquipmentRuntime?.ActionId ?? $"{tick}:{skill.SkillId}", 6_500 + Math.Clamp(configuration.Quality, 0, 20) * 50,
                     (type, dps) => DefendEnemyDot(request, enemy, type, dps, tick), VoidDebuffed(enemy, tick)));
             }
             if (burstDamage > 0 && enemy.Life > 0)
@@ -1827,7 +1828,7 @@ public sealed partial class SpatialCombatRunner
         ICollection<SpatialEvent> events,
         CombatRuntime runtime,
         ResourceState hero,
-        EquipmentCombatRuntime equipment)
+        EquipmentCombatRuntime equipment, Pcg32 random)
     {
         bool resetMovement = false;
         foreach (EnemyUnit enemy in enemies.Where(item => item.Life <= 0 && !item.KillCharged && !item.Summoned))
@@ -1855,7 +1856,8 @@ public sealed partial class SpatialCombatRunner
                     runtime.TriggerRecoveryProtection(tick);
                     EnemyUnit? spread = enemies.Where(item => item.Life > 0)
                         .OrderBy(item => Point.DistanceSquared(enemy.Position, item.Position)).FirstOrDefault();
-                    if (spread is not null) enemy.Ailments.SpreadTo(spread.Ailments, Ailment.Bleed);
+                    if (spread is not null) enemy.Ailments.SpreadTo(spread.Ailments, Ailment.Bleed,
+                        () => spread.Profile.AilmentAvoidanceBasisPoints <= 0 || random.NextBasisPoints() >= spread.Profile.AilmentAvoidanceBasisPoints);
                 }
             }
             resetMovement |= runtime.TryResetMovementCooldownOnKill(tick);
