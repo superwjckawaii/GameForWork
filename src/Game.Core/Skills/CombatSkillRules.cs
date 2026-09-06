@@ -308,9 +308,9 @@ public static class CombatSkillRules
             [DamageType.Physical] = Value(Campaign.Items.ItemModifierKind.IncreasedPhysicalDamageBasisPoints) + passive.IncreasedPhysicalDamageBasisPoints +
                 (damageOverTime ? passive.SpecializedValue(PassiveEffectKind.IncreasedPhysicalDamageOverTimeBasisPoints) : 0) +
                 (!damageOverTime && MasteryRuntime.Has(build.PassiveProfile ?? PassiveModifiers.Empty, "护甲", 6) ? (armor ?? build.Sheet.Armor().Value) / 1_000 * 400 : 0),
-            [DamageType.Fire] = Value(Campaign.Items.ItemModifierKind.IncreasedFireDamageBasisPoints),
-            [DamageType.Cold] = Value(Campaign.Items.ItemModifierKind.IncreasedColdDamageBasisPoints),
-            [DamageType.Lightning] = Value(Campaign.Items.ItemModifierKind.IncreasedLightningDamageBasisPoints),
+            [DamageType.Fire] = Value(Campaign.Items.ItemModifierKind.IncreasedFireDamageBasisPoints) + ElementalRules.TypeIncrease(build, DamageType.Fire),
+            [DamageType.Cold] = Value(Campaign.Items.ItemModifierKind.IncreasedColdDamageBasisPoints) + ElementalRules.TypeIncrease(build, DamageType.Cold),
+            [DamageType.Lightning] = Value(Campaign.Items.ItemModifierKind.IncreasedLightningDamageBasisPoints) + ElementalRules.TypeIncrease(build, DamageType.Lightning),
             [DamageType.Void] = Value(Campaign.Items.ItemModifierKind.IncreasedVoidDamageBasisPoints) + passive.IncreasedVoidDamageBasisPoints,
         }, common, Value(Campaign.Items.ItemModifierKind.IncreasedElementalDamageBasisPoints) + passive.IncreasedElementalDamageBasisPoints,
             VoidDebuffIncreaseBasisPoints: MasteryRuntime.Has(passive, "虚空", 4) ? 6_000 : 0);

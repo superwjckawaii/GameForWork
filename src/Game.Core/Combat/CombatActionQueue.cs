@@ -46,6 +46,7 @@ public sealed partial class CombatActionQueue(CombatProfile? profile = null)
     private string? _channelId;
     private int _channelLastTick;
     private readonly Dictionary<string, string> _channelActions = [];
+    public string CanonicalAction(string action) => _channelActions.GetValueOrDefault(action, action);
     public CombatActionSnapshot? LatestAttack { get; private set; }
     public IReadOnlyList<DeferredCombatCopy> Pending => _pending.Concat(_phantoms.SelectMany(phantom => phantom.MemoryReplays)).ToArray();
     private int _areaHitTick = -1;

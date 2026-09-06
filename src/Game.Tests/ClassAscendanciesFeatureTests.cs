@@ -79,19 +79,6 @@ public sealed class ClassAscendanciesFeatureTests
     }
 
     [Fact]
-    public void ElementalistGainsHalfOriginalPhysicalAsTheSelectedPrimaryElement()
-    {
-        CombatProfile profile = Profile(Ascendancy.Elementalist, ClassNodeIds.ElementalistConversionCore);
-
-        Assert.Equal(500, ClassAscendancyRules.ExtraPhysicalAsPrimaryElement(
-            1_000, PrimaryElement.Fire, profile));
-        Assert.Equal(500, ClassAscendancyRules.ExtraPhysicalAsPrimaryElement(
-            1_000, PrimaryElement.Cold, profile));
-        Assert.Equal(500, ClassAscendancyRules.ExtraPhysicalAsPrimaryElement(
-            1_000, PrimaryElement.Lightning, profile));
-    }
-
-    [Fact]
     public void AegisMaximumAndRechargeCoreNodesUseMoreAndIncreasedCorrectly()
     {
         CombatProfile profile = Profile(Ascendancy.AegisMage,

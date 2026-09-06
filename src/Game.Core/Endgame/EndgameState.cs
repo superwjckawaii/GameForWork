@@ -132,7 +132,9 @@ public sealed class EndgameState
     public CombatConfiguration CombatConfiguration { get; private set; } = new();
     public bool ConfigureCombat(CombatConfiguration configuration)
     {
-        if (!configuration.Valid || SelectedAscendancy is not (Ascendancy.PhantomMaster or Ascendancy.IdolForger)) return false;
+        if (!configuration.Valid || SelectedAscendancy is not (Ascendancy.PhantomMaster or Ascendancy.IdolForger or Ascendancy.Elementalist)) return false;
+        if (SelectedAscendancy == Ascendancy.Elementalist && configuration.PrimaryElement != CombatConfiguration.PrimaryElement &&
+            !AscendancyPassives.Contains("core.ascendancy.elementalist.conversion.small")) return false;
         CombatConfiguration = configuration.Snapshot();
         return true;
     }

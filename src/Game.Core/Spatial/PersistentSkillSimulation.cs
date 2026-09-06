@@ -49,6 +49,8 @@ public sealed partial class SpatialCombatRunner
             ResourceDamageMultiplierSnapshot = MasteryRuntime.OffensiveResourceMultiplier(request.Build.PassiveProfile ?? Campaign.Progression.PassiveModifiers.Empty, hero),
             ArmorSnapshot = HeroCurrentArmor(request, hero, tick),
             RuneFields = null,
+            ElementalSourceSelf = !request.EquipmentRuntime.CaptureAction().Triggered,
+            ElementalMultiplierSnapshot = request.Elemental?.Begin(request.EquipmentRuntime.ActionId, SkillDefinitions.Get(skill.SkillId).Tags, tick, request.EquipmentRuntime.CaptureAction().Triggered) ?? 10_000,
             ActionMultiplierSnapshot = request.EquipmentRuntime.CaptureAction().Triggered ? 10_000 : request.Reactions?.ActionMultiplier(request.EquipmentRuntime.ActionId) ?? 10_000,
             SpellEnergyIncreaseSnapshot = request.EquipmentRuntime.CaptureAction().Triggered ? request.Guard?.SpellDamageIncrease ?? 0 : request.Reactions?.SpellIncrease(request.EquipmentRuntime.ActionId) ?? 0,
             Build = request.Build with
@@ -120,10 +122,10 @@ public sealed partial class SpatialCombatRunner
             {
                 if (request.Auras?.ExclusiveElement is { } allowed && branch.CurrentType is DamageType.Fire or DamageType.Cold or DamageType.Lightning && branch.CurrentType != allowed) return 0;
                 int scaled = CombatSkillRules.ScaleOffensiveDamage(voidDebuffed ? branch.DebuffedBaseDamage ?? branch.BaseDamage : branch.BaseDamage, skill, configuration, request.Build, tags,
-                    1, 1, ScaleCombatValue(multiplier, request.ActionMultiplierSnapshot ?? 10_000), targetRareOrBoss: rare, applyIncreased: false, damageHistory: branch.History);
+                    1, 1, ScaleCombatValue(ScaleCombatValue(multiplier, request.ActionMultiplierSnapshot ?? 10_000), request.ElementalMultiplierSnapshot ?? 10_000), targetRareOrBoss: rare, applyIncreased: false, damageHistory: branch.History);
                 return ScaleCombatValue(scaled, 10_000 + modifiers.GetValueOrDefault(ItemModifierKind.DamageOverTimeMultiplierBasisPoints));
             }, configuration: configuration, allowAddedHitDamage: false,
-            mastery: new(request.Build.PassiveProfile ?? Campaign.Progression.PassiveModifiers.Empty, false));
+            mastery: new(request.Build.PassiveProfile ?? Campaign.Progression.PassiveModifiers.Empty, false), ascendancy: request.Build.Ascendancy);
     }
 
     private static void AdvancePersistentAreas(IList<PersistentArea> areas, IReadOnlyCollection<EnemyUnit> enemies,

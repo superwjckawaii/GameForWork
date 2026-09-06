@@ -107,6 +107,6 @@ public sealed class AilmentState
         }
         return output;
     }
-    private decimal Multiplier(Ailment kind) => (kind switch
+    private decimal Multiplier(Ailment kind) => kind is not (Ailment.Bleed or Ailment.Ignite) || Count(kind) <= 1 ? 1m : (kind switch
     { Ailment.Bleed => BleedMultiplier, Ailment.Ignite => IgniteMultiplier, _ => 10_000 }) / 10_000m;
 }

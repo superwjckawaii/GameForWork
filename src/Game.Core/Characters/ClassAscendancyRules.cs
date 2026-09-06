@@ -54,15 +54,6 @@ public static class ClassAscendancyRules
     public static int IncreasedMinionDamageBasisPoints(int slothLayers, CombatProfile profile) =>
         profile.Has(ClassNodeIds.SoulLegionCore) ? checked(Math.Max(0, slothLayers) * 600) : 0;
 
-    public static int ExtraPhysicalAsPrimaryElement(int originalPhysicalDamage, PrimaryElement element,
-        CombatProfile profile)
-    {
-        _ = element;
-        return profile.Has(ClassNodeIds.ElementalistConversionCore)
-            ? checked(Math.Max(0, originalPhysicalDamage) * 5_000 / 10_000)
-            : 0;
-    }
-
     public static bool ConstructPrioritizes(EnemyRarity rarity, CombatProfile profile) =>
         profile.Has(ClassNodeIds.IdolTurretCore) && rarity is EnemyRarity.Rare or EnemyRarity.Boss;
 

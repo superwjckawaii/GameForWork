@@ -52,7 +52,7 @@ public static class DamagePacketRules
         Func<DamageBranch, int>? scaleBranch = null,
         Action<IReadOnlyList<DamageBranch>>? captureSource = null,
         SkillConfiguration? configuration = null, int addedDamageEffectiveness = 10_000,
-        bool allowAddedHitDamage = true, Pcg32? random = null, MasteryDamageContext? mastery = null)
+        bool allowAddedHitDamage = true, Pcg32? random = null, MasteryDamageContext? mastery = null, Ascendancies.CombatProfile? ascendancy = null)
     {
         DamageType type = baseType switch
         {
@@ -73,6 +73,8 @@ public static class DamagePacketRules
         if (supports.HasFlag(SkillSupport.FireToVoid))
             conversions.Add(new(DamageType.Fire, DamageType.Void, 5_000, "support.fire_to_void"));
         var extras = new List<ExtraDamage>();
+        if (ElementalRules.Has(ascendancy, "conversion", "core"))
+            extras.Add(new(DamageType.Physical, ElementalRules.Primary(ascendancy), 6_000, "ascendancy.primary-element"));
         if (supports.HasFlag(SkillSupport.AddedFire))
             extras.Add(new(DamageType.Physical, DamageType.Fire, (configuration is null ? 20 :
                 CombatSkillRules.SupportValue(configuration, SkillSupport.AddedFire)) * 100, "support.added_fire"));

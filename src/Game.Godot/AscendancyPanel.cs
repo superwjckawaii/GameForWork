@@ -16,7 +16,7 @@ public partial class AscendancyPanel : Control
     private BaseClass? _pathClass;
     private AscendancyTreeView? _tree;
     private HFlowContainer? _combatOptions;
-    private OptionButton? _phantomMode, _firstModule, _secondModule;
+    private OptionButton? _phantomMode, _firstModule, _secondModule, _primaryElement;
     private Button? _applyCombat;
 
     public void Initialize(Func<GameSession> session, Action<string> changed)
@@ -58,18 +58,23 @@ public partial class AscendancyPanel : Control
         _firstModule = new OptionButton(); _secondModule = new OptionButton();
         foreach (string name in new[] { "火力模块", "守护模块", "长程模块", "稳定器", "爆裂核心", "重铸模块" })
         { _firstModule.AddItem(name); _secondModule.AddItem(name); }
+        _primaryElement = new OptionButton();
+        foreach (string name in new[] { "主元素：火焰", "主元素：冰霜", "主元素：闪电" }) _primaryElement.AddItem(name);
         _applyCombat = new Button { Text = "保存战斗配置（城镇）" };
         _applyCombat.Pressed += () =>
         {
             var current = session();
             CombatConfiguration config = current.Endgame.CombatConfiguration;
-            config = current.Endgame.SelectedAscendancy == Ascendancy.PhantomMaster
-                ? config with { PhantomMode = (PhantomReplayMode)_phantomMode.Selected }
-                : config with { Modules = new[] { (ConstructModule)_firstModule.Selected, (ConstructModule)_secondModule.Selected } };
-            changed(current.TryConfigureAscendancyCombat(config) ? "战斗配置已保存，下次出征生效。" : "请在城镇选择两个不同模块；远征期间不能更换。");
+            config = current.Endgame.SelectedAscendancy switch
+            {
+                Ascendancy.PhantomMaster => config with { PhantomMode = (PhantomReplayMode)_phantomMode.Selected },
+                Ascendancy.Elementalist => config with { PrimaryElement = (PrimaryElement)_primaryElement.Selected },
+                _ => config with { Modules = new[] { (ConstructModule)_firstModule.Selected, (ConstructModule)_secondModule.Selected } }
+            };
+            changed(current.TryConfigureAscendancyCombat(config) ? "战斗配置已保存，下次出征生效。" : "请在城镇设置有效配置；构装的两个模块须不同，远征期间不能更换。");
             Refresh();
         };
-        _combatOptions.AddChild(_phantomMode); _combatOptions.AddChild(_firstModule); _combatOptions.AddChild(_secondModule); _combatOptions.AddChild(_applyCombat);
+        _combatOptions.AddChild(_primaryElement); _combatOptions.AddChild(_phantomMode); _combatOptions.AddChild(_firstModule); _combatOptions.AddChild(_secondModule); _combatOptions.AddChild(_applyCombat);
         top.AddChild(_combatOptions);
         overlay.AddChild(Hud(top));
         overlay.AddChild(new Control { SizeFlagsVertical = SizeFlags.ExpandFill, MouseFilter = MouseFilterEnum.Ignore });
@@ -87,7 +92,10 @@ public partial class AscendancyPanel : Control
         RefreshPaths(current);
         var state = current.Endgame;
         _summary!.Text = $"{AscendancyCatalog.DisplayName(state.SelectedAscendancy)} · 已用 {state.AscendancyPassives.Count}/{state.BreakthroughPoints}（上限8） · 金币 {current.World.Economy.Gold}";
-        _combatOptions!.Visible = state.SelectedAscendancy is Ascendancy.PhantomMaster or Ascendancy.IdolForger;
+        _combatOptions!.Visible = state.SelectedAscendancy is Ascendancy.PhantomMaster or Ascendancy.IdolForger or Ascendancy.Elementalist;
+        _primaryElement!.Visible = state.SelectedAscendancy == Ascendancy.Elementalist;
+        _primaryElement.Select((int)state.CombatConfiguration.PrimaryElement);
+        _primaryElement.Disabled = !current.CanConfigureAscendancyCombat || !state.AscendancyPassives.Contains("core.ascendancy.elementalist.conversion.small");
         _phantomMode!.Visible = state.SelectedAscendancy == Ascendancy.PhantomMaster;
         _firstModule!.Visible = _secondModule!.Visible = state.SelectedAscendancy == Ascendancy.IdolForger;
         bool configurable = current.CanConfigureAscendancyCombat;

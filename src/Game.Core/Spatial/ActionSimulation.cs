@@ -78,16 +78,23 @@ public sealed partial class SpatialCombatRunner
                                 UnarmedRules.Source(hit.Skill.SkillId, hit.Build.Weapon).CriticalChanceBasisPoints + UnarmedRules.CriticalBonus(hit.Configuration), hit.Build.IncreasedCriticalChanceBasisPoints);
                         if (critical) multiplier = ScaleCombatValue(multiplier, hit.Build.CriticalMultiplierBasisPoints);
                     }
+                    int TargetDamage(DamageBranch branch)
+                    {
+                        int amount = VoidDebuffed(enemy, tick) ? branch.DebuffedBaseDamage ?? branch.BaseDamage : branch.BaseDamage;
+                        amount = ScaleCombatValue(amount, multiplier);
+                        amount = ScaleCombatValue(amount, ElementalRules.TargetMultiplier(hit.Build.Ascendancy, branch.CurrentType, ElementalStatus(enemy, tick), true, critical));
+                        amount = ScaleCombatValue(amount, 10_000 + enemy.ShockEffect);
+                        amount = ScaleCombatValue(amount, 10_000 + enemy.Curses.Effect("archetypes.skill.death_mark", tick));
+                        if (branch.CurrentType == DamageType.Void)
+                        {
+                            amount = ScaleCombatValue(amount, ScaleCombatValue(CombatRules.WitherMultiplier(enemy.Ailments.Stack(Ailment.Wither, tick)),
+                                10_000 + enemy.Curses.Effect("archetypes.skill.doom_brand", tick)));
+                        }
+                        return amount;
+                    }
                     DamagePacket offensive = hit.OffensivePacket with
                     {
-                        Branches = hit.OffensivePacket.Branches.Select(branch => branch with
-                        {
-                            BaseDamage = ScaleCombatValue(
-                        ScaleCombatValue(ScaleCombatValue(ScaleCombatValue(VoidDebuffed(enemy, tick) ? branch.DebuffedBaseDamage ?? branch.BaseDamage : branch.BaseDamage, multiplier), 10_000 + enemy.ShockEffect),
-                            10_000 + enemy.Curses.Effect("archetypes.skill.death_mark", tick)),
-                        branch.CurrentType == DamageType.Void ? ScaleCombatValue(CombatRules.WitherMultiplier(enemy.Ailments.Stack(Ailment.Wither, tick)),
-                            10_000 + enemy.Curses.Effect("archetypes.skill.doom_brand", tick)) : 10_000)
-                        }).ToArray()
+                        Branches = hit.OffensivePacket.Branches.Select(branch => branch with { BaseDamage = TargetDamage(branch) }).ToArray()
                     };
                     int armor = CombatRules.ArmorAfterBreak(enemy.Scaled.Armor, enemy.ArmorBreakStacks,
                         additionalReductionBasisPoints: request.Auras?.ArmorReductionAt((int)Math.Sqrt(Point.DistanceSquared(heroPosition, enemy.Position))) ?? 0);

@@ -145,7 +145,7 @@ public static class BuildSummaryRules
             scaleBranch: scale ? branch => ScaleToInt(CombatSkillRules.ScaleOffensiveDamage(branch.BaseDamage, skill, configuration,
                 build, tags, 100_000, 100_000, targetRareOrBoss: true, applyIncreased: false, damageHistory: branch.History), critical) : null,
             configuration: configuration, addedDamageEffectiveness: spell ? SpellHitRules.Effectiveness(skill.SkillId) : 10_000,
-            mastery: new(passive, skill.Role != SkillRole.DamageOverTime));
+            mastery: new(passive, skill.Role != SkillRole.DamageOverTime), ascendancy: build.Ascendancy);
         int armor = configuration.Supports.HasFlag(SkillSupport.ArmorPierce) ? 17 : 25;
         int hit = Packet(armor, increases, true).Total;
         int criticalHit = Packet(armor, increases, true, criticalMultiplier).Total;

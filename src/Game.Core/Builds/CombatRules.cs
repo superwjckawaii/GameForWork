@@ -269,9 +269,9 @@ public static class CombatRules
     };
 
     public static AilmentResult Chill(int coldHit, int threshold, int increasedDurationBasisPoints = 0,
-        int maximumEffectBasisPoints = 3_000)
+        int maximumEffectBasisPoints = 3_000, int increasedEffectBasisPoints = 0)
     {
-        int effect = Math.Min(maximumEffectBasisPoints, PowerEffect(3_000, coldHit, threshold));
+        int effect = Math.Min(maximumEffectBasisPoints, ApplyIncreased(PowerEffect(3_000, coldHit, threshold), increasedEffectBasisPoints));
         if (effect < 500) return default;
         return new(effect, ApplyIncreased(2_000, increasedDurationBasisPoints));
     }
@@ -284,9 +284,9 @@ public static class CombatRules
         return duration < 300 ? default : new(10_000, Math.Min(maximumDurationMilliseconds, duration));
     }
 
-    public static AilmentResult Shock(int lightningHit, int threshold, int maximumEffectBasisPoints = 5_000)
+    public static AilmentResult Shock(int lightningHit, int threshold, int maximumEffectBasisPoints = 5_000, int increasedEffectBasisPoints = 0)
     {
-        int effect = Math.Min(maximumEffectBasisPoints, PowerEffect(5_000, lightningHit, threshold));
+        int effect = Math.Min(maximumEffectBasisPoints, ApplyIncreased(PowerEffect(5_000, lightningHit, threshold), increasedEffectBasisPoints));
         return effect < 500 ? default : new(effect, 2_000);
     }
 
