@@ -719,6 +719,11 @@ public sealed class PassiveTreeAllocation
         if (!_allocated.Contains(stableId) || node.Kind != PassiveNodeKind.Mastery || option < 0 || option >= PassiveTree.MasteryOptions(node).Count) return false;
         if (_masterySelections.Any(pair => pair.Key != stableId &&
             PassiveTree.Get(pair.Key).MasteryGroup == node.MasteryGroup && pair.Value == option)) return false;
+        string? mode = GameForWork.Core.Builds.AilmentMasteryRules.ExclusiveMode(node.MasteryGroup, option);
+        if (mode is not null)
+            foreach (var previous in _masterySelections.Where(pair => pair.Key != stableId &&
+                GameForWork.Core.Builds.AilmentMasteryRules.ExclusiveMode(PassiveTree.Get(pair.Key).MasteryGroup, pair.Value) == mode).ToArray())
+                _masterySelections.Remove(previous.Key);
         _masterySelections[stableId] = option;
         return true;
     }

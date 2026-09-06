@@ -16,10 +16,14 @@ public sealed class AilmentState
     private readonly HashSet<(AilmentState Source, string Instance)> _received = [];
     private readonly HashSet<(Ailment Kind, string Action)> _settledActions = [];
     private readonly HashSet<string> _poisonCopyActions = [];
+    private readonly HashSet<(Ailment Kind, string Action)> _countedHits = [];
+    private readonly Dictionary<Ailment, int> _hitCounts = [];
     private int _sequence;
     public IReadOnlyList<DamageOverTimeInstance> Instances => _instances;
     public int BleedMaximum { get; set; } = 1;
     public int BleedMultiplier { get; set; } = 10_000;
+    public bool BleedMultiplierAlways { get; set; }
+    public bool IgniteMultiplierAlways { get; set; }
     public int IgniteMaximum { get; set; } = 1;
     public int IgniteMultiplier { get; set; } = 10_000;
     public void Remove(params Ailment[] kinds)
@@ -81,6 +85,14 @@ public sealed class AilmentState
         _instances.RemoveAll(instance => instance.Kind == kind);
         return amount * Math.Clamp(portionBasisPoints, 0, 10_000) / 10_000;
     }
+    public bool CountSettlementHit(Ailment kind, string actionId, int every, bool selfCast)
+    {
+        if (!selfCast || Count(kind) == 0 || !_countedHits.Add((kind, actionId))) return false;
+        int count = _hitCounts.GetValueOrDefault(kind) + 1;
+        _hitCounts[kind] = count % Math.Max(1, every);
+        return count >= every;
+    }
+
     public decimal ConsumeForAction(Ailment kind, string actionId, int portionBasisPoints,
         Func<DamageType, decimal, decimal>? defend = null, bool voidDebuffed = false) =>
         _settledActions.Add((kind, actionId)) ? Consume(kind, portionBasisPoints, defend, voidDebuffed) : 0;
@@ -140,6 +152,6 @@ public sealed class AilmentState
         }
         return output;
     }
-    private decimal Multiplier(Ailment kind) => kind is not (Ailment.Bleed or Ailment.Ignite) || Count(kind) <= 1 ? 1m : (kind switch
+    private decimal Multiplier(Ailment kind) => kind is not (Ailment.Bleed or Ailment.Ignite) || Count(kind) <= 1 && !(kind == Ailment.Bleed ? BleedMultiplierAlways : IgniteMultiplierAlways) ? 1m : (kind switch
     { Ailment.Bleed => BleedMultiplier, Ailment.Ignite => IgniteMultiplier, _ => 10_000 }) / 10_000m;
 }

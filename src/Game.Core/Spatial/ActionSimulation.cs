@@ -85,6 +85,7 @@ public sealed partial class SpatialCombatRunner
                         amount = ScaleCombatValue(amount, ElementalRules.TargetMultiplier(hit.Build.Ascendancy, branch.CurrentType, ElementalStatus(enemy, tick), true, critical));
                         amount = ScaleCombatValue(amount, 10_000 + enemy.ShockEffect);
                         amount = ScaleCombatValue(amount, 10_000 + enemy.Curses.Effect("archetypes.skill.death_mark", tick));
+                        amount = ScaleCombatValue(amount, AilmentMasteryRules.BleedingTargetHitMultiplier(hit.Build.PassiveProfile ?? Campaign.Progression.PassiveModifiers.Empty, enemy.Ailments));
                         if (branch.CurrentType == DamageType.Void)
                         {
                             amount = ScaleCombatValue(amount, ScaleCombatValue(CombatRules.WitherMultiplier(enemy.Ailments.Stack(Ailment.Wither, tick)),

@@ -50,7 +50,7 @@ public sealed partial class SpatialCombatRunner
             {
                 Ailment.Bleed => branch.CurrentType == DamageType.Physical,
                 Ailment.Poison => branch.CurrentType is DamageType.Physical or DamageType.Void,
-                _ => branch.CurrentType == DamageType.Fire
+                _ => branch.CurrentType == DamageType.Fire || MasteryRuntime.Has(passive, "点燃", 3) && branch.CurrentType is DamageType.Cold or DamageType.Lightning
             });
             DamageType output = kind == Ailment.Bleed ? DamageType.Physical : kind == Ailment.Poison ? DamageType.Void : DamageType.Fire;
             decimal total = 0;
@@ -90,9 +90,12 @@ public sealed partial class SpatialCombatRunner
                 damage *= (10_000m + passive.MoreDamageBasisPoints) / 10_000;
                 damage *= (10_000m + request.Build.MoreDamageOverTimeBasisPoints) / 10_000;
                 if (kind == Ailment.Bleed) damage *= (10_000m + request.Build.MoreBleedDamageBasisPoints) / 10_000;
-                damage *= (10_000m + Value(ItemModifierKind.DamageOverTimeMultiplierBasisPoints) + (critical ? 5_000 + (kind == Ailment.Poison && MasteryRuntime.Has(passive, "中毒", 3) ? 10_000 : 0) : 0)) / 10_000;
+                damage *= (10_000m + Value(ItemModifierKind.DamageOverTimeMultiplierBasisPoints) + (kind == Ailment.Ignite && MasteryRuntime.Has(passive, "点燃", 6) ? 3_000 : 0) + (critical ? 5_000 + (kind == Ailment.Poison && MasteryRuntime.Has(passive, "中毒", 3) ? 10_000 : 0) : 0)) / 10_000;
                 if (configuration.Supports.HasFlag(SkillSupport.Brutality) && output != DamageType.Physical) continue;
                 damage *= MasteryDamageRules.AilmentMultiplier(passive, branch, output, kind == Ailment.Poison) / 10_000m;
+                if (kind == Ailment.Bleed)
+                    damage *= (MasteryRuntime.Has(passive, "流血", 0) ? 2m : 1m) * (MasteryRuntime.Has(passive, "流血", 2) ? .8m : 1m);
+                if (kind == Ailment.Ignite && MasteryRuntime.Has(passive, "点燃", 0)) damage *= 1.3m;
                 total += damage;
             }
             return total;
@@ -118,19 +121,17 @@ public sealed partial class SpatialCombatRunner
             (skill.Ailment == Ailment.Bleed ? 0 : skill.BleedChanceBasisPoints) +
             MasteryRuntime.AdditionalBleedChance(passive, SkillDefinitions.Get(skill.SkillId).Tags, request.Build.Weapon)))
         {
-            enemy.Ailments.BleedMaximum = request.AscendancyRuntime?.TwoBleeds == true ? 2 : 1;
-            enemy.Ailments.BleedMultiplier = request.AscendancyRuntime?.TwoBleeds == true ? 8_000 : 10_000;
+            AilmentMasteryRules.Configure(enemy.Ailments, passive, request.AscendancyRuntime?.TwoBleeds == true, Element("fire", "core"));
             Apply(Ailment.Bleed, DamageType.Physical, .7m,
-                CombatRules.ApplyIncreased(5_000, Value(ItemModifierKind.IncreasedBleedDurationBasisPoints) + passive.SpecializedValue(PassiveEffectKind.IncreasedBleedDurationBasisPoints)), Value(ItemModifierKind.FasterBleedBasisPoints));
+                CombatRules.ApplyIncreased(5_000, Value(ItemModifierKind.IncreasedBleedDurationBasisPoints) + passive.SpecializedValue(PassiveEffectKind.IncreasedBleedDurationBasisPoints)), Value(ItemModifierKind.FasterBleedBasisPoints) + (MasteryRuntime.Has(passive, "流血", 3) ? 5_000 : 0));
             request.AscendancyRuntime?.AppliedBleed();
         }
         if (hit.Physical + hit.Void > 0 && Allowed(Ailment.Poison, Chance(Ailment.Poison) + Value(ItemModifierKind.PoisonChanceBasisPoints) + (MasteryRuntime.Has(passive, "虚空", 1) ? 2_000 : 0), critical && MasteryRuntime.Has(passive, "中毒", 3)))
             Apply(Ailment.Poison, DamageType.Void, .3m, 2_000, Value(ItemModifierKind.FasterPoisonBasisPoints));
-        if (hit.Fire > 0 && Allowed(Ailment.Ignite, Chance(Ailment.Ignite) + Value(ItemModifierKind.IgniteChanceBasisPoints), critical))
+        if (hit.Fire + (MasteryRuntime.Has(passive, "点燃", 3) ? hit.Cold + hit.Lightning : 0) > 0 && Allowed(Ailment.Ignite, Chance(Ailment.Ignite) + Value(ItemModifierKind.IgniteChanceBasisPoints), critical))
         {
-            enemy.Ailments.IgniteMaximum = Element("fire", "core") ? 2 : 1;
-            enemy.Ailments.IgniteMultiplier = Element("fire", "core") ? 8_000 : 10_000;
-            Apply(Ailment.Ignite, DamageType.Fire, .9m, Duration(4_000), Value(ItemModifierKind.FasterIgniteBasisPoints));
+            AilmentMasteryRules.Configure(enemy.Ailments, passive, request.AscendancyRuntime?.TwoBleeds == true, Element("fire", "core"));
+            Apply(Ailment.Ignite, DamageType.Fire, .9m, CombatRules.ApplyIncreased(4_000, (Element("ailment") ? 2_500 : 0) + (MasteryRuntime.Has(passive, "点燃", 0) ? 6_000 : 0)), Value(ItemModifierKind.FasterIgniteBasisPoints) + (MasteryRuntime.Has(passive, "点燃", 2) ? 6_000 : 0));
         }
         if (hit.Cold > 0 && Allowed(Ailment.Chill, 10_000))
         {

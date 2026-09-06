@@ -456,7 +456,11 @@ public sealed partial class SpatialCombatRunner
                     },
                 }
             };
-            hero.UpdateSheet(request.RuneFields!.Apply(request.Build.Sheet, heroPosition));
+            CharacterSheet recoverySheet = request.RuneFields!.Apply(request.Build.Sheet, heroPosition);
+            if (MasteryRuntime.Has(request.Build.PassiveProfile ?? PassiveModifiers.Empty, "流血", 6) &&
+                enemies.Any(enemy => enemy.Life > 0 && enemy.Rarity is EnemyRarity.Rare or EnemyRarity.Boss && enemy.Ailments.Count(Ailment.Bleed) > 0))
+                recoverySheet = recoverySheet with { MaximumLifeRegenerationBasisPoints = recoverySheet.MaximumLifeRegenerationBasisPoints + 300 };
+            hero.UpdateSheet(recoverySheet);
             hero.AdvanceRegenerationTick(tick);
             request.TeamProtection!.Update("hero", hero.Life, hero.MaximumLife, hero.MaximumShield, auras.ActiveIds.Count > 0, tick);
             AdvancePlayerStatus(request, hero, heroPosition, tick, events);
@@ -1260,6 +1264,8 @@ public sealed partial class SpatialCombatRunner
                     offensiveBranches.Add(branch with { BaseDamage = scaled, DebuffedBaseDamage = debuffed });
                 if (VoidDebuffed(enemy, tick) && debuffed.HasValue) scaled = debuffed.Value;
                 scaled = ScaleCombatValue(scaled, ElementalRules.TargetMultiplier(request.Build.Ascendancy, branch.CurrentType, ElementalStatus(enemy, tick), skill.Role != SkillRole.DamageOverTime, critical));
+                if (skill.Role != SkillRole.DamageOverTime) scaled = ScaleCombatValue(scaled,
+                    AilmentMasteryRules.BleedingTargetHitMultiplier(request.Build.PassiveProfile ?? PassiveModifiers.Empty, enemy.Ailments));
                 scaled = ScaleCombatValue(scaled, 10_000 + enemy.ShockEffect);
                 scaled = ScaleCombatValue(scaled, 10_000 + enemy.Curses.Effect("archetypes.skill.death_mark", tick));
                 if (branch.CurrentType == DamageType.Void)
@@ -1333,6 +1339,23 @@ public sealed partial class SpatialCombatRunner
         if (!triggered && value > 0 && skill.SkillId == "archetypes.skill.shield_drain")
             hero.AddShieldLeech(ScaleCombatValue(value, 300 + Math.Clamp(configuration.Quality, 0, 20) * 5));
 
+        bool settlementKilled = false;
+        if (value > 0 && enemy.Life > 0)
+        {
+            string action = request.Actions?.CanonicalAction(equipment!.ActionId) ?? equipment?.ActionId ?? $"{tick}:{skill.SkillId}";
+            bool selfCast = !triggered && equipment?.CaptureAction().Copy != true;
+            foreach (var kind in new[] { Ailment.Bleed, Ailment.Ignite })
+                if (MasteryRuntime.Has(profile, kind == Ailment.Bleed ? "流血" : "点燃", 5) &&
+                    enemy.Ailments.CountSettlementHit(kind, action, kind == Ailment.Bleed ? 5 : 4, selfCast))
+                {
+                    int settled = (int)Math.Min(enemy.Life, enemy.Ailments.ConsumeForAction(kind, action, 6_000,
+                        (type, dps) => DefendEnemyDot(request, enemy, type, dps, tick), VoidDebuffed(enemy, tick)));
+                    enemy.Life -= settled;
+                    settlementKilled |= enemy.Life == 0;
+                    events.Add(Event(tick, SpatialEventKind.Ailment, "hero", enemy.EntityId, settled, source, enemy.Position,
+                        $"settlement:{kind.ToString().ToLowerInvariant()}"));
+                }
+        }
         ApplyAilments(request, skill, configuration, enemy, ailmentSource ?? [], damage, critical, random, tick, source, events);
         if (value > 0 && masteryArmorBreakStacks > 0)
         {
@@ -1346,7 +1369,7 @@ public sealed partial class SpatialCombatRunner
         if (enemy.Life == 0)
             events.Add(Event(tick, SpatialEventKind.EnemyDefeated, "hero", enemy.EntityId, 0,
                 source, enemy.Position, enemy.Profile.StableId));
-        if (beforeShieldLink > 0 && enemy.Life == 0 && skill.Role != SkillRole.DamageOverTime &&
+        if (beforeShieldLink > 0 && enemy.Life == 0 && !settlementKilled && skill.Role != SkillRole.DamageOverTime &&
             damage.Physical > 0 && damage.Total == damage.Physical && MasteryRuntime.Has(profile, "物理", 4))
             request.Reactions?.EnqueueBurst(new Combat.PendingAreaBurst(enemy.Position, enemy.MaximumLife / 10,
                 SkillDamageType.Physical, 3_000, "physical-corpse-burst"));
@@ -1482,7 +1505,7 @@ public sealed partial class SpatialCombatRunner
                              InRange(enemy.Position, unit.Position, Math.Max(3_000, activeSkill.RangeRaw))))
                 {
                     int before = ally.Life;
-                    ally.Life = Math.Min(ally.MaximumLife, ally.Life + Math.Max(1, ally.MaximumLife * 4 / 100));
+                    ally.Life = Math.Min(ally.MaximumLife, ally.Life + ScaleCombatValue(Math.Max(1, ally.MaximumLife * 4 / 100), AilmentMasteryRules.LifeRecoveryMultiplier(request.Build.PassiveProfile ?? PassiveModifiers.Empty, ally.Ailments)));
                     restored += ally.Life - before;
                 }
                 events.Add(Event(tick, SpatialEventKind.EnemyAttack, enemy.EntityId, "allies", restored,
@@ -1836,12 +1859,17 @@ public sealed partial class SpatialCombatRunner
         foreach (EnemyUnit enemy in enemies.Where(item => item.Life <= 0 && !item.KillCharged))
         {
             enemy.KillCharged = true;
-            if (MasteryRuntime.Has(request.Build.PassiveProfile ?? PassiveModifiers.Empty, "中毒", 4) && enemy.Ailments.Count(Ailment.Poison) > 0)
-                foreach (var target in enemies.Where(candidate => candidate.Life > 0 && InRange(enemy.Position, candidate.Position, 4_000))
-                    .OrderBy(candidate => Point.DistanceSquared(enemy.Position, candidate.Position)).ThenBy(candidate => candidate.EntityId, StringComparer.Ordinal).Take(5))
-                    enemy.Ailments.SpreadTo(target.Ailments, Ailment.Poison,
-                        () => target.Profile.AilmentAvoidanceBasisPoints <= 0 || random.NextBasisPoints() >= target.Profile.AilmentAvoidanceBasisPoints,
-                        5, VoidDebuffed(enemy, tick));
+            var passives = request.Build.PassiveProfile ?? PassiveModifiers.Empty;
+            foreach (var kind in new[] { Ailment.Poison, Ailment.Bleed, Ailment.Ignite })
+                if (MasteryRuntime.Has(passives, kind == Ailment.Poison ? "中毒" : kind == Ailment.Bleed ? "流血" : "点燃", 4) && enemy.Ailments.Count(kind) > 0)
+                    foreach (var target in enemies.Where(candidate => candidate.Life > 0 && InRange(enemy.Position, candidate.Position, 4_000))
+                        .OrderBy(candidate => Point.DistanceSquared(enemy.Position, candidate.Position)).ThenBy(candidate => candidate.EntityId, StringComparer.Ordinal).Take(5))
+                    {
+                        AilmentMasteryRules.Configure(target.Ailments, passives, runtime.TwoBleeds, ElementalRules.Has(request.Build.Ascendancy, "fire", "core"));
+                        enemy.Ailments.SpreadTo(target.Ailments, kind,
+                            () => target.Profile.AilmentAvoidanceBasisPoints <= 0 || random.NextBasisPoints() >= target.Profile.AilmentAvoidanceBasisPoints,
+                            kind == Ailment.Poison ? 5 : 1, VoidDebuffed(enemy, tick));
+                    }
             if (enemy.Summoned) continue;
             equipment.Killed(enemy.Rarity, tick);
             int charges = enemy.Rarity switch
@@ -1865,8 +1893,12 @@ public sealed partial class SpatialCombatRunner
                     runtime.TriggerRecoveryProtection(tick);
                     EnemyUnit? spread = enemies.Where(item => item.Life > 0)
                         .OrderBy(item => Point.DistanceSquared(enemy.Position, item.Position)).FirstOrDefault();
-                    if (spread is not null) enemy.Ailments.SpreadTo(spread.Ailments, Ailment.Bleed,
-                        () => spread.Profile.AilmentAvoidanceBasisPoints <= 0 || random.NextBasisPoints() >= spread.Profile.AilmentAvoidanceBasisPoints);
+                    if (spread is not null)
+                    {
+                        AilmentMasteryRules.Configure(spread.Ailments, passives, runtime.TwoBleeds, ElementalRules.Has(request.Build.Ascendancy, "fire", "core"));
+                        enemy.Ailments.SpreadTo(spread.Ailments, Ailment.Bleed,
+                            () => spread.Profile.AilmentAvoidanceBasisPoints <= 0 || random.NextBasisPoints() >= spread.Profile.AilmentAvoidanceBasisPoints);
+                    }
                 }
             }
             resetMovement |= runtime.TryResetMovementCooldownOnKill(tick);
