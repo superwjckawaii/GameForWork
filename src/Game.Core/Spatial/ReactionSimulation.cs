@@ -154,7 +154,7 @@ public sealed partial class SpatialCombatRunner
                 EnemyResistance(enemy, request, SkillDamageType.Void), equipment: equipment.Modifiers, modifiers: modifiers,
                 scaleBranch: branch =>
                 {
-                    int value = ScaleCombatValue(branch.BaseDamage, 10_000 + passive.MoreDamageBasisPoints);
+                    int value = ScaleCombatValue(VoidDebuffed(enemy, tick) ? branch.DebuffedBaseDamage ?? branch.BaseDamage : branch.BaseDamage, 10_000 + passive.MoreDamageBasisPoints);
                     if (branch.History.Any(type => type is DamageType.Fire or DamageType.Cold or DamageType.Lightning))
                         value = ScaleCombatValue(value, 10_000 + build.MoreElementalDamageBasisPoints);
                     if (branch.CurrentType == DamageType.Void) value = ScaleCombatValue(value, 10_000 + build.MoreVoidDamageBasisPoints);

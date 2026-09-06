@@ -159,7 +159,10 @@ public static class DamagePacketRules
             {
                 int value = CombatRules.ApplyMore(branch.BaseDamage,
                     [mastery is { } context ? MasteryDamageRules.BranchMultiplier(context, branch) : 10_000]);
-                return branch with { BaseDamage = value <= 0 ? 0 : scaleBranch?.Invoke(branch with { BaseDamage = value }) ?? value };
+                int? debuffed = branch.DebuffedBaseDamage is { } conditional ? CombatRules.ApplyMore(conditional,
+                    [mastery is { } conditionalContext ? MasteryDamageRules.BranchMultiplier(conditionalContext, branch) : 10_000]) : null;
+                var scaled = branch with { BaseDamage = value, DebuffedBaseDamage = debuffed };
+                return scaled with { BaseDamage = value <= 0 && debuffed.GetValueOrDefault() <= 0 ? 0 : scaleBranch?.Invoke(scaled) ?? value };
             }).ToArray();
             int Sum(DamageType target) => (int)Math.Clamp(branches.Where(branch => branch.CurrentType == target)
                 .Sum(branch => (long)branch.BaseDamage), 0, int.MaxValue);

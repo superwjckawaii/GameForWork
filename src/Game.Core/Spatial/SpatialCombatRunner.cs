@@ -1209,10 +1209,10 @@ public sealed partial class SpatialCombatRunner
         var ailmentSource = new List<DamageBranch>();
         var offensiveBranches = new List<DamageBranch>();
         DamageBreakdown damage = DamagePacketRules.ResolveMixed(raw, skill.DamageType, addedWeapon, configuration.Supports,
-            armor, EnemyResistance(enemy, request, SkillDamageType.Fire, tags.HasFlag(SkillTag.Spell) && skill.Role != SkillRole.DamageOverTime),
-            EnemyResistance(enemy, request, SkillDamageType.Cold, tags.HasFlag(SkillTag.Spell) && skill.Role != SkillRole.DamageOverTime),
-            EnemyResistance(enemy, request, SkillDamageType.Lightning, tags.HasFlag(SkillTag.Spell) && skill.Role != SkillRole.DamageOverTime),
-            EnemyResistance(enemy, request, SkillDamageType.Void),
+            armor, EnemyResistance(enemy, request, SkillDamageType.Fire, tags.HasFlag(SkillTag.Spell) && skill.Role != SkillRole.DamageOverTime, penetrate: skill.Role != SkillRole.DamageOverTime),
+            EnemyResistance(enemy, request, SkillDamageType.Cold, tags.HasFlag(SkillTag.Spell) && skill.Role != SkillRole.DamageOverTime, penetrate: skill.Role != SkillRole.DamageOverTime),
+            EnemyResistance(enemy, request, SkillDamageType.Lightning, tags.HasFlag(SkillTag.Spell) && skill.Role != SkillRole.DamageOverTime, penetrate: skill.Role != SkillRole.DamageOverTime),
+            EnemyResistance(enemy, request, SkillDamageType.Void, penetrate: skill.Role != SkillRole.DamageOverTime),
             enemy.Scaled.PhysicalResistanceBasisPoints + request.EnemyPhysicalReductionBasisPoints,
             equipment?.Loadout.Modifiers,
             CombatSkillRules.OffensiveIncreases(request.Build, tags, skill.Role == SkillRole.DamageOverTime,
@@ -1221,15 +1221,16 @@ public sealed partial class SpatialCombatRunner
             branch =>
             {
                 if (request.Auras?.ExclusiveElement is { } allowed && branch.CurrentType is DamageType.Fire or DamageType.Cold or DamageType.Lightning && branch.CurrentType != allowed) return 0;
-                int scaled = CombatSkillRules.ScaleOffensiveDamage(branch.BaseDamage, skill, configuration,
+                int ScaleBranch(int amount) => ScaleCombatValue(ScaleCombatValue(CombatSkillRules.ScaleOffensiveDamage(amount, skill, configuration,
                     request.Build, tags, enemy.Life, enemy.MaximumLife, multiplier,
                     targetRareOrBoss: enemy.Rarity is EnemyRarity.Rare or EnemyRarity.Boss,
                     applyIncreased: false, damageHistory: branch.History,
-                    nearbyEnemyCount: equipment?.NearbyEnemyCount?.Invoke() ?? 1, distanceRaw: distanceRaw);
-                scaled = ScaleCombatValue(scaled, ascendancyMultiplier);
-                scaled = ScaleCombatValue(scaled, criticalMultiplier);
+                    nearbyEnemyCount: equipment?.NearbyEnemyCount?.Invoke() ?? 1, distanceRaw: distanceRaw), ascendancyMultiplier), criticalMultiplier);
+                int scaled = ScaleBranch(branch.BaseDamage);
+                int? debuffed = branch.DebuffedBaseDamage is { } conditional ? ScaleBranch(conditional) : null;
                 if (!configuration.Supports.HasFlag(SkillSupport.Brutality) || branch.CurrentType == DamageType.Physical)
-                    offensiveBranches.Add(branch with { BaseDamage = scaled });
+                    offensiveBranches.Add(branch with { BaseDamage = scaled, DebuffedBaseDamage = debuffed });
+                if (VoidDebuffed(enemy, tick) && debuffed.HasValue) scaled = debuffed.Value;
                 scaled = ScaleCombatValue(scaled, 10_000 + enemy.ShockEffect);
                 scaled = ScaleCombatValue(scaled, 10_000 + enemy.Curses.Effect("archetypes.skill.death_mark", tick));
                 if (branch.CurrentType == DamageType.Void)

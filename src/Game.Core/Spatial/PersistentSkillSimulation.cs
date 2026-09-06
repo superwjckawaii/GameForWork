@@ -30,6 +30,8 @@ public sealed partial class SpatialCombatRunner
         public bool Propagated { get; init; }
         public DamageBreakdown? DamagePerSecond { get; set; }
         public DamageBreakdown? RareDamagePerSecond { get; set; }
+        public DamageBreakdown? DebuffedDamagePerSecond { get; set; }
+        public DamageBreakdown? DebuffedRareDamagePerSecond { get; set; }
     }
 
     private static bool CreatePersistentArea(NodeCombatRequest request, ResolvedSkill skill, SkillConfiguration configuration,
@@ -89,6 +91,11 @@ public sealed partial class SpatialCombatRunner
             if (trap) raw = ScaleCombatValue(raw, (int)Math.Round(3_500 * Math.Pow(1.05, Math.Clamp(configuration.Level, 1, 40) - 1)));
             area.DamagePerSecond = SnapshotGroundDamage(request, skill, configuration, raw, trap, false, multiplier);
             area.RareDamagePerSecond = SnapshotGroundDamage(request, skill, configuration, raw, trap, true, multiplier);
+            if (MasteryRuntime.Has(profile, "虚空", 4))
+            {
+                area.DebuffedDamagePerSecond = SnapshotGroundDamage(request, skill, configuration, raw, trap, false, multiplier, true);
+                area.DebuffedRareDamagePerSecond = SnapshotGroundDamage(request, skill, configuration, raw, trap, true, multiplier, true);
+            }
         }
         if (id == "archetypes.skill.void_rift")
             foreach (var enemy in enemies.Where(enemy => enemy.Life > 0 && InRange(target.Position, enemy.Position, radius)))
@@ -100,7 +107,7 @@ public sealed partial class SpatialCombatRunner
     }
 
     private static DamageBreakdown SnapshotGroundDamage(NodeCombatRequest request, ResolvedSkill skill, SkillConfiguration configuration,
-        int raw, bool weaponDerived, bool rare, int multiplier)
+        int raw, bool weaponDerived, bool rare, int multiplier, bool voidDebuffed = false)
     {
         SkillTag tags = SkillDefinitions.Get(skill.SkillId).Tags & ~SkillTag.Attack;
         skill = skill with { Role = SkillRole.DamageOverTime };
@@ -112,7 +119,7 @@ public sealed partial class SpatialCombatRunner
             scaleBranch: branch =>
             {
                 if (request.Auras?.ExclusiveElement is { } allowed && branch.CurrentType is DamageType.Fire or DamageType.Cold or DamageType.Lightning && branch.CurrentType != allowed) return 0;
-                int scaled = CombatSkillRules.ScaleOffensiveDamage(branch.BaseDamage, skill, configuration, request.Build, tags,
+                int scaled = CombatSkillRules.ScaleOffensiveDamage(voidDebuffed ? branch.DebuffedBaseDamage ?? branch.BaseDamage : branch.BaseDamage, skill, configuration, request.Build, tags,
                     1, 1, ScaleCombatValue(multiplier, request.ActionMultiplierSnapshot ?? 10_000), targetRareOrBoss: rare, applyIncreased: false, damageHistory: branch.History);
                 return ScaleCombatValue(scaled, 10_000 + modifiers.GetValueOrDefault(ItemModifierKind.DamageOverTimeMultiplierBasisPoints));
             }, configuration: configuration, allowAddedHitDamage: false,
@@ -155,7 +162,9 @@ public sealed partial class SpatialCombatRunner
             {
                 foreach (var enemy in enemies.Where(enemy => enemy.Life > 0 && OnSegment(enemy.Position, area.Start, area.End, area.Radius)))
                 {
-                    DamageBreakdown dps = (enemy.Rarity is EnemyRarity.Rare or EnemyRarity.Boss ? area.RareDamagePerSecond : area.DamagePerSecond)!;
+                    bool rare = enemy.Rarity is EnemyRarity.Rare or EnemyRarity.Boss;
+                    DamageBreakdown dps = (rare ? area.RareDamagePerSecond : area.DamagePerSecond)!;
+                    DamageBreakdown? debuffed = rare ? area.DebuffedRareDamagePerSecond : area.DebuffedDamagePerSecond;
                     Apply(DamageType.Physical, dps.Physical); Apply(DamageType.Fire, dps.Fire); Apply(DamageType.Cold, dps.Cold);
                     Apply(DamageType.Lightning, dps.Lightning); Apply(DamageType.Void, dps.Void);
                     if (area.Skill.SkillId == SkillIds.VoidDecayField && (tick - area.Created) % 20 == 0)
@@ -165,7 +174,10 @@ public sealed partial class SpatialCombatRunner
                     void Apply(DamageType type, int value) => enemy.Ailments.Apply(Ailment.Ground, type,
                         ScaleCombatValue(value, AreaRules.PositionMultiplier(area.Request.Build.PassiveProfile ?? PassiveModifiers.Empty,
                             (int)Math.Sqrt(SegmentDistanceSquared(enemy.Position, area.Start, area.End)), area.Radius)),
-                        TickMilliseconds, 0, area.Skill.SkillId, instanceId: $"{area.Skill.SkillId}:{area.Created}");
+                        TickMilliseconds, 0, area.Skill.SkillId, instanceId: $"{area.Skill.SkillId}:{area.Created}",
+                        debuffedDamagePerSecond: type == DamageType.Void && debuffed is not null ?
+                            ScaleCombatValue(debuffed.Void, AreaRules.PositionMultiplier(area.Request.Build.PassiveProfile ?? PassiveModifiers.Empty,
+                                (int)Math.Sqrt(SegmentDistanceSquared(enemy.Position, area.Start, area.End)), area.Radius)) : null);
                 }
             }
             if (tick >= area.Expires) areas.Remove(area);

@@ -77,7 +77,7 @@ public sealed partial class SpatialCombatRunner
                         Branches = hit.OffensivePacket.Branches.Select(branch => branch with
                         {
                             BaseDamage = ScaleCombatValue(
-                        ScaleCombatValue(ScaleCombatValue(ScaleCombatValue(branch.BaseDamage, multiplier), 10_000 + enemy.ShockEffect),
+                        ScaleCombatValue(ScaleCombatValue(ScaleCombatValue(VoidDebuffed(enemy, tick) ? branch.DebuffedBaseDamage ?? branch.BaseDamage : branch.BaseDamage, multiplier), 10_000 + enemy.ShockEffect),
                             10_000 + enemy.Curses.Effect("archetypes.skill.death_mark", tick)),
                         branch.CurrentType == DamageType.Void ? ScaleCombatValue(CombatRules.WitherMultiplier(enemy.Ailments.Stack(Ailment.Wither, tick)),
                             10_000 + enemy.Curses.Effect("archetypes.skill.doom_brand", tick)) : 10_000)

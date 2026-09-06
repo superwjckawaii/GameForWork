@@ -16,13 +16,13 @@ public sealed record DamageModifiers(
     IReadOnlyDictionary<DamageType, int>? IncreasedByType = null,
     int InitialIncreasedBasisPoints = 0,
     int ElementalIncreasedBasisPoints = 0,
-    IReadOnlyDictionary<string, int>? MoreByStableId = null);
+    IReadOnlyDictionary<string, int>? MoreByStableId = null, int VoidDebuffIncreaseBasisPoints = 0);
 
 public sealed record DamageBranch(
     int BaseDamage,
     DamageType CurrentType,
     IReadOnlyList<DamageType> History,
-    IReadOnlyList<string> Trace, bool IsExtra = false, bool FullyConvertedPhysical = false);
+    IReadOnlyList<string> Trace, bool IsExtra = false, bool FullyConvertedPhysical = false, int? DebuffedBaseDamage = null);
 
 public sealed record DamagePacket(
     int Physical,
@@ -339,6 +339,7 @@ public static class CombatRules
         foreach (DamageBranch branch in branches)
         {
             int value = branch.BaseDamage;
+            int? debuffed = null;
             var trace = branch.Trace.ToList();
             var appliedTypes = new HashSet<DamageType>();
             for (int index = 0; index < branch.History.Count; index++)
@@ -350,11 +351,14 @@ public static class CombatRules
                 if (type is DamageType.Fire or DamageType.Cold or DamageType.Lightning &&
                     !branch.History.Take(index).Any(previous => previous is DamageType.Fire or DamageType.Cold or DamageType.Lightning))
                     increase = checked(increase + modifiers.ElementalIncreasedBasisPoints);
+                if (type == DamageType.Void && modifiers.VoidDebuffIncreaseBasisPoints > 0)
+                    debuffed = ApplyIncreased(value, increase, modifiers.VoidDebuffIncreaseBasisPoints);
                 value = ApplyIncreased(value, increase);
                 trace.Add($"increase:{type}:{increase}=>{value}");
             }
             value = ApplyMore(value, (modifiers.MoreByStableId ?? new Dictionary<string, int>()).Values);
-            scaled.Add(branch with { BaseDamage = value, Trace = trace });
+            if (debuffed.HasValue) debuffed = ApplyMore(debuffed.Value, (modifiers.MoreByStableId ?? new Dictionary<string, int>()).Values);
+            scaled.Add(branch with { BaseDamage = value, Trace = trace, DebuffedBaseDamage = debuffed });
         }
         return Packet(scaled);
     }

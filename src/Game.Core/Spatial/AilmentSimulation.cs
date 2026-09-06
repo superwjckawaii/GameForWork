@@ -13,6 +13,8 @@ namespace GameForWork.Core.Spatial;
 
 public sealed partial class SpatialCombatRunner
 {
+    private static bool VoidDebuffed(EnemyUnit enemy, int tick) =>
+        enemy.Ailments.Stack(Ailment.Erosion, tick) > 0 || enemy.Ailments.Stack(Ailment.Wither, tick) > 0;
     private static void ApplyAilments(NodeCombatRequest request, ResolvedSkill skill, SkillConfiguration configuration,
         EnemyUnit enemy, IReadOnlyList<DamageBranch> source, DamageBreakdown hit, bool critical,
         Pcg32 random, int tick, Point origin, ICollection<SpatialEvent> events)
@@ -34,7 +36,7 @@ public sealed partial class SpatialCombatRunner
             _ => CombatRarity.Normal
         });
 
-        decimal Basis(Ailment kind)
+        decimal Basis(Ailment kind, bool voidDebuffed = false)
         {
             var branches = source.Where(branch => kind switch
             {
@@ -70,6 +72,7 @@ public sealed partial class SpatialCombatRunner
                     increase += type == DamageType.Physical ? passive.IncreasedPhysicalDamageBasisPoints :
                         type == DamageType.Void ? passive.IncreasedVoidDamageBasisPoints : 0;
                     if (kind == Ailment.Bleed && type == DamageType.Physical) increase += passive.SpecializedValue(PassiveEffectKind.IncreasedPhysicalDamageOverTimeBasisPoints);
+                    if (voidDebuffed && type == DamageType.Void && MasteryRuntime.Has(passive, "虚空", 4)) increase += 6_000;
                     if (first) { increase += common; first = false; }
                     if (!elemental && type is DamageType.Fire or DamageType.Cold or DamageType.Lightning)
                     { increase += Value(ItemModifierKind.IncreasedElementalDamageBasisPoints) + passive.IncreasedElementalDamageBasisPoints; elemental = true; }
@@ -90,7 +93,8 @@ public sealed partial class SpatialCombatRunner
             decimal dps = Basis(kind) * ratio;
             if (dps <= 0) return;
             duration = duration * Math.Max(0, 10_000 - enemy.Profile.ReducedAilmentDurationBasisPoints) / 10_000;
-            enemy.Ailments.Apply(kind, type, dps, duration, faster, skill.SkillId);
+            enemy.Ailments.Apply(kind, type, dps, duration, faster, skill.SkillId,
+                debuffedDamagePerSecond: type == DamageType.Void && MasteryRuntime.Has(passive, "虚空", 4) ? Basis(kind, true) * ratio : null);
             events.Add(Event(tick, SpatialEventKind.Ailment, "hero", enemy.EntityId, 0, origin, enemy.Position,
                 $"skill:{skill.SkillId}|ailment:{kind.ToString().ToLowerInvariant()}|dps:{dps:0.###}"));
         }
@@ -169,7 +173,7 @@ public sealed partial class SpatialCombatRunner
                         (10_000 + enemy.Curses.Effect("archetypes.skill.doom_brand", tick)) / 10_000m;
                 damage *= (10_000 - CombatRules.SpiritBarrierReduction(enemy.Profile.SpiritBarrier, (int)Math.Min(int.MaxValue, damage))) / 10_000m;
                 return damage;
-            }))
+            }, VoidDebuffed(enemy, tick)))
             {
                 int damage = Math.Min(enemy.Life, pulse.Damage);
                 enemy.Life -= damage;

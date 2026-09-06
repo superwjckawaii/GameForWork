@@ -301,7 +301,8 @@ public static class CombatSkillRules
             [DamageType.Cold] = Value(Campaign.Items.ItemModifierKind.IncreasedColdDamageBasisPoints),
             [DamageType.Lightning] = Value(Campaign.Items.ItemModifierKind.IncreasedLightningDamageBasisPoints),
             [DamageType.Void] = Value(Campaign.Items.ItemModifierKind.IncreasedVoidDamageBasisPoints) + passive.IncreasedVoidDamageBasisPoints,
-        }, common, Value(Campaign.Items.ItemModifierKind.IncreasedElementalDamageBasisPoints) + passive.IncreasedElementalDamageBasisPoints);
+        }, common, Value(Campaign.Items.ItemModifierKind.IncreasedElementalDamageBasisPoints) + passive.IncreasedElementalDamageBasisPoints,
+            VoidDebuffIncreaseBasisPoints: MasteryRuntime.Has(passive, "虚空", 4) ? 6_000 : 0);
     }
 
     public static int ActionDelay(TeamBuild build, int baseTicks, SkillTag tags)
