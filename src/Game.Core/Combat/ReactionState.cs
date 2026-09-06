@@ -32,7 +32,7 @@ public sealed class ReactionState
         _boostExpires = Tick + 80;
         return true;
     }
-    public void Begin(string actionId, string skillId, GuardState? guard = null, int paidSpellMultiplier = 10_000)
+    public void Begin(string actionId, string skillId, GuardState? guard = null, int paidSpellMultiplier = 10_000, int paymentMultiplier = 10_000)
     {
         SkillTag tags = SkillDefinitions.Get(skillId).Tags;
         if (tags.HasFlag(SkillTag.Spell) && (tags & (SkillTag.Trigger | SkillTag.Counter | SkillTag.Reservation | SkillTag.Channelling)) == 0 &&
@@ -40,7 +40,7 @@ public sealed class ReactionState
         bool channel = SkillDefinitions.Get(skillId).Tags.HasFlag(SkillTag.Channelling);
         if (channel && _channelSkill == skillId && Tick - _channelTick <= 5)
         {
-            _channelTick = Tick; _actionMultipliers[actionId] = (int)((long)_channelMultiplier * paidSpellMultiplier / 10_000);
+            _channelTick = Tick; _actionMultipliers[actionId] = CombatRules.ApplyMore(_channelMultiplier, [paidSpellMultiplier, paymentMultiplier]);
             _spellIncreases[actionId] = _channelIncrease; return;
         }
         if (SkillDefinitions.Get(skillId).Tags.HasFlag(SkillTag.Spell) && guard is not null)
@@ -52,10 +52,11 @@ public sealed class ReactionState
         if (channel) { _channelTick = Tick; _channelMultiplier = ActionMultiplier(actionId); _channelIncrease = SpellIncrease(actionId); }
         if (SkillDefinitions.Get(skillId).Tags.HasFlag(SkillTag.Spell))
             _actionMultipliers[actionId] = (int)((long)ActionMultiplier(actionId) * paidSpellMultiplier / 10_000);
+        _actionMultipliers[actionId] = (int)((long)ActionMultiplier(actionId) * paymentMultiplier / 10_000);
         if (skillId == Overload || _boost == 0 || !SkillDefinitions.Get(skillId).Tags.HasFlag(SkillTag.Attack)) return;
         if (Tick < _boostExpires)
         {
-            _actionMultipliers[actionId] = 10_000 + _boost;
+            _actionMultipliers[actionId] = (int)((long)ActionMultiplier(actionId) * (10_000 + _boost) / 10_000);
             _pending.Enqueue(new(Overload, ""));
         }
         _boost = 0;

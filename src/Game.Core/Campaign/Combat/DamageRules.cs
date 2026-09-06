@@ -32,7 +32,8 @@ public sealed record DamageRequest(
     bool IsSpell = false,
     int BleedChanceBasisPoints = 0,
     int BleedTotalDamageBasisPoints = 7_000,
-    int BleedDurationTicks = 100);
+    int BleedDurationTicks = 100,
+    bool LuckyTargetEvasion = false);
 
 public sealed record DamageResult(
     bool Hit,
@@ -85,6 +86,9 @@ public static class DamageRules
         ValidateRequest(request);
 
         CalculatedValue hitChance = HitChance(request.Accuracy, request.TargetEvasion, request.IsSpell);
+        if (request.LuckyTargetEvasion && !request.IsSpell && hitChance.Value < 10_000)
+            hitChance = CalculatedValue.Single("幸运闪避后的命中率", "max(5%, 命中率 × 命中率)",
+                Math.Max(500, (int)((long)hitChance.Value * hitChance.Value / 10_000)));
         int hitRoll = random.NextBasisPoints();
         if (hitRoll >= hitChance.Value)
         {

@@ -1640,7 +1640,7 @@ public sealed class GameSession
         HeavyStrikeProfile: build.HeavyStrike,
         WeaponLegendaryRule: build.Equipment.WeaponLegendaryRule,
         MovementSpeedBasisPoints: checked(10_000 + build.Passives.IncreasedMovementSpeedBasisPoints +
-            build.Equipment.Modifiers.IncreasedMovementSpeedBasisPoints),
+            build.Sheet.IncreasedMovementSpeedBasisPoints),
         ActiveSkills: activeSkills ??
         [
             new SkillConfiguration(SkillIds.HeavyStrike, supports),

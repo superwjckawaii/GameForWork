@@ -7,6 +7,21 @@ namespace GameForWork.Tests;
 public sealed class SceneTimelineTests
 {
     [Fact]
+    public void TimelineLookupUsesLastEventAtTheRequestedTimeIncludingEqualTimestamps()
+    {
+        SceneEvent Event(long time, int value) => new(time, SceneEventKind.HeavyStrike, 0, 0, value, "", 0, 0, 0, 0, 0, 0, 0, 0, new(0, 0));
+        var events = new[] { Event(10, 1), Event(20, 2), Event(20, 3), Event(40, 4) };
+        var timeline = new SceneTimeline("lookup", 12, 24, 1, 1, 40, BattleOutcome.HeroVictory, 0, 0, 0, [], events, "");
+        Assert.Null(timeline.StateAt(9));
+        Assert.Equal(1, timeline.StateAt(10)!.Value);
+        Assert.Equal(1, timeline.StateAt(19)!.Value);
+        Assert.Equal(3, timeline.StateAt(20)!.Value);
+        Assert.Equal(3, timeline.StateAt(39)!.Value);
+        Assert.Equal(4, timeline.StateAt(long.MaxValue)!.Value);
+        Assert.Null((timeline with { Events = [] }).StateAt(20));
+    }
+
+    [Fact]
     public void SafeMapUsesMultipleTwelveByTwentyFourNodes()
     {
         SceneTimeline timeline = SceneTimelineBuilder.BuildMapAttempt(

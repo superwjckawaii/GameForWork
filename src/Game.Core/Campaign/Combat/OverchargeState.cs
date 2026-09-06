@@ -52,6 +52,10 @@ public sealed partial class ResourceState
     {
         ArgumentOutOfRangeException.ThrowIfNegative(amount);
         if (!IsAlive || amount == 0) return 0;
+        int manaDamage = hit ? Math.Min(Mana, (int)((long)amount * _manaDamageShare / 10_000)) : 0;
+        Mana -= manaDamage;
+        amount -= manaDamage;
+        if (manaDamage > 0) LastDamageTick = tick;
         int absorbed = 0;
         if (hit && ShieldGate)
         {
@@ -71,6 +75,6 @@ public sealed partial class ResourceState
         }
         int actual = Math.Min(amount, Life + Shield);
         ApplyDamage(amount, tick);
-        return absorbed + actual;
+        return manaDamage + absorbed + actual;
     }
 }

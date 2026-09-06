@@ -54,7 +54,9 @@ public sealed record CharacterSheet(
     int IncreasedLeechRecoveryRateBasisPoints = 0,
     int IncreasedMaximumLeechRateBasisPoints = 0,
     int LifeRecoveryMultiplierBasisPoints = 10_000,
-    int IncreasedShieldRechargeRateBasisPoints = 0)
+    int IncreasedShieldRechargeRateBasisPoints = 0,
+    int ArmorMultiplierBasisPoints = 10_000, int EvasionMultiplierBasisPoints = 10_000,
+    int AdditionalManaRegenerationBasisPoints = 0, int IncreasedLifeRegenerationBasisPoints = 0)
 {
     public int ResistanceMaximum(EnemyDamageType type) => type switch
     {
@@ -118,20 +120,20 @@ public sealed record CharacterSheet(
     public CalculatedValue Armor(bool lowLife = false, bool tenacious = false)
     {
         int increased = IncreasedArmorBasisPoints + (lowLife && tenacious ? 3_000 : 0);
-        int value = ApplyIncreased(Equipment.Armor, increased);
+        int value = CombatRules.ApplyMore(ApplyIncreased(Equipment.Armor, increased), [ArmorMultiplierBasisPoints]);
         return CalculatedValue.Single(
             "护甲",
-            $"{Equipment.Armor} × (10000 + {increased}) / 10000",
+            $"{Equipment.Armor} × (10000 + {increased}) / 10000 × {ArmorMultiplierBasisPoints} / 10000",
             value);
     }
 
     public CalculatedValue Evasion()
     {
         int baseEvasion = checked(Equipment.Evasion + Attributes.Dexterity);
-        int value = ApplyIncreased(baseEvasion, IncreasedEvasionBasisPoints);
+        int value = CombatRules.ApplyMore(ApplyIncreased(baseEvasion, IncreasedEvasionBasisPoints), [EvasionMultiplierBasisPoints]);
         return CalculatedValue.Single(
             "闪避",
-            $"({Equipment.Evasion} + {Attributes.Dexterity}) × (10000 + {IncreasedEvasionBasisPoints}) / 10000",
+            $"({Equipment.Evasion} + {Attributes.Dexterity}) × (10000 + {IncreasedEvasionBasisPoints}) / 10000 × {EvasionMultiplierBasisPoints} / 10000",
             value);
     }
 
@@ -171,21 +173,21 @@ public sealed record CharacterSheet(
     public CalculatedValue ManaRegenerationPerSecond()
     {
         int maximumMana = MaximumMana().Value;
-        int baseRegeneration = checked(maximumMana * 600 / 10_000);
+        int baseRegeneration = checked(maximumMana * (600 + AdditionalManaRegenerationBasisPoints) / 10_000);
         int increased = checked(IncreasedManaRegenerationBasisPoints + IncreasedRecoveryRateBasisPoints);
         int value = ApplyIncreased(baseRegeneration, increased);
         return CalculatedValue.Single(
             "每秒法力恢复",
-            $"{maximumMana} × 6% × (10000 + {increased}) / 10000",
+            $"{maximumMana} × (600 + {AdditionalManaRegenerationBasisPoints}) / 10000 × (10000 + {increased}) / 10000",
             value);
     }
 
     public CalculatedValue LifeRegenerationPerSecond()
     {
         int value = ApplyIncreased(Math.Max(0, FlatLifeRegeneration) +
-            (int)((long)MaximumLife().Value * MaximumLifeRegenerationBasisPoints / 10_000), IncreasedRecoveryRateBasisPoints);
+            (int)((long)MaximumLife().Value * MaximumLifeRegenerationBasisPoints / 10_000), Math.Max(-10_000, IncreasedRecoveryRateBasisPoints + IncreasedLifeRegenerationBasisPoints));
         return CalculatedValue.Single("每秒生命恢复",
-            $"{Math.Max(0, FlatLifeRegeneration)} × (10000 + {IncreasedRecoveryRateBasisPoints}) / 10000", value);
+            $"({Math.Max(0, FlatLifeRegeneration)} + {MaximumLife().Value} × {MaximumLifeRegenerationBasisPoints} / 10000) × (10000 + {IncreasedRecoveryRateBasisPoints} + {IncreasedLifeRegenerationBasisPoints}) / 10000", value);
     }
 
     public CalculatedValue ShieldRecoveryPerSecond()
@@ -214,10 +216,11 @@ public sealed partial class ResourceState
         public int Remainder { get; set; }
     }
 
+    private int _manaRegenerationPerSecond, _lifeRegenerationPerSecond, _shieldRechargePerSecond;
     private int _manaRecoveryRemainder;
     private int _lifeRecoveryRemainder;
     private int _shieldRecoveryRemainder;
-    private int _shieldRegenerationRemainder;
+    private decimal _shieldRegenerationRemainder;
     private long _lifeMultiplierRemainder;
     private readonly List<LeechInstance> _lifeLeech = [];
     private readonly List<LeechInstance> _manaLeech = [];
@@ -228,9 +231,12 @@ public sealed partial class ResourceState
         int? initialLife = null,
         int? initialMana = null,
         int? initialShield = null,
-        Ascendancies.CombatProfile? ascendancy = null)
+        Ascendancies.CombatProfile? ascendancy = null,
+        Campaign.Progression.PassiveModifiers? passives = null, WeaponProfile? weapon = null)
     {
         _ascendancy = ascendancy ?? Ascendancies.CombatProfile.Empty;
+        _passives = passives ?? Campaign.Progression.PassiveModifiers.Empty;
+        _manaDamageShare = MasteryRuntime.ManaDamageShare(_passives, weapon ?? Weapons.Unequipped);
         Sheet = sheet;
         MaximumLife = sheet.MaximumLife().Value;
         MaximumMana = sheet.MaximumMana().Value;
@@ -238,11 +244,13 @@ public sealed partial class ResourceState
         Life = Math.Clamp(initialLife ?? MaximumLife, 0, MaximumLife);
         Mana = Math.Clamp(initialMana ?? MaximumMana, 0, MaximumMana);
         Shield = Math.Clamp(initialShield ?? MaximumShield, 0, MaximumShield);
+        RefreshRecoveryRates();
     }
 
     public CharacterSheet Sheet { get; private set; }
     public void UpdateSheet(CharacterSheet sheet)
     {
+        if (Sheet == sheet) return;
         Sheet = sheet;
         MaximumLife = sheet.MaximumLife().Value;
         MaximumMana = sheet.MaximumMana().Value;
@@ -252,6 +260,13 @@ public sealed partial class ResourceState
         Mana = Math.Min(Mana, AvailableMaximumMana);
         Shield = Math.Min(Shield, MaximumShield);
         Overcharge = Math.Min(Overcharge, MaximumOvercharge);
+        RefreshRecoveryRates();
+    }
+    private void RefreshRecoveryRates()
+    {
+        _manaRegenerationPerSecond = Sheet.ManaRegenerationPerSecond().Value;
+        _lifeRegenerationPerSecond = Sheet.LifeRegenerationPerSecond().Value;
+        _shieldRechargePerSecond = Sheet.ShieldRecoveryPerSecond().Value;
     }
     public GameForWork.Core.Combat.HarmfulStatus HarmfulStatus { get; } = new();
     public int MaximumLife { get; private set; }
@@ -362,21 +377,23 @@ public sealed partial class ResourceState
 
     public void AdvanceRegenerationTick(int tick)
     {
+        AdvanceSkillPayments(tick);
         const int ticksPerSecond = 20;
-        int manaPerSecond = Sheet.ManaRegenerationPerSecond().Value;
+        int manaPerSecond = _manaRegenerationPerSecond;
         _manaRecoveryRemainder += manaPerSecond;
         Mana = Math.Min(AvailableMaximumMana, Mana + (_manaRecoveryRemainder / ticksPerSecond));
         _manaRecoveryRemainder %= ticksPerSecond;
 
-        int lifePerSecond = Sheet.LifeRegenerationPerSecond().Value;
+        int lifePerSecond = _lifeRegenerationPerSecond;
         _lifeRecoveryRemainder += lifePerSecond;
         HealLife(_lifeRecoveryRemainder / ticksPerSecond);
         _lifeRecoveryRemainder %= ticksPerSecond;
 
-        _shieldRegenerationRemainder += (int)((long)MaximumShield * Sheet.MaximumShieldRegenerationBasisPoints / 10_000 *
-            Math.Max(0L, 10_000L + Sheet.IncreasedRecoveryRateBasisPoints) / 10_000);
-        RestoreShield(_shieldRegenerationRemainder / ticksPerSecond);
-        _shieldRegenerationRemainder %= ticksPerSecond;
+        _shieldRegenerationRemainder += (decimal)MaximumShield * Sheet.MaximumShieldRegenerationBasisPoints *
+            Math.Max(0L, 10_000L + Sheet.IncreasedRecoveryRateBasisPoints) / (10_000m * 10_000 * ticksPerSecond);
+        int regeneratedShield = (int)Math.Min(int.MaxValue, decimal.Truncate(_shieldRegenerationRemainder));
+        RestoreShield(regeneratedShield);
+        _shieldRegenerationRemainder -= regeneratedShield;
 
         AdvanceLeech(_lifeLeech, MaximumLife, HealLife);
         AdvanceLeech(_manaLeech, MaximumMana, RestoreMana);
@@ -390,7 +407,7 @@ public sealed partial class ResourceState
             return;
         }
 
-        int shieldPerSecond = Sheet.ShieldRecoveryPerSecond().Value;
+        int shieldPerSecond = _shieldRechargePerSecond;
         _shieldRecoveryRemainder += shieldPerSecond;
         int recovery = _shieldRecoveryRemainder / ticksPerSecond;
         int restored = RestoreShield(recovery);

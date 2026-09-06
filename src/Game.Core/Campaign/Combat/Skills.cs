@@ -340,14 +340,7 @@ public static class SkillRules
         IncreasedAttackSpeedBasisPoints: 0);
 
     public static bool TryPaySkillCost(ResourceState resources, SkillUseProfile profile)
-    {
-        if (profile.LifeCost > 0)
-        {
-            return resources.TryPayLifeCost(profile.LifeCost);
-        }
-
-        return resources.TryPayMana(profile.ManaCost);
-    }
+        => resources.TryPaySkillCost(profile.SkillId, profile.LifeCost, profile.ManaCost);
 
     private static int DivideRoundUp(int numerator, int denominator) =>
         checked((numerator + denominator - 1) / denominator);

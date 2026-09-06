@@ -44,6 +44,8 @@ public sealed partial class SpatialCombatRunner
         request = request with
         {
             OffenseSnapshot = request.EquipmentRuntime!.SnapshotOffense(hero),
+            ResourceDamageMultiplierSnapshot = MasteryRuntime.OffensiveResourceMultiplier(request.Build.PassiveProfile ?? Campaign.Progression.PassiveModifiers.Empty, hero),
+            ArmorSnapshot = HeroCurrentArmor(request, hero, tick),
             RuneFields = null,
             ActionMultiplierSnapshot = request.EquipmentRuntime.CaptureAction().Triggered ? 10_000 : request.Reactions?.ActionMultiplier(request.EquipmentRuntime.ActionId) ?? 10_000,
             SpellEnergyIncreaseSnapshot = request.EquipmentRuntime.CaptureAction().Triggered ? request.Guard?.SpellDamageIncrease ?? 0 : request.Reactions?.SpellIncrease(request.EquipmentRuntime.ActionId) ?? 0,

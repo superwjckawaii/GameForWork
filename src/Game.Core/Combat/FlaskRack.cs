@@ -92,7 +92,9 @@ public sealed class FlaskRack
                     int effect = _build.IncreasedLifeFlaskEffectBasisPoints;
                     if (_build.Ascendancy?.Has(GameForWork.Core.Ascendancies.WarriorNodeIds.BloodLowLifeSmall) == true && hero.Life * 2L <= hero.MaximumLife) effect += 2_500;
                     total *= Math.Max(0, 10_000 + effect) / 10_000m;
+                    if (MasteryRuntime.Has(_build.PassiveProfile ?? Campaign.Progression.PassiveModifiers.Empty, "生命", 6)) total *= .8m;
                 }
+                else if (MasteryRuntime.HasManaWard(_build.PassiveProfile ?? Campaign.Progression.PassiveModifiers.Empty, _build.Weapon)) total *= .8m;
             }
             int side = kind == FlaskKind.Life ? Value(bottle, ItemModifierKind.FlaskLifeRemovedFromManaBasisPoints) :
                 kind == FlaskKind.Mana ? Value(bottle, ItemModifierKind.FlaskManaRemovedFromLifeBasisPoints) : 0;

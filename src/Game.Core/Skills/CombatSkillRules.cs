@@ -175,6 +175,7 @@ public static class CombatSkillRules
         life = checked((life * buildsSupports.ResourceMultiplierBasisPoints + 9_999) / 10_000);
         passive ??= PassiveModifiers.Empty;
         mana = Math.Max(0, checked(mana * Math.Max(0, 10_000 - passive.ReducedSkillCostBasisPoints) / 10_000));
+        mana = MasteryRuntime.ManaCost(passive, definition.Tags, mana);
         life = Math.Max(0, checked(life * Math.Max(0, 10_000 - passive.ReducedSkillCostBasisPoints) / 10_000));
         range = Math.Max(1, checked(range * (10_000 + passive.IncreasedSkillRangeBasisPoints) / 10_000));
         cooldown = Math.Max(1, checked(cooldown * 10_000 / Math.Max(1, 10_000 + passive.IncreasedCooldownRecoveryBasisPoints)));
@@ -188,10 +189,9 @@ public static class CombatSkillRules
             buildsSupports.TemperanceQualityPerLayer);
     }
 
-    public static bool TryPay(ResourceState resources, ResolvedSkill skill, bool allowOvercharge = true) => skill.LifeCost > 0
-        ? resources.TryPayLifeCost(skill.LifeCost)
-        : SkillDefinitions.Get(skill.SkillId).Tags.HasFlag(SkillTag.Spell)
-            ? resources.TryPaySpellMana(skill.ManaCost, allowOvercharge) : resources.TryPayMana(skill.ManaCost);
+    public static bool TryPay(ResourceState resources, ResolvedSkill skill, bool allowOvercharge = true, bool selfCast = true) =>
+        resources.TryPaySkillCost(skill.SkillId, skill.LifeCost, skill.ManaCost, selfCast, allowOvercharge,
+            Combat.GuardState.ShieldCost(skill.SkillId, resources.MaximumShield));
 
     public static int DamageMultiplier(ResolvedSkill skill, int life, int maximumLife)
     {
@@ -267,7 +267,7 @@ public static class CombatSkillRules
     }
 
     public static DamageModifiers OffensiveIncreases(TeamBuild build, SkillTag tags,
-        bool damageOverTime = false, int additionalIncreasedBasisPoints = 0)
+        bool damageOverTime = false, int additionalIncreasedBasisPoints = 0, int? armor = null)
     {
         var equipment = build.CombatEquipment ?? Equipment.EquipmentCombatLoadout.Empty;
         int common = (tags.HasFlag(SkillTag.Attack) ? build.IncreasedDamageBasisPoints - equipment.PhysicalIncreaseIncludedInAttack : 0) +
@@ -287,7 +287,8 @@ public static class CombatSkillRules
         if (damageOverTime) common += Value(Campaign.Items.ItemModifierKind.IncreasedDamageOverTimeBasisPoints);
         return new(new Dictionary<DamageType, int>
         {
-            [DamageType.Physical] = Value(Campaign.Items.ItemModifierKind.IncreasedPhysicalDamageBasisPoints),
+            [DamageType.Physical] = Value(Campaign.Items.ItemModifierKind.IncreasedPhysicalDamageBasisPoints) +
+                (!damageOverTime && MasteryRuntime.Has(build.PassiveProfile ?? PassiveModifiers.Empty, "护甲", 6) ? (armor ?? build.Sheet.Armor().Value) / 1_000 * 400 : 0),
             [DamageType.Fire] = Value(Campaign.Items.ItemModifierKind.IncreasedFireDamageBasisPoints),
             [DamageType.Cold] = Value(Campaign.Items.ItemModifierKind.IncreasedColdDamageBasisPoints),
             [DamageType.Lightning] = Value(Campaign.Items.ItemModifierKind.IncreasedLightningDamageBasisPoints),

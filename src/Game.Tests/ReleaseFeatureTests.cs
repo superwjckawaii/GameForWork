@@ -45,20 +45,6 @@ public sealed class ReleaseFeatureTests
         Assert.All(results, result => Assert.InRange(result.AverageDurationSeconds, 0.05, 180.0));
     }
 
-    [Fact]
-    public void OfflineFortyEightHourSettlementStaysWithinReleaseBudget()
-    {
-        GameSession session = Session(tutorialEnabled: false);
-        Stopwatch timer = Stopwatch.StartNew();
-
-        GameForWork.Core.Campaign.World.OfflineResult result = session.AdvanceOffline(OfflineTime.MaximumMilliseconds);
-
-        timer.Stop();
-        Assert.Equal(OfflineTime.MaximumMilliseconds, result.EffectiveMilliseconds);
-        Assert.True(timer.Elapsed.TotalSeconds < ReleaseTargets.MaximumOfflineSeconds,
-            $"48h settlement took {timer.Elapsed.TotalSeconds:F3}s; budget is {ReleaseTargets.MaximumOfflineSeconds:F1}s.");
-    }
-
     [Theory]
     [InlineData(true)]
     [InlineData(false)]

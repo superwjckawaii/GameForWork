@@ -99,9 +99,19 @@ public sealed record SceneTimeline(
     public const int LogicalWidth = 12;
     public const int LogicalHeight = 24;
 
-    public SceneEvent? StateAt(long elapsedMilliseconds) => Events
-        .TakeWhile(item => item.AtMilliseconds <= elapsedMilliseconds)
-        .LastOrDefault();
+    public SceneEvent? StateAt(long elapsedMilliseconds) => AtOrBefore(Events, elapsedMilliseconds, static item => item.AtMilliseconds);
+
+    internal static T? AtOrBefore<T>(IReadOnlyList<T> items, long time, Func<T, long> timestamp) where T : class
+    {
+        int low = 0, high = items.Count;
+        while (low < high)
+        {
+            int middle = low + (high - low) / 2;
+            if (timestamp(items[middle]) <= time) low = middle + 1;
+            else high = middle;
+        }
+        return low == 0 ? null : items[low - 1];
+    }
 }
 
 public static class SceneTimelineBuilder
@@ -165,7 +175,8 @@ public static class SceneTimelineBuilder
             seed,
             modifiers,
             plan,
-            map.AreaId, map: map) with { PlannedNodes = plan.Nodes };
+            map.AreaId, map: map) with
+        { PlannedNodes = plan.Nodes };
     }
 
     public static long TravelMilliseconds(int tileDistance, int movementSpeedBasisPoints)
@@ -365,7 +376,7 @@ public static class SceneTimelineBuilder
                 SpatialEventKind.EnemyDefeated => SceneEventKind.EnemyDefeated,
                 _ => SceneEventKind.BossPhase,
             };
-            SpatialFrame? frame = result.Frames.TakeWhile(frame => frame.AtMilliseconds <= item.AtMilliseconds).LastOrDefault();
+            SpatialFrame? frame = SceneTimeline.AtOrBefore(result.Frames, item.AtMilliseconds, static frame => frame.AtMilliseconds);
             EnemyFrame? enemy = frame?.Enemies.FirstOrDefault(enemy => enemy.EntityId == item.TargetId);
             target.Add(Event(
                 start + item.AtMilliseconds,
@@ -382,7 +393,8 @@ public static class SceneTimelineBuilder
                 maximumShield,
                 enemy?.Life ?? 0,
                 enemy?.MaximumLife ?? 0,
-                new GridPosition(item.TargetPosition.XRaw / 1_000, item.TargetPosition.YRaw / 1_000)) with { EffectPosition = item.TargetPosition });
+                new GridPosition(item.TargetPosition.XRaw / 1_000, item.TargetPosition.YRaw / 1_000)) with
+            { EffectPosition = item.TargetPosition });
         }
     }
 

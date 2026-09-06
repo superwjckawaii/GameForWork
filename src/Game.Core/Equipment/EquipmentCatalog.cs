@@ -27,12 +27,10 @@ public static class EquipmentCatalog
     public static IReadOnlyList<EquipmentCorruptionImplicitEntry> CorruptionImplicits => SnapshotValue.CorruptionImplicits;
 
     public static ItemBaseDefinition GetBase(string id)
-    {
-        string canonical = ResolveBaseId(id);
-        return BaseById.TryGetValue(canonical, out ItemBaseDefinition? value)
-            ? value
-            : throw new KeyNotFoundException($"Unknown item base: {id}");
-    }
+        => TryGetBase(id, out var value) ? value : throw new KeyNotFoundException($"Unknown item base: {id}");
+
+    public static bool TryGetBase(string id, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out ItemBaseDefinition? value) =>
+        BaseById.TryGetValue(id, out value) || BaseById.TryGetValue(ResolveBaseId(id), out value);
 
     public static string ResolveBaseId(string id)
     {

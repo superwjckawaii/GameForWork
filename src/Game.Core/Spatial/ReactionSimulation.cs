@@ -79,7 +79,7 @@ public sealed partial class SpatialCombatRunner
             if (reaction.PayCost)
             {
                 skill = request.EquipmentRuntime!.Resolve(ApplyAscendancyCost(skill, config, hero.MaximumLife, request.AscendancyRuntime!.Profile));
-                if (hero.Shield < GuardState.ShieldCost(skill.SkillId, hero.MaximumShield) || !CombatSkillRules.TryPay(hero, skill, allowOvercharge: false))
+                if (!CombatSkillRules.TryPay(hero, skill, allowOvercharge: false, selfCast: false))
                 {
                     events.Add(Event(tick, SpatialEventKind.SkillFailed, "hero", reaction.TargetId, 0, origin, origin, $"reaction:{skill.SkillId}|resource"));
                     continue;

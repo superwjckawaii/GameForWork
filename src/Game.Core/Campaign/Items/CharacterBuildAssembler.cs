@@ -120,12 +120,10 @@ public static class CharacterBuildAssembler
         bool armorHybrid = ascendancy?.Has("core.ascendancy.spellarmor.hybrid.core") == true;
         defense = defense with
         {
-            Armor = checked((defense.Armor + (armorHybrid ? physique / 100 * 200 : 0)) * MasteryRuntime.ArmorMultiplier(advanced, weapon) / 10_000),
-            Evasion = checked(defense.Evasion * MasteryRuntime.EvasionMultiplier(
-                advanced, weapon, equipment.HasShield) / 10_000),
+            Armor = checked(defense.Armor + (armorHybrid ? physique / 100 * 200 : 0)),
         };
         int evasionIncrease = checked(item.IncreasedEvasionBasisPoints + advanced.IncreasedEvasionBasisPoints);
-        if (advanced.IronReflexes)
+        if (advanced.IronReflexes && !MasteryRuntime.Has(advanced, "护甲", 1))
         {
             int converted = checked((defense.Evasion + attributes.Dexterity) * (10_000 + evasionIncrease) / 10_000);
             defense = new DefensiveEquipment(checked(defense.Armor + converted), 0, defense.Shield);
@@ -185,6 +183,7 @@ public static class CharacterBuildAssembler
             IncreasedShieldRechargeRateBasisPoints: (ascendancy?.Has("core.ascendancy.aegis_mage.maximum.small") == true ? 1_500 : 0) +
                 (ascendancy?.Has("core.ascendancy.aegis_mage.recharge.small") == true ? 3_000 : 0) +
                 (ascendancy?.Has("core.ascendancy.aegis_mage.recharge.core") == true ? 5_000 : 0));
+        sheet = MasteryRuntime.ApplySheet(sheet, advanced, weapon, equipment.HasShield);
         int increasedAttackSpeed = checked(item.IncreasedAttackSpeedBasisPoints + passive.IncreasedAttackSpeedBasisPoints +
             jewel.IncreasedAttackSpeedBasisPoints + attributeMemory.IncreasedAttackSpeedBasisPoints);
         SkillUseProfile heavyStrike = SkillRules.BuildHeavyStrike(
