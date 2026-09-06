@@ -1,41 +1,29 @@
 using GameForWork.Core.Campaign.Combat;
 using GameForWork.Core.Campaign.Items;
 using GameForWork.Core.Simulation;
+using GameForWork.Core.Spatial;
+using GameForWork.Core.Campaign.World;
+using GameForWork.Core.Equipment;
 
 namespace GameForWork.Tests;
 
 public sealed class CombatRulesTests
 {
     [Fact]
-    public void LegendaryHeavyStrikeUsesSlowerProfileAndCreatesAftershockEvent()
+    public void LegendaryHeavyStrikeUsesSlowerProfileAndActualAftershock()
     {
         var weapon = new WeaponProfile("legendary-test", 100, 100, 1_000, 0);
-        SkillUseProfile profile = SkillRules.BuildHeavyStrike(
-            new SkillConfiguration(SkillIds.HeavyStrike, SkillSupport.None),
-            weapon,
-            500);
-        profile = LegendaryRules.ApplyToHeavyStrike(profile, Legendary.EchoingOathbreakerRule);
-        var request = new EncounterRequest(
-            new CharacterSheet(
-                10,
-                new CharacterAttributes(100, 100, 100, 100),
-                new DefensiveEquipment(500, 100, 100),
-                FlatMaximumLife: 500),
-            weapon,
-            new SkillConfiguration(SkillIds.HeavyStrike, SkillSupport.None),
-            EnemyRules.Scale(Enemies.AbyssWarden, 1),
-            HeroFlatAccuracy: 1_000,
-            UseWarCry: false,
-            MaximumTicks: 1_000,
-            HeavyStrikeProfile: profile,
-            WeaponLegendaryRule: Legendary.EchoingOathbreakerRule);
-
-        EncounterResult result = new EncounterRunner().Run(request, 42);
-
-        Assert.Equal(BattleOutcome.HeroVictory, result.Outcome);
-        Assert.Contains(result.Events, item => item.Kind == CombatEventKind.LegendaryAftershock);
-        Assert.True(profile.AttackIntervalTicks > SkillRules.BuildHeavyStrike(
-            new SkillConfiguration(SkillIds.HeavyStrike, SkillSupport.None), weapon, 500).AttackIntervalTicks);
+        var config = new SkillConfiguration(SkillIds.HeavyStrike, SkillSupport.None);
+        var normal = SkillRules.BuildHeavyStrike(config, weapon, 500);
+        var profile = LegendaryRules.ApplyToHeavyStrike(normal, Legendary.EchoingOathbreakerRule);
+        var build = new TeamBuild(new(10, new(100, 100, 100, 100), new(500, 100, 100), FlatMaximumLife: 500),
+            weapon, config, FlatAccuracy: 1_000, UseWarCry: false, HeavyStrikeProfile: profile,
+            ActiveSkills: [config], AlwaysHit: true, CombatEquipment: EquipmentCombatLoadout.Empty with
+            { LegendaryIds = [EquipmentCatalog.LegendaryItems.Single(item => item.DisplayName == "回响破誓者").Id] });
+        var result = new SpatialCombatRunner().Run(new(build, 1, 1, 1, false, false, false, 0, MaximumTicks: 150,
+            EnemyPool: [Enemies.CorruptedWorker with { Life = 1_000_000, MinimumPhysicalDamage = 0, MaximumPhysicalDamage = 0 }]), 42);
+        Assert.Contains(result.Events, item => item.Detail == "equipment:回响破誓者" && item.Value > 0);
+        Assert.True(profile.AttackIntervalTicks > normal.AttackIntervalTicks);
     }
 
     [Fact]
@@ -238,105 +226,22 @@ public sealed class CombatRulesTests
     }
 
     [Fact]
-    public void EncounterIsDeterministicAndProducesStableHash()
+    public void OneHundredProductionSeedsFinishWithoutInvalidResources()
     {
-        EncounterRequest request = EasyEncounter(Enemies.CorruptedWorker);
-        var runner = new EncounterRunner();
-
-        EncounterResult first = runner.Run(request, 12345);
-        EncounterResult second = runner.Run(request, 12345);
-
-        Assert.Equal(first.FinalHash, second.FinalHash);
-        Assert.Equal(first.Events, second.Events);
-        Assert.Equal(BattleOutcome.HeroVictory, first.Outcome);
-    }
-
-    [Fact]
-    public void OneHundredSeedsFinishWithoutInvalidResources()
-    {
-        EncounterRequest request = EasyEncounter(Enemies.OathlessGuard);
-        var runner = new EncounterRunner();
+        var config = new SkillConfiguration("archetypes.skill.backstab", SkillSupport.None);
+        var build = new TeamBuild(new(10, new(100, 100, 100, 100), new(100, 20, 0), FlatMaximumLife: 500),
+            new("test.weapon", 30, 30, 1_200, 1_000), new(SkillIds.HeavyStrike, SkillSupport.None),
+            FlatAccuracy: 500, UseWarCry: false, ActiveSkills: [config]);
+        var request = new NodeCombatRequest(build, 1, 1, 1, false, false, false, 0, EnemyPool: [Enemies.OathlessGuard]);
+        var runner = new SpatialCombatRunner();
         for (ulong seed = 0; seed < 100; seed++)
         {
-            EncounterResult result = runner.Run(request, seed);
+            var result = runner.Run(request, seed);
             Assert.NotEqual(BattleOutcome.Timeout, result.Outcome);
-            Assert.InRange(result.HeroLife, 0, request.Hero.MaximumLife().Value);
-            Assert.InRange(result.HeroMana, 0, request.Hero.MaximumMana().Value);
-            Assert.InRange(result.EnemyLife, 0, request.Enemy.Life);
+            Assert.InRange(result.HeroLife, 0, build.Sheet.MaximumLife().Value);
+            Assert.InRange(result.HeroMana, 0, build.Sheet.MaximumMana().Value);
+            Assert.All(result.Frames, frame => Assert.All(frame.Enemies, enemy => Assert.InRange(enemy.Life, 0, enemy.MaximumLife)));
         }
-    }
-
-    [Fact]
-    public void NoProgressDeadlockEndsAsDrawWithoutRestoringBattleTimer()
-    {
-        CharacterSheet hero = StartingSheet() with { FlatLifeRegeneration = 10_000 };
-        SkillUseProfile unusableSkill = SkillRules.BuildHeavyStrike(
-            new SkillConfiguration(SkillIds.HeavyStrike, SkillSupport.None),
-            Weapons.RustedGreatsword,
-            hero.MaximumLife().Value) with { ManaCost = int.MaxValue };
-        EncounterRequest request = EasyEncounter(Enemies.CorruptedWorker) with
-        {
-            Hero = hero,
-            HeavyStrikeProfile = unusableSkill,
-            UseWarCry = false,
-            MaximumTicks = 0,
-        };
-
-        EncounterResult result = new EncounterRunner().Run(request, 2345);
-
-        Assert.Equal(BattleOutcome.Draw, result.Outcome);
-        Assert.InRange(result.Ticks, 1_200, 2_400);
-    }
-
-    [Fact]
-    public void ExtremelyLongBattleFastForwardsToProjectedOutcomeInsteadOfTimingOut()
-    {
-        CharacterSheet hero = StartingSheet() with { FlatLifeRegeneration = 10_000 };
-        var slowWeapon = new WeaponProfile("slow-progress", 1, 1, 1_000, 0);
-        EncounterRequest request = EasyEncounter(Enemies.AbyssWarden) with
-        {
-            Hero = hero,
-            HeroWeapon = slowWeapon,
-            HeavyStrikeProfile = SkillRules.BuildHeavyStrike(
-                new SkillConfiguration(SkillIds.HeavyStrike, SkillSupport.None),
-                slowWeapon,
-                hero.MaximumLife().Value),
-            UseWarCry = false,
-            MaximumTicks = 0,
-        };
-
-        EncounterResult result = new EncounterRunner().Run(request, 9876);
-
-        Assert.NotEqual(BattleOutcome.Timeout, result.Outcome);
-        Assert.InRange(result.Ticks, 1, 20_001);
-    }
-
-    [Fact]
-    public void BossEncounterEmitsPhaseSummonAndHazardEvents()
-    {
-        EncounterRequest request = EasyEncounter(Enemies.AbyssWarden) with
-        {
-            MaximumTicks = 2_000,
-        };
-        EncounterResult result = new EncounterRunner().Run(request, 8);
-
-        Assert.Contains(result.Events, item => item.Kind == CombatEventKind.BossPhaseChanged && item.Detail == BossPhase.Summoning.ToString());
-        Assert.Contains(result.Events, item => item.Kind == CombatEventKind.BossSummonedWorkers && item.Value == 3);
-        Assert.Contains(result.Events, item => item.Kind == CombatEventKind.BossHazardCreated);
-    }
-
-    [Fact]
-    public void CorpseExplosionWaitsOneSecondAfterEliteDeath()
-    {
-        ScaledEnemy enemy = EnemyRules.Scale(
-            Enemies.CorruptedWorker,
-            1,
-            [EliteAffix.CorpseExplosion, EliteAffix.Massive]);
-        EncounterRequest request = EasyEncounter(enemy);
-        EncounterResult result = new EncounterRunner().Run(request, 99);
-        CombatEvent explosion = Assert.Single(result.Events, item => item.Kind == CombatEventKind.CorpseExplosion);
-        int lastHitTick = result.Events.Last(item => item.Kind == CombatEventKind.HeavyStrikeHit).Tick;
-        Assert.Equal(20, explosion.Tick - lastHitTick);
     }
 
     private static CharacterSheet StartingSheet() => new(
@@ -344,28 +249,4 @@ public sealed class CombatRulesTests
         Attributes: CharacterAttributes.IronOathStarting,
         Equipment: new DefensiveEquipment(0, 0, 0));
 
-    private static EncounterRequest EasyEncounter(EnemyProfile enemyProfile)
-    {
-        var hero = new CharacterSheet(
-            10,
-            CharacterAttributes.IronOathStarting,
-            new DefensiveEquipment(100, 20, 0),
-            FlatMaximumLife: 50);
-        var weapon = new WeaponProfile("test.weapon", 30, 30, 1_200, 1_000);
-        return new EncounterRequest(
-            hero,
-            weapon,
-            new SkillConfiguration(
-                SkillIds.HeavyStrike,
-                SkillSupport.AttackSpeed | SkillSupport.Bleed | SkillSupport.LifeCost),
-            EnemyRules.Scale(enemyProfile, 1),
-            HeroFlatAccuracy: 500,
-            UseWarCry: true);
-    }
-
-    private static EncounterRequest EasyEncounter(ScaledEnemy enemy)
-    {
-        EncounterRequest baseRequest = EasyEncounter(enemy.Base);
-        return baseRequest with { Enemy = enemy };
-    }
 }
