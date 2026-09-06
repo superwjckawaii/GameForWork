@@ -53,10 +53,17 @@ public sealed partial class SpatialCombatRunner
         foreach (var pulse in hero.HarmfulStatus.DamageOverTime.Advance(TickMilliseconds, (type, dps) =>
         {
             int raw = Math.Max(1, (int)Math.Min(int.MaxValue, dps));
-            EnemyDamageType damageType = type switch { DamageType.Physical => EnemyDamageType.Physical, DamageType.Fire => EnemyDamageType.Fire,
-                DamageType.Cold => EnemyDamageType.Cold, DamageType.Lightning => EnemyDamageType.Lightning, _ => EnemyDamageType.Void };
+            EnemyDamageType damageType = type switch
+            {
+                DamageType.Physical => EnemyDamageType.Physical,
+                DamageType.Fire => EnemyDamageType.Fire,
+                DamageType.Cold => EnemyDamageType.Cold,
+                DamageType.Lightning => EnemyDamageType.Lightning,
+                _ => EnemyDamageType.Void
+            };
             int defended = request.EquipmentRuntime!.MitigateDamageOverTime(request.Build.Sheet, raw, damageType, tick, 1);
-            return dps * defended / raw * (10_000 + hero.HarmfulStatus.Effect(Ailment.Shock)) / 10_000m;
+            return dps * defended / raw * (10_000 + hero.HarmfulStatus.Effect(Ailment.Shock)) / 10_000m *
+                (request.Buffs?.IncomingDamageMultiplier(!request.Build.HasUsableWeapon, tick, false) ?? 10_000) / 10_000m;
         }))
         {
             int damage = request.EquipmentRuntime!.ApplyEnemyDamage(hero, pulse.Damage, false, tick, request.VirtueVice);

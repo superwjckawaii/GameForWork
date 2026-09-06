@@ -60,7 +60,6 @@ public static class SupportRules
                 case SupportMechanic.ElementalAilment: damage = Mul(damage, 9_000); break;
                 case SupportMechanic.ShieldLeech: shieldLeech += 200; break;
                 case SupportMechanic.ShieldCasting: shieldCost = true; damage = Mul(damage, 12_000); break;
-                case SupportMechanic.UnarmedFocus: damage = Mul(damage, 13_500); break;
                 case SupportMechanic.MovementEcho: repeats = true; damage = Mul(damage, 6_000); break;
                 case SupportMechanic.FerociousBeast: damage = Mul(damage, 13_500); break;
                 case SupportMechanic.PhantomCopy: phantoms += 1; break;

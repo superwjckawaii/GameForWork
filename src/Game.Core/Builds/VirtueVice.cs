@@ -45,10 +45,12 @@ public sealed class VirtueViceState
     private readonly Dictionary<VirtueViceKind, int> _maximum = [];
     private readonly HashSet<string> _resolvedOathActions = new(StringComparer.Ordinal);
     private int _slothHitProgress;
+    private readonly IReadOnlyDictionary<VirtueViceKind, int> _increasedDuration;
 
     public VirtueViceState(IReadOnlyDictionary<VirtueViceKind, int>? additionalMaximum = null,
-        IEnumerable<VirtueViceKind>? heldAtMaximum = null)
+        IEnumerable<VirtueViceKind>? heldAtMaximum = null, IReadOnlyDictionary<VirtueViceKind, int>? increasedDuration = null)
     {
+        _increasedDuration = increasedDuration ?? new Dictionary<VirtueViceKind, int>();
         foreach (VirtueViceKind kind in Enum.GetValues<VirtueViceKind>())
             _maximum[kind] = Math.Clamp(BaseMaximumLayers +
                 (additionalMaximum?.GetValueOrDefault(kind) ?? 0), 0, AuditedMaximumLayers);
@@ -73,7 +75,7 @@ public sealed class VirtueViceState
         int before = Layers(kind);
         _layers[kind] = Math.Min(Maximum(kind), before + amount);
         if (!_permanent.Contains(kind))
-            _remaining[kind] = CombatRules.ApplyIncreased(BaseDurationMilliseconds, increasedDurationBasisPoints);
+            _remaining[kind] = CombatRules.ApplyIncreased(BaseDurationMilliseconds, increasedDurationBasisPoints, _increasedDuration.GetValueOrDefault(kind));
         return _layers[kind] > before;
     }
 

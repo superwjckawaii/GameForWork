@@ -69,7 +69,7 @@ public sealed partial class SpatialCombatRunner
                         critical = !hit.Build.CannotCrit && random.NextBasisPoints() < CombatRules.CriticalChance(
                             copy.Action.Tags.HasFlag(SkillTag.Spell) ? SpellHitRules.BaseCriticalChance(hit.Skill.SkillId,
                                 (int)Math.Sqrt(Point.DistanceSquared(origin, enemy.Position)), hit.Configuration.Quality) :
-                                hit.Build.Weapon.CriticalChanceBasisPoints, hit.Build.IncreasedCriticalChanceBasisPoints);
+                                UnarmedRules.Source(hit.Skill.SkillId, hit.Build.Weapon).CriticalChanceBasisPoints + UnarmedRules.CriticalBonus(hit.Configuration), hit.Build.IncreasedCriticalChanceBasisPoints);
                         if (critical) multiplier = ScaleCombatValue(multiplier, hit.Build.CriticalMultiplierBasisPoints);
                     }
                     DamagePacket offensive = hit.OffensivePacket with

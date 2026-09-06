@@ -38,7 +38,7 @@ public sealed record ResolvedSkill(
     bool ExplodesOnKill = false,
     bool OverloadRepeatsEveryThirdUse = false,
     int TemperanceLevelPerLayer = 0,
-    int TemperanceQualityPerLayer = 0, int BaseAreaRadiusRaw = 0, int AreaMoreBasisPoints = 10_000, int AreaIncreasedBasisPoints = 0)
+    int TemperanceQualityPerLayer = 0, int BaseAreaRadiusRaw = 0, int AreaMoreBasisPoints = 10_000, int AreaIncreasedBasisPoints = 0, bool AlwaysHit = false, SkillTag AdditionalTags = SkillTag.None, int AdditionalAttackSpeedBasisPoints = 0)
 {
     public int AreaMultiplierBasisPoints => Math.Max(2_500, CombatRules.ApplyMore(Math.Max(0, 10_000 + AreaIncreasedBasisPoints), [AreaMoreBasisPoints]));
     public int AreaRadiusRaw => AreaRules.Radius(BaseAreaRadiusRaw > 0 ? BaseAreaRadiusRaw : RangeRaw, AreaMultiplierBasisPoints);
@@ -59,7 +59,7 @@ public static class CombatSkillRules
         int life = 0;
         int range = definition.RangeRaw;
         int cooldown = definition.CooldownTicks;
-        int castTime = definition.CastTimeTicks;
+        int castTime = UnarmedRules.IsSkill(configuration.SkillId) ? UnarmedRules.CastTicks(configuration.SkillId, configuration.Quality) : definition.CastTimeTicks;
         int damage = 10_000;
         int bleed = 0;
         int projectiles = 1;
@@ -174,6 +174,8 @@ public static class CombatSkillRules
         projectiles += archetypes.ProjectileCount;
         pierce += archetypes.PierceCount;
         chains += archetypes.ChainCount;
+        if (UnarmedRules.IsSkill(configuration.SkillId))
+            damage = CombatRules.ApplyMore(damage, [10_000 + LinkedSupportRules.SupportValue(configuration, SupportMechanic.UnarmedFocus, 4_000, 7_000)]);
         damage = checked(damage * buildsSupports.DamageMultiplierBasisPoints / 10_000);
         mana = checked((mana * buildsSupports.ResourceMultiplierBasisPoints + 9_999) / 10_000);
         life = checked((life * buildsSupports.ResourceMultiplierBasisPoints + 9_999) / 10_000);
@@ -190,7 +192,10 @@ public static class CombatSkillRules
             pierce, fork, returns, active.Capabilities.HasFlag(SkillCapability.RequiresShield),
             buildsSupports.ResourceMultiplierBasisPoints, buildsSupports.SingleTargetOnly, buildsSupports.ExplodesOnKill,
             buildsSupports.OverloadRepeatsEveryThirdUse, buildsSupports.TemperanceLevelPerLayer,
-            buildsSupports.TemperanceQualityPerLayer, configuration.SkillId == SkillIds.SeismicCharge ? 1_800 : definition.RangeRaw, AreaRules.More(configuration, passive), AreaRules.Increased(configuration, passive));
+            buildsSupports.TemperanceQualityPerLayer, configuration.SkillId == SkillIds.SeismicCharge ? 1_800 : definition.RangeRaw, AreaRules.More(configuration, passive), AreaRules.Increased(configuration, passive),
+            AdditionalTags: active.Role == SkillRole.Counter ? SkillTag.Counter : SkillTag.None,
+            AdditionalAttackSpeedBasisPoints: UnarmedRules.IsSkill(configuration.SkillId)
+                ? LinkedSupportRules.SupportValue(configuration, SupportMechanic.UnarmedFocus, 1_000, 2_000) : 0);
     }
 
     public static bool TryPay(ResourceState resources, ResolvedSkill skill, bool allowOvercharge = true, bool selfCast = true) =>
@@ -210,6 +215,7 @@ public static class CombatSkillRules
         int addedPhysicalDamage, int? weaponRoll = null)
     {
         if (!tags.HasFlag(SkillTag.Attack)) return Math.Max(1, (skill.BaseDamageBasisPoints + 50) / 100);
+        weapon = UnarmedRules.Source(skill.SkillId, weapon);
         int physical = weaponRoll ?? checked((weapon.MinimumPhysicalDamage + weapon.MaximumPhysicalDamage) / 2);
         return Math.Max(1, checked(physical + addedPhysicalDamage));
     }
@@ -238,6 +244,8 @@ public static class CombatSkillRules
             value = Scale(value, 10_000L + increases.InitialIncreasedBasisPoints + increases.IncreasedByType!.GetValueOrDefault(type) +
                 (type is DamageType.Fire or DamageType.Cold or DamageType.Lightning ? increases.ElementalIncreasedBasisPoints : 0));
         }
+        if (UnarmedRules.IsSkill(skill.SkillId) && !build.HasUsableWeapon && UnarmedRules.Has(build.Ascendancy, "unarmed", "core"))
+            value = Scale(value, 14_500);
         value = Scale(value, 10_000L + passive.MoreDamageBasisPoints);
         if (skill.Role == SkillRole.DamageOverTime)
             value = Scale(value, 10_000L + build.MoreDamageOverTimeBasisPoints);
@@ -281,6 +289,7 @@ public static class CombatSkillRules
             passive.DamageFor(tags & ~(SkillTag.Physical | SkillTag.Elemental | SkillTag.Void), damageOverTime) + additionalIncreasedBasisPoints;
         if (tags.HasFlag(SkillTag.Attack)) common += Ascendancies.WarriorAscendancyRules.IncreasedAttackDamageBasisPoints(
             build.Ascendancy ?? Ascendancies.CombatProfile.Empty, build.Sheet.Attributes.Physique);
+        if (tags.HasFlag(SkillTag.Attack)) common += UnarmedRules.DamageIncrease(build);
         if (tags.HasFlag(SkillTag.Spell)) common += build.IncreasedSpellDamageBasisPoints;
         if (build.Ascendancy?.Has("core.ascendancy.spellarmor.hybrid.core") == true)
         {
@@ -305,12 +314,12 @@ public static class CombatSkillRules
             VoidDebuffIncreaseBasisPoints: MasteryRuntime.Has(passive, "虚空", 4) ? 6_000 : 0);
     }
 
-    public static int ActionDelay(TeamBuild build, int baseTicks, SkillTag tags)
+    public static int ActionDelay(TeamBuild build, int baseTicks, SkillTag tags, int additionalAttackSpeed = 0)
     {
         PassiveModifiers passive = build.PassiveProfile ?? PassiveModifiers.Empty;
         int masterySpeed = MasteryRuntime.ActionSpeedMultiplier(passive, tags, build.Weapon);
         int increasedSpeed = build.IncreasedActionSpeedBasisPoints;
-        if (tags.HasFlag(SkillTag.Attack)) increasedSpeed = checked(increasedSpeed + build.IncreasedAttackSpeedBasisPoints);
+        if (tags.HasFlag(SkillTag.Attack)) increasedSpeed = checked(increasedSpeed + build.IncreasedAttackSpeedBasisPoints + UnarmedRules.AttackSpeed(build) + additionalAttackSpeed);
         if (tags.HasFlag(SkillTag.Spell)) increasedSpeed = checked(increasedSpeed + build.IncreasedCastSpeedBasisPoints +
             (build.CombatEquipment?.Value(GameForWork.Core.Campaign.Items.ItemModifierKind.IncreasedCastSpeedBasisPoints) ?? 0));
         return Math.Max(1, checked((int)((long)Math.Max(1, baseTicks) * 10_000 * 10_000 /
@@ -318,14 +327,14 @@ public static class CombatSkillRules
     }
 
     public static int ActionFrequencyMilliPerSecond(TeamBuild build, int baseTicks, int cooldownTicks,
-        SkillTag tags)
+        SkillTag tags, int additionalAttackSpeed = 0)
     {
-        int actionDelay = ActionDelay(build, baseTicks, tags);
+        int actionDelay = ActionDelay(build, baseTicks, tags, additionalAttackSpeed);
         if (!tags.HasFlag(SkillTag.Attack)) return checked(20_000 / actionDelay);
 
         PassiveModifiers passive = build.PassiveProfile ?? PassiveModifiers.Empty;
         int masterySpeed = MasteryRuntime.ActionSpeedMultiplier(passive, tags, build.Weapon);
-        int increasedSpeed = checked(build.IncreasedActionSpeedBasisPoints + build.IncreasedAttackSpeedBasisPoints);
+        int increasedSpeed = checked(build.IncreasedActionSpeedBasisPoints + build.IncreasedAttackSpeedBasisPoints + UnarmedRules.AttackSpeed(build) + additionalAttackSpeed);
         int baseFrequency = baseTicks <= 1
             ? Math.Max(1, build.Weapon.AttacksPerSecondMilli)
             : Math.Max(1, 20_000 / baseTicks);

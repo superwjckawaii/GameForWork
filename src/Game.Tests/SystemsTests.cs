@@ -168,7 +168,7 @@ public sealed class SystemsTests
     [Fact]
     public void LinkAndMasteryChangesAffectSharedPreviewMathAndAuthoritativeCombat()
     {
-        ActiveSkillDefinition active = ActiveSkillCatalog.Active.Single(item => item.Combat.DisplayName == "十方终式");
+        ActiveSkillDefinition active = ActiveSkillCatalog.ActiveForSkill("archetypes.skill.backstab");
         SupportSkillDefinition support = ActiveSkillCatalog.Supports.Single(item => item.DisplayName == "孤锋专注");
         var plain = new SkillConfiguration(active.Combat.SkillId, SkillSupport.None, Level: 21);
         var linked = plain with { SupportLinks = [new(support.StoneId, 21, 20)] };

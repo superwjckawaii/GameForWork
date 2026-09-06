@@ -111,7 +111,8 @@ public static class BuildSummaryRules
         bool spell = tags.HasFlag(SkillTag.Spell);
         var mechanic = Archetypes.ArchetypeSkillDefinitions.Active.FirstOrDefault(active => active.Combat.SkillId == skill.SkillId)?.Mechanic;
         if (ActiveSkillCatalog.ActiveForSkill(skill.SkillId).Curve is SkillCurve.Unit or SkillCurve.DamageOverTime or SkillCurve.None ||
-            mechanic is Archetypes.SkillMechanic.Minion or Archetypes.SkillMechanic.Companion or Archetypes.SkillMechanic.Phantom or Archetypes.SkillMechanic.Construct or Archetypes.SkillMechanic.Rebuild ||
+            mechanic is Archetypes.SkillMechanic.Minion or Archetypes.SkillMechanic.Phantom or Archetypes.SkillMechanic.Construct or Archetypes.SkillMechanic.Rebuild ||
+            mechanic == Archetypes.SkillMechanic.Companion && !tags.HasFlag(SkillTag.Attack) ||
             skill.Role is SkillRole.Reservation or SkillRole.Guard or SkillRole.WarCry or SkillRole.Counter or SkillRole.DamageOverTime ||
             (configuration.Supports & (SkillSupport.BlockTrigger | SkillSupport.CastWhenDamaged)) != 0 ||
             LinkedSupportRules.Support(configuration, Archetypes.SupportMechanic.AttackTrigger) ||
@@ -119,20 +120,22 @@ public static class BuildSummaryRules
             skill.SkillId is SkillIds.StormBrand or "archetypes.skill.thunderstorm" or "archetypes.skill.doom_brand")
             return OffenseBreakdown.Empty with { IsSpell = spell };
         var passive = build.PassiveProfile ?? PassiveModifiers.Empty;
-        var local = tags.HasFlag(SkillTag.Attack) ? build.LocalWeaponStats : null;
+        if (build.HasUsableWeapon && UnarmedRules.IsSkill(skill.SkillId)) return OffenseBreakdown.Empty;
+        var weapon = UnarmedRules.Source(skill.SkillId, build.Weapon);
+        var local = tags.HasFlag(SkillTag.Attack) && !UnarmedRules.IsSkill(skill.SkillId) ? build.LocalWeaponStats : null;
         int Average(LocalDamageRange? range) => range is { } value ? (value.Minimum + value.Maximum) / 2 : 0;
         var added = new AddedWeaponDamage(Average(local?.Fire), Average(local?.Cold), Average(local?.Lightning), Average(local?.Void));
         var spellRange = SpellHitRules.DamageRange(skill, configuration.Level);
         int raw = spell ? (spellRange.Minimum + spellRange.Maximum) / 2 :
-            CombatSkillRules.BaseDamage(skill, tags, build.Weapon, build.AddedPhysicalDamage,
-                MasteryDamageRules.ExpectedPhysicalRoll(build.Weapon.MinimumPhysicalDamage, build.Weapon.MaximumPhysicalDamage,
+            CombatSkillRules.BaseDamage(skill, tags, weapon, build.AddedPhysicalDamage,
+                MasteryDamageRules.ExpectedPhysicalRoll(weapon.MinimumPhysicalDamage, weapon.MaximumPhysicalDamage,
                     MasteryRuntime.Has(passive, "物理", 5)));
         var increases = CombatSkillRules.OffensiveIncreases(build, tags, skill.Role == SkillRole.DamageOverTime);
         int accuracy = build.Sheet.Accuracy(build.FlatAccuracy).Value;
         int hitChance = build.AlwaysHit || spell ? 10_000 : DamageRules.HitChance(accuracy, 20, false).Value;
         var criticalSupport = configuration.Supports.HasFlag(SkillSupport.CriticalStrikes) ? CombatSkillRules.SupportLink(configuration, SkillSupport.CriticalStrikes) : null;
         int criticalChance = build.CannotCrit || MasteryRuntime.CannotCrit(passive) || skill.Role == SkillRole.DamageOverTime ? 0 :
-            CombatRules.CriticalChance((spell ? SpellHitRules.BaseCriticalChance(skill.SkillId, 1_000, configuration.Quality) : build.Weapon.CriticalChanceBasisPoints) +
+            CombatRules.CriticalChance((spell ? SpellHitRules.BaseCriticalChance(skill.SkillId, 1_000, configuration.Quality) : weapon.CriticalChanceBasisPoints + UnarmedRules.CriticalBonus(configuration)) +
                 (criticalSupport is null ? 0 : CombatSkillRules.SupportValue(configuration, SkillSupport.CriticalStrikes) * 100), build.IncreasedCriticalChanceBasisPoints);
         int criticalMultiplier = build.CriticalMultiplierBasisPoints + (criticalSupport is null ? 0 :
             ActiveSkillCatalog.Interpolate(1_500, 3_000, criticalSupport.Level, false) + criticalSupport.Quality * 50);
@@ -148,7 +151,7 @@ public static class BuildSummaryRules
         int criticalHit = Packet(armor, increases, true, criticalMultiplier).Total;
         long expected = ((long)hit * (10_000 - criticalChance) + (long)criticalHit * criticalChance) / 10_000;
         expected = expected * hitChance / 10_000;
-        int frequency = CombatSkillRules.ActionFrequencyMilliPerSecond(build, skill.CastTimeTicks, skill.CooldownTicks, tags);
+        int frequency = CombatSkillRules.ActionFrequencyMilliPerSecond(build, skill.CastTimeTicks, skill.CooldownTicks, tags, skill.AdditionalAttackSpeedBasisPoints);
         long dps = expected * frequency / 1_000;
         int baseTotal = Packet(0, null, false).Total;
         int increasedTotal = Packet(0, increases, false).Total;
@@ -157,9 +160,9 @@ public static class BuildSummaryRules
         int increased = baseTotal == 0 ? 0 : (int)Math.Clamp((long)increasedTotal * 10_000 / baseTotal - 10_000, int.MinValue, int.MaxValue);
         int more = increasedTotal == 0 ? 0 : (int)Math.Clamp((long)scaledTotal * 100_000_000 /
             Math.Max(1, (long)increasedTotal * baseMultiplier) - 10_000, int.MinValue, int.MaxValue);
-        int minimum = spell ? spellRange.Minimum : ScaleToInt((long)build.Weapon.MinimumPhysicalDamage + build.AddedPhysicalDamage +
+        int minimum = spell ? spellRange.Minimum : ScaleToInt((long)weapon.MinimumPhysicalDamage + build.AddedPhysicalDamage +
             (local?.Fire.Minimum ?? 0) + (local?.Cold.Minimum ?? 0) + (local?.Lightning.Minimum ?? 0) + (local?.Void.Minimum ?? 0), baseMultiplier);
-        int maximum = spell ? spellRange.Maximum : ScaleToInt((long)build.Weapon.MaximumPhysicalDamage + build.AddedPhysicalDamage +
+        int maximum = spell ? spellRange.Maximum : ScaleToInt((long)weapon.MaximumPhysicalDamage + build.AddedPhysicalDamage +
             (local?.Fire.Maximum ?? 0) + (local?.Cold.Maximum ?? 0) + (local?.Lightning.Maximum ?? 0) + (local?.Void.Maximum ?? 0), baseMultiplier);
         return new((int)Math.Clamp(dps, 0, int.MaxValue), Math.Max(1, minimum), Math.Max(1, maximum), increased, more,
             spell, frequency, accuracy, hitChance, criticalChance, criticalMultiplier);

@@ -122,7 +122,8 @@ public static class CharacterBuildAssembler
         {
             Armor = checked(defense.Armor + (armorHybrid ? physique / 100 * 200 : 0)),
         };
-        int evasionIncrease = checked(item.IncreasedEvasionBasisPoints + advanced.IncreasedEvasionBasisPoints);
+        int evasionIncrease = checked(item.IncreasedEvasionBasisPoints + advanced.IncreasedEvasionBasisPoints +
+            (Skills.UnarmedRules.Has(ascendancy, "unarmed") ? 2_000 : 0));
         if (advanced.IronReflexes && !MasteryRuntime.Has(advanced, "护甲", 1))
         {
             int converted = checked((defense.Evasion + attributes.Dexterity) * (10_000 + evasionIncrease) / 10_000);

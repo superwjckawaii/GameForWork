@@ -118,7 +118,7 @@ public static class ArchetypeSkillDefinitions
         A(BaseClass.Monk, "skyquake_palm", "震空掌", SkillMechanic.Combo, SkillTag.Attack | SkillTag.Melee | SkillTag.Area,
             AttackHit | SkillCapability.Melee | SkillCapability.Area, SkillRole.Clear, SkillDamageType.Physical, SkillShape.Cone, 12, 3_500, 2, 20, 13_000, "掌风震击前方敌人，连击层数提高范围。", Ailment.Stun, 4_000),
         A(BaseClass.Monk, "gale_kick", "追风踢", SkillMechanic.Combo, SkillTag.Attack | SkillTag.Melee | SkillTag.Movement,
-            AttackHit | SkillCapability.Melee | SkillCapability.Movement, SkillRole.Movement, SkillDamageType.Physical, SkillShape.MovementCircle, 10, 5_000, 1, 20, 11_000, "追向远处目标并维持连击。"),
+            AttackHit | SkillCapability.Melee | SkillCapability.Movement, SkillRole.Movement, SkillDamageType.Physical, SkillShape.Single, 10, 5_000, 1, 20, 11_000, "追向远处目标并维持连击。"),
         A(BaseClass.Monk, "yin_yang_stance", "阴阳架势", SkillMechanic.Stance, SkillTag.Attack | SkillTag.Buff | SkillTag.Duration,
             SkillCapability.Attack | SkillCapability.Duration, SkillRole.Reservation, SkillDamageType.None, SkillShape.Self, 0, 1_500, 1, 8, 0, "在进攻阳式与防守阴式间切换。"),
         A(BaseClass.Monk, "tenfold_finisher", "十方终式", SkillMechanic.Finisher, SkillTag.Attack | SkillTag.Melee | SkillTag.Area,

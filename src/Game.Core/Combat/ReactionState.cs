@@ -8,7 +8,7 @@ namespace GameForWork.Core.Combat;
 public sealed record PendingAreaBurst(GameForWork.Core.Spatial.Point Origin, int BaseDamage, SkillDamageType Type, int Radius, string Detail);
 
 public sealed record PendingReaction(string SkillId, string TargetId, int Multiplier = 10_000,
-    ResolvedSkill? Resolved = null, int IncreasedDamage = 0, bool RecoverLife = false, bool PayCost = false);
+    ResolvedSkill? Resolved = null, int IncreasedDamage = 0, bool RecoverLife = false, bool PayCost = false, SkillConfiguration? Configuration = null);
 
 /// <summary>Sources enqueue after their result is known; reactions never enqueue further reactions.</summary>
 public sealed class ReactionState

@@ -64,6 +64,22 @@ public sealed partial class SpatialCombatRunner
             "Lightning" or "闪电" => SkillDamageType.Lightning,
             _ => SkillDamageType.Fire,
         };
+    private static void ScheduleUnarmedCounter(NodeCombatRequest request, string target, int tick, bool attack)
+    {
+        if (request.Unarmed?.Avoided(tick, attack, !request.Build.HasUsableWeapon) != true) return;
+        var config = new SkillConfiguration("archetypes.skill.chain_fists", SkillSupport.None);
+        var skill = CombatSkillRules.Resolve(config, request.Build.Sheet.MaximumLife().Value, request.Build.PassiveProfile) with
+        {
+            BaseDamageBasisPoints = 25_000,
+            ManaCost = 0,
+            LifeCost = 0,
+            CastTimeTicks = 1,
+            Role = SkillRole.Counter,
+            AlwaysHit = true,
+            AdditionalTags = SkillTag.Counter
+        };
+        request.Reactions!.Enqueue(new(skill.SkillId, target, Resolved: skill, Configuration: config));
+    }
     private static void ResolveReactions(NodeCombatRequest request, IReadOnlyList<EnemyUnit> enemies,
         ResourceState hero, Point origin, Pcg32 random, int tick, ICollection<SpatialEvent> events,
         IList<PendingProjectile> projectiles, IList<PersistentArea> areas)
@@ -76,7 +92,7 @@ public sealed partial class SpatialCombatRunner
                 request.Reactions.Enqueue(new(id, replay.Target, replay.Multiplier));
         foreach (var reaction in request.Reactions!.Drain())
         {
-            if (!hero.IsAlive || ReactionConfiguration(request, reaction.SkillId) is not { } config) continue;
+            if (!hero.IsAlive || (reaction.Configuration ?? ReactionConfiguration(request, reaction.SkillId)) is not { } config) continue;
             var skill = reaction.Resolved ?? CombatSkillRules.Resolve(config, hero.MaximumLife, request.Build.PassiveProfile);
             if (reaction.PayCost)
             {

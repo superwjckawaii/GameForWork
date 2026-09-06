@@ -189,7 +189,7 @@ public sealed record NodeCombatRequest(
     Combat.ReactionState? Reactions = null, Combat.ChannelCostState? ChannelCosts = null,
     EquipmentOffenseSnapshot? OffenseSnapshot = null, Combat.RuneFieldState? RuneFields = null,
     int? ActionMultiplierSnapshot = null, int? SpellEnergyIncreaseSnapshot = null, Combat.TeamProtectionState? TeamProtection = null,
-    int? ResourceDamageMultiplierSnapshot = null, int? ArmorSnapshot = null);
+    int? ResourceDamageMultiplierSnapshot = null, int? ArmorSnapshot = null, Combat.UnarmedCombatState? Unarmed = null);
 
 public sealed record NodeCombatResult(
     BattleOutcome Outcome,
@@ -255,8 +255,13 @@ public sealed partial class SpatialCombatRunner
         foreach (VirtueViceKind kind in AscendancyDefinitions.PermanentVirtueVice(ascendancy))
             maxima[kind] = maxima.GetValueOrDefault(kind) + 1;
         var virtueVice = request.VirtueVice ?? new VirtueViceState(
-            maxima, held);
-        request = request with { AscendancyRuntime = ascendancyRuntime, VirtueVice = virtueVice };
+            maxima, held, UnarmedRules.Has(ascendancy, "stance") ? new Dictionary<VirtueViceKind, int> { [VirtueViceKind.Mercy] = 5_000 } : null);
+        request = request with
+        {
+            AscendancyRuntime = ascendancyRuntime,
+            VirtueVice = virtueVice,
+            Unarmed = new Combat.UnarmedCombatState(ascendancy, request.Build.ActiveSkills?.Any(skill => skill.SkillId == "archetypes.skill.chain_fists") == true)
+        };
         Point heroPosition = new(6_000, 22_000);
         auras.SourcePosition = () => heroPosition;
         var flasks = request.FlaskState ?? new Combat.FlaskRack(request.Build);
@@ -418,6 +423,8 @@ public sealed partial class SpatialCombatRunner
                         Math.Max(1, request.Build.MovementSpeedBasisPoints * 300 / 10_000));
                 }
             }
+            if (heroPosition != beforeMovement)
+                request.Unarmed!.Moved((int)Math.Sqrt(Point.DistanceSquared(beforeMovement, heroPosition)), tick);
             const string instantSong = "archetypes.skill.soul_warsong";
             if (request.Buffs!.Instant(instantSong) && skillCatalogSkills.TryGetValue(instantSong, out var song) &&
                 tick >= skillCatalogReadyTicks[instantSong] && !TriggerSupported(skills[instantSong]) &&
@@ -432,7 +439,7 @@ public sealed partial class SpatialCombatRunner
             }
             if (request.Guard!.TryOverload(hero, tick))
                 events.Add(Event(tick, SpatialEventKind.Ascendancy, "hero", "hero", 0, heroPosition, heroPosition, "spellarmor-overload|duration:6000"));
-            TeamBuild buffedBuild = request.Guard.ApplyBonuses(request.Actions!.ApplyPhantomBonuses(request.Buffs!.Apply(originalBuild, tick), tick), hero, tick);
+            TeamBuild buffedBuild = request.Guard.ApplyBonuses(request.Actions!.ApplyPhantomBonuses(request.Buffs!.Apply(request.Unarmed!.Apply(originalBuild, tick, virtueVice.Layers(VirtueViceKind.Mercy)), tick), tick), hero, tick);
             request = request with
             {
                 Build = buffedBuild with
@@ -531,8 +538,8 @@ public sealed partial class SpatialCombatRunner
                         SkillTarget(candidate)!, enemies, SkillDistance(candidate)))
                     .OrderBy(candidate => skills[candidate!].Priority)
                     .FirstOrDefault();
-                string? skillCatalogChosen = skillCatalogSkills.Values
-                    .Where(skill => !request.Buffs!.Instant(skill.SkillId) && army.CanUse(skill.SkillId) && request.Buffs.CanUse(skill.SkillId, tick) &&
+                string? skillCatalogChosen = skillCatalogSkills.Values.Select(skill => request.Unarmed!.Resolve(skill, tick, virtueVice.Layers(VirtueViceKind.Mercy)))
+                    .Where(skill => (!UnarmedRules.IsSkill(skill.SkillId) || !request.Build.HasUsableWeapon) && !request.Buffs!.Instant(skill.SkillId) && army.CanUse(skill.SkillId) && request.Buffs.CanUse(skills[skill.SkillId], tick) &&
                                     (skill.Role != SkillRole.Reservation || Combat.CombatBuffState.IsSkill(skill.SkillId)) && skill.Role != SkillRole.Counter &&
                                     !TriggerSupported(skills[skill.SkillId]) &&
                                     (skill.SkillId != Combat.ReactionState.Overload || request.Guard!.ArmorEnergy > 0) &&
@@ -590,15 +597,16 @@ public sealed partial class SpatialCombatRunner
                 }
                 else
                 {
-                    if (chosen is not null && skillCatalogSkills.TryGetValue(chosen, out ResolvedSkill? skillCatalogSkill) &&
-                        TryPayEquipmentCost(request, hero, skillCatalogSkill))
+                    ResolvedSkill? selectedCatalogSkill = chosen is not null && skillCatalogSkills.TryGetValue(chosen, out var template)
+                        ? request.Unarmed!.Resolve(template, tick, virtueVice.Layers(VirtueViceKind.Mercy)) : null;
+                    if (chosen is not null && selectedCatalogSkill is { } skillCatalogSkill && TryPayEquipmentCost(request, hero, skillCatalogSkill))
                     {
                         SkillTag skillCatalogTags = SkillDefinitions.Get(skillCatalogSkill.SkillId).Tags;
                         int useCount = 1;
                         if (skillCatalogTags.HasFlag(SkillTag.Attack))
                         {
                             int frequency = CombatSkillRules.ActionFrequencyMilliPerSecond(request.Build,
-                                skillCatalogSkill.CastTimeTicks, skillCatalogSkill.CooldownTicks, skillCatalogTags);
+                                skillCatalogSkill.CastTimeTicks, skillCatalogSkill.CooldownTicks, skillCatalogTags, skillCatalogSkill.AdditionalAttackSpeedBasisPoints);
                             int carry = skillCatalogAttackFrequencyCarry.GetValueOrDefault(skillCatalogSkill.SkillId);
                             useCount = CombatRules.AttacksForScheduledSimulationTick(frequency, ref carry);
                             skillCatalogAttackFrequencyCarry[skillCatalogSkill.SkillId] = carry;
@@ -619,8 +627,8 @@ public sealed partial class SpatialCombatRunner
                         }
                         skillCatalogReadyTicks[chosen] = tick + Math.Max(1, skillCatalogSkill.CooldownTicks * 10_000 /
                             (10_000 + request.Buffs.CooldownRecovery(chosen)));
-                        heroNextActionTick = tick + (skillCatalogTags.HasFlag(SkillTag.Channelling) ? 5 : ActionDelay(request.Build, skillCatalogSkill.CastTimeTicks,
-                            skillCatalogTags));
+                        heroNextActionTick = tick + (skillCatalogTags.HasFlag(SkillTag.Channelling) ? 5 : CombatSkillRules.ActionDelay(request.Build, skillCatalogSkill.CastTimeTicks,
+                            skillCatalogTags, skillCatalogSkill.AdditionalAttackSpeedBasisPoints));
                         if (request.Buffs.Instant(chosen)) heroNextActionTick = tick;
                     }
                     else if (chosen == SkillIds.SeismicCharge && TryPayEquipmentCost(request, hero, charge!))
@@ -629,6 +637,7 @@ public sealed partial class SpatialCombatRunner
                         Point beforeCharge = heroPosition;
                         heroPosition = Point.MoveToward(heroPosition, target.Position, Math.Max(1, chargeSkill.RangeRaw - 900));
                         ascendancyRuntime.Moved((int)Math.Sqrt(Point.DistanceSquared(beforeCharge, heroPosition)));
+                        request.Unarmed!.Moved((int)Math.Sqrt(Point.DistanceSquared(beforeCharge, heroPosition)), tick, chargeSkill.SkillId);
                         if (beforeCharge != heroPosition) equipment.UsedMovementSkill(tick);
                         foreach (EnemyUnit enemy in enemies.Where(enemy => enemy.Life > 0 && InRange(heroPosition, enemy.Position, chargeSkill.AreaRadiusRaw)))
                         {
@@ -754,6 +763,7 @@ public sealed partial class SpatialCombatRunner
                         if (next != heroPosition)
                         {
                             ascendancyRuntime.Moved((int)Math.Sqrt(Point.DistanceSquared(heroPosition, next)));
+                            request.Unarmed!.Moved((int)Math.Sqrt(Point.DistanceSquared(heroPosition, next)), tick);
                             heroPosition = next;
                             if ((tick & 3) == 0)
                             {
@@ -984,6 +994,7 @@ public sealed partial class SpatialCombatRunner
             Point beforeMove = heroPosition;
             heroPosition = Point.MoveToward(heroPosition, target.Position, Math.Max(1, skill.RangeRaw - (skill.SkillId == SkillIds.FlameStep ? 0 : 900)));
             request.AscendancyRuntime?.Moved((int)Math.Sqrt(Point.DistanceSquared(beforeMove, heroPosition)));
+            request.Unarmed!.Moved((int)Math.Sqrt(Point.DistanceSquared(beforeMove, heroPosition)), tick, skill.SkillId);
             if (beforeMove != heroPosition) request.EquipmentRuntime?.UsedMovementSkill(tick);
             events.Add(Event(tick, SpatialEventKind.HeroMoved, "hero", target.EntityId, 0,
                 heroPosition, target.Position, $"skill:{skill.SkillId}"));
@@ -1143,18 +1154,21 @@ public sealed partial class SpatialCombatRunner
         int chainIndex = 0, int additionalBaseDamage = 0)
     {
         CombatRuntime runtime = request.AscendancyRuntime ?? new CombatRuntime(CombatProfile.Empty);
-        SkillTag tags = SkillDefinitions.Get(skill.SkillId).Tags;
+        SkillTag tags = SkillDefinitions.Get(skill.SkillId).Tags | skill.AdditionalTags;
         EquipmentCombatRuntime? equipment = request.EquipmentRuntime;
         if (tags.HasFlag(SkillTag.Area) && skill.Role != SkillRole.DamageOverTime &&
             request.Actions?.TryAreaHit(equipment!.ActionId, enemy.EntityId, tick,
                 MasteryRuntime.Has(request.Build.PassiveProfile ?? PassiveModifiers.Empty, "范围_距离", 4)) == false) return null;
         if (skill.Role != SkillRole.DamageOverTime) multiplier = ScaleCombatValue(multiplier,
             request.ResourceDamageMultiplierSnapshot ?? MasteryRuntime.OffensiveResourceMultiplier(request.Build.PassiveProfile ?? PassiveModifiers.Empty, hero));
+        var unarmedBonus = request.Unarmed?.Begin(equipment!.ActionId, configuration, request.Build, enemy.EntityId, tick, equipment.CaptureAction().Triggered) ?? new Combat.UnarmedActionBonus(10_000, 0, false, 0);
+        multiplier = ScaleCombatValue(multiplier, unarmedBonus.Multiplier);
+        additionalIncreasedBasisPoints += unarmedBonus.IncreasedDamage + (tags.HasFlag(SkillTag.Counter) ? request.Unarmed?.CounterIncrease(tick) ?? 0 : 0);
         request.Actions?.Begin(equipment!.ActionId, skill, request.Build, tick, equipment.CaptureAction().Triggered);
         if (tags.HasFlag(SkillTag.Spell)) additionalIncreasedBasisPoints += request.SpellEnergyIncreaseSnapshot ??
             (equipment!.CaptureAction().Triggered ? request.Guard?.SpellDamageIncrease ?? 0 : request.Reactions?.SpellIncrease(equipment.ActionId) ?? 0);
         bool hunted = enemy.Rarity is EnemyRarity.Rare or EnemyRarity.Boss && request.Auras?.HunterAlwaysHits == true;
-        bool missed = tags.HasFlag(SkillTag.Attack) && !request.Build.AlwaysHit && !hunted && random.NextBasisPoints() >=
+        bool missed = tags.HasFlag(SkillTag.Attack) && !skill.AlwaysHit && !request.Build.AlwaysHit && !hunted && random.NextBasisPoints() >=
             DamageRules.HitChance(request.Build.Sheet.Accuracy(request.Build.FlatAccuracy).Value, enemy.Scaled.Evasion, false).Value;
         if (missed)
         {
@@ -1176,10 +1190,11 @@ public sealed partial class SpatialCombatRunner
             new EnemyState(enemy.ArmorBreakStacks, tick < enemy.StunnedUntilTick));
         PassiveModifiers profile = request.Build.PassiveProfile ?? PassiveModifiers.Empty;
         bool luckyPhysical = MasteryRuntime.Has(profile, "物理", 5);
-        int weaponRoll = MasteryDamageRules.RollPhysical(request.Build.Weapon.MinimumPhysicalDamage,
-            request.Build.Weapon.MaximumPhysicalDamage, random, luckyPhysical && tags.HasFlag(SkillTag.Attack));
+        WeaponProfile damageSource = UnarmedRules.Source(skill.SkillId, request.Build.Weapon);
+        int weaponRoll = MasteryDamageRules.RollPhysical(damageSource.MinimumPhysicalDamage,
+            damageSource.MaximumPhysicalDamage, random, luckyPhysical && tags.HasFlag(SkillTag.Attack));
         int raw = tags.HasFlag(SkillTag.Spell) ? SpellHitRules.Roll(skill, configuration.Level, random) :
-            CombatSkillRules.BaseDamage(skill, tags, request.Build.Weapon, request.Build.AddedPhysicalDamage, weaponRoll);
+            CombatSkillRules.BaseDamage(skill, tags, damageSource, request.Build.AddedPhysicalDamage, weaponRoll);
         if (luckyPhysical && tags.HasFlag(SkillTag.Spell) && skill.DamageType == SkillDamageType.Physical)
             raw = Math.Max(raw, SpellHitRules.Roll(skill, configuration.Level, random));
         raw = (int)Math.Min(int.MaxValue, (long)raw + Math.Max(0, additionalBaseDamage));
@@ -1187,17 +1202,17 @@ public sealed partial class SpatialCombatRunner
             multiplier = ScaleCombatValue(multiplier, 10_000 + enemy.Ailments.ConsumeStacks(Ailment.Poison, 10 + configuration.Quality / 10, tick) * 1_200);
         if (skill.SkillId == "archetypes.skill.forbidden_collapse")
             multiplier = ScaleCombatValue(multiplier, 10_000 + enemy.Ailments.ConsumeStacks(Ailment.Wither, 10, tick) * 2_000);
-        AddedWeaponDamage addedWeapon = tags.HasFlag(SkillTag.Attack) && skill.Role != SkillRole.DamageOverTime &&
+        AddedWeaponDamage addedWeapon = tags.HasFlag(SkillTag.Attack) && !UnarmedRules.IsSkill(skill.SkillId) && skill.Role != SkillRole.DamageOverTime &&
                                            request.Build.LocalWeaponStats is { } localWeapon
             ? new(Roll(localWeapon.Fire), Roll(localWeapon.Cold), Roll(localWeapon.Lightning), Roll(localWeapon.Void))
             : default;
         var criticalSupport = configuration.Supports.HasFlag(SkillSupport.CriticalStrikes) ? CombatSkillRules.SupportLink(configuration, SkillSupport.CriticalStrikes) : null;
         int criticalChance = request.Build.CannotCrit ? 0 : CombatRules.CriticalChance(
             (tags.HasFlag(SkillTag.Spell) ? SpellHitRules.BaseCriticalChance(skill.SkillId, distanceRaw, configuration.Quality) :
-                request.Build.Weapon.CriticalChanceBasisPoints) + (equipment?.BaseCriticalBonus(tags, distanceRaw) ?? 0) +
+                damageSource.CriticalChanceBasisPoints + UnarmedRules.CriticalBonus(configuration)) + (equipment?.BaseCriticalBonus(tags, distanceRaw) ?? 0) +
                 (criticalSupport is null ? 0 : CombatSkillRules.SupportValue(configuration, SkillSupport.CriticalStrikes) * 100), request.Build.IncreasedCriticalChanceBasisPoints);
         bool critical = !request.Build.CannotCrit && skill.Role != SkillRole.DamageOverTime && !MasteryRuntime.CannotCrit(profile) &&
-                        (equipment?.ForceCritical(tags) == true || random.NextUInt() % 10_000 < Math.Clamp(criticalChance, 0, 10_000));
+                        (unarmedBonus.ForceCritical || equipment?.ForceCritical(tags) == true || random.NextUInt() % 10_000 < Math.Clamp(criticalChance, 0, 10_000));
         int criticalMultiplier = critical ? ScaleCombatValue(request.Build.CriticalMultiplierBasisPoints +
             (criticalSupport is null ? 0 : ActiveSkillCatalog.Interpolate(1_500, 3_000, criticalSupport.Level, false) + criticalSupport.Quality * 50) +
             (hunted ? request.Auras?.HunterCriticalMultiplier ?? 0 : 0), equipment?.ForceCritical(tags) == true ? 15_000 : 10_000) : 10_000;
@@ -1266,7 +1281,7 @@ public sealed partial class SpatialCombatRunner
         IReadOnlyList<DamageBranch>? ailmentSource = null)
     {
         CombatRuntime runtime = request.AscendancyRuntime ?? new CombatRuntime(CombatProfile.Empty);
-        SkillTag tags = SkillDefinitions.Get(skill.SkillId).Tags;
+        SkillTag tags = SkillDefinitions.Get(skill.SkillId).Tags | skill.AdditionalTags;
         EquipmentCombatRuntime? equipment = request.EquipmentRuntime;
         PassiveModifiers profile = request.Build.PassiveProfile ?? PassiveModifiers.Empty;
         int value = damage.Total;
@@ -1274,6 +1289,8 @@ public sealed partial class SpatialCombatRunner
         enemy.Life = Math.Max(0, enemy.Life - value);
         value = beforeShieldLink - enemy.Life;
         bool triggered = equipment?.CaptureAction().Triggered == true;
+        if (value > 0 && !request.Build.HasUsableWeapon && request.Unarmed?.Hit(equipment!.ActionId, configuration, tick, triggered) == true)
+            events.Add(Event(tick, SpatialEventKind.SkillEffect, "hero", enemy.EntityId, request.Unarmed.Combo(tick), source, enemy.Position, "unarmed-combo"));
         if (!triggered && value > 0 && damage.Physical > 0 && tags.HasFlag(SkillTag.Attack) && tags.HasFlag(SkillTag.Melee)) equipment?.PhysicalMeleeHit?.Invoke();
         if (value > 0 && equipment?.CaptureAction().Triggered != true && skill.Role != SkillRole.DamageOverTime &&
             enemy.Rarity is EnemyRarity.Rare or EnemyRarity.Boss && request.VirtueVice is { } oathState)
@@ -1310,7 +1327,7 @@ public sealed partial class SpatialCombatRunner
         }
         events.Add(Event(tick, eventKind, "hero", enemy.EntityId, value,
             source, enemy.Position,
-            $"skill:{skill.SkillId}|damage:{damage.Compact}|supports:{(ulong)configuration.Supports}{(critical ? "|critical" : string.Empty)}"));
+            $"skill:{skill.SkillId}|damage:{damage.Compact}|supports:{(ulong)configuration.Supports}{(skill.AdditionalTags.HasFlag(SkillTag.Counter) ? "|counter" : string.Empty)}{(critical ? "|critical" : string.Empty)}"));
         if (enemy.Life == 0)
             events.Add(Event(tick, SpatialEventKind.EnemyDefeated, "hero", enemy.EntityId, 0,
                 source, enemy.Position, enemy.Profile.StableId));
@@ -1536,6 +1553,7 @@ public sealed partial class SpatialCombatRunner
             {
                 request.EquipmentRuntime?.Evaded();
                 hero.ObserveEvade(tick);
+                ScheduleUnarmedCounter(request, enemy.EntityId, tick, true);
             }
             if (damage > 0)
             {
@@ -1580,6 +1598,7 @@ public sealed partial class SpatialCombatRunner
             if (blocked)
             {
                 request.EquipmentRuntime?.Blocked(tick, spell);
+                ScheduleUnarmedCounter(request, enemy.EntityId, tick, !spell);
                 damage = spell && ascendancy.Has(WarriorNodeIds.BastionSpellBlockCore)
                     ? Math.Max(0, damage * ascendancy.IncomingHitMultiplier(true, true, tick) / 10_000) : 0;
                 events.Add(Event(tick, SpatialEventKind.Block, "hero", enemy.EntityId, 0,
@@ -1625,7 +1644,7 @@ public sealed partial class SpatialCombatRunner
                     damage = damage * MasteryRuntime.IncomingAttackMultiplier(
                         request.Build.PassiveProfile ?? PassiveModifiers.Empty, request.Build.Weapon) / 10_000;
                 damage = ScaleCombatValue(damage, request.EquipmentRuntime?.IncomingMultiplier(hero.Sheet, activeSkill.DamageType, true, tick) ?? 10_000);
-                damage = ScaleCombatValue(damage, request.Buffs?.IncomingHitMultiplier(!request.Build.HasUsableWeapon) ?? 10_000);
+                damage = ScaleCombatValue(damage, request.Buffs?.IncomingHitMultiplier(!request.Build.HasUsableWeapon, tick) ?? 10_000);
                 damage = ScaleCombatValue(damage, MasteryRuntime.IncomingResourceMultiplier(request.Build.PassiveProfile ?? PassiveModifiers.Empty, hero, true));
                 damage = ScaleCombatValue(damage, hero.RecentEvadeHitMultiplier(tick));
                 damage = request.Guard?.Absorb(damage, activeSkill.DamageType, tick) ?? damage;
@@ -1779,6 +1798,8 @@ public sealed partial class SpatialCombatRunner
     {
         ResolvedSkill result = WarriorAscendancyRules.ApplySkillCost(
             skill, SkillDefinitions.Get(configuration.SkillId).Tags, maximumLife, profile);
+        if (result.AdditionalTags.HasFlag(SkillTag.Counter) && UnarmedRules.Has(profile, "counter"))
+            result = result with { CooldownTicks = Math.Max(1, (int)Math.Ceiling(result.CooldownTicks * 10_000d / 12_000)) };
         if (result.Role == SkillRole.Guard && profile.Has(WarriorNodeIds.BastionGuardSmall))
             result = result with { CooldownTicks = Math.Max(1, result.CooldownTicks * 10_000 / 13_000) };
         return result;

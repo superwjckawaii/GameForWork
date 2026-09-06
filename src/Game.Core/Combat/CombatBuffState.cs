@@ -19,7 +19,8 @@ public sealed class CombatBuffState(CombatProfile? profile = null)
     private readonly Dictionary<string, CombatBuff> _active = [];
     private SkillConfiguration? _stance;
     private SkillConfiguration? _blessingConfiguration;
-    private int _stanceReady;
+    private int _stanceReady, _overlapUntil, _overlapReady;
+    private SkillConfiguration? _previousStance;
     private int _warSongLayers, _warSongUntil;
     private bool Cantor(string branch, string size = "small") => profile?.Has($"core.ascendancy.spirit_cantor.{branch}.{size}") == true;
     public int WarSongMore(int tick) => tick < _warSongUntil ? _warSongLayers * 1_500 : 0;
@@ -29,6 +30,17 @@ public sealed class CombatBuffState(CombatProfile? profile = null)
         "archetypes.skill.yin_yang_stance" or "archetypes.skill.king_soul_command";
     public bool CanUse(string id, int tick) => id == "archetypes.skill.soul_warsong" || (id == "archetypes.skill.yin_yang_stance" ? _stance is null && tick >= _stanceReady :
         !_active.TryGetValue(id, out var buff) || tick >= buff.Expires);
+    public bool CanUse(SkillConfiguration skill, int tick)
+    {
+        if (skill.SkillId != "archetypes.skill.yin_yang_stance") return CanUse(skill.SkillId, tick);
+        if (tick < _stanceReady) return false;
+        if (_stance is null) return true;
+        if (skill.Mode.Length > 0) return Yin(skill) != Yin(_stance);
+        return UnarmedRules.Has(profile, "stance", "core") && tick >= _overlapReady;
+    }
+    private static bool Yin(SkillConfiguration skill) => skill.Mode is "Yin" or "阴" or "阴式";
+    private SkillConfiguration? Stance(bool yin, int tick) => _stance is { } current && Yin(current) == yin ? current :
+        tick < _overlapUntil && _previousStance is { } previous && Yin(previous) == yin ? previous : null;
     public bool Activate(SkillConfiguration skill, bool unarmed, int tick, string target = "")
     {
         string id = skill.SkillId;
@@ -36,6 +48,13 @@ public sealed class CombatBuffState(CombatProfile? profile = null)
         if (id == "archetypes.skill.yin_yang_stance")
         {
             if (!unarmed || tick < _stanceReady) return false;
+            if (skill.Mode.Length == 0) skill = skill with { Mode = _stance is null || Yin(_stance) ? "Yang" : "Yin" };
+            if (_stance is not null && Yin(_stance) == Yin(skill)) return false;
+            if (_stance is not null && UnarmedRules.Has(profile, "stance", "core") && tick >= _overlapReady)
+            {
+                _previousStance = _stance;
+                _overlapUntil = _overlapReady = tick + 60;
+            }
             _stance = skill;
             _stanceReady = tick + (int)Math.Ceiling((16 + SupportValue(skill, SupportMechanic.StanceAmplify, 20, 10)) *
                 10_000d / (10_000 + SupportQuality(skill, SupportMechanic.StanceAmplify) * 100));
@@ -73,8 +92,13 @@ public sealed class CombatBuffState(CombatProfile? profile = null)
         }
         return new(damage, speed, movement, resistance, WarSongMore(tick));
     }
-    public int IncomingHitMultiplier(bool unarmed) => unarmed && _stance is { Mode: "Yin" or "阴" or "阴式" } stance
-        ? 10_000 - StanceValue(stance, 800, 1_200) : 10_000;
+    public int IncomingHitMultiplier(bool unarmed, int tick = 0) => IncomingDamageMultiplier(unarmed, tick, true);
+    public int IncomingDamageMultiplier(bool unarmed, int tick, bool hit)
+    {
+        if (!unarmed || Stance(true, tick) is not { } stance) return 10_000;
+        int value = hit ? 10_000 - StanceValue(stance, 800, 1_200) : 10_000;
+        return UnarmedRules.Has(profile, "stance") ? CombatRules.ApplyMore(value, [9_000]) : value;
+    }
     public TeamBuild Apply(TeamBuild build, int tick)
     {
         int warSong = WarSongMore(tick);
@@ -116,20 +140,24 @@ public sealed class CombatBuffState(CombatProfile? profile = null)
                 },
             };
         }
-        if (build.HasUsableWeapon || _stance is not { } stance) return build;
-        bool yin = stance.Mode is "Yin" or "阴" or "阴式";
-        if (!yin) return build with
+        if (build.HasUsableWeapon) return build;
+        if (Stance(false, tick) is { } yang) build = build with
         {
-            IncreasedDamageBasisPoints = build.IncreasedDamageBasisPoints + StanceValue(stance, 2_500, 4_500),
-            IncreasedAttackSpeedBasisPoints = build.IncreasedAttackSpeedBasisPoints + StanceValue(stance, 1_200, 2_000)
+            IncreasedDamageBasisPoints = build.IncreasedDamageBasisPoints + StanceValue(yang, 2_500, 4_500) +
+                (UnarmedRules.Has(profile, "stance") ? 2_000 : 0),
+            IncreasedAttackSpeedBasisPoints = build.IncreasedAttackSpeedBasisPoints + StanceValue(yang, 1_200, 2_000)
         };
-        int block = StanceValue(stance, 600, 1_000);
-        return build with
+        if (Stance(true, tick) is { } yin)
         {
-            MoreAttackDamageBasisPoints = CombatRules.CombineMoreBasisPoints(build.MoreAttackDamageBasisPoints, -StanceValue(stance, 2_000, 2_000)),
-            BlockChanceBasisPoints = build.BlockChanceBasisPoints + block,
-            Sheet = build.Sheet with { SpellBlockChanceBasisPoints = build.Sheet.SpellBlockChanceBasisPoints + block }
-        };
+            int block = StanceValue(yin, 600, 1_000);
+            build = build with
+            {
+                MoreAttackDamageBasisPoints = CombatRules.CombineMoreBasisPoints(build.MoreAttackDamageBasisPoints, -StanceValue(yin, 2_000, 2_000)),
+                BlockChanceBasisPoints = build.BlockChanceBasisPoints + block,
+                Sheet = build.Sheet with { SpellBlockChanceBasisPoints = build.Sheet.SpellBlockChanceBasisPoints + block }
+            };
+        }
+        return build;
     }
     private static int StanceValue(SkillConfiguration skill, int one, int maximum) => CombatRules.ApplyIncreased(
         ActiveSkillCatalog.Interpolate(one, maximum, skill.Level, false), skill.Quality * 50 + SupportValue(skill, SupportMechanic.StanceAmplify, 3_000, 5_000));
