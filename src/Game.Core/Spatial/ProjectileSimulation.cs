@@ -63,7 +63,7 @@ public sealed partial class SpatialCombatRunner
             .OrderBy(enemy => enemy != target).ThenBy(enemy => Point.DistanceSquared(origin, enemy.Position))
             .Take(Math.Max(1, skill.ProjectileCount)).ToArray();
         foreach (EnemyUnit enemy in targets) projectiles.Add(new(action, enemy.EntityId, origin, tick)
-            { Destination = ExtendRay(origin, enemy.Position, skill.RangeRaw) });
+        { Destination = ExtendRay(origin, enemy.Position, skill.RangeRaw) });
     }
 
     private static void ResolveProjectiles(IList<PendingProjectile> projectiles,
@@ -114,7 +114,7 @@ public sealed partial class SpatialCombatRunner
                 {
                     foreach (EnemyUnit forkTarget in candidates.Take(skill.ForkCount))
                         projectiles.Add(new PendingProjectile(action, forkTarget.EntityId, target.Position, tick)
-                            { Forked = true, Destination = ExtendRay(target.Position, forkTarget.Position, skill.RangeRaw) });
+                        { Forked = true, Destination = ExtendRay(target.Position, forkTarget.Position, skill.RangeRaw) });
                     projectiles.Remove(projectile);
                     redirected = true; break;
                 }
@@ -202,12 +202,15 @@ public sealed partial class SpatialCombatRunner
             new(origin.XRaw + (int)Math.Round(dx * range / length), origin.YRaw + (int)Math.Round(dy * range / length));
     }
 
-    private static bool OnSegment(Point point, Point start, Point end, int radius)
+    private static bool OnSegment(Point point, Point start, Point end, int radius) =>
+        SegmentDistanceSquared(point, start, end) <= (double)radius * radius;
+
+    private static double SegmentDistanceSquared(Point point, Point start, Point end)
     {
         double dx = end.XRaw - start.XRaw, dy = end.YRaw - start.YRaw;
         double length = dx * dx + dy * dy;
         double t = length == 0 ? 0 : Math.Clamp(((point.XRaw - start.XRaw) * dx + (point.YRaw - start.YRaw) * dy) / length, 0, 1);
         double x = point.XRaw - (start.XRaw + t * dx), y = point.YRaw - (start.YRaw + t * dy);
-        return x * x + y * y <= (double)radius * radius;
+        return x * x + y * y;
     }
 }

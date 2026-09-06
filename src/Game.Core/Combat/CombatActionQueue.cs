@@ -10,7 +10,7 @@ namespace GameForWork.Core.Combat;
 
 public sealed record CombatHitSnapshot(string TargetId, Point Origin, ResolvedSkill Skill, SkillConfiguration Configuration,
     TeamBuild Build, DamagePacket OffensivePacket, IReadOnlyList<DamageBranch> AilmentSource, bool Critical,
-    int AppliedCriticalMultiplier = 10_000, int OffsetMilliseconds = 0);
+    int AppliedCriticalMultiplier = 10_000, int OffsetMilliseconds = 0, int AreaPositionMultiplier = 10_000);
 public sealed record CombatActionSnapshot(string Id, string SkillId, SkillTag Tags, bool Unarmed,
     int StartedMilliseconds, int CompletesMilliseconds, IReadOnlyList<CombatHitSnapshot> Hits);
 public sealed record DeferredCombatCopy(string Id, CombatActionSnapshot Action, int DueMilliseconds,
@@ -48,6 +48,18 @@ public sealed partial class CombatActionQueue(CombatProfile? profile = null)
     private readonly Dictionary<string, string> _channelActions = [];
     public CombatActionSnapshot? LatestAttack { get; private set; }
     public IReadOnlyList<DeferredCombatCopy> Pending => _pending.Concat(_phantoms.SelectMany(phantom => phantom.MemoryReplays)).ToArray();
+    private int _areaHitTick = -1;
+    private readonly Dictionary<(string Action, string Target), int> _areaHits = [];
+    public bool TryAreaHit(string actionId, string targetId, int tick, bool overlapping)
+    {
+        if (_areaHitTick != tick) { _areaHitTick = tick; _areaHits.Clear(); }
+        var key = (actionId, targetId);
+        int count = _areaHits.GetValueOrDefault(key);
+        if (count >= (overlapping ? 2 : 1)) return false;
+        _areaHits[key] = count + 1;
+        return true;
+    }
+
     public void Begin(string id, ResolvedSkill skill, TeamBuild build, int tick, bool triggered)
     {
         SkillTag tags = SkillDefinitions.Get(skill.SkillId).Tags;
@@ -138,7 +150,18 @@ public sealed partial class CombatActionQueue(CombatProfile? profile = null)
         Begin(actionId, hit.Skill, hit.Build, tick, triggered);
         actionId = _channelActions.GetValueOrDefault(actionId, actionId);
         if (!_recording.TryGetValue(actionId, out var action)) return;
-        if (tags.HasFlag(SkillTag.Channelling)) hit = hit with { OffsetMilliseconds = tick * 50 - action.StartedMilliseconds };
+        hit = hit with { OffsetMilliseconds = tick * 50 - action.StartedMilliseconds };
+        if (tags.HasFlag(SkillTag.Area) && (tags & (SkillTag.Duration | SkillTag.Channelling)) == 0 &&
+            MasteryRuntime.Has(hit.Build.PassiveProfile ?? Campaign.Progression.PassiveModifiers.Empty, "范围_距离", 6))
+        {
+            int existing = _pending.FindIndex(copy => copy.Source == "mastery:aftershock" && copy.Action.Id == actionId);
+            if (existing >= 0)
+            {
+                var copy = _pending[existing];
+                _pending[existing] = copy with { Action = copy.Action with { Hits = copy.Action.Hits.Append(hit).ToArray() } };
+            }
+            else Enqueue(action with { Hits = [hit] }, tick * 50 + 400, 4_000, false, "mastery:aftershock");
+        }
         _recording[actionId] = action with { Hits = action.Hits.Append(hit).ToArray() };
     }
     public void CompleteReady(int milliseconds, IReadOnlySet<string> flyingActions, bool hundredReturn, bool alternatingCopy,

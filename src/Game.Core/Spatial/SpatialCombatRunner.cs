@@ -510,15 +510,15 @@ public sealed partial class SpatialCombatRunner
                             SkillDistance(SkillIds.SeismicCharge) > (long)HeavyStrikeRange * HeavyStrikeRange &&
                             SkillDistance(SkillIds.SeismicCharge) <= (long)charge.RangeRaw * charge.RangeRaw && CanPay(request, hero, charge)),
                         Candidate(SkillIds.BloodTideSpin, spin is not null && tick >= spinReadyTick &&
-                            SkillTarget(SkillIds.BloodTideSpin) is not null && NearbyCount(SkillIds.BloodTideSpin, spin.RangeRaw) >= 2 && CanPay(request, hero, spin)),
+                            SkillTarget(SkillIds.BloodTideSpin) is not null && NearbyCount(SkillIds.BloodTideSpin, spin.AreaRadiusRaw) >= 2 && CanPay(request, hero, spin)),
                         Candidate(SkillIds.EarthCleave, cleave is not null && tick >= cleaveReadyTick &&
-                            SkillTarget(SkillIds.EarthCleave) is not null && ConeCount(SkillIds.EarthCleave, cleave.RangeRaw) >= 2 && CanPay(request, hero, cleave)),
+                            SkillTarget(SkillIds.EarthCleave) is not null && ConeCount(SkillIds.EarthCleave, cleave.AreaRadiusRaw) >= 2 && CanPay(request, hero, cleave)),
                         Candidate(SkillIds.SpiritBlade, blade is not null && tick >= bladeReadyTick &&
                             SkillTarget(SkillIds.SpiritBlade) is not null && SkillDistance(SkillIds.SpiritBlade) <= (long)blade.RangeRaw * blade.RangeRaw && CanPay(request, hero, blade)),
                         Candidate(SkillIds.AshJavelin, ashJavelin is not null && tick >= ashJavelinReadyTick &&
                             SkillTarget(SkillIds.AshJavelin) is not null && SkillDistance(SkillIds.AshJavelin) <= (long)ashJavelin.RangeRaw * ashJavelin.RangeRaw && CanPay(request, hero, ashJavelin)),
                         Candidate(SkillIds.EmberNova, emberNova is not null && tick >= emberNovaReadyTick &&
-                            SkillTarget(SkillIds.EmberNova) is not null && NearbyCount(SkillIds.EmberNova, emberNova.RangeRaw) >= 2 && CanPay(request, hero, emberNova)),
+                            SkillTarget(SkillIds.EmberNova) is not null && NearbyCount(SkillIds.EmberNova, emberNova.AreaRadiusRaw) >= 2 && CanPay(request, hero, emberNova)),
                         Candidate(SkillIds.StormBrand, stormBrand is not null && tick >= stormBrandReadyTick &&
                             SkillTarget(SkillIds.StormBrand) is not null &&
                             enemies.Any(enemy => enemy.Life > 0 && InRange(heroPosition, enemy.Position, stormBrand.RangeRaw) &&
@@ -543,7 +543,7 @@ public sealed partial class SpatialCombatRunner
                                     (!skill.RequiresShield || request.Build.HasShield) && tick >= skillCatalogReadyTicks[skill.SkillId] &&
                                     SkillTarget(skill.SkillId) is not null &&
                                     (skill.Shape == SkillShape.Self ||
-                                     SkillDistance(skill.SkillId) <= (long)skill.RangeRaw * skill.RangeRaw) && CanPay(request, hero, skill) &&
+                                     SkillDistance(skill.SkillId) <= (long)AreaRules.EngagementRange(skill) * AreaRules.EngagementRange(skill)) && CanPay(request, hero, skill) &&
                                     AiMatches(skills[skill.SkillId], request, hero, SkillTarget(skill.SkillId)!, enemies, SkillDistance(skill.SkillId)))
                     .OrderBy(skill => skills[skill.SkillId].Priority)
                     .Select(skill => skill.SkillId)
@@ -557,12 +557,12 @@ public sealed partial class SpatialCombatRunner
                     heroTargetId = target.EntityId;
                 }
                 long distance = Point.DistanceSquared(heroPosition, target.Position);
-                int cleaveRange = cleave is null ? 0 : cleave.RangeRaw *
+                int cleaveRange = cleave is null ? 0 : cleave.AreaRadiusRaw *
                     (ascendancyRuntime.MarchReady && ascendancy.Has(WarriorNodeIds.BreakerMarchCore) ? 15_000 : 10_000) / 10_000;
                 EnemyUnit[] cleaveTargets = cleave is null ? [] : enemies.Where(enemy => enemy.Life > 0 &&
                     InCleaveCone(heroPosition, target.Position, enemy.Position, cleaveRange)).ToArray();
                 EnemyUnit[] spinTargets = spin is null ? [] : enemies.Where(enemy => enemy.Life > 0 &&
-                    InRange(heroPosition, enemy.Position, spin.RangeRaw)).ToArray();
+                    InRange(heroPosition, enemy.Position, spin.AreaRadiusRaw)).ToArray();
 
                 if (chosen is null)
                 {
@@ -630,7 +630,7 @@ public sealed partial class SpatialCombatRunner
                         heroPosition = Point.MoveToward(heroPosition, target.Position, Math.Max(1, chargeSkill.RangeRaw - 900));
                         ascendancyRuntime.Moved((int)Math.Sqrt(Point.DistanceSquared(beforeCharge, heroPosition)));
                         if (beforeCharge != heroPosition) equipment.UsedMovementSkill(tick);
-                        foreach (EnemyUnit enemy in enemies.Where(enemy => enemy.Life > 0 && InRange(heroPosition, enemy.Position, 1_800)))
+                        foreach (EnemyUnit enemy in enemies.Where(enemy => enemy.Life > 0 && InRange(heroPosition, enemy.Position, chargeSkill.AreaRadiusRaw)))
                         {
                             int multiplier = bannerMultiplier;
                             ApplyHeroHit(request, enemy, random, tick, multiplier, SpatialEventKind.SeismicCharge,
@@ -697,7 +697,7 @@ public sealed partial class SpatialCombatRunner
                     else if (chosen == SkillIds.EmberNova && TryPayEquipmentCost(request, hero, emberNova!))
                     {
                         ResolvedSkill skill = emberNova!;
-                        foreach (EnemyUnit enemy in enemies.Where(enemy => enemy.Life > 0 && InRange(heroPosition, enemy.Position, skill.RangeRaw)))
+                        foreach (EnemyUnit enemy in enemies.Where(enemy => enemy.Life > 0 && InRange(heroPosition, enemy.Position, skill.AreaRadiusRaw)))
                             ApplyHeroHit(request, enemy, random, tick, bannerMultiplier,
                                 SpatialEventKind.EmberNova, heroPosition, events, 0, hero, skill.LifeLeechBasisPoints);
                         emberNovaReadyTick = tick + skill.CooldownTicks;
@@ -1010,7 +1010,7 @@ public sealed partial class SpatialCombatRunner
             if (skill.SkillId == "archetypes.skill.aegis_pulse")
             {
                 Point center = heroPosition;
-                foreach (var enemy in enemies.Where(enemy => enemy.Life > 0 && InRange(center, enemy.Position, skill.RangeRaw)))
+                foreach (var enemy in enemies.Where(enemy => enemy.Life > 0 && InRange(center, enemy.Position, skill.AreaRadiusRaw)))
                     ResolveHeroHit(request, skill with { Role = SkillRole.Clear }, configuration, enemy, hero, random,
                         tick, center, bannerMultiplier, events, additionalBaseDamage: request.Guard!.LastPaidShield);
             }
@@ -1036,9 +1036,9 @@ public sealed partial class SpatialCombatRunner
         EnemyUnit[] affected = skill.Shape switch
         {
             SkillShape.Circle or SkillShape.MovementCircle or SkillShape.GroundArea => enemies
-                .Where(enemy => enemy.Life > 0 && InRange(origin, enemy.Position, skill.RangeRaw)).ToArray(),
+                .Where(enemy => enemy.Life > 0 && InRange(origin, enemy.Position, skill.AreaRadiusRaw)).ToArray(),
             SkillShape.Cone => enemies.Where(enemy => enemy.Life > 0 &&
-                InCleaveCone(origin, target.Position, enemy.Position, skill.RangeRaw)).ToArray(),
+                InCleaveCone(origin, target.Position, enemy.Position, skill.AreaRadiusRaw)).ToArray(),
             SkillShape.Chain => enemies.Where(enemy => enemy.Life > 0)
                 .OrderBy(enemy => Point.DistanceSquared(target.Position, enemy.Position))
                 .Take(Math.Max(1, skill.MaximumChains + 1)).ToArray(),
@@ -1047,7 +1047,7 @@ public sealed partial class SpatialCombatRunner
                 .Take(Math.Max(1, skill.ProjectileCount + skill.PierceCount + skill.ForkCount)).ToArray(),
             _ => [target],
         };
-        if (affected.Length == 0) affected = [target];
+
 
         int useCount = useCounts[skill.SkillId] = useCounts[skill.SkillId] + 1;
         PassiveModifiers passive = request.Build.PassiveProfile ?? PassiveModifiers.Empty;
@@ -1145,6 +1145,9 @@ public sealed partial class SpatialCombatRunner
         CombatRuntime runtime = request.AscendancyRuntime ?? new CombatRuntime(CombatProfile.Empty);
         SkillTag tags = SkillDefinitions.Get(skill.SkillId).Tags;
         EquipmentCombatRuntime? equipment = request.EquipmentRuntime;
+        if (tags.HasFlag(SkillTag.Area) && skill.Role != SkillRole.DamageOverTime &&
+            request.Actions?.TryAreaHit(equipment!.ActionId, enemy.EntityId, tick,
+                MasteryRuntime.Has(request.Build.PassiveProfile ?? PassiveModifiers.Empty, "范围_距离", 4)) == false) return null;
         if (skill.Role != SkillRole.DamageOverTime) multiplier = ScaleCombatValue(multiplier,
             request.ResourceDamageMultiplierSnapshot ?? MasteryRuntime.OffensiveResourceMultiplier(request.Build.PassiveProfile ?? PassiveModifiers.Empty, hero));
         request.Actions?.Begin(equipment!.ActionId, skill, request.Build, tick, equipment.CaptureAction().Triggered);
@@ -1159,6 +1162,9 @@ public sealed partial class SpatialCombatRunner
             if (request.Build.Ascendancy?.Ascendancy != Ascendancy.PhantomMaster) return null;
         }
         int distanceRaw = (int)Math.Sqrt(Point.DistanceSquared(source, enemy.Position));
+        int areaPositionMultiplier = tags.HasFlag(SkillTag.Area) ?
+            AreaRules.PositionMultiplier(request.Build.PassiveProfile ?? PassiveModifiers.Empty, distanceRaw, skill.AreaRadiusRaw) : 10_000;
+        multiplier = ScaleCombatValue(multiplier, areaPositionMultiplier);
         multiplier = ScaleCombatValue(multiplier, request.ActionMultiplierSnapshot ??
             (equipment?.CaptureAction().Triggered != true ? request.Reactions?.ActionMultiplier(equipment!.ActionId) ?? 10_000 : 10_000));
         multiplier = ScaleCombatValue(multiplier, equipment?.HitMultiplier(request.Build, hero, tags, enemy.EntityId,
@@ -1236,7 +1242,7 @@ public sealed partial class SpatialCombatRunner
             tags.HasFlag(SkillTag.Spell) ? SpellHitRules.Effectiveness(skill.SkillId) : 10_000, random: random,
             mastery: new(profile, skill.Role != SkillRole.DamageOverTime, enemy.Life, enemy.MaximumLife));
         request.Actions?.Record(equipment!.ActionId, new(enemy.EntityId, source, skill, configuration, request.Build,
-            new(0, 0, 0, 0, 0, offensiveBranches.ToArray(), []), ailmentSource.ToArray(), critical, criticalMultiplier), tick, equipment.CaptureAction().Triggered);
+            new(0, 0, 0, 0, 0, offensiveBranches.ToArray(), []), ailmentSource.ToArray(), critical, criticalMultiplier, AreaPositionMultiplier: areaPositionMultiplier), tick, equipment.CaptureAction().Triggered);
         if (missed) return null;
         ApplyHeroDamage(request, skill, configuration, enemy, hero, random, tick, source,
             damage, critical, events, masteryArmorBreakStacks, eventKind, ailmentSource);
@@ -1582,7 +1588,7 @@ public sealed partial class SpatialCombatRunner
                     tick >= shieldCounterReadyTick)
                 {
                     request.Reactions?.Enqueue(new(shieldCounter.SkillId, enemy.EntityId, counterMultiplier,
-                        shieldCounter with { RangeRaw = ascendancy.Has(WarriorNodeIds.BastionCounterSmall) ? shieldCounter.RangeRaw * 12_000 / 10_000 : shieldCounter.RangeRaw },
+                        shieldCounter with { AreaIncreasedBasisPoints = shieldCounter.AreaIncreasedBasisPoints + (ascendancy.Has(WarriorNodeIds.BastionCounterSmall) ? 2_000 : 0) },
                         ascendancy.Has(WarriorNodeIds.BastionCounterSmall) ? 4_000 : 0, counterMultiplier >= 28_000));
                     int counterCooldown = ascendancy.Has(WarriorNodeIds.BastionCounterSmall)
                         ? shieldCounter.CooldownTicks * 10_000 / 12_500 : shieldCounter.CooldownTicks;

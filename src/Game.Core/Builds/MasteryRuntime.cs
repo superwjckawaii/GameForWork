@@ -115,6 +115,7 @@ public static class MasteryRuntime
             result = Multiply(result, 13_500);
         if (tags.HasFlag(SkillTag.Area) && Has(profile, "范围_距离", 0)) result = Multiply(result, 16_000);
         if (tags.HasFlag(SkillTag.Area) && Has(profile, "范围_距离", 1)) result = Multiply(result, 8_000);
+        if (hit && tags.HasFlag(SkillTag.Area) && Has(profile, "范围_距离", 4)) result = Multiply(result, 6_000);
         if (tags.HasFlag(SkillTag.Projectile) && Has(profile, "投射物", 0)) result = Multiply(result, 15_000);
         return result;
     }

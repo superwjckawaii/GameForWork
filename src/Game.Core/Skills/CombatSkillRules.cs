@@ -38,7 +38,11 @@ public sealed record ResolvedSkill(
     bool ExplodesOnKill = false,
     bool OverloadRepeatsEveryThirdUse = false,
     int TemperanceLevelPerLayer = 0,
-    int TemperanceQualityPerLayer = 0);
+    int TemperanceQualityPerLayer = 0, int BaseAreaRadiusRaw = 0, int AreaMoreBasisPoints = 10_000, int AreaIncreasedBasisPoints = 0)
+{
+    public int AreaMultiplierBasisPoints => Math.Max(2_500, CombatRules.ApplyMore(Math.Max(0, 10_000 + AreaIncreasedBasisPoints), [AreaMoreBasisPoints]));
+    public int AreaRadiusRaw => AreaRules.Radius(BaseAreaRadiusRaw > 0 ? BaseAreaRadiusRaw : RangeRaw, AreaMultiplierBasisPoints);
+}
 
 public static class CombatSkillRules
 {
@@ -74,7 +78,6 @@ public static class CombatSkillRules
         bool returns = active.Tags.HasFlag(SkillTag.Returning);
         if (configuration.Supports.HasFlag(SkillSupport.IncreasedArea))
         {
-            range = checked(range * (10_000 + SupportValue(configuration, SkillSupport.IncreasedArea) * 100) / 10_000);
             damage = checked(damage * 9_000 / 10_000);
         }
         if (configuration.Supports.HasFlag(SkillSupport.Bleed))
@@ -123,7 +126,6 @@ public static class CombatSkillRules
             damage = More(damage, SupportValue(configuration, SkillSupport.ElementalFocus));
         if (configuration.Supports.HasFlag(SkillSupport.ConcentratedEffect) && definition.Tags.HasFlag(SkillTag.Area))
         {
-            range = checked(range * 7_500 / 10_000);
             damage = More(damage, SupportValue(configuration, SkillSupport.ConcentratedEffect));
         }
         if (configuration.Supports.HasFlag(SkillSupport.AttackSpeed) && definition.Tags.HasFlag(SkillTag.Attack))
@@ -188,7 +190,7 @@ public static class CombatSkillRules
             pierce, fork, returns, active.Capabilities.HasFlag(SkillCapability.RequiresShield),
             buildsSupports.ResourceMultiplierBasisPoints, buildsSupports.SingleTargetOnly, buildsSupports.ExplodesOnKill,
             buildsSupports.OverloadRepeatsEveryThirdUse, buildsSupports.TemperanceLevelPerLayer,
-            buildsSupports.TemperanceQualityPerLayer);
+            buildsSupports.TemperanceQualityPerLayer, configuration.SkillId == SkillIds.SeismicCharge ? 1_800 : definition.RangeRaw, AreaRules.More(configuration, passive), AreaRules.Increased(configuration, passive));
     }
 
     public static bool TryPay(ResourceState resources, ResolvedSkill skill, bool allowOvercharge = true, bool selfCast = true) =>
@@ -265,6 +267,8 @@ public static class CombatSkillRules
         value = Scale(value, DamageMultiplier(skill, targetLife, targetMaximumLife));
         value = Scale(value, MasteryRuntime.OffensiveMultiplier(passive, tags, build.Weapon,
             targetLife, targetMaximumLife, nearbyEnemyCount, distanceRaw, hasOffHand: build.HasOffHand, hit: skill.Role != SkillRole.DamageOverTime));
+        if (skill.Role != SkillRole.DamageOverTime && skill.RangeRaw > 0 && (long)distanceRaw * 10 >= (long)skill.RangeRaw * 7)
+            value = Scale(value, 10_000L + passive.SpecializedValue(PassiveEffectKind.DistantHitMoreBasisPoints));
         return SaturatingInt(Scale(value, actionMultiplierBasisPoints));
     }
 

@@ -1,5 +1,6 @@
 using System.Reflection;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 using GameForWork.Core.Campaign.Progression;
 
@@ -23,7 +24,11 @@ public sealed record ClusterData(
     string SourceFile,
     IReadOnlyList<string> Descriptions,
     string MasteryKey,
-    IReadOnlyList<string> MasteryOptions);
+    IReadOnlyList<string> MasteryOptions,
+    IReadOnlyList<ClusterNodeData>? SmallNodes = null,
+    IReadOnlyList<ClusterNodeData>? NotableNodes = null);
+
+public sealed record ClusterNodeData(string Description, IReadOnlyList<PassiveEffect> Effects);
 
 public sealed record MasteryChoice(PassiveEffect Effect, string Description, string MechanicId);
 
@@ -215,24 +220,24 @@ public static partial class PassiveTreeCatalog
             [PassiveEffectKind.FlatDexterity, PassiveEffectKind.FlatPhysique, PassiveEffectKind.FlatSpirit],
         ];
         for (int vertex = 0; vertex < 6; vertex++)
-        for (int index = 0; index < 3; index++)
-        {
-            string anchor = VertexId("middle", vertex);
-            (float anchorX, float anchorY) = positions[anchor];
-            float angle = VertexAngle(vertex) + MathF.PI + (index switch
+            for (int index = 0; index < 3; index++)
             {
-                0 => -.72f,
-                1 => .72f,
-                _ => .28f,
-            });
-            float distance = index < 2 ? 112 : 70;
-            (float x, float y) = Offset(anchorX, anchorY, angle, distance, 0);
-            PassiveEffectKind effect = effects[vertex][index];
-            string id = $"builds.attr.major.v{vertex}.{AttributeSlug(effect)}";
-            nodes.Add(new(id, $"{AttributeName(effect)} +30", Branches[vertex], PassiveNodeKind.Notable,
-                anchor, [new(effect, 30)], [anchor], x, y, vertex, SpecialRule: $"{AttributeName(effect)} +30"));
-            positions[id] = (x, y);
-        }
+                string anchor = VertexId("middle", vertex);
+                (float anchorX, float anchorY) = positions[anchor];
+                float angle = VertexAngle(vertex) + MathF.PI + (index switch
+                {
+                    0 => -.72f,
+                    1 => .72f,
+                    _ => .28f,
+                });
+                float distance = index < 2 ? 112 : 70;
+                (float x, float y) = Offset(anchorX, anchorY, angle, distance, 0);
+                PassiveEffectKind effect = effects[vertex][index];
+                string id = $"builds.attr.major.v{vertex}.{AttributeSlug(effect)}";
+                nodes.Add(new(id, $"{AttributeName(effect)} +30", Branches[vertex], PassiveNodeKind.Notable,
+                    anchor, [new(effect, 30)], [anchor], x, y, vertex, SpecialRule: $"{AttributeName(effect)} +30"));
+                positions[id] = (x, y);
+            }
     }
 
     private static void AddJewels(ICollection<PassiveNodeDefinition> nodes,
@@ -240,30 +245,30 @@ public static partial class PassiveTreeCatalog
     {
         string[] suffixes = ["ji", "jm0", "jm1", "jo"];
         for (int vertex = 0; vertex < 6; vertex++)
-        for (int index = 0; index < suffixes.Length; index++)
-        {
-            string anchor = index switch
+            for (int index = 0; index < suffixes.Length; index++)
             {
-                0 => RadialId(vertex, "i2m", 2),
-                1 => RingId("middle", vertex, 3),
-                2 => RingId("middle", (vertex + 5) % 6, 7),
-                _ => RadialId(vertex, "m2o", 4),
-            };
-            (float anchorX, float anchorY) = positions[anchor];
-            float angle = MathF.Atan2(anchorY, anchorX);
-            (float forward, float sideways) = index switch
-            {
-                0 => (0, 82),
-                1 => (76, 0),
-                2 => (76, 0),
-                _ => (0, -82),
-            };
-            (float x, float y) = Offset(anchorX, anchorY, angle, forward, sideways);
-            string id = $"builds.jewel.v{vertex}.{suffixes[index]}";
-            nodes.Add(new(id, "记忆棱孔", Branches[vertex], PassiveNodeKind.JewelSocket, anchor, [], [anchor],
-                x, y, vertex, SpecialRule: "可镶嵌一枚棱晶或传奇珠宝；半径、塑形与腐化读取当前珠宝规则"));
-            positions[id] = (x, y);
-        }
+                string anchor = index switch
+                {
+                    0 => RadialId(vertex, "i2m", 2),
+                    1 => RingId("middle", vertex, 3),
+                    2 => RingId("middle", (vertex + 5) % 6, 7),
+                    _ => RadialId(vertex, "m2o", 4),
+                };
+                (float anchorX, float anchorY) = positions[anchor];
+                float angle = MathF.Atan2(anchorY, anchorX);
+                (float forward, float sideways) = index switch
+                {
+                    0 => (0, 82),
+                    1 => (76, 0),
+                    2 => (76, 0),
+                    _ => (0, -82),
+                };
+                (float x, float y) = Offset(anchorX, anchorY, angle, forward, sideways);
+                string id = $"builds.jewel.v{vertex}.{suffixes[index]}";
+                nodes.Add(new(id, "记忆棱孔", Branches[vertex], PassiveNodeKind.JewelSocket, anchor, [], [anchor],
+                    x, y, vertex, SpecialRule: "可镶嵌一枚棱晶或传奇珠宝；半径、塑形与腐化读取当前珠宝规则"));
+                positions[id] = (x, y);
+            }
     }
 
     private static void AddClusters(ICollection<PassiveNodeDefinition> nodes,
@@ -357,13 +362,26 @@ public static partial class PassiveTreeCatalog
         PassiveEffectKind effect = ThemeEffect(cluster.Theme + " " + description, ordinal);
         int value = ParseValue(description, effect, kind);
         nodes.Add(new(id, NodeName(cluster, kind, description, ordinal), Branches[sector], kind, prerequisite,
-            [new(effect, value)], links, x, y, sector, SpecialRule: DescriptionEffect(description),
+            TypedNode(cluster, kind, ordinal)?.Effects ?? [new(effect, value)], links, x, y, sector, SpecialRule: DescriptionEffect(description),
             MasteryGroup: $"builds.mastery.{cluster.MasteryKey}", ClusterTheme: cluster.Theme));
+    }
+
+    private static ClusterNodeData? TypedNode(ClusterData cluster, PassiveNodeKind kind, int ordinal)
+    {
+        var source = kind == PassiveNodeKind.Small ? cluster.SmallNodes :
+            kind == PassiveNodeKind.Notable ? cluster.NotableNodes : null;
+        if (source is null) return null;
+        int index = kind == PassiveNodeKind.Notable ? ordinal / 5 :
+            cluster.Size == "large" ? ordinal - ordinal / 5 : ordinal;
+        return source[index];
     }
 
     private static (string[] Smalls, string[] Notables) ClusterDescriptions(ClusterData cluster,
         int smallCount, int notableCount)
     {
+        if (cluster.SmallNodes is not null && cluster.NotableNodes is not null)
+            return (cluster.SmallNodes.Select(node => node.Description).ToArray(),
+                cluster.NotableNodes.Select(node => node.Description).ToArray());
         string[] source = cluster.Descriptions.Where(text => !string.IsNullOrWhiteSpace(text))
             .Select(NormalizeDescription).ToArray();
         string[] notables = source.Where(text => text.Contains("显著", StringComparison.Ordinal)).
@@ -440,6 +458,8 @@ public static partial class PassiveTreeCatalog
         if (text.Contains("陷阱", StringComparison.Ordinal)) return PassiveEffectKind.IncreasedTrapDamageBasisPoints;
         if (text.Contains("光环", StringComparison.Ordinal)) return PassiveEffectKind.IncreasedAuraEffectBasisPoints;
         if (text.Contains("诅咒", StringComparison.Ordinal)) return PassiveEffectKind.IncreasedCurseEffectBasisPoints;
+        if (text.Contains("范围效果", StringComparison.Ordinal)) return PassiveEffectKind.IncreasedAreaEffectBasisPoints;
+        if (text.Contains("范围伤害", StringComparison.Ordinal)) return PassiveEffectKind.IncreasedAreaDamageBasisPoints;
         if (text.Contains("范围", StringComparison.Ordinal) || text.Contains("距离", StringComparison.Ordinal)) return PassiveEffectKind.IncreasedSkillRangeBasisPoints;
         if (text.Contains("冷却", StringComparison.Ordinal)) return PassiveEffectKind.IncreasedCooldownRecoveryBasisPoints;
         if (text.Contains("法术", StringComparison.Ordinal)) return PassiveEffectKind.IncreasedSpellDamageBasisPoints;
@@ -558,6 +578,14 @@ public static partial class PassiveTreeCatalog
         if (Data.Clusters.Any(cluster => string.IsNullOrWhiteSpace(cluster.Name) ||
             string.IsNullOrWhiteSpace(cluster.StableSlug) || cluster.Descriptions.Count == 0))
             throw new InvalidDataException("Builds passive-tree resource contains an incomplete cluster.");
+        foreach (var cluster in Data.Clusters.Where(item => item.SmallNodes is not null || item.NotableNodes is not null))
+        {
+            if (cluster.SmallNodes?.Count != (cluster.Size == "large" ? 8 : 4) ||
+                cluster.NotableNodes?.Count != (cluster.Size == "large" ? 2 : 1) ||
+                cluster.SmallNodes.Concat(cluster.NotableNodes).Any(node => string.IsNullOrWhiteSpace(node.Description) ||
+                    node.Effects.Count == 0 || node.Effects.Any(effect => !Enum.IsDefined(effect.Kind))))
+                throw new InvalidDataException($"Invalid typed nodes in cluster {cluster.StableSlug}.");
+        }
     }
 
     private static PassiveTreeData Load()
@@ -566,7 +594,7 @@ public static partial class PassiveTreeCatalog
         using Stream stream = Assembly.GetExecutingAssembly().GetManifestResourceStream(resource) ??
             throw new InvalidDataException($"Missing embedded Builds passive resource: {resource}");
         return JsonSerializer.Deserialize<PassiveTreeData>(stream,
-            new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ??
+            new JsonSerializerOptions { PropertyNameCaseInsensitive = true, Converters = { new JsonStringEnumConverter() } }) ??
             throw new InvalidDataException("Builds passive resource is invalid.");
     }
 

@@ -90,9 +90,9 @@ public sealed partial class SpatialCombatRunner
             bool overload = reaction.SkillId == ReactionState.Overload;
             bool shieldBreak = reaction.SkillId == ReactionState.ShieldBreak;
             if (overload || reaction.SkillId == ReactionState.Answer) skill = skill with { DamageType = MainElement(request.Build) };
-            if (reaction.SkillId == ReactionState.Mirror) skill = skill with { DamageType = SkillDamageType.Lightning, RangeRaw = 10_000 };
+            if (reaction.SkillId == ReactionState.Mirror) skill = skill with { DamageType = SkillDamageType.Lightning, RangeRaw = 10_000, BaseAreaRadiusRaw = 10_000 };
             if (overload || shieldBreak) skill = skill with { BaseDamageBasisPoints = (int)Math.Round((overload ? 8_000 : 18_000) * Math.Pow(1.05, config.Level - 1)) };
-            var target = enemies.Where(enemy => enemy.Life > 0 && (skill.Shape == SkillShape.Self || InRange(origin, enemy.Position, skill.RangeRaw)))
+            var target = enemies.Where(enemy => enemy.Life > 0 && (skill.Shape == SkillShape.Self || InRange(origin, enemy.Position, AreaRules.EngagementRange(skill))))
                 .OrderBy(enemy => enemy.EntityId != reaction.TargetId).ThenBy(enemy => Point.DistanceSquared(origin, enemy.Position))
                 .ThenBy(enemy => enemy.EntityId, StringComparer.Ordinal).FirstOrDefault();
             if (shieldBreak) request.Guard!.GainEnergy(3);
@@ -116,7 +116,9 @@ public sealed partial class SpatialCombatRunner
                     LaunchProjectiles(request, skill, config, target, enemies, origin, reaction.Multiplier, tick, projectiles);
                 else
                     foreach (var enemy in (overload || shieldBreak || skill.Shape is SkillShape.Circle or SkillShape.Cone ?
-                        enemies.Where(enemy => enemy.Life > 0 && InRange(origin, enemy.Position, skill.RangeRaw)) : [target]).ToArray())
+                        enemies.Where(enemy => enemy.Life > 0 && (skill.Shape == SkillShape.Cone ?
+                            InCleaveCone(origin, target.Position, enemy.Position, skill.AreaRadiusRaw) :
+                            InRange(origin, enemy.Position, skill.AreaRadiusRaw))) : [target]).ToArray())
                         ResolveHeroHit(request, skill, config, enemy, hero, random, tick, origin, reaction.Multiplier, events,
                             additionalIncreasedBasisPoints: reaction.IncreasedDamage,
                             additionalBaseDamage: skill.SkillId == "archetypes.skill.aegis_pulse" ? request.Guard!.LastPaidShield : 0);

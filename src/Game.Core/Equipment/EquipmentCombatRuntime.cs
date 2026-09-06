@@ -152,8 +152,9 @@ public sealed class EquipmentCombatRuntime(EquipmentCombatLoadout loadout, ulong
         {
             ManaCost = Scale(skill.ManaCost, cost),
             LifeCost = Scale(skill.LifeCost, cost),
-            RangeRaw = Scale(skill.RangeRaw, 10_000 + Value(ItemModifierKind.SkillRangeBasisPoints) +
-                (SkillDefinitions.Get(skill.SkillId).Tags.HasFlag(SkillTag.Area) ? Value(ItemModifierKind.SkillAreaBasisPoints) : 0)),
+            RangeRaw = Scale(skill.RangeRaw, 10_000 + Value(ItemModifierKind.SkillRangeBasisPoints)),
+            AreaIncreasedBasisPoints = skill.AreaIncreasedBasisPoints +
+                (SkillDefinitions.Get(skill.SkillId).Tags.HasFlag(SkillTag.Area) ? Value(ItemModifierKind.SkillAreaBasisPoints) : 0),
             CooldownTicks = skill.CooldownTicks <= 0 ? 0 : Math.Max(1, Scale(skill.CooldownTicks,
                 100_000_000 / Math.Max(1, 10_000 + Value(ItemModifierKind.IncreasedCooldownRecoveryBasisPoints)))),
             ProjectileCount = projectile ? skill.ProjectileCount + Value(ItemModifierKind.AdditionalProjectile) : skill.ProjectileCount,

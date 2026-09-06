@@ -1730,6 +1730,59 @@
         "叠层爆破：同一技能使用产生的多个同时范围事件可以对同一目标命中最多 2 次；每次造成 40% 更少伤害。",
         "长存领域：范围持续效果持续时间总增 100%，造成 20% 更少伤害。",
         "延迟余震：自行使用的瞬时范围击中在 0.4 秒后产生一次 40% 伤害的余震；可以再次命中原目标，但不能再次产生余震或触发技能。"
+      ],
+      "smallNodes": [
+        {
+          "description": "范围伤害提高 12%",
+          "effects": [
+            {
+              "kind": "IncreasedAreaDamageBasisPoints",
+              "value": 1200
+            }
+          ]
+        },
+        {
+          "description": "范围效果提高 20%",
+          "effects": [
+            {
+              "kind": "IncreasedAreaEffectBasisPoints",
+              "value": 2000
+            }
+          ]
+        },
+        {
+          "description": "范围伤害提高 12%",
+          "effects": [
+            {
+              "kind": "IncreasedAreaDamageBasisPoints",
+              "value": 1200
+            }
+          ]
+        },
+        {
+          "description": "范围效果提高 20%",
+          "effects": [
+            {
+              "kind": "IncreasedAreaEffectBasisPoints",
+              "value": 2000
+            }
+          ]
+        }
+      ],
+      "notableNodes": [
+        {
+          "description": "广域核心·显著：范围效果提高 60%，范围伤害提高 30%。",
+          "effects": [
+            {
+              "kind": "IncreasedAreaEffectBasisPoints",
+              "value": 6000
+            },
+            {
+              "kind": "IncreasedAreaDamageBasisPoints",
+              "value": 3000
+            }
+          ]
+        }
       ]
     },
     {
@@ -1913,6 +1966,59 @@
         "叠层爆破：同一技能使用产生的多个同时范围事件可以对同一目标命中最多 2 次；每次造成 40% 更少伤害。",
         "长存领域：范围持续效果持续时间总增 100%，造成 20% 更少伤害。",
         "延迟余震：自行使用的瞬时范围击中在 0.4 秒后产生一次 40% 伤害的余震；可以再次命中原目标，但不能再次产生余震或触发技能。"
+      ],
+      "smallNodes": [
+        {
+          "description": "范围伤害提高 12%",
+          "effects": [
+            {
+              "kind": "IncreasedAreaDamageBasisPoints",
+              "value": 1200
+            }
+          ]
+        },
+        {
+          "description": "技能距离提高 15%",
+          "effects": [
+            {
+              "kind": "IncreasedSkillRangeBasisPoints",
+              "value": 1500
+            }
+          ]
+        },
+        {
+          "description": "范围伤害提高 12%",
+          "effects": [
+            {
+              "kind": "IncreasedAreaDamageBasisPoints",
+              "value": 1200
+            }
+          ]
+        },
+        {
+          "description": "技能距离提高 15%",
+          "effects": [
+            {
+              "kind": "IncreasedSkillRangeBasisPoints",
+              "value": 1500
+            }
+          ]
+        }
+      ],
+      "notableNodes": [
+        {
+          "description": "极距施展·显著：技能距离提高 40%；实际命中距离达到技能最终最大距离 70% 以上时，击中造成 30% 更多伤害。",
+          "effects": [
+            {
+              "kind": "IncreasedSkillRangeBasisPoints",
+              "value": 4000
+            },
+            {
+              "kind": "DistantHitMoreBasisPoints",
+              "value": 3000
+            }
+          ]
+        }
       ]
     },
     {

@@ -110,6 +110,8 @@ public enum PassiveEffectKind
     IncreasedAuraEffectBasisPoints,
     IncreasedCurseEffectBasisPoints,
     IncreasedEnergyShieldRechargeBasisPoints,
+    IncreasedAreaEffectBasisPoints,
+    DistantHitMoreBasisPoints,
 }
 
 public sealed record PassiveEffect(PassiveEffectKind Kind, int Value = 0);

@@ -63,7 +63,12 @@ public sealed partial class SpatialCombatRunner
         int duration = flame ? 50 : brand ? 120 : thunder ? 100 : trap ? 160 : id == SkillIds.VoidDecayField ?
             CombatRules.ApplyIncreased(120, configuration.Quality * 100) : 100;
         int radius = doom ? 3_200 : flame ? 750 : brand ? 5_000 : thunder ? 4_000 : id == SkillIds.VoidDecayField ? 3_500 : 3_000;
-        if (id == "archetypes.skill.void_rift") radius = CombatRules.ApplyIncreased(radius, configuration.Quality * 100);
+        var tags = SkillDefinitions.Get(id).Tags;
+        var profile = request.Build.PassiveProfile ?? PassiveModifiers.Empty;
+        duration = AreaRules.Duration(duration, tags, profile);
+        if (tags.HasFlag(SkillTag.Area) && MasteryRuntime.Has(profile, "范围_距离", 5)) multiplier = ScaleCombatValue(multiplier, 8_000);
+        radius = AreaRules.Radius(radius, skill.AreaMultiplierBasisPoints);
+        skill = skill with { BaseAreaRadiusRaw = radius, AreaMoreBasisPoints = 10_000, AreaIncreasedBasisPoints = 0 };
         int interval = brand ? 15 - Math.Clamp(configuration.Quality, 0, 20) / 10 :
             thunder ? 10 - Math.Clamp(configuration.Quality, 0, 20) / 20 : 0;
         int maximum = brand || doom ? 3 : id == "archetypes.skill.void_rift" ? 2 : flame || trap ? int.MaxValue : 1;
@@ -87,7 +92,7 @@ public sealed partial class SpatialCombatRunner
         }
         if (id == "archetypes.skill.void_rift")
             foreach (var enemy in enemies.Where(enemy => enemy.Life > 0 && InRange(target.Position, enemy.Position, radius)))
-                ResolveHeroHit(request, skill with { Role = SkillRole.Clear }, configuration, enemy, hero, random, tick, origin, multiplier, events);
+                ResolveHeroHit(request, skill with { Role = SkillRole.Clear }, configuration, enemy, hero, random, tick, target.Position, multiplier, events);
         areas.Add(area);
         events.Add(Event(tick, SpatialEventKind.SkillEffect, "hero", target.EntityId, 0, area.Start, area.End,
             $"skill:{id}|area-created|radius:{radius}|expires:{area.Expires}"));
@@ -132,7 +137,8 @@ public sealed partial class SpatialCombatRunner
             if (area.Armed)
             {
                 if (!enemies.Any(enemy => enemy.Life > 0 && InRange(area.End, enemy.Position, 2_000))) continue;
-                area.Armed = false; area.Expires = tick + 79;
+                area.Armed = false; area.Expires = tick + AreaRules.Duration(80, SkillDefinitions.Get(area.Skill.SkillId).Tags,
+                    area.Request.Build.PassiveProfile ?? PassiveModifiers.Empty) - 1;
                 foreach (var enemy in enemies.Where(enemy => enemy.Life > 0 && InRange(area.End, enemy.Position, area.Radius)))
                     Pulse(enemy, area.Skill with { Role = SkillRole.Clear });
             }
@@ -156,7 +162,9 @@ public sealed partial class SpatialCombatRunner
                         enemy.Ailments.AddStack(Ailment.Erosion, 1, 5, 120, tick);
                     if (area.Skill.SkillId == "archetypes.skill.corrosive_trap")
                     { enemy.ChillEffect = Math.Max(enemy.ChillEffect, 2_000); enemy.ImpairedUntilTick = tick + 1; }
-                    void Apply(DamageType type, int value) => enemy.Ailments.Apply(Ailment.Ground, type, value,
+                    void Apply(DamageType type, int value) => enemy.Ailments.Apply(Ailment.Ground, type,
+                        ScaleCombatValue(value, AreaRules.PositionMultiplier(area.Request.Build.PassiveProfile ?? PassiveModifiers.Empty,
+                            (int)Math.Sqrt(SegmentDistanceSquared(enemy.Position, area.Start, area.End)), area.Radius)),
                         TickMilliseconds, 0, area.Skill.SkillId, instanceId: $"{area.Skill.SkillId}:{area.Created}");
                 }
             }

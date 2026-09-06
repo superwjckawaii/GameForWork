@@ -18,25 +18,44 @@ public sealed partial class SpatialCombatRunner
             var context = request.EquipmentRuntime!.CreateTriggeredAction("", copy: true);
             var assigned = new Dictionary<string, EnemyUnit>();
             var replayed = new List<CombatHitSnapshot>();
+            var areaHits = new Dictionary<(int Offset, Point Origin, string Target), int>();
+            var areaAims = new Dictionary<(int Offset, Point Origin), Point>();
             var hits = copy.Sacrifice ? copy.Action.Hits.TakeLast(1) : copy.Action.Hits;
             foreach (CombatHitSnapshot recorded in hits)
             {
-                Point origin = copy.Source.StartsWith("phantom:", StringComparison.Ordinal) ? recorded.Origin : heroPosition;
+                Point origin = copy.Source.StartsWith("phantom:", StringComparison.Ordinal) || copy.Source == "mastery:aftershock" ? recorded.Origin : heroPosition;
                 var hit = recorded with { Origin = origin };
                 if (!assigned.TryGetValue(hit.TargetId, out var selected))
                 {
                     selected = enemies.Where(enemy => enemy.Life > 0 && !assigned.ContainsValue(enemy) &&
-                            InRange(origin, enemy.Position, hit.Skill.RangeRaw))
+                            InRange(origin, enemy.Position, AreaRules.EngagementRange(hit.Skill)))
                         .OrderBy(enemy => enemy.EntityId != hit.TargetId).ThenBy(enemy => Point.DistanceSquared(origin, enemy.Position))
                         .ThenBy(enemy => enemy.EntityId, StringComparer.Ordinal).FirstOrDefault();
                     if (selected is not null) assigned[hit.TargetId] = selected;
                 }
+                bool area = !copy.Sacrifice && hit.Skill.Shape is SkillShape.Circle or SkillShape.Cone or SkillShape.MovementCircle or SkillShape.GroundArea;
+                var areaKey = (hit.OffsetMilliseconds, origin);
+                if (area && !areaAims.ContainsKey(areaKey) && selected is not null) areaAims[areaKey] = selected.Position;
                 var targets = copy.Sacrifice ? enemies.Where(enemy => enemy.Life > 0 && InRange(origin, enemy.Position, copy.Radius)).ToArray() :
+                    area ? enemies.Where(enemy => enemy.Life > 0 && InRange(origin, enemy.Position, hit.Skill.AreaRadiusRaw) &&
+                        (hit.Skill.Shape != SkillShape.Cone || areaAims.TryGetValue(areaKey, out var aim) && InCleaveCone(origin, aim, enemy.Position, hit.Skill.AreaRadiusRaw))).ToArray() :
                     selected is null || selected.Life <= 0 ? [] : new[] { selected };
                 foreach (var enemy in targets)
                 {
-                    if (!copy.Sacrifice && hit.Skill.Shape == SkillShape.Cone && !InCleaveCone(origin, selected!.Position, enemy.Position, hit.Skill.RangeRaw)) continue;
+                    if (area)
+                    {
+                        var key = (hit.OffsetMilliseconds, origin, enemy.EntityId);
+                        int count = areaHits.GetValueOrDefault(key);
+                        int maximum = MasteryRuntime.Has(hit.Build.PassiveProfile ?? Campaign.Progression.PassiveModifiers.Empty, "范围_距离", 4)
+                            ? Math.Min(2, copy.Action.Hits.Where(item => item.OffsetMilliseconds == hit.OffsetMilliseconds && item.Origin == recorded.Origin)
+                                .GroupBy(item => item.TargetId).Max(group => group.Count())) : 1;
+                        if (count >= maximum) continue;
+                        areaHits[key] = count + 1;
+                    }
                     int multiplier = copy.Multiplier;
+                    if (area)
+                        multiplier = (int)((long)multiplier * AreaRules.PositionMultiplier(hit.Build.PassiveProfile ?? Campaign.Progression.PassiveModifiers.Empty,
+                            (int)Math.Sqrt(Point.DistanceSquared(origin, enemy.Position)), hit.Skill.AreaRadiusRaw) / hit.AreaPositionMultiplier);
                     if (copy.Source.StartsWith("phantom:", StringComparison.Ordinal) && !copy.Sacrifice)
                         multiplier = (int)((long)multiplier * (10_000 + request.Buffs!.WarSongMore(tick)) /
                             (10_000 + hit.Build.WarSongMoreDamageBasisPoints));
