@@ -15,6 +15,7 @@ public sealed class AilmentState
     private readonly Dictionary<Ailment, (int Count, int Until)> _debuffs = [];
     private readonly HashSet<(AilmentState Source, string Instance)> _received = [];
     private readonly HashSet<(Ailment Kind, string Action)> _settledActions = [];
+    private readonly HashSet<string> _poisonCopyActions = [];
     private int _sequence;
     public IReadOnlyList<DamageOverTimeInstance> Instances => _instances;
     public int BleedMaximum { get; set; } = 1;
@@ -34,6 +35,23 @@ public sealed class AilmentState
         if (dps <= 0 || durationMilliseconds <= 0) return;
         decimal speed = Math.Max(1, 10_000 + fasterBasisPoints) / 10_000m;
         _instances.Add(new(kind, type, dps * speed, durationMilliseconds / speed, sourceId, propagated, instanceId ?? $"dot:{++_sequence}", debuffedDamagePerSecond * speed, selfCast));
+    }
+
+    public decimal ApplyPoison(GameForWork.Core.Campaign.Progression.PassiveModifiers passive,
+        decimal dps, int duration, int faster, string sourceId, string actionId, bool selfCast, decimal? debuffedDps = null)
+    {
+        if (dps <= 0 || duration <= 0) return 0;
+        bool Has(int option) => MasteryRuntime.Has(passive, "中毒", option);
+        bool first = Count(Ailment.Poison) == 0 && Has(6);
+        decimal more = (Has(0) ? 1.6m : 1m) * (Has(1) ? .8m : 1m) * (first ? 2m : 1m);
+        duration = checked(duration * (10_000 + (Has(1) ? 10_000 : 0) + (first ? 10_000 : 0)) / 10_000);
+        if (Has(0)) duration = duration * 3 / 4;
+        Apply(Ailment.Poison, DamageType.Void, dps * more, duration, faster, sourceId,
+            debuffedDamagePerSecond: debuffedDps * more, selfCast: selfCast);
+        if (selfCast && Has(2) && _poisonCopyActions.Add(actionId))
+            Apply(Ailment.Poison, DamageType.Void, dps * more * .7m, duration, faster, sourceId,
+                debuffedDamagePerSecond: debuffedDps * more * .7m, selfCast: true);
+        return dps * more;
     }
 
     public int Stack(Ailment kind, int tick) => _debuffs.TryGetValue(kind, out var value) && tick < value.Until ? value.Count : 0;
@@ -79,10 +97,11 @@ public sealed class AilmentState
         if (_debuffs.TryGetValue(kind, out var value)) _debuffs[kind] = (value.Count - count, value.Until);
         return count;
     }
-    public void SpreadTo(AilmentState target, Ailment kind, Func<bool>? targetAllows = null)
+    public void SpreadTo(AilmentState target, Ailment kind, Func<bool>? targetAllows = null, int maximum = int.MaxValue, bool voidDebuffed = false)
     {
         if (ReferenceEquals(this, target)) return;
-        foreach (DamageOverTimeInstance instance in Active().Where(instance => instance.Kind == kind && !instance.Propagated))
+        foreach (DamageOverTimeInstance instance in Active(voidDebuffed).Where(instance => instance.Kind == kind && !instance.Propagated)
+            .OrderByDescending(instance => Dps(instance, voidDebuffed)).Take(Math.Max(0, maximum)))
             if (target._received.Add((this, instance.InstanceId)) && (targetAllows?.Invoke() ?? true))
                 target._instances.Add(instance with { Propagated = true });
     }

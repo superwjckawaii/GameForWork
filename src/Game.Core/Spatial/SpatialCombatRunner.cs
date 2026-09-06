@@ -779,7 +779,7 @@ public sealed partial class SpatialCombatRunner
 
             ResolveReactions(request, enemies, hero, heroPosition, random, tick, events, projectiles, persistentAreas);
             army.Advance(enemies, heroPosition, random, tick, events, heroTargetId, request.Build);
-            if (RechargeFlasksForKills(enemies, flasks, tick, heroPosition, events, ascendancyRuntime, hero, equipment, random))
+            if (RechargeFlasksForKills(enemies, flasks, tick, heroPosition, events, ascendancyRuntime, hero, equipment, random, request))
                 chargeReadyTick = 0;
             if (tick < rootedUntilTick) heroPosition = beforeMovement;
             equipment.Advance(tick, hero, heroPosition != beforeMovement);
@@ -1662,6 +1662,8 @@ public sealed partial class SpatialCombatRunner
                 damage = ScaleCombatValue(damage, request.Buffs?.IncomingHitMultiplier(!request.Build.HasUsableWeapon, tick) ?? 10_000);
                 damage = ScaleCombatValue(damage, MasteryRuntime.IncomingResourceMultiplier(request.Build.PassiveProfile ?? PassiveModifiers.Empty, hero, true));
                 damage = ScaleCombatValue(damage, hero.RecentEvadeHitMultiplier(tick));
+                if (enemy.Ailments.Count(Ailment.Poison) >= 10 && MasteryRuntime.Has(request.Build.PassiveProfile ?? PassiveModifiers.Empty, "中毒", 5))
+                    damage = ScaleCombatValue(damage, 8_500);
                 damage = request.Guard?.Absorb(damage, activeSkill.DamageType, tick) ?? damage;
                 if (request.EquipmentRuntime is { } equipment)
                     damage = equipment.ApplyEnemyDamage(hero, damage, true, tick, request.VirtueVice, blocked);
@@ -1828,12 +1830,19 @@ public sealed partial class SpatialCombatRunner
         ICollection<SpatialEvent> events,
         CombatRuntime runtime,
         ResourceState hero,
-        EquipmentCombatRuntime equipment, Pcg32 random)
+        EquipmentCombatRuntime equipment, Pcg32 random, NodeCombatRequest request)
     {
         bool resetMovement = false;
-        foreach (EnemyUnit enemy in enemies.Where(item => item.Life <= 0 && !item.KillCharged && !item.Summoned))
+        foreach (EnemyUnit enemy in enemies.Where(item => item.Life <= 0 && !item.KillCharged))
         {
             enemy.KillCharged = true;
+            if (MasteryRuntime.Has(request.Build.PassiveProfile ?? PassiveModifiers.Empty, "中毒", 4) && enemy.Ailments.Count(Ailment.Poison) > 0)
+                foreach (var target in enemies.Where(candidate => candidate.Life > 0 && InRange(enemy.Position, candidate.Position, 4_000))
+                    .OrderBy(candidate => Point.DistanceSquared(enemy.Position, candidate.Position)).ThenBy(candidate => candidate.EntityId, StringComparer.Ordinal).Take(5))
+                    enemy.Ailments.SpreadTo(target.Ailments, Ailment.Poison,
+                        () => target.Profile.AilmentAvoidanceBasisPoints <= 0 || random.NextBasisPoints() >= target.Profile.AilmentAvoidanceBasisPoints,
+                        5, VoidDebuffed(enemy, tick));
+            if (enemy.Summoned) continue;
             equipment.Killed(enemy.Rarity, tick);
             int charges = enemy.Rarity switch
             {

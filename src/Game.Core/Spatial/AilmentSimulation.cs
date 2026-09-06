@@ -90,7 +90,7 @@ public sealed partial class SpatialCombatRunner
                 damage *= (10_000m + passive.MoreDamageBasisPoints) / 10_000;
                 damage *= (10_000m + request.Build.MoreDamageOverTimeBasisPoints) / 10_000;
                 if (kind == Ailment.Bleed) damage *= (10_000m + request.Build.MoreBleedDamageBasisPoints) / 10_000;
-                damage *= (10_000m + Value(ItemModifierKind.DamageOverTimeMultiplierBasisPoints) + (critical ? 5_000 : 0)) / 10_000;
+                damage *= (10_000m + Value(ItemModifierKind.DamageOverTimeMultiplierBasisPoints) + (critical ? 5_000 + (kind == Ailment.Poison && MasteryRuntime.Has(passive, "中毒", 3) ? 10_000 : 0) : 0)) / 10_000;
                 if (configuration.Supports.HasFlag(SkillSupport.Brutality) && output != DamageType.Physical) continue;
                 damage *= MasteryDamageRules.AilmentMultiplier(passive, branch, output, kind == Ailment.Poison) / 10_000m;
                 total += damage;
@@ -102,9 +102,14 @@ public sealed partial class SpatialCombatRunner
             decimal dps = Basis(kind) * ratio;
             if (dps <= 0) return;
             duration = duration * Math.Max(0, 10_000 - enemy.Profile.ReducedAilmentDurationBasisPoints) / 10_000;
-            enemy.Ailments.Apply(kind, type, dps, duration, faster, skill.SkillId,
-                debuffedDamagePerSecond: type == DamageType.Void && MasteryRuntime.Has(passive, "虚空", 4) ? Basis(kind, true) * ratio : null,
-                selfCast: request.EquipmentRuntime?.CaptureAction().Copy != true && (request.ElementalSourceSelf || request.EquipmentRuntime?.CaptureAction().Triggered != true));
+            decimal? debuffedDps = type == DamageType.Void && MasteryRuntime.Has(passive, "虚空", 4) ? Basis(kind, true) * ratio : null;
+            bool selfCast = request.EquipmentRuntime?.CaptureAction().Copy != true && (request.ElementalSourceSelf || request.EquipmentRuntime?.CaptureAction().Triggered != true);
+            if (kind == Ailment.Poison)
+                dps = enemy.Ailments.ApplyPoison(passive, dps, duration, faster, skill.SkillId,
+                    request.Actions?.CanonicalAction(request.EquipmentRuntime!.ActionId) ?? request.EquipmentRuntime?.ActionId ?? $"{tick}:{skill.SkillId}",
+                    selfCast, debuffedDps);
+            else enemy.Ailments.Apply(kind, type, dps, duration, faster, skill.SkillId,
+                debuffedDamagePerSecond: debuffedDps, selfCast: selfCast);
             events.Add(Event(tick, SpatialEventKind.Ailment, "hero", enemy.EntityId, 0, origin, enemy.Position,
                 $"skill:{skill.SkillId}|ailment:{kind.ToString().ToLowerInvariant()}|dps:{dps:0.###}"));
         }
@@ -119,7 +124,7 @@ public sealed partial class SpatialCombatRunner
                 CombatRules.ApplyIncreased(5_000, Value(ItemModifierKind.IncreasedBleedDurationBasisPoints) + passive.SpecializedValue(PassiveEffectKind.IncreasedBleedDurationBasisPoints)), Value(ItemModifierKind.FasterBleedBasisPoints));
             request.AscendancyRuntime?.AppliedBleed();
         }
-        if (hit.Physical + hit.Void > 0 && Allowed(Ailment.Poison, Chance(Ailment.Poison) + Value(ItemModifierKind.PoisonChanceBasisPoints) + (MasteryRuntime.Has(passive, "虚空", 1) ? 2_000 : 0)))
+        if (hit.Physical + hit.Void > 0 && Allowed(Ailment.Poison, Chance(Ailment.Poison) + Value(ItemModifierKind.PoisonChanceBasisPoints) + (MasteryRuntime.Has(passive, "虚空", 1) ? 2_000 : 0), critical && MasteryRuntime.Has(passive, "中毒", 3)))
             Apply(Ailment.Poison, DamageType.Void, .3m, 2_000, Value(ItemModifierKind.FasterPoisonBasisPoints));
         if (hit.Fire > 0 && Allowed(Ailment.Ignite, Chance(Ailment.Ignite) + Value(ItemModifierKind.IgniteChanceBasisPoints), critical))
         {
