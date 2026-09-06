@@ -47,7 +47,7 @@ public sealed class PresentationFeatureTests
             PassiveTree.LayoutExtent, TreeProjection.PassiveSourceSize);
         AssertProjection(AtlasTree.Nodes.Select(node => (node.X, node.Y)),
             AtlasTree.LayoutExtent, TreeProjection.AtlasSourceSize);
-        AssertProjection(WarriorAscendancyCatalog.Nodes.Select(node => ((float)node.X, (float)node.Y)),
+        AssertProjection(AscendancyCatalog.Nodes.Select(node => ((float)node.X, (float)node.Y)),
             240f, TreeProjection.AscendancySourceSize);
     }
 
@@ -56,7 +56,7 @@ public sealed class PresentationFeatureTests
     {
         foreach (Ascendancy ascendancy in Enum.GetValues<Ascendancy>().Where(value => value != Ascendancy.None))
         {
-            AscendancyNode[] cores = WarriorAscendancyCatalog.For(ascendancy)
+            AscendancyNode[] cores = AscendancyCatalog.For(ascendancy)
                 .Where(node => node.Kind == NodeKind.Core).ToArray();
             Assert.Equal(6, cores.Length);
             Assert.Equal(190, cores.Max(node => Math.Abs(node.Y)));

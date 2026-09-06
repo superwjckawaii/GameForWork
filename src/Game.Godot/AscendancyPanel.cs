@@ -45,7 +45,7 @@ public partial class AscendancyPanel : Control
         {
             if (_path.Selected < 0 || _path.Selected >= _path.ItemCount) return;
             Ascendancy value = (Ascendancy)_path.GetItemId(_path.Selected);
-            changed(session().TrySelectAscendancy(value) ? $"已选择升华：{WarriorAscendancyCatalog.DisplayName(value)}。" : "需要至少1点升华点，且已选路线只能通过重置更换。");
+            changed(session().TrySelectAscendancy(value) ? $"已选择升华：{AscendancyCatalog.DisplayName(value)}。" : "需要至少1点升华点，且已选路线只能通过重置更换。");
             Refresh();
         };
         var reset = new Button { Text = "重置节点（50000金币）" }; bar.AddChild(reset);
@@ -86,7 +86,7 @@ public partial class AscendancyPanel : Control
         GameSession current = _session();
         RefreshPaths(current);
         var state = current.Endgame;
-        _summary!.Text = $"{WarriorAscendancyCatalog.DisplayName(state.SelectedAscendancy)} · 已用 {state.AscendancyPassives.Count}/{state.BreakthroughPoints}（上限8） · 金币 {current.World.Economy.Gold}";
+        _summary!.Text = $"{AscendancyCatalog.DisplayName(state.SelectedAscendancy)} · 已用 {state.AscendancyPassives.Count}/{state.BreakthroughPoints}（上限8） · 金币 {current.World.Economy.Gold}";
         _combatOptions!.Visible = state.SelectedAscendancy is Ascendancy.PhantomMaster or Ascendancy.IdolForger;
         _phantomMode!.Visible = state.SelectedAscendancy == Ascendancy.PhantomMaster;
         _firstModule!.Visible = _secondModule!.Visible = state.SelectedAscendancy == Ascendancy.IdolForger;
@@ -105,9 +105,9 @@ public partial class AscendancyPanel : Control
         _pathClass = session.Player.BaseClass;
         _path!.Clear();
         Ascendancy[] available = ClassCatalog.Get(session.Player.BaseClass).Ascendancies
-            .Where(WarriorAscendancyCatalog.IsImplemented).ToArray();
+            .Where(AscendancyCatalog.IsImplemented).ToArray();
         foreach (Ascendancy value in available)
-            _path.AddItem(WarriorAscendancyCatalog.DisplayName(value), (int)value);
+            _path.AddItem(AscendancyCatalog.DisplayName(value), (int)value);
         if (available.Length == 0)
             _path.AddItem("暂无可用升华", (int)Ascendancy.None);
         _path.Disabled = available.Length == 0;
@@ -170,22 +170,22 @@ public partial class AscendancyTreeView : Control
         }
         DrawCircle(origin, 29 * _zoom, new Color("6b5434"));
         DrawString(ThemeDB.FallbackFont, origin + new Vector2(-42, 5),
-            WarriorAscendancyCatalog.DisplayName(selected), HorizontalAlignment.Center, 84, 13, new Color("f0d394"));
+            AscendancyCatalog.DisplayName(selected), HorizontalAlignment.Center, 84, 13, new Color("f0d394"));
         if (selected == Ascendancy.None)
         {
             Ascendancy[] available = ClassCatalog.Get(_session().Player.BaseClass).Ascendancies
-                .Where(WarriorAscendancyCatalog.IsImplemented).ToArray();
+                .Where(AscendancyCatalog.IsImplemented).ToArray();
             string prompt = available.Length == 0
                 ? "该职业暂未配置可用升华"
-                : $"先在上方选择{string.Join('、', available.Select(WarriorAscendancyCatalog.DisplayName))}";
+                : $"先在上方选择{string.Join('、', available.Select(AscendancyCatalog.DisplayName))}";
             DrawString(ThemeDB.FallbackFont, origin + new Vector2(-190, 65), prompt,
                 HorizontalAlignment.Center, 380, 15, new Color("a8b0ba"));
             return;
         }
-        foreach (AscendancyNode node in WarriorAscendancyCatalog.For(selected))
+        foreach (AscendancyNode node in AscendancyCatalog.For(selected))
         {
             Vector2 point = Point(node, origin);
-            Vector2 parent = node.PrerequisiteId is null ? origin : Point(WarriorAscendancyCatalog.Get(node.PrerequisiteId), origin);
+            Vector2 parent = node.PrerequisiteId is null ? origin : Point(AscendancyCatalog.Get(node.PrerequisiteId), origin);
             bool allocated = _session().Endgame.AscendancyPassives.Contains(node.StableId);
             bool available = node.PrerequisiteId is null || _session().Endgame.AscendancyPassives.Contains(node.PrerequisiteId);
             if (allocated)
@@ -252,7 +252,7 @@ public partial class AscendancyTreeView : Control
     {
         if (_session is null || _session().Endgame.SelectedAscendancy == Ascendancy.None) return null;
         Vector2 origin = Size / 2 + _pan;
-        return WarriorAscendancyCatalog.For(_session().Endgame.SelectedAscendancy)
+        return AscendancyCatalog.For(_session().Endgame.SelectedAscendancy)
             .Select(node => (node, distance: Point(node, origin).DistanceTo(position)))
             .Where(item => item.distance <= (item.node.Kind == NodeKind.Core ? 28 : 21) * _zoom)
             .OrderBy(item => item.distance).Select(item => item.node).FirstOrDefault();

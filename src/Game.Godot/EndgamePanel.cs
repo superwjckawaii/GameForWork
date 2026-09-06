@@ -39,11 +39,11 @@ public partial class AtlasTreeView : Control
             DrawTextureRect(_backdrop, new Rect2(square.X, square.Y, square.Side, square.Side), false);
         }
         else for (int lane = 0; lane < 10; lane++)
-        {
-            float x = origin.X + (-630 + lane * 140) * _zoom;
-            DrawRect(new Rect2(x - 48 * _zoom, origin.Y - 610 * _zoom, 96 * _zoom, 1_220 * _zoom),
-                lane % 2 == 0 ? new Color("18202b80") : new Color("11192380"), true);
-        }
+            {
+                float x = origin.X + (-630 + lane * 140) * _zoom;
+                DrawRect(new Rect2(x - 48 * _zoom, origin.Y - 610 * _zoom, 96 * _zoom, 1_220 * _zoom),
+                    lane % 2 == 0 ? new Color("18202b80") : new Color("11192380"), true);
+            }
         foreach (AtlasPassiveNode node in VisibleNodes())
         {
             Vector2 point = NodePosition(node, origin);
@@ -121,15 +121,25 @@ public partial class AtlasTreeView : Control
     }
     private static string ThemeName(AtlasTheme theme) => theme switch
     {
-        AtlasTheme.MapBasics => "地图基础", AtlasTheme.MapSupply => "地图续航", AtlasTheme.Crafting => "地图打造",
-        AtlasTheme.PacksAndElites => "怪群精英", AtlasTheme.Boss => "Boss攻坚", AtlasTheme.Abyss => "深渊",
-        AtlasTheme.LifeGarden => "命能花园", AtlasTheme.RedAltar => "赤誓祭坛",
-        AtlasTheme.BlueAltar => "苍誓祭坛", _ => "战阵前线"
+        AtlasTheme.MapBasics => "地图基础",
+        AtlasTheme.MapSupply => "地图续航",
+        AtlasTheme.Crafting => "地图打造",
+        AtlasTheme.PacksAndElites => "怪群精英",
+        AtlasTheme.Boss => "Boss攻坚",
+        AtlasTheme.Abyss => "深渊",
+        AtlasTheme.LifeGarden => "命能花园",
+        AtlasTheme.RedAltar => "赤誓祭坛",
+        AtlasTheme.BlueAltar => "苍誓祭坛",
+        _ => "战阵前线"
     };
     private static string GateName(AtlasGate gate) => gate switch
     {
-        AtlasGate.Act5 => "第五幕", AtlasGate.Tier5 => "完成 T5", AtlasGate.Tier10 => "完成 T10",
-        AtlasGate.Tier16 => "完成 T16", AtlasGate.FinalBreakthrough => "最终突破", _ => "完成 T20"
+        AtlasGate.Act5 => "第五幕",
+        AtlasGate.Tier5 => "完成 T5",
+        AtlasGate.Tier10 => "完成 T10",
+        AtlasGate.Tier16 => "完成 T16",
+        AtlasGate.FinalBreakthrough => "最终突破",
+        _ => "完成 T20"
     };
 }
 
@@ -201,7 +211,7 @@ public partial class EndgamePanel : Control
             $"命能 {state.LifeForce} · 赤誓 {state.RedFavor} · 苍誓 {state.BlueFavor} · " +
             $"亡旗 {(state.WarfrontDiscovered ? $"战功 {state.WarfrontMerit} / 声望 {state.WarfrontReputation}" : "未发现")}\n" +
             $"天垒碎片 {state.CitadelFragments}/{EndgameState.CitadelFragmentsPerTicket} · 门票 {state.CitadelTickets} · " +
-            $"升华 {WarriorAscendancyCatalog.DisplayName(state.SelectedAscendancy)} · 升华点 {state.AscendancyPassives.Count}/{state.BreakthroughPoints} · 天垒胜利 {state.CitadelVictories} · 神话重铸 {state.MythicReforgeMaterials}";
+            $"升华 {AscendancyCatalog.DisplayName(state.SelectedAscendancy)} · 升华点 {state.AscendancyPassives.Count}/{state.BreakthroughPoints} · 天垒胜利 {state.CitadelVictories} · 神话重铸 {state.MythicReforgeMaterials}";
         if (_preflight is not null)
         {
             BossDefinition boss = Bosses.CitadelStages[^1];

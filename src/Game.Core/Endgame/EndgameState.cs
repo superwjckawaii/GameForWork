@@ -163,9 +163,15 @@ public sealed class EndgameState
         AddFragments(earned.Fragments);
         foreach (Mechanic mechanic in earned.Encounters.Where(e => e.Kills > 0).Select(e => e.Node.Gameplay!.Mechanic).Distinct())
         {
-            MapMechanic? kind = mechanic switch { Mechanic.Abyss => MapMechanic.Abyss,
-                Mechanic.Garden => MapMechanic.LifeGarden, Mechanic.Red => MapMechanic.RedAltar,
-                Mechanic.Blue => MapMechanic.BlueAltar, Mechanic.Warfront => MapMechanic.Warfront, _ => null };
+            MapMechanic? kind = mechanic switch
+            {
+                Mechanic.Abyss => MapMechanic.Abyss,
+                Mechanic.Garden => MapMechanic.LifeGarden,
+                Mechanic.Red => MapMechanic.RedAltar,
+                Mechanic.Blue => MapMechanic.BlueAltar,
+                Mechanic.Warfront => MapMechanic.Warfront,
+                _ => null
+            };
             if (kind is not null) _mechanics[kind.Value]++;
         }
         if (!bluePityUnlocked || earned.BlueTarget is null) return false;
@@ -235,7 +241,7 @@ public sealed class EndgameState
 
     public bool TryAllocateAscendancy(string id)
     {
-        AscendancyNode node = WarriorAscendancyCatalog.Get(id);
+        AscendancyNode node = AscendancyCatalog.Get(id);
         if (SelectedAscendancy == Ascendancy.None || node.Ascendancy != SelectedAscendancy) return false;
         if (_ascendancy.Contains(id) || _ascendancy.Count >= BreakthroughPoints || node.PrerequisiteId is not null && !_ascendancy.Contains(node.PrerequisiteId)) return false;
         return _ascendancy.Add(id);
@@ -243,7 +249,7 @@ public sealed class EndgameState
 
     public bool TryRefundAscendancy(string id)
     {
-        if (!_ascendancy.Contains(id) || WarriorAscendancyCatalog.For(SelectedAscendancy)
+        if (!_ascendancy.Contains(id) || AscendancyCatalog.For(SelectedAscendancy)
                 .Any(node => node.PrerequisiteId == id && _ascendancy.Contains(node.StableId))) return false;
         return _ascendancy.Remove(id);
     }
@@ -372,7 +378,7 @@ public sealed class EndgameState
         foreach (string id in snapshot.AscendancyPassives)
         {
             if (id.StartsWith("core.ascendancy.iron_oath.", StringComparison.Ordinal)) continue;
-            AscendancyNode node = WarriorAscendancyCatalog.Get(id);
+            AscendancyNode node = AscendancyCatalog.Get(id);
             if (node.Ascendancy != state.SelectedAscendancy) throw new InvalidDataException("Ascendancies ascendancy node belongs to another path.");
             state._ascendancy.Add(id);
         }

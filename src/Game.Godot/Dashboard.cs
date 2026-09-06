@@ -256,7 +256,7 @@ public partial class Dashboard : VBoxContainer
             classSummary.Text = $"{definition.DisplayName}：{definition.Summary}\n" +
                                 $"初始属性 {definition.StartingAttributes.Physique}/{definition.StartingAttributes.Dexterity}/" +
                                 $"{definition.StartingAttributes.Spirit}/{definition.StartingAttributes.Energy} · " +
-                                $"升华：{string.Join("、", definition.Ascendancies.Select(WarriorAscendancyCatalog.DisplayName))}\n" +
+                                $"升华：{string.Join("、", definition.Ascendancies.Select(AscendancyCatalog.DisplayName))}\n" +
                                 "基础职业创建后不能更换；升华在旅程中选择。";
         }
         baseClass.ItemSelected += RefreshClassSummary;
@@ -418,9 +418,16 @@ public partial class Dashboard : VBoxContainer
         var storyLogFrame = new PanelContainer { CustomMinimumSize = new Vector2(0, 92) };
         storyLogFrame.AddThemeStyleboxOverride("panel", new StyleBoxFlat
         {
-            BgColor = new Color("0d1219"), BorderColor = new Color("4b5665"),
-            BorderWidthLeft = 1, BorderWidthTop = 1, BorderWidthRight = 1, BorderWidthBottom = 1,
-            ContentMarginLeft = 5, ContentMarginTop = 3, ContentMarginRight = 7, ContentMarginBottom = 5,
+            BgColor = new Color("0d1219"),
+            BorderColor = new Color("4b5665"),
+            BorderWidthLeft = 1,
+            BorderWidthTop = 1,
+            BorderWidthRight = 1,
+            BorderWidthBottom = 1,
+            ContentMarginLeft = 5,
+            ContentMarginTop = 3,
+            ContentMarginRight = 7,
+            ContentMarginBottom = 5,
         });
         storyLogFrame.AddChild(_storyLog);
         page.AddChild(storyLogFrame);
@@ -692,9 +699,16 @@ public partial class Dashboard : VBoxContainer
         var frame = new PanelContainer();
         frame.AddThemeStyleboxOverride("panel", new StyleBoxFlat
         {
-            BgColor = new Color("111720"), BorderColor = new Color("786747"),
-            BorderWidthLeft = 1, BorderWidthTop = 1, BorderWidthRight = 1, BorderWidthBottom = 1,
-            ContentMarginLeft = 10, ContentMarginTop = 9, ContentMarginRight = 10, ContentMarginBottom = 9,
+            BgColor = new Color("111720"),
+            BorderColor = new Color("786747"),
+            BorderWidthLeft = 1,
+            BorderWidthTop = 1,
+            BorderWidthRight = 1,
+            BorderWidthBottom = 1,
+            ContentMarginLeft = 10,
+            ContentMarginTop = 9,
+            ContentMarginRight = 10,
+            ContentMarginBottom = 9,
         });
         _bossFragmentsStatus = new Label { AutowrapMode = TextServer.AutowrapMode.WordSmart };
         frame.AddChild(_bossFragmentsStatus);

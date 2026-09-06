@@ -144,8 +144,8 @@ public static class BuildAudit
                 int[] directions = endgame ? [2, 3, 4, 5] : [0, 1, 2, 3];
                 string[] nodes = directions.SelectMany(direction => new[]
                 {
-                    WarriorAscendancyCatalog.For(path.Ascendancy).Single(node => node.Direction == direction && node.Kind == NodeKind.Reinforcement).StableId,
-                    WarriorAscendancyCatalog.For(path.Ascendancy).Single(node => node.Direction == direction && node.Kind == NodeKind.Core).StableId,
+                    AscendancyCatalog.For(path.Ascendancy).Single(node => node.Direction == direction && node.Kind == NodeKind.Reinforcement).StableId,
+                    AscendancyCatalog.For(path.Ascendancy).Single(node => node.Direction == direction && node.Kind == NodeKind.Core).StableId,
                 }).ToArray();
                 string mode = endgame ? "终局" : "开荒";
                 result.Add(new($"builds.build.{path.Ascendancy.ToString().ToLowerInvariant()}.{(endgame ? "endgame" : "entry")}",

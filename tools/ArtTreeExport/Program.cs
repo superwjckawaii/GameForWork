@@ -19,11 +19,11 @@ var passiveEdges = PassiveTree.Nodes
 var ascendancies = Enum.GetValues<Ascendancy>().Where(value => value != Ascendancy.None)
     .Select(value =>
     {
-        TreeNode[] nodes = WarriorAscendancyCatalog.For(value)
+        TreeNode[] nodes = AscendancyCatalog.For(value)
             .Select(node => Project(node.StableId, node.X, node.Y, node.Kind.ToString(),
                 node.Kind == NodeKind.Core, 240))
             .ToArray();
-        TreeEdge[] edges = WarriorAscendancyCatalog.For(value)
+        TreeEdge[] edges = AscendancyCatalog.For(value)
             .Select(node => new TreeEdge(node.PrerequisiteId ?? $"center:{value}", node.StableId)).ToArray();
         return new NamedTree(value.ToString(), nodes, edges, 240);
     }).ToArray();

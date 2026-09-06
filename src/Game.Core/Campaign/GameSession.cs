@@ -292,7 +292,7 @@ public sealed class GameSession
         EndgameState endgame = EndgameState.Restore(snapshot.Endgame);
         if (endgame.SelectedAscendancy != Ascendancy.None &&
             (!ClassCatalog.Allows(baseClass, endgame.SelectedAscendancy) ||
-             !WarriorAscendancyCatalog.IsImplemented(endgame.SelectedAscendancy)))
+             !AscendancyCatalog.IsImplemented(endgame.SelectedAscendancy)))
             throw new InvalidDataException("Saved ascendancy does not belong to the selected base class.");
         var session = new GameSession(
             player,
@@ -1567,7 +1567,7 @@ public sealed class GameSession
 
     public bool TrySelectAscendancy(Ascendancy ascendancy)
     {
-        if (!ClassCatalog.Allows(Player.BaseClass, ascendancy) || !WarriorAscendancyCatalog.IsImplemented(ascendancy))
+        if (!ClassCatalog.Allows(Player.BaseClass, ascendancy) || !AscendancyCatalog.IsImplemented(ascendancy))
             return false;
         bool changed = Endgame.TrySelectAscendancy(ascendancy);
         if (changed) RefreshHeroBuild();
@@ -1583,7 +1583,7 @@ public sealed class GameSession
 
     public bool TryRefundAscendancyPassive(string stableId)
     {
-        AscendancyNode node = WarriorAscendancyCatalog.Get(stableId);
+        AscendancyNode node = AscendancyCatalog.Get(stableId);
         int cost = node.Kind == NodeKind.Core ? 10_000 : 2_000;
         if (!Endgame.AscendancyPassives.Contains(stableId) || World.Economy.Gold < cost ||
             !Endgame.TryRefundAscendancy(stableId)) return false;

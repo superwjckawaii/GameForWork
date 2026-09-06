@@ -14,10 +14,10 @@ public sealed class AscendanciesFeatureTests
     [Fact]
     public void EighteenAscendanciesHaveSixTwoNodeDirections()
     {
-        Assert.Equal(216, WarriorAscendancyCatalog.Nodes.Count);
-        foreach (Ascendancy path in Enum.GetValues<Ascendancy>().Where(WarriorAscendancyCatalog.IsImplemented))
+        Assert.Equal(216, AscendancyCatalog.Nodes.Count);
+        foreach (Ascendancy path in Enum.GetValues<Ascendancy>().Where(AscendancyCatalog.IsImplemented))
         {
-            IReadOnlyList<AscendancyNode> nodes = WarriorAscendancyCatalog.For(path);
+            IReadOnlyList<AscendancyNode> nodes = AscendancyCatalog.For(path);
             Assert.Equal(12, nodes.Count);
             Assert.Equal(6, nodes.Select(node => node.Direction).Distinct().Count());
             Assert.All(nodes.GroupBy(node => node.Direction), branch =>

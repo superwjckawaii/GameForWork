@@ -88,10 +88,9 @@ public static class WarriorNodeIds
     public const string BreakerMarchCore = "core.ascendancy.breaker.march.core";
 }
 
-public static class WarriorAscendancyCatalog
+public static class AscendancyCatalog
 {
-    private static readonly IReadOnlyDictionary<string, AscendancyNode> NodeMap = AscendancyDefinitions.Apply(Build()
-        .Concat(ClassAscendancyCatalog.Nodes).ToArray())
+    private static readonly IReadOnlyDictionary<string, AscendancyNode> NodeMap = AscendancyDefinitions.Nodes
         .ToDictionary(node => node.StableId, StringComparer.Ordinal);
 
     public static IReadOnlyCollection<AscendancyNode> Nodes => NodeMap.Values.ToArray();
@@ -101,108 +100,7 @@ public static class WarriorAscendancyCatalog
     public static AscendancyNode Get(string id) => NodeMap.TryGetValue(id, out AscendancyNode? node)
         ? node : throw new KeyNotFoundException($"Unknown Ascendancies ascendancy node: {id}");
 
-    public static string DisplayName(Ascendancy ascendancy) => ascendancy switch
-    {
-        Ascendancy.BloodFighter => "血战士",
-        Ascendancy.IronGuardian => "铁壁卫",
-        Ascendancy.Warbreaker => "破军者",
-        Ascendancy.Marksman => "神射手",
-        Ascendancy.Shadowblade => "影刃客",
-        Ascendancy.Venomist => "毒术师",
-        Ascendancy.SoulShepherd => "牧魂师",
-        Ascendancy.SpiritCantor => "颂灵师",
-        Ascendancy.Hexbinder => "咒契师",
-        Ascendancy.Elementalist => "元素使",
-        Ascendancy.VoidScholar => "虚空学者",
-        Ascendancy.AegisMage => "秘盾师",
-        Ascendancy.MartialMonk => "行武僧",
-        Ascendancy.BeastKeeper => "灵兽使",
-        Ascendancy.PhantomMaster => "幻身宗师",
-        Ascendancy.Runecarver => "刻印师",
-        Ascendancy.Spellarmor => "魔铠师",
-        Ascendancy.IdolForger => "铸像师",
-        _ => "尚未升华",
-    };
-
-    private static IReadOnlyList<AscendancyNode> Build()
-    {
-        var result = new List<AscendancyNode>(36);
-        AddBranch(result, Ascendancy.BloodFighter, 0, WarriorNodeIds.BloodLifeSmall, "血肉薪火",
-            "最大生命提高5%；技能生命消耗降低10%", WarriorNodeIds.BloodLifeCore, "血铸契约",
-            "攻击技能改用生命；生命消耗至少为最大生命2%，支付生命的攻击命中与流血造成50%更多伤害");
-        AddBranch(result, Ascendancy.BloodFighter, 1, WarriorNodeIds.BloodTwinSmall, "深红刀口",
-            "流血概率提高25%；流血伤害提高15%", WarriorNodeIds.BloodTwinCore, "双痕法则",
-            "最强两条流血同时生效，每条造成原伤害80%");
-        AddBranch(result, Ascendancy.BloodFighter, 2, WarriorNodeIds.BloodRuptureSmall, "急血奔流",
-            "流血造成伤害速度提高15%，持续时间缩短10%", WarriorNodeIds.BloodRuptureCore, "裂创连击",
-            "命中流血敌人施加裂创，最多3层；每层使流血造成伤害速度提高15%");
-        AddBranch(result, Ascendancy.BloodFighter, 3, WarriorNodeIds.BloodRageSmall, "沸血战意",
-            "最近3秒支付过生命时攻击速度提高8%", WarriorNodeIds.BloodRageCore, "血怒不息",
-            "支付生命、施加流血和击杀流血敌人积累血怒；满层提供40%更多物理与流血伤害和10%攻击速度");
-        AddBranch(result, Ascendancy.BloodFighter, 4, WarriorNodeIds.BloodLowLifeSmall, "濒战本能",
-            "低生命时生命偷取和药剂生命恢复提高25%，攻击速度提高8%", WarriorNodeIds.BloodLowLifeCore, "死战不退",
-            "低生命时物理命中与流血造成60%更多伤害，受到击中伤害降低25%，免疫眩晕");
-        AddBranch(result, Ascendancy.BloodFighter, 5, WarriorNodeIds.BloodTideSmall, "饮血收割",
-            "物理攻击伤害的1%转化为生命偷取", WarriorNodeIds.BloodTideCore, "赤潮归身",
-            "流血击杀传播120%最强剩余流血并回复4%最大生命；持续伤害稀有怪或Boss时每秒回复4%最大生命；触发恢复后2秒内受到击中伤害降低20%");
-
-        AddBranch(result, Ascendancy.IronGuardian, 0, WarriorNodeIds.BastionArmorSmall, "层叠甲幕",
-            "护甲提高25%；最大生命提高5%", WarriorNodeIds.BastionArmorCore, "百炼甲幕",
-            "30%护甲参与元素击中减伤；元素击中伤害降低20%");
-        AddBranch(result, Ascendancy.IronGuardian, 1, WarriorNodeIds.BastionAttackBlockSmall, "盾列操练",
-            "装备盾牌时攻击格挡率额外提高8%；盾牌护甲提高25%", WarriorNodeIds.BastionAttackBlockCore, "绝对盾面",
-            "攻击格挡率额外提高12%、上限提高至80%；未格挡攻击击中伤害降低20%");
-        AddBranch(result, Ascendancy.IronGuardian, 2, WarriorNodeIds.BastionCounterSmall, "回震刃缘",
-            "反击伤害提高30%、冷却恢复提高20%、范围提高15%", WarriorNodeIds.BastionCounterCore, "复仇壁垒",
-            "格挡积累复仇；满3层反击造成180%更多伤害并回复6%最大生命");
-        AddBranch(result, Ascendancy.IronGuardian, 3, WarriorNodeIds.BastionLayersSmall, "受击成垒",
-            "受到未格挡攻击后，2秒内护甲提高20%", WarriorNodeIds.BastionLayersCore, "不破阵地",
-            "未格挡攻击积累壁垒；满层降低25%击中伤害、反击造成50%更多伤害并每秒回复4%最大生命；格挡攻击后清空");
-        AddBranch(result, Ascendancy.IronGuardian, 4, WarriorNodeIds.BastionGuardSmall, "守护轮转",
-            "护卫冷却恢复提高25%、持续时间提高20%", WarriorNodeIds.BastionGuardCore, "守誓疆域",
-            "最大生命提高20%；战旗保留降低50%、效果提高30%；护卫期间额外降低25%击中伤害并每秒回复5%最大生命");
-        AddBranch(result, Ascendancy.IronGuardian, 5, WarriorNodeIds.BastionSpellBlockSmall, "咒击偏转",
-            "装备盾牌时获得8%法术格挡率", WarriorNodeIds.BastionSpellBlockCore, "镜铁守誓",
-            "获得攻击格挡率60%的额外法术格挡；法术格挡降低70%伤害，未格挡法术击中伤害降低25%");
-
-        AddBranch(result, Ascendancy.Warbreaker, 0, WarriorNodeIds.BreakerTwoHandSmall, "巨兵驾驭",
-            "双手武器伤害提高15%；双手攻击速度提高8%", WarriorNodeIds.BreakerTwoHandCore, "重兵裁决",
-            "双手攻击击中造成60%更多伤害，但攻击速度降低10%");
-        AddBranch(result, Ascendancy.Warbreaker, 1, WarriorNodeIds.BreakerAftershockSmall, "震域扩张",
-            "猛击范围提高20%；猛击伤害提高15%", WarriorNodeIds.BreakerAftershockCore, "震岳余势",
-            "猛击命中0.5秒后产生造成原始击中实际伤害100%的余震");
-        AddBranch(result, Ascendancy.Warbreaker, 2, WarriorNodeIds.BreakerMarchSmall, "踏阵而行",
-            "移动技能冷却恢复提高25%；移动技能和猛击范围提高15%", WarriorNodeIds.BreakerMarchCore, "裂阵行军",
-            "累计实际移动6米获得行军势；下一次猛击范围提高50%、造成60%更多伤害，击杀可重置移动技能冷却");
-        AddBranch(result, Ascendancy.Warbreaker, 3, WarriorNodeIds.BreakerStunSmall, "撼魂重势",
-            "眩晕积累提高40%；眩晕持续时间提高25%", WarriorNodeIds.BreakerStunCore, "山崩之王",
-            "稀有怪和Boss可完整眩晕；眩晕期间承受100%更多伤害，触发时产生150%击中伤害的震波");
-        AddBranch(result, Ascendancy.Warbreaker, 4, WarriorNodeIds.BreakerArmorBreakSmall, "碎甲专断",
-            "物理攻击每次技能使用有25%概率额外施加1层破甲", WarriorNodeIds.BreakerArmorBreakCore, "碎城铁律",
-            "破甲上限提高至8层、每层降低12%护甲；满层额外承受50%更多物理伤害");
-        AddBranch(result, Ascendancy.Warbreaker, 5, WarriorNodeIds.BreakerWarCrySmall, "号令回响",
-            "战吼冷却恢复提高30%、持续时间提高25%", WarriorNodeIds.BreakerWarCryCore, "号令无尽",
-            "战吼不占用攻击动作时间，并使接下来4次近战攻击造成50%更多伤害");
-        return result;
-    }
-
-    private static void AddBranch(List<AscendancyNode> nodes, Ascendancy ascendancy, int direction,
-        string smallId, string smallName, string smallEffect, string coreId, string coreName, string coreEffect)
-    {
-        (int smallX, int smallY, int coreX, int coreY) = direction switch
-        {
-            0 => (0, -92, 0, -190),
-            1 => (80, -46, 165, -95),
-            2 => (80, 46, 165, 95),
-            3 => (0, 92, 0, 190),
-            4 => (-80, 46, -165, 95),
-            _ => (-80, -46, -165, -95),
-        };
-        nodes.Add(new(smallId, ascendancy, direction, NodeKind.Reinforcement, smallName, smallEffect,
-            null, smallX, smallY));
-        nodes.Add(new(coreId, ascendancy, direction, NodeKind.Core, coreName, coreEffect,
-            smallId, coreX, coreY));
-    }
+    public static string DisplayName(Ascendancy ascendancy) => AscendancyDefinitions.All.FirstOrDefault(path => path.Ascendancy == ascendancy)?.DisplayName ?? "尚未升华";
 }
 
 public static class WarriorAscendancyRules

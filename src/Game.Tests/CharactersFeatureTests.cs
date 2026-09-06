@@ -54,12 +54,12 @@ public sealed class CharactersFeatureTests
     public void EighteenAscendanciesHaveUniqueFinalDisplayNames()
     {
         Ascendancy[] values = Enum.GetValues<Ascendancy>().Where(value => value != Ascendancy.None).ToArray();
-        string[] names = values.Select(WarriorAscendancyCatalog.DisplayName).ToArray();
+        string[] names = values.Select(AscendancyCatalog.DisplayName).ToArray();
 
         Assert.Equal(18, values.Length);
         Assert.Equal(18, names.Distinct(StringComparer.Ordinal).Count());
         Assert.Equal(["血战士", "铁壁卫", "破军者"],
-            ClassCatalog.Get(BaseClass.Fighter).Ascendancies.Select(WarriorAscendancyCatalog.DisplayName));
+            ClassCatalog.Get(BaseClass.Fighter).Ascendancies.Select(AscendancyCatalog.DisplayName));
     }
 
     [Theory]

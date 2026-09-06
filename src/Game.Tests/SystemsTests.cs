@@ -351,30 +351,30 @@ public sealed class SystemsTests
         PassiveNodeDefinition[] nodes = PassiveTree.Nodes.ToArray();
         var violations = new List<string>();
         for (int left = 0; left < nodes.Length; left++)
-        for (int right = left + 1; right < nodes.Length; right++)
-        {
-            double distance = Distance(nodes[left], nodes[right]);
-            if (distance < Radius(nodes[left]) + Radius(nodes[right]))
-                violations.Add($"nodes: {nodes[left].StableId} / {nodes[right].StableId} ({distance:0.0})");
-        }
+            for (int right = left + 1; right < nodes.Length; right++)
+            {
+                double distance = Distance(nodes[left], nodes[right]);
+                if (distance < Radius(nodes[left]) + Radius(nodes[right]))
+                    violations.Add($"nodes: {nodes[left].StableId} / {nodes[right].StableId} ({distance:0.0})");
+            }
 
         var edges = new HashSet<string>(StringComparer.Ordinal);
         foreach (PassiveNodeDefinition from in nodes)
-        foreach (string targetId in PassiveTree.Neighbors(from.StableId))
-        {
-            string edge = string.CompareOrdinal(from.StableId, targetId) < 0
-                ? from.StableId + '|' + targetId
-                : targetId + '|' + from.StableId;
-            if (!edges.Add(edge)) continue;
-            PassiveNodeDefinition to = PassiveTree.Get(targetId);
-            foreach (PassiveNodeDefinition node in nodes)
+            foreach (string targetId in PassiveTree.Neighbors(from.StableId))
             {
-                if (node.StableId == from.StableId || node.StableId == to.StableId) continue;
-                double clearance = DistanceToSegment(node.X, node.Y, from.X, from.Y, to.X, to.Y);
-                if (clearance < Radius(node) + 1)
-                    violations.Add($"edge: {edge} / {node.StableId} ({clearance:0.0})");
+                string edge = string.CompareOrdinal(from.StableId, targetId) < 0
+                    ? from.StableId + '|' + targetId
+                    : targetId + '|' + from.StableId;
+                if (!edges.Add(edge)) continue;
+                PassiveNodeDefinition to = PassiveTree.Get(targetId);
+                foreach (PassiveNodeDefinition node in nodes)
+                {
+                    if (node.StableId == from.StableId || node.StableId == to.StableId) continue;
+                    double clearance = DistanceToSegment(node.X, node.Y, from.X, from.Y, to.X, to.Y);
+                    if (clearance < Radius(node) + 1)
+                        violations.Add($"edge: {edge} / {node.StableId} ({clearance:0.0})");
+                }
             }
-        }
         Assert.True(violations.Count == 0,
             $"Passive layout has {violations.Count} collision(s):\n{string.Join('\n', violations.Take(100))}");
     }
@@ -388,8 +388,12 @@ public sealed class SystemsTests
 
     private static double Radius(PassiveNodeDefinition node) => node.Kind switch
     {
-        PassiveNodeKind.Start => 16, PassiveNodeKind.Small => 7, PassiveNodeKind.Notable => 11,
-        PassiveNodeKind.Mastery => 13, PassiveNodeKind.Rule => 15, _ => 12,
+        PassiveNodeKind.Start => 16,
+        PassiveNodeKind.Small => 7,
+        PassiveNodeKind.Notable => 11,
+        PassiveNodeKind.Mastery => 13,
+        PassiveNodeKind.Rule => 15,
+        _ => 12,
     };
 
     private static double DistanceToSegment(double px, double py, double ax, double ay, double bx, double by)
@@ -407,14 +411,14 @@ public sealed class SystemsTests
     public void AllEighteenAscendanciesUseConfirmedBuildsNodes()
     {
         Assert.Equal(18, AscendancyDefinitions.All.Count);
-        Assert.Equal(216, WarriorAscendancyCatalog.Nodes.Count);
+        Assert.Equal(216, AscendancyCatalog.Nodes.Count);
         Assert.All(AscendancyDefinitions.All, path =>
         {
             Assert.Equal(6, path.Branches.Count);
-            Assert.Equal(12, WarriorAscendancyCatalog.For(path.Ascendancy).Count);
+            Assert.Equal(12, AscendancyCatalog.For(path.Ascendancy).Count);
         });
-        Assert.Equal("血肉薪火", WarriorAscendancyCatalog.For(Ascendancy.BloodFighter)[0].DisplayName);
-        Assert.Contains("50% 更多伤害", WarriorAscendancyCatalog.For(Ascendancy.Warbreaker)
+        Assert.Equal("血肉薪火", AscendancyCatalog.For(Ascendancy.BloodFighter)[0].DisplayName);
+        Assert.Contains("50% 更多伤害", AscendancyCatalog.For(Ascendancy.Warbreaker)
             .Single(node => node.DisplayName == "摧城崩线").Effect);
     }
 
