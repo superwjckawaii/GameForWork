@@ -47,34 +47,47 @@ public sealed partial class ResourceState
         _overchargeDecayRemainder %= 200_000;
     }
 
+    private readonly record struct EnemyDamagePlan(int Remaining, int ManaLoss, int OverchargeLoss, bool Gate);
+
+    private EnemyDamagePlan PlanEnemyDamage(int amount, bool hit)
+    {
+        int mana = hit ? Math.Min(Mana, (int)((long)amount * _manaDamageShare / 10_000)) : 0;
+        amount -= mana;
+        if (hit && ShieldGate) return new(Math.Min(amount, Math.Max(0, Shield - 1)), mana, 0, true);
+        int absorbed = 0;
+        if (Overcharge > 0)
+        {
+            int multiplier = hit && AegisNode("absorb") ? 8_000 : 10_000;
+            int reduced = (int)((long)amount * multiplier / 10_000);
+            absorbed = Math.Min(Overcharge, reduced);
+            amount = reduced <= absorbed ? 0 : Math.Max(0, amount - (int)(((long)absorbed * 10_000 + multiplier - 1) / multiplier));
+        }
+        return new(amount, mana, absorbed, false);
+    }
+
+    public bool WouldEnemyHitBeLethal(int amount) => IsAlive && amount > 0 && PlanEnemyDamage(amount, true).Remaining >= (long)Life + Shield;
+
     /// <summary>Only enemy damage enters this path. Payments and decay cannot fire the gate or break reactions.</summary>
     public int ApplyEnemyDamage(int amount, bool hit, int tick)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(amount);
         if (!IsAlive || amount == 0) return 0;
-        int manaDamage = hit ? Math.Min(Mana, (int)((long)amount * _manaDamageShare / 10_000)) : 0;
-        Mana -= manaDamage;
-        amount -= manaDamage;
-        if (manaDamage > 0) LastDamageTick = tick;
-        int absorbed = 0;
-        if (hit && ShieldGate)
+        var plan = PlanEnemyDamage(amount, hit);
+        Mana -= plan.ManaLoss;
+        if (plan.Gate)
         {
-            ShieldGate = false; _gateReady = tick + 200;
+            ShieldGate = false;
+            _gateReady = tick + 200;
             Overcharge = 0;
-            amount = Math.Min(amount, Math.Max(0, Shield - 1));
             LastDamageTick = tick;
         }
-        else if (Overcharge > 0)
+        else
         {
-            int multiplier = hit && AegisNode("absorb") ? 8_000 : 10_000;
-            int reduced = (int)((long)amount * multiplier / 10_000);
-            absorbed = Math.Min(Overcharge, reduced);
-            Overcharge -= absorbed;
-            amount = reduced <= absorbed ? 0 : Math.Max(0, amount - (int)(((long)absorbed * 10_000 + multiplier - 1) / multiplier));
-            LastDamageTick = tick;
+            if (plan.ManaLoss > 0 || Overcharge > 0) LastDamageTick = tick;
+            Overcharge -= plan.OverchargeLoss;
         }
-        int actual = Math.Min(amount, Life + Shield);
-        ApplyDamage(amount, tick);
-        return manaDamage + absorbed + actual;
+        int actual = (int)Math.Min(plan.Remaining, (long)Life + Shield);
+        ApplyDamage(plan.Remaining, tick);
+        return plan.ManaLoss + plan.OverchargeLoss + actual;
     }
 }

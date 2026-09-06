@@ -25,7 +25,19 @@ public sealed partial class SpatialCombatRunner
         private readonly Combat.AuraCombatProfile? _auras;
         private readonly NodeCombatRequest _request;
         private int _sequence;
+        private readonly ResourceState _resources;
+        private Campaign.World.TeamBuild _heroBuild;
+        private int Inheritance => Shepherd("inheritance", "core") ? 5_000 : Shepherd("inheritance") ? 2_000 : 0;
+        private int _corpseStacks, _corpseUntil, _deathRecoveryReady, _sacrificeReady, _sacrificeUntil;
+        private bool Shepherd(string branch, string size = "small") => _ascendancy.Has($"core.ascendancy.soul_shepherd.{branch}.{size}");
         private int _unusedMinionSlots;
+        private readonly int _baseMinionMaximum;
+        private int MinionMaximum => _equipment.Has("末页王庭") ? 1 : ClassAscendancyRules.MaximumMinions(_baseMinionMaximum - CombatCaps.BaseMinions, _request.VirtueVice?.Layers(VirtueViceKind.Sloth) ?? 0);
+        private void EnforceMinionMaximum()
+        {
+            while (_units.Count(unit => unit.Kind == CombatUnitKind.Minion && unit.Life > 0) > MinionMaximum)
+                _units.Remove(_units.First(unit => unit.Kind == CombatUnitKind.Minion && unit.Life > 0));
+        }
         private int _arrayUntil, _arrayPulse;
         private Point _heroPosition;
         private string _heroTargetId = "";
@@ -44,13 +56,13 @@ public sealed partial class SpatialCombatRunner
         public int RedirectDamage(int damage, bool hit, Point hero, int tick, ICollection<SpatialEvent> events)
         {
             ArmyUnit? companion = _units.FirstOrDefault(unit => unit.Kind == CombatUnitKind.Companion && unit.Life > 0);
-            int remaining = damage;
+            int remaining = hit && tick < _sacrificeUntil ? ScaleCombatValue(damage, 7_000) : damage;
             if (companion is not null)
             {
                 int ratio = (_equipment.Has("共生兽印") ? 2_500 : 0) +
                     (hit ? SupportValue(companion.Skill, SupportMechanic.GuardianBeast, 1_500, 3_000) +
                         (_ascendancy.Has("core.ascendancy.beast_keeper.share.core") ? 3_000 : _ascendancy.Has("core.ascendancy.beast_keeper.share.small") ? 1_500 : 0) : 0);
-                int redirected = Math.Min(companion.Life, ScaleCombatValue(damage, Math.Min(5_000, ratio)));
+                int redirected = Math.Min(companion.Life, ScaleCombatValue(remaining, Math.Min(5_000, ratio)));
                 if (redirected > 0)
                 {
                     DamageUnit(companion, redirected, tick, events); remaining -= redirected;
@@ -60,14 +72,25 @@ public sealed partial class SpatialCombatRunner
             }
             var guards = hit ? _units.Where(unit => unit.Life > 0 && unit.Kind == CombatUnitKind.Minion &&
                 Support(unit.Skill, SupportMechanic.Bodyguard) && InRange(hero, unit.Position, 6_000)).ToArray() : [];
-            if (guards.Length == 0) return remaining;
-            int transfer = ScaleCombatValue(remaining, guards.Max(unit => SupportValue(unit.Skill, SupportMechanic.Bodyguard, 1_000, 2_000)));
+
+            int transfer = guards.Length == 0 ? 0 : ScaleCombatValue(remaining, guards.Max(unit => SupportValue(unit.Skill, SupportMechanic.Bodyguard, 1_000, 2_000)));
             for (int index = 0; index < guards.Length; index++)
             {
                 int portion = Math.Min(guards[index].Life, transfer / guards.Length + (index < transfer % guards.Length ? 1 : 0));
                 DamageUnit(guards[index], portion, tick, events); remaining -= portion;
                 events.Add(Event(tick, SpatialEventKind.SkillEffect, "hero", guards[index].Id, portion,
                     hero, guards[index].Position, "support:bodyguard|redirect"));
+            }
+            if (hit && tick >= _sacrificeReady && Shepherd("sacrifice", "core") && _resources.WouldEnemyHitBeLethal(remaining) &&
+                _units.FirstOrDefault(unit => unit.Kind == CombatUnitKind.Minion && unit.Life > 0) is { } sacrifice)
+            {
+                _sacrificeReady = tick + 240;
+                _sacrificeUntil = tick + 40;
+                DamageUnit(sacrifice, sacrifice.Life, tick, events);
+                _resources.HealLife((int)((long)_resources.MaximumLife * 3_000 / 10_000));
+                _resources.RestoreShield((int)((long)_resources.MaximumShield * 3_000 / 10_000));
+                events.Add(Event(tick, SpatialEventKind.SkillEffect, "hero", sacrifice.Id, remaining, hero, sacrifice.Position, "soul-sacrifice|lethal-hit"));
+                return 0;
             }
             return remaining;
         }
@@ -106,6 +129,9 @@ public sealed partial class SpatialCombatRunner
                 if (dead.Kind == CombatUnitKind.Companion)
                     dead.ReviveAt = tick + Math.Max(1, (160 - Math.Min(20, dead.Skill.Quality) * 2) * 10_000 /
                         Math.Max(1, 10_000 + _equipment.Value(ItemModifierKind.IncreasedCompanionReviveRateBasisPoints)));
+                else if (dead.Kind == CombatUnitKind.Minion && (Shepherd("rebirth") || Shepherd("rebirth", "core")) && tick >= dead.RebirthReady &&
+                    !(Shepherd("rebirth", "core") && tick < dead.RebuiltUntil))
+                { dead.ReviveAt = tick + (Shepherd("rebirth", "core") ? 40 : 80); dead.RebirthReady = tick + 240; }
                 else if (dead.Kind == CombatUnitKind.Minion && !dead.Resummoned && _equipment.Value(ItemModifierKind.MinionAutomaticResummon) > 0)
                 { dead.Resummoned = true; dead.ReviveAt = tick + 40; }
                 else if (dead.Kind == CombatUnitKind.Construct && (_ascendancy.Has("core.ascendancy.idol_forger.rebuild.small") || Module(ConstructModule.Reforge)))
@@ -115,21 +141,28 @@ public sealed partial class SpatialCombatRunner
                     _deathBlasts.Add(dead);
                 if (dead.Kind == CombatUnitKind.Construct && dead.ReviveAt != int.MaxValue)
                     ApplyRebuildSupport(dead, dead.Skill, tick);
+                if (dead.Kind == CombatUnitKind.Minion && Shepherd("sacrifice") && tick >= _deathRecoveryReady)
+                {
+                    _deathRecoveryReady = tick + 10;
+                    _resources.HealLife((int)((long)_resources.MaximumLife * 200 / 10_000));
+                    _resources.RestoreShield((int)((long)_resources.MaximumShield * 200 / 10_000));
+                }
                 events.Add(Event(tick, SpatialEventKind.SkillEffect, dead.Id, dead.Id, 0,
                     dead.Position, dead.Position, $"unit:{dead.Kind}|death"));
             }
         }
-        public BattleArmy(NodeCombatRequest request, IEnumerable<SkillConfiguration> skills, Point origin)
+        public BattleArmy(NodeCombatRequest request, IEnumerable<SkillConfiguration> skills, Point origin, ResourceState resources)
         {
             _request = request;
+            _resources = resources;
+            _heroBuild = request.Build;
             _equipment = request.Build.CombatEquipment ?? EquipmentCombatLoadout.Empty;
             _ascendancy = request.Build.Ascendancy ?? CombatProfile.Empty;
             _auras = request.Auras;
             SkillConfiguration[] stones = skills.Where(s => s.SkillId is Bone or Bow).ToArray();
-            int maximum = CombatCaps.Clamp(CombatUnitKind.Minion,
-                ClassAscendancyRules.MaximumMinions(_equipment.Value(ItemModifierKind.AdditionalMinionMaximum) +
-                    _equipment.Value(ItemModifierKind.AdditionalUnitMaximum), _ascendancy) +
-                stones.Select(s => SupportValue(s, SupportMechanic.ExpandedArmy, 1, 2)).DefaultIfEmpty().Max());
+            _baseMinionMaximum = CombatCaps.BaseMinions + _equipment.Value(ItemModifierKind.AdditionalMinionMaximum) +
+                _equipment.Value(ItemModifierKind.AdditionalUnitMaximum) + stones.Select(s => SupportValue(s, SupportMechanic.ExpandedArmy, 1, 2)).DefaultIfEmpty().Max();
+            int maximum = ClassAscendancyRules.MaximumMinions(_baseMinionMaximum - CombatCaps.BaseMinions, request.VirtueVice?.Layers(VirtueViceKind.Sloth) ?? 0);
             if (_equipment.Has("末页王庭")) { _unusedMinionSlots = Math.Min(8, Math.Max(0, maximum - 1)); maximum = 1; }
             if (stones.Length > 0)
                 for (int index = 0; index < maximum; index++) Spawn(stones[index % stones.Length], origin, 0);
@@ -201,7 +234,19 @@ public sealed partial class SpatialCombatRunner
                 int corpses = enemies.Count(e => e.Life <= 0 && !e.CorpseConsumed && InRange(origin, e.Position, 6_000));
                 corpses = Math.Min(corpses, 5 + skill.Quality / 10);
                 foreach (var corpse in enemies.Where(e => e.Life <= 0 && !e.CorpseConsumed && InRange(origin, e.Position, 6_000)).Take(corpses))
+                {
                     corpse.CorpseConsumed = true;
+                    if (Shepherd("corpse"))
+                    {
+                        hero.RestoreMana((int)((long)hero.MaximumMana * 200 / 10_000));
+                        hero.RestoreShield((int)((long)hero.MaximumShield * 200 / 10_000));
+                    }
+                    if (Shepherd("corpse", "core"))
+                    {
+                        _corpseStacks = Math.Min(5, (tick < _corpseUntil ? _corpseStacks : 0) + 1);
+                        _corpseUntil = tick + 120;
+                    }
+                }
                 int multiplier = (int)Math.Round(12_000 * Math.Pow(1.05, skill.Level - 1));
                 multiplier = ScaleCombatValue(multiplier, 10_000 + corpses * 1_000);
                 foreach (ArmyUnit unit in _units.Where(u => u.Life > 0 && u.Kind == CombatUnitKind.Minion))
@@ -265,10 +310,12 @@ public sealed partial class SpatialCombatRunner
         }
 
         public void Advance(IReadOnlyCollection<EnemyUnit> enemies, Point hero, Pcg32 random, int tick,
-            ICollection<SpatialEvent> events, string heroTargetId)
+            ICollection<SpatialEvent> events, string heroTargetId, Campaign.World.TeamBuild heroBuild)
         {
             _heroPosition = hero;
             _heroTargetId = heroTargetId;
+            _heroBuild = heroBuild;
+            EnforceMinionMaximum();
             foreach (var shot in _projectiles.ToArray())
             {
                 Point previous = shot.Position;
@@ -346,6 +393,11 @@ public sealed partial class SpatialCombatRunner
                         RebalanceSharedPool();
                         if (!_units.Contains(unit)) continue;
                     }
+                    if (unit.Kind == CombatUnitKind.Minion)
+                    {
+                        EnforceMinionMaximum();
+                        if (!_units.Contains(unit)) continue;
+                    }
                     events.Add(Event(tick, SpatialEventKind.SkillEffect, unit.Id, unit.Id, unit.Life,
                         unit.Position, unit.Position, $"unit:{unit.Kind}|revive"));
                 }
@@ -374,7 +426,7 @@ public sealed partial class SpatialCombatRunner
                 UpdateProtection(unit, tick);
                 int movementIncrease = (aura?.UnitSpeedIncrease ?? 0) + (aura?.Build.MovementSpeedBasisPoints ?? 10_000) - 10_000 + buff.MovementSpeed;
                 if (unit.Kind == CombatUnitKind.Companion) movementIncrease += unit.Form == "追猎" ? 5_000 : unit.Form == "猛攻" ? 2_000 : 0;
-                if (unit.Kind == CombatUnitKind.Minion) movementIncrease += _equipment.Value(ItemModifierKind.IncreasedMinionSpeedBasisPoints) +
+                if (unit.Kind == CombatUnitKind.Minion) movementIncrease += (Shepherd("command") ? 2_000 : 0) + _equipment.Value(ItemModifierKind.IncreasedMinionSpeedBasisPoints) +
                     SupportValue(unit.Skill, SupportMechanic.SwiftMinions, 3_000, 5_000) + SupportQuality(unit.Skill, SupportMechanic.SwiftMinions) * 50;
                 int speed = ScaleCombatValue(4_000, 10_000 + movementIncrease);
                 if (unit.Kind != CombatUnitKind.Construct && !InRange(unit.Position, target.Position, range))
@@ -411,6 +463,11 @@ public sealed partial class SpatialCombatRunner
                 if (unit.Skill.SkillId == Turret) bonus += unit.Skill.Quality * 100;
                 if (unit.Kind == CombatUnitKind.Companion && unit.Form == "猛攻") bonus += 2_500;
                 if (unit.Kind == CombatUnitKind.Construct && _ascendancy.Has("core.ascendancy.idol_forger.construct.core")) bonus += Math.Min(6, _units.Count(unit => unit.Life > 0 && unit.Kind == CombatUnitKind.Construct)) * 600;
+                if (unit.Kind == CombatUnitKind.Minion)
+                {
+                    if (tick < _corpseUntil) bonus += _corpseStacks * 800;
+                    bonus += ScaleCombatValue(_heroBuild.IncreasedAttackSpeedBasisPoints + _heroBuild.IncreasedActionSpeedBasisPoints, Inheritance);
+                }
                 bonus += unit.Heat?.SpeedIncrease ?? 0;
                 frequency = Math.Max(1, ScaleCombatValue(frequency, 10_000 + bonus));
                 unit.ReadyAt = tick + Math.Max(1, (20_000 + frequency - 1) / frequency);
@@ -437,11 +494,16 @@ public sealed partial class SpatialCombatRunner
                 _ => ItemModifierKind.IncreasedConstructDamageBasisPoints,
             });
             if (unit.Kind == CombatUnitKind.Minion) increased += ClassAscendancyRules.IncreasedMinionDamageBasisPoints(
-                _units.Count(u => u.Life > 0 && u.Kind == unit.Kind), _ascendancy);
+                _request.VirtueVice?.Layers(VirtueViceKind.Sloth) ?? 0, _ascendancy);
+            if (unit.Kind == CombatUnitKind.Minion) increased += ScaleCombatValue(_heroBuild.IncreasedGenericDamageBasisPoints, Inheritance);
             increased += _request.Buffs?.ForUnit(tick, _heroPosition, unit.Position, unit.Kind == CombatUnitKind.Minion).DamageIncrease ?? 0;
             increased += unit.Heat?.DamageIncrease ?? 0;
             increased += _request.RuneFields?.DamageIncrease(unit.Position) ?? 0;
-            if (unit.Kind == CombatUnitKind.Minion) raw = ScaleCombatValue(raw, 10_000 + _unusedMinionSlots * 3_000);
+            if (unit.Kind == CombatUnitKind.Minion)
+            {
+                raw = ScaleCombatValue(raw, 10_000 + _unusedMinionSlots * 3_000);
+                if (tick < unit.RebuiltUntil && Shepherd("rebirth", "core")) raw = ScaleCombatValue(raw, 15_000);
+            }
             raw = ScaleCombatValue(raw, 10_000 + SupportValue(unit.Skill, SupportMechanic.MinionAmplify, 3_000, 5_500));
             raw = ScaleCombatValue(raw, 10_000 + SupportValue(unit.Skill, SupportMechanic.ConstructAmplify, 3_000, 5_500));
             raw = ScaleCombatValue(raw, 10_000 + SupportValue(unit.Skill, SupportMechanic.SwiftMinions, 1_500, 2_500));
@@ -453,12 +515,6 @@ public sealed partial class SpatialCombatRunner
                 raw = ScaleCombatValue(raw, 10_000 + SupportQuality(unit.Skill, SupportMechanic.FerociousBeast) * 50);
             }
             if (Support(unit.Skill, SupportMechanic.GuardianBeast)) raw = ScaleCombatValue(raw, 8_000);
-            if (unit.Kind == CombatUnitKind.Minion && _request.Buffs?.Command(tick) is { } command && command.TargetId == enemy.EntityId)
-            {
-                raw = ScaleCombatValue(raw, 10_000 + command.MoreDamage);
-                if (_ascendancy.Has("core.ascendancy.soul_shepherd.command.core") && enemy.Rarity is EnemyRarity.Rare or EnemyRarity.Boss)
-                    raw = ScaleCombatValue(raw, 15_000);
-            }
             raw = ScaleCombatValue(raw, multiplier);
             raw = ScaleCombatValue(raw, 10_000 + (_request.Buffs?.WarSongMore(tick) ?? 0));
             raw = ScaleCombatValue(raw, aura?.UnitDamageMultiplier ?? 10_000);
@@ -497,6 +553,12 @@ public sealed partial class SpatialCombatRunner
         private sealed record UnitOffense(Combat.AuraCombatProfile? Aura, int Increased, bool Critical);
         private void DealUnitDamage(ArmyUnit unit, EnemyUnit enemy, int raw, SkillDamageType type, int tick, ICollection<SpatialEvent> events, string action, UnitOffense? offense = null)
         {
+            if (unit.Kind == CombatUnitKind.Minion && _request.Buffs?.Command(tick) is { } command && command.TargetId == enemy.EntityId)
+            {
+                raw = ScaleCombatValue(raw, 10_000 + command.MoreDamage);
+                if (_ascendancy.Has("core.ascendancy.soul_shepherd.command.core") && enemy.Rarity is EnemyRarity.Rare or EnemyRarity.Boss)
+                    raw = ScaleCombatValue(raw, 15_000);
+            }
             var aura = offense?.Aura ?? UnitAura(unit);
             bool hunted = enemy.Rarity is EnemyRarity.Rare or EnemyRarity.Boss;
             if (hunted) raw = ScaleCombatValue(raw, 10_000 + (aura?.Build.MoreRareBossDamageBasisPoints ?? 0));
@@ -604,6 +666,13 @@ public sealed partial class SpatialCombatRunner
                 EnemyDamageType.Lightning => sheet?.LightningResistanceBasisPoints ?? 0,
                 _ => sheet?.VoidResistanceBasisPoints ?? 0
             };
+            if (unit.Kind == CombatUnitKind.Minion && Shepherd("inheritance", "core")) resistance += type switch
+            {
+                EnemyDamageType.Fire => _heroBuild.Sheet.FireResistanceBasisPoints,
+                EnemyDamageType.Cold => _heroBuild.Sheet.ColdResistanceBasisPoints,
+                EnemyDamageType.Lightning => _heroBuild.Sheet.LightningResistanceBasisPoints,
+                _ => _heroBuild.Sheet.VoidResistanceBasisPoints
+            };
             int maximum = type == EnemyDamageType.Void ? sheet?.MaximumVoidResistanceBasisPoints ?? 7_500 : sheet?.MaximumElementalResistanceBasisPoints ?? 7_500;
             return Math.Clamp(unit.Resistance + resistance + (_request.Buffs?.ForUnit(tick, _heroPosition, unit.Position).Resistance ?? 0), -50_000, Math.Min(9_000, maximum));
         }
@@ -661,6 +730,7 @@ public sealed partial class SpatialCombatRunner
             public int BashAt { get; set; } = tick;
             public int ReviveAt { get; set; } = int.MaxValue;
             public bool Resummoned { get; set; }
+            public int RebirthReady { get; set; }
             public Combat.ConstructHeatState? Heat { get; set; }
         }
     }

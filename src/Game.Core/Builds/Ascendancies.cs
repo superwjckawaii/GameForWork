@@ -49,20 +49,27 @@ public static class AscendancyDefinitions
     {
         VirtueViceKind? kind = VirtueViceSources.Ascendancy(profile.Ascendancy);
         if (kind is null) return [];
-        AscendancyData path = All.Single(item => item.Ascendancy == profile.Ascendancy);
-        int direction = kind.Value switch
-        {
-            VirtueViceKind.Rage => 3,
-            VirtueViceKind.Arrogance => 5,
-            VirtueViceKind.Sloth => 0,
-            VirtueViceKind.Temperance => 5,
-            VirtueViceKind.Mercy => 2,
-            _ => 4,
-        };
-        AscendancyNode core = AscendancyCatalog.For(profile.Ascendancy)
-            .Single(node => node.Direction == direction && node.Kind == NodeKind.Core);
-        return profile.Has(core.StableId) ? [kind.Value] : [];
+        string branch = ResourceBranch(kind.Value);
+        return profile.Has(Id(profile.Ascendancy, branch, NodeKind.Core)) ? [kind.Value] : [];
     }
+
+    public static IReadOnlyDictionary<VirtueViceKind, int> ResourceDuration(CombatProfile profile)
+    {
+        if (VirtueViceSources.Ascendancy(profile.Ascendancy) is not { } kind || kind == VirtueViceKind.Rage ||
+            !profile.Has(Id(profile.Ascendancy, ResourceBranch(kind), NodeKind.Reinforcement))) return new Dictionary<VirtueViceKind, int>();
+        return new Dictionary<VirtueViceKind, int> { [kind] = 5_000 };
+    }
+
+    private static string ResourceBranch(VirtueViceKind kind) => kind switch
+    {
+        VirtueViceKind.Rage => "rage",
+        VirtueViceKind.Arrogance => "gale",
+        VirtueViceKind.Sloth => "legion",
+        VirtueViceKind.Temperance => "resonance",
+        VirtueViceKind.Mercy => "stance",
+        VirtueViceKind.Humility => "spellblade",
+        _ => throw new ArgumentOutOfRangeException(nameof(kind))
+    };
 
     private static IReadOnlyList<AscendancyData> Load()
     {

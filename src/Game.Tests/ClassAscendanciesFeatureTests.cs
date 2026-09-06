@@ -47,15 +47,17 @@ public sealed class ClassAscendanciesFeatureTests
     }
 
     [Fact]
-    public void LegionAddsTwoToEveryOtherMaximumSourceAndOnlyScalesAboveEight()
+    public void LegionUsesCurrentSlothLayersForCapacityAndDamage()
     {
         CombatProfile profile = Profile(Ascendancy.SoulShepherd, ClassNodeIds.SoulLegionCore);
 
-        Assert.Equal(8, ClassAscendancyRules.MaximumMinions(0, profile));
-        Assert.Equal(12, ClassAscendancyRules.MaximumMinions(4, profile));
-        Assert.Equal(0, ClassAscendancyRules.IncreasedMinionDamageBasisPoints(8, profile));
-        Assert.Equal(1_500, ClassAscendancyRules.IncreasedMinionDamageBasisPoints(9, profile));
-        Assert.Equal(6_000, ClassAscendancyRules.IncreasedMinionDamageBasisPoints(12, profile));
+        Assert.Equal(6, ClassAscendancyRules.MaximumMinions(0, 0));
+        Assert.Equal(10, ClassAscendancyRules.MaximumMinions(0, 4));
+        Assert.Equal(14, ClassAscendancyRules.MaximumMinions(4, 4));
+        Assert.Equal(16, ClassAscendancyRules.MaximumMinions(20, 4));
+        Assert.Equal(0, ClassAscendancyRules.IncreasedMinionDamageBasisPoints(0, profile));
+        Assert.Equal(600, ClassAscendancyRules.IncreasedMinionDamageBasisPoints(1, profile));
+        Assert.Equal(2_400, ClassAscendancyRules.IncreasedMinionDamageBasisPoints(4, profile));
     }
 
     [Fact]

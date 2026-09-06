@@ -81,7 +81,12 @@ public sealed class CombatBuffState(CombatProfile? profile = null)
         };
         return true;
     }
-    public CombatBuff? Command(int tick) => _active.TryGetValue("archetypes.skill.king_soul_command", out var buff) && tick < buff.Expires ? buff : null;
+    public CombatBuff? Command(int tick)
+    {
+        if (!_active.TryGetValue("archetypes.skill.king_soul_command", out var buff)) return null;
+        if (tick < buff.Expires) return buff;
+        return profile?.Has("core.ascendancy.soul_shepherd.command.core") == true ? buff with { MoreDamage = 0 } : null;
+    }
     public UnitBuff ForUnit(int tick, Point hero, Point unit, bool minion = false)
     {
         int damage = 0, speed = 0, movement = 0, resistance = 0;
@@ -127,8 +132,7 @@ public sealed class CombatBuffState(CombatProfile? profile = null)
             }
             build = build with
             {
-                IncreasedDamageBasisPoints = build.IncreasedDamageBasisPoints + blessing.DamageIncrease,
-                IncreasedSpellDamageBasisPoints = build.IncreasedSpellDamageBasisPoints + blessing.DamageIncrease,
+                IncreasedGenericDamageBasisPoints = build.IncreasedGenericDamageBasisPoints + blessing.DamageIncrease,
                 IncreasedActionSpeedBasisPoints = build.IncreasedActionSpeedBasisPoints + blessing.ActionSpeed,
                 MovementSpeedBasisPoints = build.MovementSpeedBasisPoints + blessing.MovementSpeed,
                 Sheet = build.Sheet with

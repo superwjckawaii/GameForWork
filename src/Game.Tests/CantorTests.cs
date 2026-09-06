@@ -91,7 +91,7 @@ public sealed partial class CombatClosureTests
         var buffs = new CombatBuffState(new(Ascendancy.SpiritCantor,
             ["core.ascendancy.spirit_cantor.blessing.small", "core.ascendancy.spirit_cantor.blessing.core"]));
         Assert.True(buffs.Activate(new("archetypes.skill.fellowship_blessing", SkillSupport.None), false, 0));
-        Assert.Equal(4_000, buffs.Apply(Team(), 207).IncreasedDamageBasisPoints - Team().IncreasedDamageBasisPoints);
+        Assert.Equal(4_000, buffs.Apply(Team(), 207).IncreasedGenericDamageBasisPoints - Team().IncreasedGenericDamageBasisPoints);
         Assert.Equal(3_000, buffs.ForUnit(207, new(0, 0), new(0, 0)).DamageIncrease);
         Assert.Equal(0, buffs.ForUnit(207, new(0, 0), new(9_001, 0)).DamageIncrease);
         var team = Team();

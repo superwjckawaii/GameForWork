@@ -48,12 +48,11 @@ public static class ClassAscendancyRules
         };
     }
 
-    public static int MaximumMinions(int externalAdditionalMaximum, CombatProfile profile) => checked(
-        CombatLimits.MaximumMinions + Math.Max(0, externalAdditionalMaximum) +
-        (profile.Has(ClassNodeIds.SoulLegionCore) ? 2 : 0));
+    public static int MaximumMinions(int externalAdditionalMaximum, int slothLayers) =>
+        Archetypes.CombatCaps.Clamp(Archetypes.CombatUnitKind.Minion, CombatLimits.MaximumMinions + Math.Max(0, externalAdditionalMaximum) + Math.Max(0, slothLayers));
 
-    public static int IncreasedMinionDamageBasisPoints(int livingMinions, CombatProfile profile) =>
-        profile.Has(ClassNodeIds.SoulLegionCore) ? checked(Math.Max(0, livingMinions - 8) * 1_500) : 0;
+    public static int IncreasedMinionDamageBasisPoints(int slothLayers, CombatProfile profile) =>
+        profile.Has(ClassNodeIds.SoulLegionCore) ? checked(Math.Max(0, slothLayers) * 600) : 0;
 
     public static int ExtraPhysicalAsPrimaryElement(int originalPhysicalDamage, PrimaryElement element,
         CombatProfile profile)

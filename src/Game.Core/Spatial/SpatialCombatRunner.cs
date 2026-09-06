@@ -255,7 +255,7 @@ public sealed partial class SpatialCombatRunner
         foreach (VirtueViceKind kind in AscendancyDefinitions.PermanentVirtueVice(ascendancy))
             maxima[kind] = maxima.GetValueOrDefault(kind) + 1;
         var virtueVice = request.VirtueVice ?? new VirtueViceState(
-            maxima, held, UnarmedRules.Has(ascendancy, "stance") ? new Dictionary<VirtueViceKind, int> { [VirtueViceKind.Mercy] = 5_000 } : null);
+            maxima, held, AscendancyDefinitions.ResourceDuration(ascendancy));
         request = request with
         {
             AscendancyRuntime = ascendancyRuntime,
@@ -337,7 +337,7 @@ public sealed partial class SpatialCombatRunner
                 warCry.CooldownDurationTicks = Math.Max(1, warCry.CooldownDurationTicks * 10_000 / 13_000);
         }
 
-        var army = new BattleArmy(request, skills.Values, heroPosition);
+        var army = new BattleArmy(request, skills.Values, heroPosition, hero);
         equipment.NearbyEnemyCount = () => enemies.Count(enemy => enemy.Life > 0 && InRange(heroPosition, enemy.Position, 6_000));
         string heroTargetId = string.Empty;
         int heroNextActionTick = 0;
@@ -777,7 +777,7 @@ public sealed partial class SpatialCombatRunner
             }
 
             ResolveReactions(request, enemies, hero, heroPosition, random, tick, events, projectiles, persistentAreas);
-            army.Advance(enemies, heroPosition, random, tick, events, heroTargetId);
+            army.Advance(enemies, heroPosition, random, tick, events, heroTargetId, request.Build);
             if (RechargeFlasksForKills(enemies, flasks, tick, heroPosition, events, ascendancyRuntime, hero, equipment))
                 chargeReadyTick = 0;
             if (tick < rootedUntilTick) heroPosition = beforeMovement;

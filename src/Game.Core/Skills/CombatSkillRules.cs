@@ -287,7 +287,7 @@ public static class CombatSkillRules
     {
         var equipment = build.CombatEquipment ?? Equipment.EquipmentCombatLoadout.Empty;
         var passive = build.PassiveProfile ?? PassiveModifiers.Empty;
-        int common = (tags.HasFlag(SkillTag.Attack) ? build.IncreasedDamageBasisPoints - equipment.PhysicalIncreaseIncludedInAttack : 0) +
+        int common = build.IncreasedGenericDamageBasisPoints + (tags.HasFlag(SkillTag.Attack) ? build.IncreasedDamageBasisPoints - equipment.PhysicalIncreaseIncludedInAttack : 0) +
             passive.DamageFor(tags & ~(SkillTag.Physical | SkillTag.Elemental | SkillTag.Void), damageOverTime) + additionalIncreasedBasisPoints;
         if (tags.HasFlag(SkillTag.Attack)) common += Ascendancies.WarriorAscendancyRules.IncreasedAttackDamageBasisPoints(
             build.Ascendancy ?? Ascendancies.CombatProfile.Empty, build.Sheet.Attributes.Physique);
