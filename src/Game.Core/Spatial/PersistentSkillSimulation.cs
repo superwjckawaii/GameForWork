@@ -179,7 +179,7 @@ public sealed partial class SpatialCombatRunner
                         TickMilliseconds, 0, area.Skill.SkillId, instanceId: $"{area.Skill.SkillId}:{area.Created}",
                         debuffedDamagePerSecond: type == DamageType.Void && debuffed is not null ?
                             ScaleCombatValue(debuffed.Void, AreaRules.PositionMultiplier(area.Request.Build.PassiveProfile ?? PassiveModifiers.Empty,
-                                (int)Math.Sqrt(SegmentDistanceSquared(enemy.Position, area.Start, area.End)), area.Radius)) : null);
+                                (int)Math.Sqrt(SegmentDistanceSquared(enemy.Position, area.Start, area.End)), area.Radius)) : null, selfCast: area.Request.ElementalSourceSelf);
                 }
             }
             if (tick >= area.Expires) areas.Remove(area);

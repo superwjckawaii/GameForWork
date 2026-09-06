@@ -103,7 +103,8 @@ public sealed partial class SpatialCombatRunner
             if (dps <= 0) return;
             duration = duration * Math.Max(0, 10_000 - enemy.Profile.ReducedAilmentDurationBasisPoints) / 10_000;
             enemy.Ailments.Apply(kind, type, dps, duration, faster, skill.SkillId,
-                debuffedDamagePerSecond: type == DamageType.Void && MasteryRuntime.Has(passive, "虚空", 4) ? Basis(kind, true) * ratio : null);
+                debuffedDamagePerSecond: type == DamageType.Void && MasteryRuntime.Has(passive, "虚空", 4) ? Basis(kind, true) * ratio : null,
+                selfCast: request.EquipmentRuntime?.CaptureAction().Copy != true && (request.ElementalSourceSelf || request.EquipmentRuntime?.CaptureAction().Triggered != true));
             events.Add(Event(tick, SpatialEventKind.Ailment, "hero", enemy.EntityId, 0, origin, enemy.Position,
                 $"skill:{skill.SkillId}|ailment:{kind.ToString().ToLowerInvariant()}|dps:{dps:0.###}"));
         }
@@ -191,6 +192,7 @@ public sealed partial class SpatialCombatRunner
             }, VoidDebuffed(enemy, tick)))
             {
                 int damage = Math.Min(enemy.Life, pulse.Damage);
+                if (damage > 0) request.Elemental?.Observe(pulse.Type, tick, !pulse.SelfCast);
                 enemy.Life -= damage;
                 if (damage > 0 && tick % 20 == 0 && !recovered && enemy.Rarity is EnemyRarity.Rare or EnemyRarity.Boss &&
                     request.AscendancyRuntime?.Has(WarriorNodeIds.BloodTideCore) == true)

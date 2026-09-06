@@ -30,9 +30,13 @@ public sealed class ElementalCombatState(CombatProfile? profile)
     }
     public void Observe(DamageBreakdown damage, int tick, bool triggered)
     {
-        if (triggered || !ElementalRules.Has(profile, "resonance")) return;
-        if (damage.Fire > 0) _resonances[DamageType.Fire] = tick + 160;
-        if (damage.Cold > 0) _resonances[DamageType.Cold] = tick + 160;
-        if (damage.Lightning > 0) _resonances[DamageType.Lightning] = tick + 160;
+        if (damage.Fire > 0) Observe(DamageType.Fire, tick, triggered);
+        if (damage.Cold > 0) Observe(DamageType.Cold, tick, triggered);
+        if (damage.Lightning > 0) Observe(DamageType.Lightning, tick, triggered);
+    }
+    public void Observe(DamageType type, int tick, bool triggered)
+    {
+        if (triggered || type is not (DamageType.Fire or DamageType.Cold or DamageType.Lightning) || !ElementalRules.Has(profile, "resonance")) return;
+        _resonances[type] = tick + 160;
     }
 }

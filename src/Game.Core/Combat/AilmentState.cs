@@ -4,8 +4,8 @@ using GameForWork.Core.SkillCatalog;
 namespace GameForWork.Core.Combat;
 
 public sealed record DamageOverTimeInstance(Ailment Kind, DamageType Type, decimal DamagePerSecond,
-    decimal RemainingMilliseconds, string SourceId, bool Propagated = false, string InstanceId = "", decimal? DebuffedDamagePerSecond = null);
-public readonly record struct DamageOverTimePulse(Ailment Kind, DamageType Type, int Damage);
+    decimal RemainingMilliseconds, string SourceId, bool Propagated = false, string InstanceId = "", decimal? DebuffedDamagePerSecond = null, bool SelfCast = false);
+public readonly record struct DamageOverTimePulse(Ailment Kind, DamageType Type, int Damage, bool SelfCast = false);
 
 /// <summary>Attacker snapshots; target defenses are supplied afresh for every simulation step.</summary>
 public sealed class AilmentState
@@ -27,11 +27,11 @@ public sealed class AilmentState
     }
 
     public void Apply(Ailment kind, DamageType type, decimal dps, int durationMilliseconds,
-        int fasterBasisPoints, string sourceId, bool propagated = false, string? instanceId = null, decimal? debuffedDamagePerSecond = null)
+        int fasterBasisPoints, string sourceId, bool propagated = false, string? instanceId = null, decimal? debuffedDamagePerSecond = null, bool selfCast = false)
     {
         if (dps <= 0 || durationMilliseconds <= 0) return;
         decimal speed = Math.Max(1, 10_000 + fasterBasisPoints) / 10_000m;
-        _instances.Add(new(kind, type, dps * speed, durationMilliseconds / speed, sourceId, propagated, instanceId ?? $"dot:{++_sequence}", debuffedDamagePerSecond * speed));
+        _instances.Add(new(kind, type, dps * speed, durationMilliseconds / speed, sourceId, propagated, instanceId ?? $"dot:{++_sequence}", debuffedDamagePerSecond * speed, selfCast));
     }
 
     public int Stack(Ailment kind, int tick) => _debuffs.TryGetValue(kind, out var value) && tick < value.Until ? value.Count : 0;
@@ -94,7 +94,7 @@ public sealed class AilmentState
                     decimal amount = defended * portion * step / 1000 + _remainders.GetValueOrDefault(key);
                     int damage = (int)Math.Min(int.MaxValue, decimal.Floor(amount));
                     _remainders[key] = amount - damage;
-                    if (damage > 0) output.Add(new(kind.Key, type.Key, damage));
+                    if (damage > 0) output.Add(new(kind.Key, type.Key, damage, kind.Any(instance => instance.SelfCast)));
                 }
             }
             for (int index = _instances.Count - 1; index >= 0; index--)

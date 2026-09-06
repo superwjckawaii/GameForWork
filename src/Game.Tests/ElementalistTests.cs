@@ -116,6 +116,32 @@ public sealed class ElementalistTests
     }
 
     [Fact]
+    public void GroundOwnershipFollowsTheWholeActiveInstance()
+    {
+        var state = new AilmentState();
+        state.Apply(Ailment.Ground, DamageType.Fire, 100, 1_000, 0, "ground", instanceId: "self", selfCast: true);
+        state.Apply(Ailment.Ground, DamageType.Fire, 200, 500, 0, "ground", instanceId: "trigger");
+        var first = Assert.Single(state.Advance(500, (_, dps) => dps));
+        Assert.False(first.SelfCast);
+        var next = Assert.Single(state.Advance(500, (_, dps) => dps));
+        Assert.True(next.SelfCast);
+    }
+
+    [Fact]
+    public void FireGroundGeneratesResonanceFromActualPeriodicDamage()
+    {
+        var profile = Profile(PrimaryElement.Fire, "resonance.small");
+        var state = new ElementalCombatState(profile);
+        var config = new SkillConfiguration(SkillIds.FlameStep, SkillSupport.None);
+        var build = new TeamBuild(new(1, new(0, 0, 0, 0), new(0, 0, 0), FlatMaximumLife: 10_000, FlatMaximumMana: 10_000),
+            Weapons.Unequipped, new(SkillIds.HeavyStrike, SkillSupport.None), UseWarCry: false, ActiveSkills: [config], Ascendancy: profile);
+        var result = new SpatialCombatRunner().Run(new(build, 1, 1, 1, false, false, false, 0, MaximumTicks: 150, Elemental: state,
+            EnemyPool: [Enemies.CorruptedWorker with { Life = 1_000_000, Armor = 0, MinimumPhysicalDamage = 0, MaximumPhysicalDamage = 0 }]), 731);
+        Assert.Contains(result.Events, e => e.Detail == "dot:ground" && e.Value > 0);
+        Assert.Equal(1, state.Count(result.Ticks));
+    }
+
+    [Fact]
     public void PrimaryAndBranchIncreasesShareTheElementStage()
     {
         var build = new TeamBuild(new(1, new(0, 0, 0, 0), new(0, 0, 0)), Weapons.Unequipped, new(SkillIds.HeavyStrike, SkillSupport.None),

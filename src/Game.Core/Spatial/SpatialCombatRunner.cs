@@ -260,7 +260,7 @@ public sealed partial class SpatialCombatRunner
         {
             AscendancyRuntime = ascendancyRuntime,
             VirtueVice = virtueVice,
-            Elemental = new Combat.ElementalCombatState(ascendancy),
+            Elemental = request.Elemental ?? new Combat.ElementalCombatState(ascendancy),
             Unarmed = new Combat.UnarmedCombatState(ascendancy, request.Build.ActiveSkills?.Any(skill => skill.SkillId == "archetypes.skill.chain_fists") == true)
         };
         Point heroPosition = new(6_000, 22_000);
