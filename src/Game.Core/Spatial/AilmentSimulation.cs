@@ -27,29 +27,46 @@ public sealed partial class SpatialCombatRunner
             (enemy.Profile.AilmentAvoidanceBasisPoints <= 0 || random.NextBasisPoints() >= enemy.Profile.AilmentAvoidanceBasisPoints);
         int Chance(Ailment kind) => skill.Ailment == kind ? skill.AilmentChanceBasisPoints : 0;
         int threshold = CombatRules.AilmentThreshold(enemy.MaximumLife, enemy.Rarity switch
-        { EnemyRarity.Magic => CombatRarity.Magic, EnemyRarity.Rare => CombatRarity.Rare,
-            EnemyRarity.Boss => CombatRarity.MapBoss, _ => CombatRarity.Normal });
+        {
+            EnemyRarity.Magic => CombatRarity.Magic,
+            EnemyRarity.Rare => CombatRarity.Rare,
+            EnemyRarity.Boss => CombatRarity.MapBoss,
+            _ => CombatRarity.Normal
+        });
 
         decimal Basis(Ailment kind)
         {
             var branches = source.Where(branch => kind switch
-            { Ailment.Bleed => branch.CurrentType == DamageType.Physical,
+            {
+                Ailment.Bleed => branch.CurrentType == DamageType.Physical,
                 Ailment.Poison => branch.CurrentType is DamageType.Physical or DamageType.Void,
-                _ => branch.CurrentType == DamageType.Fire });
+                _ => branch.CurrentType == DamageType.Fire
+            });
+            DamageType output = kind == Ailment.Bleed ? DamageType.Physical : kind == Ailment.Poison ? DamageType.Void : DamageType.Fire;
             decimal total = 0;
             foreach (var branch in branches)
             {
                 decimal damage = branch.BaseDamage;
                 if (SkillDefinitions.Get(skill.SkillId).Tags.HasFlag(SkillTag.Attack)) damage *= skill.BaseDamageBasisPoints / 10_000m;
                 int common = Value(ItemModifierKind.IncreasedDamageOverTimeBasisPoints) + passive.IncreasedDamageOverTimeBasisPoints +
-                    Value(kind switch { Ailment.Bleed => ItemModifierKind.IncreasedBleedDamageBasisPoints,
-                        Ailment.Poison => ItemModifierKind.IncreasedPoisonDamageBasisPoints, _ => ItemModifierKind.IncreasedIgniteDamageBasisPoints });
+                    Value(kind switch
+                    {
+                        Ailment.Bleed => ItemModifierKind.IncreasedBleedDamageBasisPoints,
+                        Ailment.Poison => ItemModifierKind.IncreasedPoisonDamageBasisPoints,
+                        _ => ItemModifierKind.IncreasedIgniteDamageBasisPoints
+                    });
+                if (kind == Ailment.Bleed) common += passive.SpecializedValue(PassiveEffectKind.IncreasedBleedDamageBasisPoints);
                 bool first = true, elemental = false;
-                foreach (DamageType type in branch.History.Distinct())
+                foreach (DamageType type in branch.History.Append(output).Distinct())
                 {
-                    int increase = Value(type switch { DamageType.Physical => ItemModifierKind.IncreasedPhysicalDamageBasisPoints,
-                        DamageType.Fire => ItemModifierKind.IncreasedFireDamageBasisPoints, DamageType.Cold => ItemModifierKind.IncreasedColdDamageBasisPoints,
-                        DamageType.Lightning => ItemModifierKind.IncreasedLightningDamageBasisPoints, _ => ItemModifierKind.IncreasedVoidDamageBasisPoints });
+                    int increase = Value(type switch
+                    {
+                        DamageType.Physical => ItemModifierKind.IncreasedPhysicalDamageBasisPoints,
+                        DamageType.Fire => ItemModifierKind.IncreasedFireDamageBasisPoints,
+                        DamageType.Cold => ItemModifierKind.IncreasedColdDamageBasisPoints,
+                        DamageType.Lightning => ItemModifierKind.IncreasedLightningDamageBasisPoints,
+                        _ => ItemModifierKind.IncreasedVoidDamageBasisPoints
+                    });
                     increase += type == DamageType.Physical ? passive.IncreasedPhysicalDamageBasisPoints :
                         type == DamageType.Void ? passive.IncreasedVoidDamageBasisPoints : 0;
                     if (kind == Ailment.Bleed && type == DamageType.Physical) increase += passive.SpecializedValue(PassiveEffectKind.IncreasedPhysicalDamageOverTimeBasisPoints);
@@ -62,6 +79,8 @@ public sealed partial class SpatialCombatRunner
                 damage *= (10_000m + request.Build.MoreDamageOverTimeBasisPoints) / 10_000;
                 if (kind == Ailment.Bleed) damage *= (10_000m + request.Build.MoreBleedDamageBasisPoints) / 10_000;
                 damage *= (10_000m + Value(ItemModifierKind.DamageOverTimeMultiplierBasisPoints) + (critical ? 5_000 : 0)) / 10_000;
+                if (configuration.Supports.HasFlag(SkillSupport.Brutality) && output != DamageType.Physical) continue;
+                damage *= MasteryDamageRules.AilmentMultiplier(passive, branch, output, kind == Ailment.Poison) / 10_000m;
                 total += damage;
             }
             return total;
@@ -83,10 +102,10 @@ public sealed partial class SpatialCombatRunner
             enemy.Ailments.BleedMaximum = request.AscendancyRuntime?.TwoBleeds == true ? 2 : 1;
             enemy.Ailments.BleedMultiplier = request.AscendancyRuntime?.TwoBleeds == true ? 8_000 : 10_000;
             Apply(Ailment.Bleed, DamageType.Physical, .7m,
-                CombatRules.ApplyIncreased(5_000, Value(ItemModifierKind.IncreasedBleedDurationBasisPoints)), Value(ItemModifierKind.FasterBleedBasisPoints));
+                CombatRules.ApplyIncreased(5_000, Value(ItemModifierKind.IncreasedBleedDurationBasisPoints) + passive.SpecializedValue(PassiveEffectKind.IncreasedBleedDurationBasisPoints)), Value(ItemModifierKind.FasterBleedBasisPoints));
             request.AscendancyRuntime?.AppliedBleed();
         }
-        if (hit.Physical + hit.Void > 0 && Allowed(Ailment.Poison, Chance(Ailment.Poison) + Value(ItemModifierKind.PoisonChanceBasisPoints)))
+        if (hit.Physical + hit.Void > 0 && Allowed(Ailment.Poison, Chance(Ailment.Poison) + Value(ItemModifierKind.PoisonChanceBasisPoints) + (MasteryRuntime.Has(passive, "虚空", 1) ? 2_000 : 0)))
             Apply(Ailment.Poison, DamageType.Void, .3m, 2_000, Value(ItemModifierKind.FasterPoisonBasisPoints));
         if (hit.Fire > 0 && Allowed(Ailment.Ignite, Chance(Ailment.Ignite) + Value(ItemModifierKind.IgniteChanceBasisPoints), critical))
             Apply(Ailment.Ignite, DamageType.Fire, .9m, 4_000, Value(ItemModifierKind.FasterIgniteBasisPoints));

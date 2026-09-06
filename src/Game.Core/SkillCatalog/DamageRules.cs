@@ -52,7 +52,7 @@ public static class DamagePacketRules
         Func<DamageBranch, int>? scaleBranch = null,
         Action<IReadOnlyList<DamageBranch>>? captureSource = null,
         SkillConfiguration? configuration = null, int addedDamageEffectiveness = 10_000,
-        bool allowAddedHitDamage = true, Pcg32? random = null)
+        bool allowAddedHitDamage = true, Pcg32? random = null, MasteryDamageContext? mastery = null)
     {
         DamageType type = baseType switch
         {
@@ -77,6 +77,18 @@ public static class DamagePacketRules
             extras.Add(new(DamageType.Physical, DamageType.Fire, (configuration is null ? 20 :
                 CombatSkillRules.SupportValue(configuration, SkillSupport.AddedFire)) * 100, "support.added_fire"));
 
+        if (configuration?.SkillId == SkillIds.AshJavelin)
+        {
+            type = DamageType.Physical;
+            conversions.Add(new(DamageType.Physical, DamageType.Fire, 5_000, "skill.ash_javelin.conversion"));
+            extras.Add(new(DamageType.Physical, DamageType.Fire, 2_500, "skill.ash_javelin.extra"));
+        }
+        if (configuration?.SkillId is "archetypes.skill.venom_blades" or "archetypes.skill.corrosive_trap")
+        {
+            type = DamageType.Physical;
+            conversions.Add(new(DamageType.Physical, DamageType.Void, 10_000, "skill.weapon_to_void"));
+        }
+
         AddConversion(ItemModifierKind.PhysicalToFireConversionBasisPoints, DamageType.Physical, DamageType.Fire);
         AddConversion(ItemModifierKind.PhysicalToColdConversionBasisPoints, DamageType.Physical, DamageType.Cold);
         AddConversion(ItemModifierKind.PhysicalToLightningConversionBasisPoints, DamageType.Physical, DamageType.Lightning);
@@ -91,6 +103,9 @@ public static class DamagePacketRules
         AddExtra(ItemModifierKind.PhysicalAsExtraLightningBasisPoints, DamageType.Physical, DamageType.Lightning);
         foreach (DamageType element in new[] { DamageType.Fire, DamageType.Cold, DamageType.Lightning })
             AddExtra(ItemModifierKind.ElementalAsExtraVoidBasisPoints, element, DamageType.Void);
+
+        if (mastery is { } context && context.Profile.MasteryMechanics.Length > 0) MasteryDamageRules.Configure(context.Profile, conversions, extras);
+        else mastery = null;
 
         var packets = new List<DamagePacket>
         {
@@ -110,7 +125,10 @@ public static class DamagePacketRules
         if (supports.HasFlag(SkillSupport.Brutality))
             packet = packet with
             {
-                Fire = 0, Cold = 0, Lightning = 0, Void = 0,
+                Fire = 0,
+                Cold = 0,
+                Lightning = 0,
+                Void = 0,
                 Branches = packet.Branches.Where(branch => branch.CurrentType == DamageType.Physical).ToArray(),
             };
         packet = CombatRules.Mitigate(packet, Math.Max(0, targetArmor),
@@ -136,8 +154,13 @@ public static class DamagePacketRules
         DamagePacket ConvertPacket(int damage, DamageType damageType)
         {
             DamagePacket converted = CombatRules.ConvertAndScale(damage, damageType, conversions, extras, modifiers, captureSource);
-            if (scaleBranch is null) return converted;
-            DamageBranch[] branches = converted.Branches.Select(branch => branch with { BaseDamage = scaleBranch(branch) }).ToArray();
+            if (scaleBranch is null && mastery is null) return converted;
+            DamageBranch[] branches = converted.Branches.Select(branch =>
+            {
+                int value = CombatRules.ApplyMore(branch.BaseDamage,
+                    [mastery is { } context ? MasteryDamageRules.BranchMultiplier(context, branch) : 10_000]);
+                return branch with { BaseDamage = value <= 0 ? 0 : scaleBranch?.Invoke(branch with { BaseDamage = value }) ?? value };
+            }).ToArray();
             int Sum(DamageType target) => (int)Math.Clamp(branches.Where(branch => branch.CurrentType == target)
                 .Sum(branch => (long)branch.BaseDamage), 0, int.MaxValue);
             return new(Sum(DamageType.Physical), Sum(DamageType.Fire), Sum(DamageType.Cold),

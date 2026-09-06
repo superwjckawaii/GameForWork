@@ -1,8 +1,11 @@
+using GameForWork.Core.SkillCatalog;
 using GameForWork.Core.Builds;
 using GameForWork.Core.Campaign.Combat;
 using GameForWork.Core.Skills;
 
 namespace GameForWork.Core.Combat;
+
+public sealed record PendingAreaBurst(GameForWork.Core.Spatial.Point Origin, int BaseDamage, SkillDamageType Type, int Radius, string Detail);
 
 public sealed record PendingReaction(string SkillId, string TargetId, int Multiplier = 10_000,
     ResolvedSkill? Resolved = null, int IncreasedDamage = 0, bool RecoverLife = false, bool PayCost = false);
@@ -18,6 +21,12 @@ public sealed class ReactionState
     private readonly Dictionary<string, int> _actionMultipliers = [];
     private readonly Dictionary<string, int> _spellIncreases = [];
     private readonly Queue<PendingReaction> _pending = [];
+    private readonly Queue<PendingAreaBurst> _bursts = [];
+    public void EnqueueBurst(PendingAreaBurst burst) => _bursts.Enqueue(burst);
+    public IEnumerable<PendingAreaBurst> DrainBursts()
+    {
+        while (_bursts.TryDequeue(out var burst)) yield return burst;
+    }
     private readonly Dictionary<string, long> _damageTaken = [];
     private int _boost, _boostExpires;
     private string _channelSkill = "";

@@ -4,7 +4,7 @@ namespace GameForWork.Core.Builds;
 
 internal static class ExplicitMasteryEffects
 {
-    private static readonly HashSet<string> RuntimeGroups = ["生命", "法力", "能量护盾", "护甲", "闪避"];
+    private static readonly HashSet<string> RuntimeGroups = ["生命", "法力", "能量护盾", "护甲", "闪避", "物理"];
     private static readonly IReadOnlyDictionary<string, PassiveEffect[]> Rules =
         new Dictionary<string, PassiveEffect[]>(StringComparer.Ordinal)
         {
@@ -51,7 +51,6 @@ internal static class ExplicitMasteryEffects
             ["偷取"] = [new(PassiveEffectKind.IncreasedMaximumLifeBasisPoints, 300), new(PassiveEffectKind.IncreasedMaximumLifeBasisPoints, 3000), new(PassiveEffectKind.IncreasedMaximumLifeBasisPoints, 2500), new(PassiveEffectKind.IncreasedMaximumLifeBasisPoints, 6000), new(PassiveEffectKind.IncreasedMaximumLifeBasisPoints, 3000), new(PassiveEffectKind.IncreasedAttackSkillDamageBasisPoints, 1500), new(PassiveEffectKind.IncreasedMaximumLifeBasisPoints, 5000)],
             ["投射物"] = [new(PassiveEffectKind.IncreasedSkillRangeBasisPoints, 5000), new(PassiveEffectKind.IncreasedAttackSkillDamageBasisPoints, 2000), new(PassiveEffectKind.FlatAccuracy, 2), new(PassiveEffectKind.IncreasedAttackSkillDamageBasisPoints, 1000), new(PassiveEffectKind.IncreasedAttackSkillDamageBasisPoints, 4000), new(PassiveEffectKind.IncreasedSkillRangeBasisPoints, 5000), new(PassiveEffectKind.FlatAccuracy, 25)],
             ["徒手"] = [new(PassiveEffectKind.IncreasedUnarmedDamageBasisPoints, 6000), new(PassiveEffectKind.FlatPhysique, 10), new(PassiveEffectKind.IncreasedUnarmedDamageBasisPoints, 3500), new(PassiveEffectKind.IncreasedElementalDamageBasisPoints, 6000), new(PassiveEffectKind.IncreasedUnarmedDamageBasisPoints, 400), new(PassiveEffectKind.IncreasedMaximumLifeBasisPoints, 500), new(PassiveEffectKind.IncreasedSkillRangeBasisPoints, 8000)],
-            ["物理"] = [new(PassiveEffectKind.IncreasedAttackSkillDamageBasisPoints, 6000), new(PassiveEffectKind.IncreasedAttackSkillDamageBasisPoints, 10000), new(PassiveEffectKind.IncreasedElementalDamageBasisPoints, 1000), new(PassiveEffectKind.IncreasedAttackSkillDamageBasisPoints, 5000), new(PassiveEffectKind.IncreasedMaximumLifeBasisPoints, 1000), new(PassiveEffectKind.IncreasedAttackSkillDamageBasisPoints, 2500), new(PassiveEffectKind.IncreasedDamageOverTimeBasisPoints, 3500)],
             ["陷阱"] = [new(PassiveEffectKind.IncreasedTrapDamageBasisPoints, 5000), new(PassiveEffectKind.IncreasedCriticalChanceBasisPoints, 5000), new(PassiveEffectKind.IncreasedTrapDamageBasisPoints, 1500), new(PassiveEffectKind.IncreasedTrapDamageBasisPoints, 5000), new(PassiveEffectKind.IncreasedTrapDamageBasisPoints, 3000), new(PassiveEffectKind.IncreasedTrapDamageBasisPoints, 5000), new(PassiveEffectKind.IncreasedMaximumLifeBasisPoints, 2000)],
             ["虚空"] = [new(PassiveEffectKind.IncreasedElementalDamageBasisPoints, 5000), new(PassiveEffectKind.IncreasedDamageOverTimeBasisPoints, 5000), new(PassiveEffectKind.IncreasedElementalDamageBasisPoints, 5000), new(PassiveEffectKind.IncreasedDamageOverTimeBasisPoints, 5000), new(PassiveEffectKind.IncreasedSkillRangeBasisPoints, 8000), new(PassiveEffectKind.VoidResistanceBasisPoints, 2000), new(PassiveEffectKind.IncreasedDamageOverTimeBasisPoints, 1000)],
             ["虚空抗性"] = [new(PassiveEffectKind.VoidResistanceBasisPoints, 2500), new(PassiveEffectKind.VoidResistanceBasisPoints, 2500), new(PassiveEffectKind.IncreasedShieldBasisPoints, 600), new(PassiveEffectKind.IncreasedDamageOverTimeBasisPoints, 2500), new(PassiveEffectKind.IncreasedMaximumLifeBasisPoints, 200), new(PassiveEffectKind.IncreasedVoidDamageBasisPoints, 4000), new(PassiveEffectKind.VoidResistanceBasisPoints, 1500)],
@@ -79,6 +78,7 @@ internal static class ExplicitMasteryEffects
 
     private static PassiveEffect Corrected(string key, int option, PassiveEffect fallback) => (key, option) switch
     {
+        ("虚空", 0) or ("虚空", 1) or ("虚空", 2) or ("虚空", 3) or ("虚空", 5) or
         ("法杖", 6) or ("双手", 0) or ("双手", 2) or ("剑类", 6) or ("属性", 3) or
         ("近战打击", 2) or ("破甲_物理穿透", 1) or ("眩晕", 1) or
         ("护体_承伤缓冲", 0) or ("偷取", 0) or ("双手", 5) or

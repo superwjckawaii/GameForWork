@@ -1168,16 +1168,19 @@ public sealed partial class SpatialCombatRunner
         int ascendancyMultiplier = runtime.ConsumeAttackMultiplier(tags,
             hero.Life * 2L <= hero.MaximumLife, !request.Build.HasShield,
             new EnemyState(enemy.ArmorBreakStacks, tick < enemy.StunnedUntilTick));
-        int weaponSpan = request.Build.Weapon.MaximumPhysicalDamage - request.Build.Weapon.MinimumPhysicalDamage + 1;
-        int weaponRoll = request.Build.Weapon.MinimumPhysicalDamage + (int)(random.NextUInt() % (uint)Math.Max(1, weaponSpan));
+        PassiveModifiers profile = request.Build.PassiveProfile ?? PassiveModifiers.Empty;
+        bool luckyPhysical = MasteryRuntime.Has(profile, "物理", 5);
+        int weaponRoll = MasteryDamageRules.RollPhysical(request.Build.Weapon.MinimumPhysicalDamage,
+            request.Build.Weapon.MaximumPhysicalDamage, random, luckyPhysical && tags.HasFlag(SkillTag.Attack));
         int raw = tags.HasFlag(SkillTag.Spell) ? SpellHitRules.Roll(skill, configuration.Level, random) :
             CombatSkillRules.BaseDamage(skill, tags, request.Build.Weapon, request.Build.AddedPhysicalDamage, weaponRoll);
+        if (luckyPhysical && tags.HasFlag(SkillTag.Spell) && skill.DamageType == SkillDamageType.Physical)
+            raw = Math.Max(raw, SpellHitRules.Roll(skill, configuration.Level, random));
         raw = (int)Math.Min(int.MaxValue, (long)raw + Math.Max(0, additionalBaseDamage));
         if (skill.SkillId == "archetypes.skill.plague_detonation")
             multiplier = ScaleCombatValue(multiplier, 10_000 + enemy.Ailments.ConsumeStacks(Ailment.Poison, 10 + configuration.Quality / 10, tick) * 1_200);
         if (skill.SkillId == "archetypes.skill.forbidden_collapse")
             multiplier = ScaleCombatValue(multiplier, 10_000 + enemy.Ailments.ConsumeStacks(Ailment.Wither, 10, tick) * 2_000);
-        PassiveModifiers profile = request.Build.PassiveProfile ?? PassiveModifiers.Empty;
         AddedWeaponDamage addedWeapon = tags.HasFlag(SkillTag.Attack) && skill.Role != SkillRole.DamageOverTime &&
                                            request.Build.LocalWeaponStats is { } localWeapon
             ? new(Roll(localWeapon.Fire), Roll(localWeapon.Cold), Roll(localWeapon.Lightning), Roll(localWeapon.Void))
@@ -1230,7 +1233,8 @@ public sealed partial class SpatialCombatRunner
                 }
                 return scaled;
             }, branches => ailmentSource.AddRange(branches), configuration,
-            tags.HasFlag(SkillTag.Spell) ? SpellHitRules.Effectiveness(skill.SkillId) : 10_000, random: random);
+            tags.HasFlag(SkillTag.Spell) ? SpellHitRules.Effectiveness(skill.SkillId) : 10_000, random: random,
+            mastery: new(profile, skill.Role != SkillRole.DamageOverTime, enemy.Life, enemy.MaximumLife));
         request.Actions?.Record(equipment!.ActionId, new(enemy.EntityId, source, skill, configuration, request.Build,
             new(0, 0, 0, 0, 0, offensiveBranches.ToArray(), []), ailmentSource.ToArray(), critical, criticalMultiplier), tick, equipment.CaptureAction().Triggered);
         if (missed) return null;
@@ -1303,6 +1307,10 @@ public sealed partial class SpatialCombatRunner
         if (enemy.Life == 0)
             events.Add(Event(tick, SpatialEventKind.EnemyDefeated, "hero", enemy.EntityId, 0,
                 source, enemy.Position, enemy.Profile.StableId));
+        if (beforeShieldLink > 0 && enemy.Life == 0 && skill.Role != SkillRole.DamageOverTime &&
+            damage.Physical > 0 && damage.Total == damage.Physical && MasteryRuntime.Has(profile, "物理", 4))
+            request.Reactions?.EnqueueBurst(new Combat.PendingAreaBurst(enemy.Position, enemy.MaximumLife / 10,
+                SkillDamageType.Physical, 3_000, "physical-corpse-burst"));
         if (!triggered && value > 0 && tags.HasFlag(SkillTag.Attack) && ReactionConfiguration(request, Combat.ReactionState.Answer) is { } answer)
             request.Reactions?.Schedule(answer, enemy.EntityId, 44);
         if (!triggered && value > 0 && tags.HasFlag(SkillTag.Attack)) ScheduleSupportedReactions(request, hero, enemy.EntityId, attack: true);
@@ -1703,7 +1711,8 @@ public sealed partial class SpatialCombatRunner
             resistance -= enemy.Curses.Effect("archetypes.skill.elemental_hex", enemy.CurrentTick);
         if (type == SkillDamageType.Void) resistance -= CombatRules.CorrosionResistanceReduction(enemy.Ailments.Stack(Ailment.Erosion, enemy.CurrentTick));
         return Math.Clamp(resistance, CombatRules.MinimumResistance, 7_500) -
-            (penetrate ? request.Build.CombatEquipment?.Penetration(type) ?? 0 : 0);
+            (penetrate ? (request.Build.CombatEquipment?.Penetration(type) ?? 0) +
+                (type == SkillDamageType.Void && MasteryRuntime.Has(request.Build.PassiveProfile ?? PassiveModifiers.Empty, "虚空", 5) ? 2_000 : 0) : 0);
     }
 
     private static int HeroBaseArmor(NodeCombatRequest request, ResourceState hero, int tick)

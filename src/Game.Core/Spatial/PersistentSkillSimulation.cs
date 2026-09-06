@@ -76,8 +76,9 @@ public sealed partial class SpatialCombatRunner
         { Armed = trap };
         if (!brand && !thunder && !doom)
         {
-            int weapon = request.Build.Weapon.MinimumPhysicalDamage + (int)(random.NextUInt() %
-                (uint)Math.Max(1, request.Build.Weapon.MaximumPhysicalDamage - request.Build.Weapon.MinimumPhysicalDamage + 1));
+            int weapon = MasteryDamageRules.RollPhysical(request.Build.Weapon.MinimumPhysicalDamage,
+                request.Build.Weapon.MaximumPhysicalDamage, random,
+                trap && MasteryRuntime.Has(request.Build.PassiveProfile ?? Campaign.Progression.PassiveModifiers.Empty, "物理", 5));
             int raw = trap ? weapon : (int)Math.Round((flame ? 45 : id == SkillIds.VoidDecayField ? 42 : 32) *
                 Math.Pow(1.065, Math.Clamp(configuration.Level, 1, 40) - 1), MidpointRounding.AwayFromZero);
             if (trap) raw = ScaleCombatValue(raw, (int)Math.Round(3_500 * Math.Pow(1.05, Math.Clamp(configuration.Level, 1, 40) - 1)));
@@ -99,12 +100,6 @@ public sealed partial class SpatialCombatRunner
         SkillTag tags = SkillDefinitions.Get(skill.SkillId).Tags & ~SkillTag.Attack;
         skill = skill with { Role = SkillRole.DamageOverTime };
         var modifiers = (request.Build.CombatEquipment?.Modifiers ?? new Dictionary<ItemModifierKind, int>()).ToDictionary(pair => pair.Key, pair => pair.Value);
-        if (weaponDerived)
-        {
-            foreach (var kind in new[] { ItemModifierKind.PhysicalToFireConversionBasisPoints, ItemModifierKind.PhysicalToColdConversionBasisPoints,
-                ItemModifierKind.PhysicalToLightningConversionBasisPoints }) modifiers.Remove(kind);
-            modifiers[ItemModifierKind.PhysicalToVoidConversionBasisPoints] = 10_000;
-        }
         return DamagePacketRules.ResolveMixed(raw, weaponDerived ? SkillDamageType.Physical : skill.DamageType, default,
             configuration.Supports, 0, 0, 0, 0, 0, equipment: modifiers,
             modifiers: CombatSkillRules.OffensiveIncreases(request.Build, tags, true,
@@ -115,7 +110,8 @@ public sealed partial class SpatialCombatRunner
                 int scaled = CombatSkillRules.ScaleOffensiveDamage(branch.BaseDamage, skill, configuration, request.Build, tags,
                     1, 1, ScaleCombatValue(multiplier, request.ActionMultiplierSnapshot ?? 10_000), targetRareOrBoss: rare, applyIncreased: false, damageHistory: branch.History);
                 return ScaleCombatValue(scaled, 10_000 + modifiers.GetValueOrDefault(ItemModifierKind.DamageOverTimeMultiplierBasisPoints));
-            }, configuration: configuration, allowAddedHitDamage: false);
+            }, configuration: configuration, allowAddedHitDamage: false,
+            mastery: new(request.Build.PassiveProfile ?? Campaign.Progression.PassiveModifiers.Empty, false));
     }
 
     private static void AdvancePersistentAreas(IList<PersistentArea> areas, IReadOnlyCollection<EnemyUnit> enemies,

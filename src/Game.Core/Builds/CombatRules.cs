@@ -22,7 +22,7 @@ public sealed record DamageBranch(
     int BaseDamage,
     DamageType CurrentType,
     IReadOnlyList<DamageType> History,
-    IReadOnlyList<string> Trace);
+    IReadOnlyList<string> Trace, bool IsExtra = false, bool FullyConvertedPhysical = false);
 
 public sealed record DamagePacket(
     int Physical,
@@ -328,7 +328,7 @@ public static class CombatRules
                 {
                     int amount = checked((int)((long)original.BaseDamage * Math.Max(0, extra.BasisPoints) / Basis));
                     if (amount > 0) branches.Add(new(amount, extra.Target, [.. original.History, extra.Target],
-                        [.. original.Trace, $"extra:{extra.StableId}:{amount}"]));
+                        [.. original.Trace, $"extra:{extra.StableId}:{amount}"], IsExtra: true));
                 }
                 SplitBranch(branches, original, conversionArray.Where(item => item.Source == source).ToArray());
             }
@@ -453,7 +453,8 @@ public static class CombatRules
             converted = Math.Min(remaining, converted);
             remaining -= converted;
             if (converted > 0) produced.Add(new(converted, conversion.Target,
-                [.. original.History, conversion.Target], [.. original.Trace, $"convert:{conversion.StableId}:{converted}"]));
+                [.. original.History, conversion.Target], [.. original.Trace, $"convert:{conversion.StableId}:{converted}"],
+                original.IsExtra, original.FullyConvertedPhysical || original.CurrentType == DamageType.Physical && total >= Basis));
         }
         if (remaining > 0) produced.Insert(0, original with { BaseDamage = remaining });
         branches.InsertRange(originalIndex, produced);

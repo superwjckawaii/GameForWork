@@ -116,8 +116,6 @@ public static class MasteryRuntime
         if (tags.HasFlag(SkillTag.Area) && Has(profile, "范围_距离", 0)) result = Multiply(result, 16_000);
         if (tags.HasFlag(SkillTag.Area) && Has(profile, "范围_距离", 1)) result = Multiply(result, 8_000);
         if (tags.HasFlag(SkillTag.Projectile) && Has(profile, "投射物", 0)) result = Multiply(result, 15_000);
-        if (tags.HasFlag(SkillTag.Physical) && Has(profile, "物理", 0)) result = Multiply(result, 16_000);
-        if (tags.HasFlag(SkillTag.Void) && Has(profile, "虚空", 0)) result = Multiply(result, 15_000);
         return result;
     }
 

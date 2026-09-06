@@ -848,7 +848,8 @@ public sealed class PassiveTreeAllocation
                 sums[(int)PassiveEffectKind.IncreasedCooldownRecoveryBasisPoints], sums[(int)PassiveEffectKind.MoreDamageBasisPoints],
                 sums[(int)PassiveEffectKind.RuleResoluteTechnique] > 0, sums[(int)PassiveEffectKind.RuleIronReflexes] > 0,
                 sums[(int)PassiveEffectKind.RuleFlaskless] > 0,
-                Enum.GetValues<PassiveEffectKind>().Where(kind => (int)kind >= (int)PassiveEffectKind.IncreasedOneHandDamageBasisPoints)
+                Enum.GetValues<PassiveEffectKind>().Where(kind => (int)kind >= (int)PassiveEffectKind.IncreasedOneHandDamageBasisPoints ||
+                        kind is PassiveEffectKind.IncreasedBleedDamageBasisPoints or PassiveEffectKind.IncreasedBleedDurationBasisPoints or PassiveEffectKind.IncreasedPhysicalDamageOverTimeBasisPoints)
                     .Where(kind => sums[(int)kind] != 0).ToDictionary(kind => kind, kind => sums[(int)kind]),
                 string.Join('|', _masterySelections.Select(pair =>
                         PassiveTreeCatalog.MasteryMechanicId(PassiveTree.Get(pair.Key), pair.Value))

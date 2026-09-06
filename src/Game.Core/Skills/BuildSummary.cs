@@ -124,7 +124,9 @@ public static class BuildSummaryRules
         var added = new AddedWeaponDamage(Average(local?.Fire), Average(local?.Cold), Average(local?.Lightning), Average(local?.Void));
         var spellRange = SpellHitRules.DamageRange(skill, configuration.Level);
         int raw = spell ? (spellRange.Minimum + spellRange.Maximum) / 2 :
-            CombatSkillRules.BaseDamage(skill, tags, build.Weapon, build.AddedPhysicalDamage);
+            CombatSkillRules.BaseDamage(skill, tags, build.Weapon, build.AddedPhysicalDamage,
+                MasteryDamageRules.ExpectedPhysicalRoll(build.Weapon.MinimumPhysicalDamage, build.Weapon.MaximumPhysicalDamage,
+                    MasteryRuntime.Has(passive, "物理", 5)));
         var increases = CombatSkillRules.OffensiveIncreases(build, tags, skill.Role == SkillRole.DamageOverTime);
         int accuracy = build.Sheet.Accuracy(build.FlatAccuracy).Value;
         int hitChance = build.AlwaysHit || spell ? 10_000 : DamageRules.HitChance(accuracy, 20, false).Value;
@@ -139,7 +141,8 @@ public static class BuildSummaryRules
             equipment: build.CombatEquipment?.Modifiers, modifiers: modifiers,
             scaleBranch: scale ? branch => ScaleToInt(CombatSkillRules.ScaleOffensiveDamage(branch.BaseDamage, skill, configuration,
                 build, tags, 100_000, 100_000, targetRareOrBoss: true, applyIncreased: false, damageHistory: branch.History), critical) : null,
-            configuration: configuration, addedDamageEffectiveness: spell ? SpellHitRules.Effectiveness(skill.SkillId) : 10_000);
+            configuration: configuration, addedDamageEffectiveness: spell ? SpellHitRules.Effectiveness(skill.SkillId) : 10_000,
+            mastery: new(passive, skill.Role != SkillRole.DamageOverTime));
         int armor = configuration.Supports.HasFlag(SkillSupport.ArmorPierce) ? 17 : 25;
         int hit = Packet(armor, increases, true).Total;
         int criticalHit = Packet(armor, increases, true, criticalMultiplier).Total;

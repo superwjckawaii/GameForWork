@@ -67,6 +67,8 @@ public static class CombatSkillRules
         int nonExecute = 10_000;
         int baseDamage = buildsActive.DamageAt(configuration.Level);
         int ailmentChance = active.AilmentChanceBasisPoints;
+        if (configuration.SkillId is SkillIds.AshJavelin or "archetypes.skill.venom_blades" or "archetypes.skill.corrosive_trap")
+            ailmentChance += Math.Clamp(configuration.Quality, 0, 20) * 100;
         int pierce = 0;
         int fork = 0;
         bool returns = active.Tags.HasFlag(SkillTag.Returning);
@@ -179,7 +181,7 @@ public static class CombatSkillRules
         life = Math.Max(0, checked(life * Math.Max(0, 10_000 - passive.ReducedSkillCostBasisPoints) / 10_000));
         range = Math.Max(1, checked(range * (10_000 + passive.IncreasedSkillRangeBasisPoints) / 10_000));
         cooldown = Math.Max(1, checked(cooldown * 10_000 / Math.Max(1, 10_000 + passive.IncreasedCooldownRecoveryBasisPoints)));
-        ailmentChance = Math.Clamp(ailmentChance + bleed, 0, 10_000);
+        ailmentChance = Math.Clamp(ailmentChance + (active.Ailment == Ailment.Bleed ? bleed : 0), 0, 10_000);
         return new ResolvedSkill(configuration.SkillId, mana, life, range, castTime, cooldown,
             damage, bleed, projectiles, projectileSpeed, chains, leech, executeThreshold, execute, nonExecute,
             active.DamageType, active.Role, active.Shape, baseDamage, active.Ailment, ailmentChance,
@@ -270,8 +272,9 @@ public static class CombatSkillRules
         bool damageOverTime = false, int additionalIncreasedBasisPoints = 0, int? armor = null)
     {
         var equipment = build.CombatEquipment ?? Equipment.EquipmentCombatLoadout.Empty;
+        var passive = build.PassiveProfile ?? PassiveModifiers.Empty;
         int common = (tags.HasFlag(SkillTag.Attack) ? build.IncreasedDamageBasisPoints - equipment.PhysicalIncreaseIncludedInAttack : 0) +
-            (build.PassiveProfile ?? PassiveModifiers.Empty).DamageFor(tags, damageOverTime) + additionalIncreasedBasisPoints;
+            passive.DamageFor(tags & ~(SkillTag.Physical | SkillTag.Elemental | SkillTag.Void), damageOverTime) + additionalIncreasedBasisPoints;
         if (tags.HasFlag(SkillTag.Attack)) common += Ascendancies.WarriorAscendancyRules.IncreasedAttackDamageBasisPoints(
             build.Ascendancy ?? Ascendancies.CombatProfile.Empty, build.Sheet.Attributes.Physique);
         if (tags.HasFlag(SkillTag.Spell)) common += build.IncreasedSpellDamageBasisPoints;
@@ -287,13 +290,14 @@ public static class CombatSkillRules
         if (damageOverTime) common += Value(Campaign.Items.ItemModifierKind.IncreasedDamageOverTimeBasisPoints);
         return new(new Dictionary<DamageType, int>
         {
-            [DamageType.Physical] = Value(Campaign.Items.ItemModifierKind.IncreasedPhysicalDamageBasisPoints) +
+            [DamageType.Physical] = Value(Campaign.Items.ItemModifierKind.IncreasedPhysicalDamageBasisPoints) + passive.IncreasedPhysicalDamageBasisPoints +
+                (damageOverTime ? passive.SpecializedValue(PassiveEffectKind.IncreasedPhysicalDamageOverTimeBasisPoints) : 0) +
                 (!damageOverTime && MasteryRuntime.Has(build.PassiveProfile ?? PassiveModifiers.Empty, "护甲", 6) ? (armor ?? build.Sheet.Armor().Value) / 1_000 * 400 : 0),
             [DamageType.Fire] = Value(Campaign.Items.ItemModifierKind.IncreasedFireDamageBasisPoints),
             [DamageType.Cold] = Value(Campaign.Items.ItemModifierKind.IncreasedColdDamageBasisPoints),
             [DamageType.Lightning] = Value(Campaign.Items.ItemModifierKind.IncreasedLightningDamageBasisPoints),
-            [DamageType.Void] = Value(Campaign.Items.ItemModifierKind.IncreasedVoidDamageBasisPoints),
-        }, common, Value(Campaign.Items.ItemModifierKind.IncreasedElementalDamageBasisPoints));
+            [DamageType.Void] = Value(Campaign.Items.ItemModifierKind.IncreasedVoidDamageBasisPoints) + passive.IncreasedVoidDamageBasisPoints,
+        }, common, Value(Campaign.Items.ItemModifierKind.IncreasedElementalDamageBasisPoints) + passive.IncreasedElementalDamageBasisPoints);
     }
 
     public static int ActionDelay(TeamBuild build, int baseTicks, SkillTag tags)
