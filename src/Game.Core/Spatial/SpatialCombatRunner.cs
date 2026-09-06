@@ -1117,26 +1117,26 @@ public sealed partial class SpatialCombatRunner
             int burstDamage = 0;
             if (skill.SkillId == SkillIds.BloodBurst && enemy.BleedRemaining > 0)
             {
-                burstDamage = (int)Math.Min(int.MaxValue, enemy.Ailments.Consume(Ailment.Bleed, 6_500));
+                burstDamage = (int)Math.Min(int.MaxValue, enemy.Ailments.Consume(Ailment.Bleed, 6_500 + Math.Clamp(configuration.Quality, 0, 20) * 50,
+                    (type, dps) => DefendEnemyDot(request, enemy, type, dps, tick), VoidDebuffed(enemy, tick)));
             }
+            if (burstDamage > 0 && enemy.Life > 0)
+            {
+                int dealt = Math.Min(enemy.Life, burstDamage);
+                enemy.Life -= dealt;
+                events.Add(Event(tick, SpatialEventKind.SkillEffect, "hero", enemy.EntityId, dealt,
+                    heroPosition, enemy.Position, $"skill:{skill.SkillId}|blood-burst|dot:bleed|supports:{(ulong)configuration.Supports}"));
+                if (enemy.Life == 0)
+                    events.Add(Event(tick, SpatialEventKind.EnemyDefeated, "hero", enemy.EntityId, 0,
+                        heroPosition, enemy.Position, enemy.Profile.StableId));
+            }
+            if (enemy.Life <= 0) continue;
             ResolveHeroHit(request, skill, configuration, enemy, hero, random, tick, heroPosition,
                 enemy != target && skill.Shape == SkillShape.Single && skillTags.HasFlag(SkillTag.Strike) && UnarmedRules.IsSkill(skill.SkillId) && MasteryRuntime.Has(passive, "徒手", 6)
                     ? ScaleCombatValue(bannerMultiplier, 13_000) : bannerMultiplier, events,
                 MasteryRuntime.Has(passive, "破甲_物理穿透", 1) && skillTags.HasFlag(SkillTag.Physical)
                     ? empoweredArmorBreak ? 5 : 2
                     : 0);
-            if (burstDamage > 0 && enemy.Life > 0)
-            {
-                int armor = enemy.Scaled.Armor * Math.Max(0, 10_000 - enemy.ArmorBreakStacks * 800) / 10_000;
-                DamageBreakdown burst = DamagePacketRules.Resolve(burstDamage, SkillDamageType.Physical,
-                    SkillSupport.None, armor, 0, 0, 0, 0);
-                enemy.Life = Math.Max(0, enemy.Life - burst.Total);
-                events.Add(Event(tick, SpatialEventKind.SkillEffect, "hero", enemy.EntityId, burst.Total,
-                    heroPosition, enemy.Position, $"skill:{skill.SkillId}|blood-burst|damage:{burst.Compact}|supports:{(ulong)configuration.Supports}"));
-                if (enemy.Life == 0)
-                    events.Add(Event(tick, SpatialEventKind.EnemyDefeated, "hero", enemy.EntityId, 0,
-                        heroPosition, enemy.Position, enemy.Profile.StableId));
-            }
         }
         if (configuration.Supports.HasFlag(SkillSupport.Fortification) &&
             skillTags.HasFlag(SkillTag.Attack) && skillTags.HasFlag(SkillTag.Melee))

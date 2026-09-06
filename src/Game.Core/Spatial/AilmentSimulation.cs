@@ -164,6 +164,23 @@ public sealed partial class SpatialCombatRunner
             enemy.StunnedUntilTick = tick + (enemy.Boss ? 6 : 12);
     }
 
+    private static decimal DefendEnemyDot(NodeCombatRequest request, EnemyUnit enemy, DamageType type, decimal dps, int tick)
+    {
+        decimal damage = dps;
+        if (type == DamageType.Physical) damage *= (10_000 - CombatRules.PhysicalDotArmorReduction(
+            CombatRules.ArmorAfterBreak(enemy.Scaled.Armor, enemy.ArmorBreakStacks), (int)Math.Min(int.MaxValue, dps))) / 10_000m;
+        int resistance = type == DamageType.Physical ? enemy.Scaled.PhysicalResistanceBasisPoints + request.EnemyPhysicalReductionBasisPoints :
+            EnemyResistance(enemy, request, type == DamageType.Fire ? SkillDamageType.Fire : type == DamageType.Void ? SkillDamageType.Void : type == DamageType.Cold ? SkillDamageType.Cold : SkillDamageType.Lightning, penetrate: false);
+        damage *= (10_000 - Math.Clamp(resistance, CombatRules.MinimumResistance, type == DamageType.Physical ? 5_000 : 7_500)) / 10_000m;
+        damage *= ElementalRules.TargetMultiplier(request.Build.Ascendancy, type, ElementalStatus(enemy, tick), false, false) / 10_000m;
+        damage *= (10_000 + enemy.ShockEffect) / 10_000m;
+        if (type == DamageType.Void)
+            damage *= CombatRules.WitherMultiplier(enemy.Ailments.Stack(Ailment.Wither, tick)) / 10_000m *
+                (10_000 + enemy.Curses.Effect("archetypes.skill.doom_brand", tick)) / 10_000m;
+        damage *= (10_000 - CombatRules.SpiritBarrierReduction(enemy.Profile.SpiritBarrier, (int)Math.Min(int.MaxValue, damage))) / 10_000m;
+        return damage;
+    }
+
     private static void AdvanceAilments(NodeCombatRequest request, IEnumerable<EnemyUnit> enemies, ResourceState hero, int tick, ICollection<SpatialEvent> events)
     {
         bool recovered = false;
@@ -174,22 +191,8 @@ public sealed partial class SpatialCombatRunner
             if (tick >= enemy.ArmorBreakUntil) enemy.ArmorBreakStacks = 0;
             if (tick - enemy.ParalysisLastTick >= 40) enemy.Paralysis = Math.Max(0, enemy.Paralysis - 125);
             enemy.CurrentTick = tick;
-            foreach (var pulse in enemy.Ailments.Advance(TickMilliseconds, (type, dps) =>
-            {
-                decimal damage = dps;
-                if (type == DamageType.Physical) damage *= (10_000 - CombatRules.PhysicalDotArmorReduction(
-                    CombatRules.ArmorAfterBreak(enemy.Scaled.Armor, enemy.ArmorBreakStacks), (int)Math.Min(int.MaxValue, dps))) / 10_000m;
-                int resistance = type == DamageType.Physical ? enemy.Scaled.PhysicalResistanceBasisPoints + request.EnemyPhysicalReductionBasisPoints :
-                    EnemyResistance(enemy, request, type == DamageType.Fire ? SkillDamageType.Fire : type == DamageType.Void ? SkillDamageType.Void : type == DamageType.Cold ? SkillDamageType.Cold : SkillDamageType.Lightning, penetrate: false);
-                damage *= (10_000 - Math.Clamp(resistance, CombatRules.MinimumResistance, type == DamageType.Physical ? 5_000 : 7_500)) / 10_000m;
-                damage *= ElementalRules.TargetMultiplier(request.Build.Ascendancy, type, ElementalStatus(enemy, tick), false, false) / 10_000m;
-                damage *= (10_000 + enemy.ShockEffect) / 10_000m;
-                if (type == DamageType.Void)
-                    damage *= CombatRules.WitherMultiplier(enemy.Ailments.Stack(Ailment.Wither, tick)) / 10_000m *
-                        (10_000 + enemy.Curses.Effect("archetypes.skill.doom_brand", tick)) / 10_000m;
-                damage *= (10_000 - CombatRules.SpiritBarrierReduction(enemy.Profile.SpiritBarrier, (int)Math.Min(int.MaxValue, damage))) / 10_000m;
-                return damage;
-            }, VoidDebuffed(enemy, tick)))
+            foreach (var pulse in enemy.Ailments.Advance(TickMilliseconds,
+                (type, dps) => DefendEnemyDot(request, enemy, type, dps, tick), VoidDebuffed(enemy, tick)))
             {
                 int damage = Math.Min(enemy.Life, pulse.Damage);
                 if (damage > 0) request.Elemental?.Observe(pulse.Type, tick, !pulse.SelfCast);

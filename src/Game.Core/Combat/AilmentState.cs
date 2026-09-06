@@ -13,6 +13,7 @@ public sealed class AilmentState
     private readonly List<DamageOverTimeInstance> _instances = [];
     private readonly Dictionary<(Ailment, DamageType), decimal> _remainders = [];
     private readonly Dictionary<Ailment, (int Count, int Until)> _debuffs = [];
+    private readonly HashSet<(AilmentState Source, string Instance)> _received = [];
     private int _sequence;
     public IReadOnlyList<DamageOverTimeInstance> Instances => _instances;
     public int BleedMaximum { get; set; } = 1;
@@ -48,12 +49,18 @@ public sealed class AilmentState
     public int Count(Ailment kind) => Active().Count(instance => instance.Kind == kind);
     public decimal Remaining(Ailment kind) => Active().Where(instance => instance.Kind == kind)
         .Sum(instance => instance.DamagePerSecond * instance.RemainingMilliseconds / 1000 * Multiplier(kind));
-    public decimal Consume(Ailment kind, int portionBasisPoints)
+    public decimal Consume(Ailment kind, int portionBasisPoints,
+        Func<DamageType, decimal, decimal>? defend = null, bool voidDebuffed = false)
     {
-        DamageOverTimeInstance[] active = Active().Where(instance => instance.Kind == kind).ToArray();
-        decimal amount = Remaining(kind) * Math.Clamp(portionBasisPoints, 0, 10_000) / 10_000;
-        _instances.RemoveAll(active.Contains);
-        return amount;
+        decimal amount = 0;
+        foreach (var group in Active(voidDebuffed).Where(instance => instance.Kind == kind).GroupBy(instance => instance.Type))
+        {
+            decimal dps = group.Sum(instance => Dps(instance, voidDebuffed) * Multiplier(kind));
+            decimal remaining = group.Sum(instance => Dps(instance, voidDebuffed) * instance.RemainingMilliseconds / 1000 * Multiplier(kind));
+            if (dps > 0) amount += remaining * Math.Max(0, defend?.Invoke(group.Key, dps) ?? dps) / dps;
+        }
+        _instances.RemoveAll(instance => instance.Kind == kind);
+        return amount * Math.Clamp(portionBasisPoints, 0, 10_000) / 10_000;
     }
     public int ConsumeStacks(Ailment kind, int maximum, int tick)
     {
@@ -69,8 +76,10 @@ public sealed class AilmentState
     }
     public void SpreadTo(AilmentState target, Ailment kind)
     {
+        if (ReferenceEquals(this, target)) return;
         foreach (DamageOverTimeInstance instance in Active().Where(instance => instance.Kind == kind && !instance.Propagated))
-            target._instances.Add(instance with { Propagated = true });
+            if (target._received.Add((this, instance.InstanceId)))
+                target._instances.Add(instance with { Propagated = true });
     }
 
     public IReadOnlyList<DamageOverTimePulse> Advance(int milliseconds, Func<DamageType, decimal, decimal> defend, bool voidDebuffed = false)
