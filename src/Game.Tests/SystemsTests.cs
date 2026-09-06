@@ -211,6 +211,22 @@ public sealed class SystemsTests
         Assert.True(Actual(plain, mastery) > Actual(plain, noMastery));
     }
 
+    [Theory]
+    [InlineData(false, 4_000, 3_400)]
+    [InlineData(true, 6_000, 5_400)]
+    public void BlockPreviewKeepsNonShieldSourcesAndGatesShieldAscendancy(bool shield, int attack, int spell)
+    {
+        var profile = new CombatProfile(Ascendancy.IronGuardian,
+            [WarriorNodeIds.BastionAttackBlockSmall, WarriorNodeIds.BastionAttackBlockCore,
+                WarriorNodeIds.BastionSpellBlockSmall, WarriorNodeIds.BastionSpellBlockCore]);
+        var build = new TeamBuild(new(1, new(0, 0, 0, 0), new(0, 0, 0), SpellBlockChanceBasisPoints: 1_000),
+            Weapons.RustedGreatsword, new(SkillIds.HeavyStrike, SkillSupport.None),
+            HasShield: shield, BlockChanceBasisPoints: 4_000, Ascendancy: profile);
+        DefenseBreakdown defense = BuildSummaryRules.CalculateDefense(build);
+        Assert.Equal(attack, defense.EffectivePhysicalBlockChanceBasisPoints);
+        Assert.Equal(spell, defense.EffectiveSpellBlockChanceBasisPoints);
+    }
+
     [Fact]
     public void HighDamagePreviewUsesWideIntermediateArithmetic()
     {

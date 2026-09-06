@@ -179,7 +179,7 @@ public static class BuildSummaryRules
         return checked((int)Math.Clamp((long)singleTargetDps * coverage, 0, int.MaxValue));
     }
 
-    internal static DefenseBreakdown CalculateDefense(TeamBuild build)
+    public static DefenseBreakdown CalculateDefense(TeamBuild build)
     {
         CharacterSheet sheet = build.Sheet;
         int armor = sheet.Armor().Value;
@@ -191,7 +191,7 @@ public static class BuildSummaryRules
             build.BlockChanceBasisPoints, ascendancy, build.HasShield);
         int physicalBlockMaximum = Ascendancies.WarriorAscendancyRules.AttackBlockMaximumBasisPoints(
             sheet.MaximumBlockChanceBasisPoints, ascendancy, build.HasShield);
-        int finalPhysicalBlock = build.HasShield ? Math.Clamp(physicalBlock, 0, physicalBlockMaximum) : 0;
+        int finalPhysicalBlock = Math.Clamp(physicalBlock, 0, physicalBlockMaximum);
         int spellBlock = Ascendancies.WarriorAscendancyRules.SpellBlockChanceBasisPoints(
             sheet.SpellBlockChanceBasisPoints, finalPhysicalBlock, ascendancy, build.HasShield);
         return new DefenseBreakdown(
@@ -214,7 +214,7 @@ public static class BuildSummaryRules
             physicalBlock,
             finalPhysicalBlock,
             spellBlock,
-            build.HasShield ? Math.Clamp(spellBlock, 0, sheet.MaximumSpellBlockChanceBasisPoints) : 0,
+            Math.Clamp(spellBlock, 0, sheet.MaximumSpellBlockChanceBasisPoints),
             sheet.SpellSuppressionBasisPoints,
             sheet.EffectiveSpellSuppressionBasisPoints);
     }
