@@ -1,4 +1,6 @@
 using GameForWork.Core.Builds;
+using GameForWork.Core.Campaign.World;
+using GameForWork.Core.Skills;
 
 namespace GameForWork.Core.Campaign.Combat;
 
@@ -7,93 +9,25 @@ public sealed record CombatPreview(
     CalculatedValue AttacksPerSecondMilli,
     CalculatedValue HitChanceBasisPoints,
     CalculatedValue CriticalChanceBasisPoints,
-    CalculatedValue ExpectedBleedDamagePerSecond,
-    CalculatedValue EffectiveLife,
-    CalculatedValue ArmorReductionAgainstMinimumHit,
-    CalculatedValue ArmorReductionAgainstMaximumHit,
-    CalculatedValue ShieldRecoveryPerSecond);
+    CalculatedValue EffectiveLife);
 
 public static class CombatPreviewRules
 {
-    public static CombatPreview Calculate(
-        CharacterSheet character,
-        WeaponProfile weapon,
-        SkillUseProfile heavyStrike,
-        int accuracy,
-        int targetEvasion,
-        int targetArmor,
-        int representativeIncomingPhysicalHit,
-        int addedPhysicalDamage = 0,
-        int increasedDamageBasisPoints = 0,
-        int increasedCriticalChanceBasisPoints = 0,
-        int increasedBleedChanceBasisPoints = 0)
+    public static CombatPreview Calculate(TeamBuild build, SkillConfiguration configuration)
     {
-        ArgumentNullException.ThrowIfNull(character);
-        ArgumentNullException.ThrowIfNull(weapon);
-        ArgumentNullException.ThrowIfNull(heavyStrike);
-
-        int minimumDamage = checked(weapon.MinimumPhysicalDamage + addedPhysicalDamage);
-        int maximumDamage = checked(weapon.MaximumPhysicalDamage + addedPhysicalDamage);
-        int averageWeaponDamage = checked((minimumDamage + maximumDamage) / 2);
-        int physiqueIncrease = character.AttackDamageIncreaseFromPhysique().Value;
+        OffenseBreakdown offense = BuildSummaryRules.CalculateOffense(build, configuration);
+        DefenseBreakdown defense = BuildSummaryRules.CalculateDefense(GameForWork.Core.Combat.AuraCombatProfile.Resolve(build).Build);
         var hitTrace = new FormulaTraceBuilder();
-        hitTrace.Add(
-            "武器平均物理伤害",
-            $"({minimumDamage} + {maximumDamage}) / 2",
-            averageWeaponDamage);
-        int combinedIncrease = checked(physiqueIncrease + increasedDamageBasisPoints);
-        int averageHit = checked((int)((long)averageWeaponDamage * (10_000 + combinedIncrease) / 10_000));
-        hitTrace.Add("伤害增加总和", $"{averageWeaponDamage} × (10000 + {combinedIncrease}) / 10000", averageHit);
-        foreach (int multiplier in heavyStrike.MoreDamageMultipliersBasisPoints)
-        {
-            averageHit = checked((int)((long)averageHit * multiplier / 10_000));
-            hitTrace.Add("技能总增/总降", $"previous × {multiplier} / 10000", averageHit);
-        }
-
-        CalculatedValue armorReduction = DamageRules.ArmorReduction(targetArmor, averageHit);
-        averageHit = Math.Max(1, checked((int)((long)averageHit * (10_000 - armorReduction.Value) / 10_000)));
-        hitTrace.Add("目标护甲", $"previous × (10000 - {armorReduction.Value}) / 10000", averageHit);
-
-        int attacksPerSecondMilli = heavyStrike.AttackFrequencyMilliPerSecond;
-        CalculatedValue hitChance = DamageRules.HitChance(accuracy, targetEvasion, false);
-        int criticalChance = Math.Clamp(
-            checked((int)((long)weapon.CriticalChanceBasisPoints * (10_000 + increasedCriticalChanceBasisPoints) / 10_000)),
-            0,
-            10_000);
-        int bleedChance = Math.Clamp(
-            checked(heavyStrike.BleedChanceBasisPoints + increasedBleedChanceBasisPoints),
-            0,
-            10_000);
-        int expectedBleedPerSecond = checked((int)(
-            (long)averageHit * 7_000 / 10_000 *
-            bleedChance / 10_000 *
-            hitChance.Value / 10_000 *
-            attacksPerSecondMilli / 1_000 / 5));
-
-        int maximumLife = character.MaximumLife().Value;
-        int maximumShield = character.MaximumShield().Value;
-        CalculatedValue incomingReduction = DamageRules.ArmorReduction(character.Armor().Value, representativeIncomingPhysicalHit);
-        int damageTakenBasisPoints = Math.Max(1, 10_000 - incomingReduction.Value);
-        int effectiveLife = checked((int)((long)(maximumLife + maximumShield) * 10_000 / damageTakenBasisPoints));
-
-        return new CombatPreview(
-            hitTrace.Build(averageHit),
-            CalculatedValue.Single(
-                "预计攻击频率（千分之一/秒）",
-                $"min({heavyStrike.UncappedAttackFrequencyMilliPerSecond}, {CombatRules.MaximumAttackFrequencyMilliPerSecond})",
-                attacksPerSecondMilli),
-            hitChance,
-            CalculatedValue.Single("预计暴击率", weapon.CriticalChanceBasisPoints.ToString(System.Globalization.CultureInfo.InvariantCulture), criticalChance),
-            CalculatedValue.Single(
-                "预计流血每秒伤害",
-                "平均命中 × 70% × 流血概率 × 命中率 × 攻击频率 / 5秒",
-                expectedBleedPerSecond),
-            CalculatedValue.Single(
-                "有效生命",
-                $"({maximumLife} + {maximumShield}) × 10000 / {damageTakenBasisPoints}",
-                effectiveLife),
-            DamageRules.ArmorReduction(targetArmor, minimumDamage),
-            DamageRules.ArmorReduction(targetArmor, maximumDamage),
-            character.ShieldRecoveryPerSecond());
+        hitTrace.Add("基础伤害区间", $"{offense.BaseMinimumDamage}～{offense.BaseMaximumDamage}",
+            (int)(((long)offense.BaseMinimumDamage + offense.BaseMaximumDamage) / 2));
+        hitTrace.Add("伤害增加总和", $"转换分支加权提高：{offense.EffectiveIncreaseBasisPoints / 100.0}%", offense.EffectiveIncreaseBasisPoints);
+        hitTrace.Add("直接击中", "共用实战伤害包；目标护甲25、抗性0，不含暴击和命中概率", offense.AverageHitDamage);
+        int taken = Math.Max(1, 10_000 - defense.PhysicalDamageReductionBasisPoints);
+        int effectiveLife = (int)Math.Clamp(((long)defense.MaximumLife + defense.MaximumShield) * 10_000 / taken, 0, int.MaxValue);
+        return new(hitTrace.Build(offense.AverageHitDamage),
+            CalculatedValue.Single("预计动作频率（千分之一/秒）", "共用技能动作速度与冷却", offense.FrequencyMilliPerSecond),
+            CalculatedValue.Single("预计命中率", "目标闪避20", offense.HitChanceBasisPoints),
+            CalculatedValue.Single("预计暴击率", "共用技能来源与辅助暴击", offense.CriticalChanceBasisPoints),
+            CalculatedValue.Single("有效生命", $"({defense.MaximumLife} + {defense.MaximumShield}) × 10000 / {taken}", effectiveLife));
     }
 }

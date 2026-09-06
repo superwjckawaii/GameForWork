@@ -158,6 +158,15 @@ public sealed class SystemsTests
             Assert.True(definition.Combat.Capabilities.HasFlag(SkillCapability.Damage));
             Assert.NotEqual(SkillRole.Reservation, definition.Combat.Role);
         });
+        foreach (var candidate in candidates)
+        {
+            Assert.True(session.SelectPreviewSkill(candidate.StoneInstanceId));
+            OffenseBreakdown offense = BuildSummaryRules.CalculateOffense(session.World.Hero.Build, candidate);
+            CombatPreview preview = session.GetCombatPreview();
+            Assert.Equal(offense.AverageHitDamage, preview.AverageHitDamage.Value);
+            Assert.Equal(offense.FrequencyMilliPerSecond, preview.AttacksPerSecondMilli.Value);
+            Assert.Equal(offense.CriticalChanceBasisPoints, preview.CriticalChanceBasisPoints.Value);
+        }
         Assert.True(session.SelectPreviewSkill(candidates[0].StoneInstanceId));
         Assert.Equal(candidates[0].StoneInstanceId,
             GameSession.Restore(session.Capture()).GetPreviewSkill()!.StoneInstanceId);

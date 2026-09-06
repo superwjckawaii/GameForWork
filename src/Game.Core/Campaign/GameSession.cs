@@ -1257,18 +1257,7 @@ public sealed class GameSession
     public bool TryChallengeFinalBreakthrough()
         => AssignBossChallenge(ExpeditionTarget.FinalBreakthrough, DispatchMode.Once);
 
-    public CombatPreview GetCombatPreview() => CombatPreviewRules.Calculate(
-        _heroBuild.Sheet,
-        _heroBuild.EffectiveWeapon,
-        _heroBuild.HeavyStrike,
-        _heroBuild.Sheet.Accuracy(_heroBuild.FlatAccuracy).Value,
-        targetEvasion: 20,
-        targetArmor: 25,
-        representativeIncomingPhysicalHit: 10,
-        addedPhysicalDamage: _heroBuild.AddedPhysicalDamage,
-        increasedDamageBasisPoints: _heroBuild.IncreasedAttackDamageBasisPoints,
-        increasedCriticalChanceBasisPoints: _heroBuild.IncreasedCriticalChanceBasisPoints,
-        increasedBleedChanceBasisPoints: _heroBuild.IncreasedBleedChanceBasisPoints);
+    public CombatPreview GetCombatPreview() => Preview(_heroBuild);
 
     public BuildSummary GetBuildSummary() => BuildSummaryRules.Calculate(this);
 
@@ -1377,18 +1366,12 @@ public sealed class GameSession
         };
     }
 
-    private static CombatPreview Preview(AssembledCharacterBuild build) => CombatPreviewRules.Calculate(
-        build.Sheet,
-        build.EffectiveWeapon,
-        build.HeavyStrike,
-        build.Sheet.Accuracy(build.FlatAccuracy).Value,
-        targetEvasion: 20,
-        targetArmor: 25,
-        representativeIncomingPhysicalHit: 10,
-        addedPhysicalDamage: build.AddedPhysicalDamage,
-        increasedDamageBasisPoints: build.IncreasedAttackDamageBasisPoints,
-        increasedCriticalChanceBasisPoints: build.IncreasedCriticalChanceBasisPoints,
-        increasedBleedChanceBasisPoints: build.IncreasedBleedChanceBasisPoints);
+    private CombatPreview Preview(AssembledCharacterBuild build)
+    {
+        SkillConfiguration configuration = GetPreviewSkill() ?? new(SkillIds.HeavyStrike, HeavyStrikeSupports);
+        return CombatPreviewRules.Calculate(ToTeamBuild(build, HeavyStrikeSupports, HeroAi,
+            BuildActiveSkills(), AscendancyProfile()), configuration);
+    }
 
     private void RefreshHeroTeamBuild() => World.Hero.UpdateBuild(
         ToTeamBuild(_heroBuild, HeavyStrikeSupports, HeroAi, BuildActiveSkills(), AscendancyProfile()));

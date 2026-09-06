@@ -211,12 +211,9 @@ public sealed class CombatRulesTests
     public void CombatPreviewContainsAllRequiredFormulaGroups()
     {
         CharacterSheet sheet = StartingSheet();
-        SkillUseProfile skill = SkillRules.BuildHeavyStrike(
-            new SkillConfiguration(SkillIds.HeavyStrike, SkillSupport.Bleed),
-            Weapons.RustedGreatsword,
-            sheet.MaximumLife().Value);
-
-        CombatPreview preview = CombatPreviewRules.Calculate(sheet, Weapons.RustedGreatsword, skill, 100, 20, 25, 10);
+        var skill = new SkillConfiguration(SkillIds.HeavyStrike, SkillSupport.Bleed);
+        var build = new TeamBuild(sheet, Weapons.RustedGreatsword, skill, FlatAccuracy: 100);
+        CombatPreview preview = CombatPreviewRules.Calculate(build, skill);
 
         Assert.True(preview.AverageHitDamage.Value >= 1);
         Assert.True(preview.AttacksPerSecondMilli.Value > 0);

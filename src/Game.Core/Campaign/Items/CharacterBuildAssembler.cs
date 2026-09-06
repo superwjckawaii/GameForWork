@@ -36,23 +36,7 @@ public sealed record AssembledCharacterBuild(
 {
     public bool HasUsableWeapon => Equipment.Weapon is not null;
 
-    public HeavyStrikeRequest CreateHeavyStrikeRequest(
-        ResourceState resources,
-        int targetEvasion,
-        int targetArmor) => new(
-        resources,
-        HeavyStrike,
-        EffectiveWeapon,
-        Sheet.Accuracy(FlatAccuracy).Value,
-        targetEvasion,
-        targetArmor,
-        IncreasedAttackDamageBasisPoints,
-        AddedPhysicalDamage,
-        AddedPhysicalDamage,
-        IncreasedCriticalChanceBasisPoints,
-        IncreasedBleedChanceBasisPoints,
-        WarCry,
-        ChargedHeavyStrike);
+
 }
 
 public static class CharacterBuildAssembler

@@ -44,7 +44,7 @@ public sealed record OffenseBreakdown(
     int Accuracy,
     int HitChanceBasisPoints,
     int CriticalChanceBasisPoints,
-    int CriticalMultiplierBasisPoints, bool IsDirectHitEstimate = true)
+    int CriticalMultiplierBasisPoints, bool IsDirectHitEstimate = true, int AverageHitDamage = 0)
 {
     public static OffenseBreakdown Empty { get; } = new(0, 0, 0, 0, 0, false, 0, 0, 0, 0, 10_000, false);
 }
@@ -165,7 +165,7 @@ public static class BuildSummaryRules
         int maximum = spell ? spellRange.Maximum : ScaleToInt((long)weapon.MaximumPhysicalDamage + build.AddedPhysicalDamage +
             (local?.Fire.Maximum ?? 0) + (local?.Cold.Maximum ?? 0) + (local?.Lightning.Maximum ?? 0) + (local?.Void.Maximum ?? 0), baseMultiplier);
         return new((int)Math.Clamp(dps, 0, int.MaxValue), Math.Max(1, minimum), Math.Max(1, maximum), increased, more,
-            spell, frequency, accuracy, hitChance, criticalChance, criticalMultiplier);
+            spell, frequency, accuracy, hitChance, criticalChance, criticalMultiplier, AverageHitDamage: hit);
     }
     private static int CalculateClearDps(int singleTargetDps, ResolvedSkill skill)
     {
@@ -179,7 +179,7 @@ public static class BuildSummaryRules
         return checked((int)Math.Clamp((long)singleTargetDps * coverage, 0, int.MaxValue));
     }
 
-    private static DefenseBreakdown CalculateDefense(TeamBuild build)
+    internal static DefenseBreakdown CalculateDefense(TeamBuild build)
     {
         CharacterSheet sheet = build.Sheet;
         int armor = sheet.Armor().Value;
