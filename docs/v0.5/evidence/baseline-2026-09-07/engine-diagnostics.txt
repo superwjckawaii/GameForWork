@@ -1,0 +1,4 @@
+ERROR: WASAPI: GetBufferSize error
+   at: thread_func (drivers/wasapi/audio_driver_wasapi.cpp:778)
+WARNING: WASAPI: Current output_device invalidated, closing output_device
+   at: thread_func (drivers/wasapi/audio_driver_wasapi.cpp:849)

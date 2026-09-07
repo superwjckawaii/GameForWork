@@ -6,8 +6,21 @@
 
 - [游戏设计基线](shared/GAME_DESIGN_BASELINE.md)
 - [技术架构](shared/TECHNICAL_ARCHITECTURE.md)
-- [Foundation～Resources 开发计划](shared/DEVELOPMENT_PLAN.md)
+- [开发计划与当前版本入口](shared/DEVELOPMENT_PLAN.md)
 - [待讨论与开发决策](shared/OPEN_QUESTIONS.md)
+
+## v0.5（当前规划）
+
+- [v0.5 六阶段开发计划：沉金港与全量动画优化](v0.5/V0_5_DEVELOPMENT_PLAN.md)
+- [沉金港与统一宝箱：第一阶段确认记录](v0.5/Harbor_REWARD_DECISIONS.md)
+- [沉金港装备设计目录](v0.5/Harbor_EQUIPMENT_DESIGN.md)：18 件底材、8 件传奇核心机制与数值范围已确认，基础面板与完整固定词缀待补齐。
+- [统一宝箱资源结算分类表](v0.5/Harbor_RESOURCE_SETTLEMENT.md)：分类与特殊来源边界已统一确认，全部写入调用点仍待审计，尚未实现。
+- [全量动画审核清单](v0.5/V0_5_ANIMATION_AUDIT.md)与[逐项索引](v0.5/V0_5_ANIMATION_INVENTORY.md)：已枚举 86 主动、98 辅助、80 普通敌人、24 Boss；源码问题已记录，实机画面和性能尚未验收。
+- [第一阶段集中收口检查](v0.5/V0_5_STAGE_ONE_CHECKPOINT.md)：第一阶段交付完成，含失败前测证据及第二阶段接续顺序。
+- [装备实现参数](v0.5/Harbor_IMPLEMENTATION_PARAMETERS.md)、[流程初始配置](v0.5/Harbor_FLOW_PARAMETERS.md)、[结算调用点审计](v0.5/Harbor_SETTLEMENT_CALLSITE_AUDIT.md)。
+- [辅助与Boss子项](v0.5/V0_5_ANIMATION_SUBITEMS.md)、[七组合实机初测](v0.5/V0_5_VISUAL_BASELINE.md)。
+- 第一阶段规格、结算审计、动画清单与20组代表场景前测已交付。前测记录长帧及音频设备错误，不代表性能验收通过；下一步第二阶段流程原型。
+- 本目录中的装备与实现复核文件属于历史审计，不等同于 v0.5 新增目标。
 
 ## v0.1
 

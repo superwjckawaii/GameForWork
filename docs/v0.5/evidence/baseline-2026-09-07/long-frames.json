@@ -1,0 +1,44 @@
+[
+  {
+    "Case": 9,
+    "Scenario": "normal",
+    "AtSeconds": 101.578202,
+    "FrameMs": 62.0876,
+    "SimulationMs": 0.0457,
+    "UiMs": 0.0463,
+    "SaveMs": 6,
+    "GcDelta": [
+      0,
+      0,
+      0
+    ]
+  },
+  {
+    "Case": 9,
+    "Scenario": "normal",
+    "AtSeconds": 101.9148913,
+    "FrameMs": 47.7041,
+    "SimulationMs": 0.0469,
+    "UiMs": 0.0561,
+    "SaveMs": 6,
+    "GcDelta": [
+      0,
+      0,
+      0
+    ]
+  },
+  {
+    "Case": 9,
+    "Scenario": "normal",
+    "AtSeconds": 103.6000356,
+    "FrameMs": 46.7103,
+    "SimulationMs": 0.053,
+    "UiMs": 0.0475,
+    "SaveMs": 6,
+    "GcDelta": [
+      0,
+      0,
+      0
+    ]
+  }
+]

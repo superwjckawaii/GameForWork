@@ -1,0 +1,10 @@
+{
+  "DataCoverageValidated": true,
+  "EngineGatePassed": false,
+  "PerformanceTargetsPassed": false,
+  "Status": "FailedBaseline",
+  "FailedCaseIndices": [
+    9
+  ],
+  "Scope": "Pre-optimization baseline, not full release acceptance"
+}
