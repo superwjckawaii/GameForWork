@@ -424,8 +424,6 @@ public static class LegendaryDrops
     private static readonly string[] CitadelPool =
     [
         "core.unique.grave_plate", "core.unique.ashes_memory", "core.unique.funeral_bell", "core.unique.fourth_testament",
-        "core.mythic.heart_of_ash", "equipment.legendary.52.44a586da1f", "equipment.legendary.53.26839c4b94",
-        "equipment.legendary.54.915c91c995", "equipment.legendary.55.54b1e3f6f0",
     ];
     private static readonly string[] AbyssPool = ["core.unique.echoing_oathbreaker", "core.unique.thorn_procession", "resources.unique.rift_fang", "resources.unique.deep_echo"];
     private static readonly string[] GardenPool = ["core.unique.gardeners_sinew", "core.unique.march_without_end", "resources.unique.seed_of_rebirth", "resources.unique.thorned_bark"];

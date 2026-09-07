@@ -33,6 +33,7 @@
   },
   "counts": {
     "actorRigs": 5,
+    "unitRigs": 4,
     "enemyBodyRigs": 26,
     "enemyTypes": 80,
     "bossBodyRigs": 12,

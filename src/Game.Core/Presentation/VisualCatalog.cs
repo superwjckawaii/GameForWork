@@ -92,6 +92,15 @@ public static class VisualCatalog
     public static bool TryForSkill(string skillId, out SkillVisualDescriptor? result) =>
         SkillById.TryGetValue(skillId, out result);
 
+    public static int EffectRangeRaw(string eventDetail)
+    {
+        string? marker = eventDetail.Split('|').FirstOrDefault(part =>
+            part.StartsWith("range:", StringComparison.Ordinal));
+        return marker is not null && int.TryParse(marker.AsSpan("range:".Length), out int range)
+            ? Math.Max(0, range)
+            : 0;
+    }
+
     public static SupportVisualLayer LayersForLegacySupport(ulong supportFlags)
     {
         SupportVisualLayer result = SupportVisualLayer.None;

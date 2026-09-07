@@ -68,6 +68,17 @@
       "sha256": "8185483bdb0aea490e44a31daf7ff906f506e791e63f16f844d5c48e13caae90"
     },
     {
+      "path": "art/characters/art-unit-animation.png",
+      "width": 1488,
+      "height": 1024,
+      "columns": 31,
+      "rows": 16,
+      "count": 496,
+      "gutters": true,
+      "unique": false,
+      "sha256": "ca0cf2a69866a3846f37385075a5146ee76bcde081167bbeebcd18fbac0f03e4"
+    },
+    {
       "path": "art/enemies/art-boss-animation.png",
       "width": 2232,
       "height": 3840,

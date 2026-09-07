@@ -16,8 +16,7 @@ $directories = @(
     (Join-Path $assetRoot 'enemies'),
     (Join-Path $assetRoot 'regions'),
     (Join-Path $assetRoot 'town'),
-    (Join-Path $assetRoot 'ui'),
-    (Join-Path $assetRoot 'vfx')
+    (Join-Path $assetRoot 'ui')
 )
 foreach ($directory in $directories) {
     New-Item -ItemType Directory -Force -Path $directory | Out-Null
@@ -306,6 +305,15 @@ if (-not $SkipAnimations) {
     $monstersMonsterSource = [System.Drawing.Bitmap]::FromFile((Join-Path $monstersSourceRoot 'monsters-monster-family-master.png'))
     for ($index = 0; $index -lt 10; $index++) { $enemySprites.Add((Get-GridSprite -Atlas $monstersMonsterSource -Index $index -Columns 5 -Rows 2)) }
     Build-AnimationAtlas -Sprites $enemySprites -Destination (Join-Path $assetRoot 'enemies\art-enemy-animation.png') -CellWidth 48 -CellHeight 64 -Padding 7
+
+    $unitSprites = [System.Collections.Generic.List[System.Drawing.Bitmap]]::new()
+    $unitSprites.Add((Get-GridSprite -Atlas $actorSource -Index 5 -Columns 5 -Rows 5))
+    $unitSprites.Add((Get-GridSprite -Atlas $actorSource -Index 6 -Columns 5 -Rows 5))
+    $unitSprites.Add((Get-GridSprite -Atlas $monstersMonsterSource -Index 0 -Columns 5 -Rows 2))
+    $unitSprites.Add((Get-GridSprite -Atlas $monstersMonsterSource -Index 9 -Columns 5 -Rows 2))
+    Build-AnimationAtlas -Sprites $unitSprites -Destination (Join-Path $assetRoot 'characters\art-unit-animation.png') -CellWidth 48 -CellHeight 64 -Padding 7
+    foreach ($sprite in $unitSprites) { $sprite.Dispose() }
+
     foreach ($sprite in $enemySprites) { $sprite.Dispose() }
     $monstersMonsterSource.Dispose()
     $actorSource.Dispose()
@@ -351,6 +359,7 @@ $manifest = [ordered]@{
     }
     counts = [ordered]@{
         actorRigs = 5
+        unitRigs = 4
         enemyBodyRigs = 26
         enemyTypes = 80
         bossBodyRigs = 12

@@ -1,6 +1,7 @@
 using GameForWork.Core.Content;
 using GameForWork.Core.Art;
 using GameForWork.Core.Archetypes;
+using GameForWork.Core.Presentation;
 
 namespace GameForWork.Tests;
 
@@ -41,6 +42,29 @@ public sealed class ArtFeatureTests
                      .Concat([Bosses.Breakthrough.StableId])
                      .Concat(Bosses.CitadelStages.Select(item => item.StableId)))
             Assert.InRange(ArtContract.BossRig(boss), 0, ArtContract.BossRigCount - 1);
+    }
+
+    [Fact]
+    public void SummonedCombatUnitsHaveDedicatedStableRigs()
+    {
+        string[] skills =
+        [
+            "archetypes.skill.summon_boneguard",
+            "archetypes.skill.summon_soulbow",
+            "archetypes.skill.summon_spirit_beast",
+            "archetypes.skill.forge_turret",
+        ];
+        int[] rigs = skills.Select(ArtContract.UnitRig).ToArray();
+        Assert.Equal(ArtContract.UnitRigCount, rigs.Distinct().Count());
+        Assert.All(rigs, rig => Assert.InRange(rig, 0, ArtContract.UnitRigCount - 1));
+    }
+
+    [Fact]
+    public void PresentationReadsTheResolvedRangeWrittenByCombatEvents()
+    {
+        Assert.Equal(4_275, VisualCatalog.EffectRangeRaw("hero|enemy|skill:test|range:4275|supports:0"));
+        Assert.Equal(0, VisualCatalog.EffectRangeRaw("hero|enemy|skill:test"));
+        Assert.Equal(0, VisualCatalog.EffectRangeRaw("range:-1"));
     }
 
     [Fact]

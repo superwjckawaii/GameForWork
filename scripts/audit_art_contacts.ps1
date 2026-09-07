@@ -29,6 +29,7 @@ function Contact([string]$path, [int]$columns, [int]$rows, [int]$cw, [int]$ch, [
 Contact 'src/Game.Godot/assets/equipmentArt/ui/equipmentArt-equipment-atlas.png' 13 19 32 32 @($catalog.bases.displayName) 'equipment'
 Contact 'src/Game.Godot/assets/equipmentArt/ui/equipmentArt-legendary-atlas.png' 5 11 32 32 @($catalog.legendaryItems.displayName) 'legendary'
 Contact 'src/Game.Godot/assets/art/characters/art-actor-animation.png' 31 20 48 64 @(0..19|ForEach-Object {"actor row $_"}) 'actors' 31
+Contact 'src/Game.Godot/assets/art/characters/art-unit-animation.png' 31 16 48 64 @(0..15|ForEach-Object {"unit row $_"}) 'units' 31
 Contact 'src/Game.Godot/assets/art/enemies/art-enemy-animation.png' 31 104 48 64 @(0..103|ForEach-Object {"enemy row $_"}) 'enemies' 31
 Contact 'src/Game.Godot/assets/art/enemies/art-boss-animation.png' 31 48 72 80 @(0..47|ForEach-Object {"boss row $_"}) 'bosses' 31
 Contact 'src/Game.Godot/assets/art/town/art-building-atlas.png' 4 2 160 120 @(0..6|ForEach-Object {"building $_"}) 'buildings'

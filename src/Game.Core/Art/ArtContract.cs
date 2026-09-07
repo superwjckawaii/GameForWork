@@ -17,6 +17,7 @@ public static class ArtContract
     public const int AnimationColumns = 31;
     public const int DirectionCount = 4;
     public const int ActorRigCount = 5;
+    public const int UnitRigCount = 4;
     public const int EnemyBodyRigCount = 26;
     public const int BossRigCount = 12;
     public const int ActorCellWidth = 48;
@@ -73,6 +74,15 @@ public static class ArtContract
         int withinFamily = Enemies.NormalEnemies.Take(index).Count(enemy => enemy.Family == family);
         return 16 + familyOffset + withinFamily % 2 * 5;
     }
+
+    public static int UnitRig(string skillId) => skillId switch
+    {
+        "archetypes.skill.summon_boneguard" => 0,
+        "archetypes.skill.summon_soulbow" => 1,
+        "archetypes.skill.summon_spirit_beast" => 2,
+        "archetypes.skill.forge_turret" => 3,
+        _ => throw new KeyNotFoundException($"Unknown animated unit skill: {skillId}"),
+    };
 
     public static int EnemyVariant(string stableId)
     {

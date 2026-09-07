@@ -1385,7 +1385,7 @@ public sealed partial class SpatialCombatRunner
         }
         events.Add(Event(tick, eventKind, "hero", enemy.EntityId, value,
             source, enemy.Position,
-            $"skill:{skill.SkillId}|damage:{damage.Compact}|supports:{(ulong)configuration.Supports}{(skill.AdditionalTags.HasFlag(SkillTag.Counter) ? "|counter" : string.Empty)}{(critical ? "|critical" : string.Empty)}"));
+            $"skill:{skill.SkillId}|damage:{damage.Compact}|range:{AreaRules.EngagementRange(skill)}|supports:{(ulong)configuration.Supports}{(skill.AdditionalTags.HasFlag(SkillTag.Counter) ? "|counter" : string.Empty)}{(critical ? "|critical" : string.Empty)}"));
         if (enemy.Life == 0)
             events.Add(Event(tick, SpatialEventKind.EnemyDefeated, "hero", enemy.EntityId, 0,
                 source, enemy.Position, enemy.Profile.StableId));

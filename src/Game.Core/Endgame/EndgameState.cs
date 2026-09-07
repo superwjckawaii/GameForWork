@@ -95,7 +95,8 @@ public sealed record EndgameSnapshot(
     bool WarfrontGuaranteeIssued = false,
     IReadOnlyDictionary<RewardPreference, int>? BlueMisses = null,
     long GameplayOperationSequence = 0,
-    string LastWarfrontBaseId = "", CombatConfiguration? CombatConfiguration = null);
+    string LastWarfrontBaseId = "", CombatConfiguration? CombatConfiguration = null,
+    IReadOnlyList<string>? GrantedMythics = null);
 
 public sealed record AtlasSchemeSnapshot(string Name, IReadOnlyList<string> AllocatedPassives);
 
@@ -109,10 +110,12 @@ public sealed class EndgameState
     private readonly HashSet<string> _atlas = new(StringComparer.Ordinal);
     private readonly Dictionary<MapMechanic, int> _mechanics = Enum.GetValues<MapMechanic>().ToDictionary(kind => kind, _ => 0);
     private readonly HashSet<string> _ascendancy = new(StringComparer.Ordinal);
+    private readonly HashSet<string> _grantedMythics = new(StringComparer.Ordinal);
     public IReadOnlySet<int> CompletedTiers => _completedTiers;
     public IReadOnlySet<string> AtlasPassives => _atlas;
     public IReadOnlyDictionary<MapMechanic, int> MechanicEncounters => _mechanics;
     public IReadOnlySet<string> AscendancyPassives => _ascendancy;
+    public IReadOnlySet<string> GrantedMythics => _grantedMythics;
     public int EarnedAtlasPoints => AtlasCatalog.MaximumNodes;
     public int LifeForce { get; private set; }
     public int RedFavor { get; private set; }
@@ -303,6 +306,8 @@ public sealed class EndgameState
         return true;
     }
 
+    public bool TryRecordMythicReward(string catalogId) => _grantedMythics.Add(catalogId);
+
     public bool RecordCitadelVictory()
     {
         bool first = !CitadelDefeated;
@@ -332,7 +337,8 @@ public sealed class EndgameState
         0, CitadelVictories, MythicReforgeMaterials, MythicGranted,
         BreakthroughAttempts, BreakthroughVictories, BonusAtlasPoints, SelectedAscendancy,
         Act3AscendancyAwarded, Act5AscendancyAwarded, WarfrontDiscovered,
-        WarfrontMerit, WarfrontReputation, WarfrontGuaranteeIssued, new Dictionary<RewardPreference, int>(_blueMisses), GameplayOperationSequence, LastWarfrontBaseId, CombatConfiguration.Snapshot());
+        WarfrontMerit, WarfrontReputation, WarfrontGuaranteeIssued, new Dictionary<RewardPreference, int>(_blueMisses), GameplayOperationSequence, LastWarfrontBaseId,
+        CombatConfiguration.Snapshot(), _grantedMythics.Order(StringComparer.Ordinal).ToArray());
 
     public static EndgameState Restore(EndgameSnapshot? snapshot)
     {
@@ -359,6 +365,7 @@ public sealed class EndgameState
         state.CitadelVictories = snapshot.CitadelVictories;
         state.MythicReforgeMaterials = snapshot.MythicReforgeMaterials;
         state.MythicGranted = snapshot.MythicGranted;
+        foreach (string id in snapshot.GrantedMythics ?? []) state._grantedMythics.Add(id);
         state.BreakthroughAttempts = snapshot.BreakthroughAttempts;
         state.BreakthroughVictories = snapshot.BreakthroughVictories;
         state.BonusAtlasPoints = snapshot.BonusAtlasPoints > 0 ? snapshot.BonusAtlasPoints : snapshot.CitadelDefeated ? 5 : 0;

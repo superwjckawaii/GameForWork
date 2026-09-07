@@ -257,7 +257,6 @@ public sealed class GameSession
         bool migratingV20 = snapshot.FormatVersion == 20;
         bool migratingV21 = snapshot.FormatVersion == 21;
         bool migratingV22 = snapshot.FormatVersion == 22;
-        bool migratingV23 = snapshot.FormatVersion == 23;
         if (snapshot.FormatVersion is < 18 or > CurrentFormatVersion || snapshot.SimulationSequence < 0)
         {
             throw new InvalidDataException(
@@ -313,14 +312,13 @@ public sealed class GameSession
             snapshot.SimulationSequence,
             snapshot.DebugTwentyTimes);
         session.CitadelDropCompensationGranted = snapshot.CitadelDropCompensationGranted;
-        if (migratingV23 && session.Endgame.CitadelVictories > 0 && !session.HasMythic("equipment.legendary.52.44a586da1f"))
+        if ((snapshot.FormatVersion <= 23 || snapshot.Endgame?.GrantedMythics is null) && session.Endgame.CitadelVictories > 0)
         {
-            ItemInstance compensation = UniqueItems.Create(
-                "equipment.legendary.52.44a586da1f", 100,
-                $"citadel-pool-compensation-{snapshot.Seed:x16}");
-            if (!session.World.Storage.TryStore(compensation))
-                session.Management.AddToRecovery(compensation, "灰烬天垒掉落池修复补偿");
-            session.Management.AddHistory($"灰烬天垒掉落池修复：补偿百骸噬界（已记录 {session.Endgame.CitadelVictories:N0} 次天垒胜利）。");
+            bool granted = session.GrantMythic(MythicRewardRules.HeartOfAsh, 100,
+                $"mythic-migration-{snapshot.Seed:x16}");
+            session.Management.AddHistory(granted
+                ? $"神话来源迁移：已按 {session.Endgame.CitadelVictories:N0} 次天垒胜利补发灰烬之心。"
+                : $"神话来源迁移：已有灰烬之心，已按 {session.Endgame.CitadelVictories:N0} 次天垒胜利登记首通。");
             session.CitadelDropCompensationGranted = true;
         }
         session.ApplyTownBuildingEffects();
@@ -360,10 +358,23 @@ public sealed class GameSession
         Jewels.Capture(),
         CitadelDropCompensationGranted);
 
-    private bool HasMythic(string catalogId) =>
-        HeroEquipment.Items.Values.Concat(MercenaryEquipment.Items.Values).Concat(World.Storage.Items)
+    private bool GrantMythic(string catalogId, int itemLevel, string instanceId)
+    {
+        UniqueDefinition definition = UniqueItems.All.Single(item => item.StableId == catalogId);
+        bool owned = HeroEquipment.Items.Values.Concat(MercenaryEquipment.Items.Values).Concat(World.Storage.Items)
             .Concat(Management.SortingBag).Concat(Management.Recovery)
-            .Any(item => item.LegendaryCatalogId == catalogId);
+            .Any(item => item.DisplayName == definition.DisplayName);
+        if (owned)
+        {
+            Endgame.TryRecordMythicReward(catalogId);
+            return false;
+        }
+        if (!Endgame.TryRecordMythicReward(catalogId)) return false;
+        ItemInstance reward = UniqueItems.Create(catalogId, itemLevel, instanceId);
+        if (!World.Storage.TryStore(reward)) Management.AddToRecovery(reward, "终局首通神话奖励");
+        Management.AddHistory($"终局首通神话奖励：{reward.DisplayName}");
+        return true;
+    }
 
     public OfflineResult Advance(long realElapsedMilliseconds)
     {
@@ -528,6 +539,8 @@ public sealed class GameSession
                 else Management.AddHistory($"珠宝仓已满，{jewel.DisplayName}进入恢复记录。");
             }
         }
+        foreach (string mythic in MythicRewardRules.ForCompletion(run.Map, run.Route))
+            GrantMythic(mythic, run.Map.MonsterLevel, $"mythic-{run.Map.InstanceId}-{SimulationSequence:000000}");
         EnsureWarfrontDiscoveryMap(); SynchronizeWarfrontRouteCandidates();
         RefreshHeroTeamBuild(); RefreshMercenaryPartyBuild(); Journey.Synchronize(this);
     }

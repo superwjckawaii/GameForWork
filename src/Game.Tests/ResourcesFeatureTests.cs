@@ -22,7 +22,8 @@ public sealed class ResourcesFeatureTests
 
         Assert.True(ExpeditionDirector.IsBoss(map));
         Assert.Equal("citadel", LegendaryDrops.BossPool(map));
-        Assert.Contains(LegendaryDrops.Pool("citadel"), item => item.StableId == "equipment.legendary.52.44a586da1f");
+        Assert.DoesNotContain(LegendaryDrops.Pool("citadel"), item => item.Mythic);
+        Assert.Equal([MythicRewardRules.HeartOfAsh], MythicRewardRules.ForCompletion(map, MapRoute.Safe));
     }
 
     [Fact]
@@ -56,17 +57,16 @@ public sealed class ResourcesFeatureTests
         foreach (string pool in new[] { "warden", "citadel", "abyss", "garden", "red", "blue", "warfront" })
         {
             IReadOnlyList<UniqueDefinition> items = LegendaryDrops.Pool(pool);
-            Assert.Equal(pool == "citadel" ? 9 : 4, items.Count);
+            Assert.Equal(4, items.Count);
             Assert.All(items, item =>
             {
                 EquipmentLegendaryEntry entry = EquipmentCatalog.LegendaryItems.Single(value => value.DisplayName == item.DisplayName);
                 Assert.Equal(entry.Id, EquipmentRuleRegistry.Get(entry.RuleId).SourceDefinitionId);
             });
         }
-        Assert.Equal(UniqueItems.All.Where(item => item.Mythic).Select(item => item.StableId).Order(),
-            LegendaryDrops.Pool("citadel").Where(item => item.Mythic).Select(item => item.StableId).Order());
-        Assert.DoesNotContain(new[] { "warden", "abyss", "garden", "red", "blue", "warfront" }
+        Assert.DoesNotContain(new[] { "warden", "citadel", "abyss", "garden", "red", "blue", "warfront" }
             .SelectMany(LegendaryDrops.Pool), item => item.Mythic);
+        Assert.Equal(5, UniqueItems.All.Count(item => item.Mythic));
         Assert.Equal(12, LegendaryDrops.Pool("common").Count);
     }
 

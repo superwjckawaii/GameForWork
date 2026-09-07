@@ -10,6 +10,7 @@ using GameForWork.Core.Campaign.World;
 using GameForWork.Core.Equipment;
 using GameForWork.Core.Skills;
 using GameForWork.Core.Builds;
+using GameForWork.Core.Content;
 using System.Text.Json;
 
 namespace GameForWork.Tests;
@@ -135,13 +136,29 @@ public sealed class SystemsTests
 
         GameSession migrated = GameSession.Restore(old);
         GameSession restoredAgain = GameSession.Restore(migrated.Capture());
-        int Count(GameSession session) => session.World.Storage.Items.Count(item => item.LegendaryCatalogId == "equipment.legendary.52.44a586da1f") +
-            session.Management.Recovery.Count(item => item.LegendaryCatalogId == "equipment.legendary.52.44a586da1f");
+        const string catalogId = "equipment.legendary.41.d25ca19685";
+        int Count(GameSession session) => session.World.Storage.Items.Count(item => item.LegendaryCatalogId == catalogId) +
+            session.Management.Recovery.Count(item => item.LegendaryCatalogId == catalogId);
 
         Assert.True(migrated.CitadelDropCompensationGranted);
         Assert.Equal(1, Count(migrated));
         Assert.Equal(1, Count(restoredAgain));
         Assert.Contains(migrated.Management.OperationHistory, line => line.Contains("11,463", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void MythicMigrationRegistersAnExistingHeartWithoutDuplicatingIt()
+    {
+        GameSession source = GameSession.CreateNew(new("已有神话迁移", CharacterGender.Androgynous,
+            CharacterSkinTone.Umber, CharacterHairStyle.Cropped, GameForWork.Core.Characters.BaseClass.Fighter), 0x3052);
+        source.World.Storage.TryStore(UniqueItems.Create(MythicRewardRules.HeartOfAsh, 100, "existing-heart"));
+        var oldEndgame = new EndgameState();
+        oldEndgame.RecordCitadelVictory();
+        GameSessionSnapshot old = source.Capture() with { FormatVersion = 23, Endgame = oldEndgame.Capture() };
+
+        GameSession migrated = GameSession.Restore(old);
+        Assert.Single(migrated.World.Storage.Items, item => item.DisplayName == "灰烬之心");
+        Assert.Contains(MythicRewardRules.HeartOfAsh, migrated.Endgame.GrantedMythics);
     }
 
     [Fact]

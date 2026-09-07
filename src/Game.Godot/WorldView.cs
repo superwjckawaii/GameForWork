@@ -34,6 +34,7 @@ public partial class WorldView : Control
     private Texture2D? _regionAtlas;
     private Texture2D? _presentationVfxAtlas;
     private Texture2D? _actorAnimationAtlas;
+    private Texture2D? _unitAnimationAtlas;
     private Texture2D? _enemyAnimationAtlas;
     private Texture2D? _bossAnimationAtlas;
     private readonly Dictionary<string, EnemyFrame> _nextEnemies = new(StringComparer.Ordinal);
@@ -74,6 +75,7 @@ public partial class WorldView : Control
         _regionAtlas = LoadOptional("res://assets/art/regions/art-region-atlas.png");
         _presentationVfxAtlas = LoadOptional("res://assets/presentation/vfx/presentation-combat-vfx.png");
         _actorAnimationAtlas = LoadOptional("res://assets/art/characters/art-actor-animation.png");
+        _unitAnimationAtlas = LoadOptional("res://assets/art/characters/art-unit-animation.png");
         _enemyAnimationAtlas = LoadOptional("res://assets/art/enemies/art-enemy-animation.png");
         _bossAnimationAtlas = LoadOptional("res://assets/art/enemies/art-boss-animation.png");
     }
@@ -370,51 +372,7 @@ public partial class WorldView : Control
             heroTarget?.Position ?? new Point(current.HeroPosition.XRaw, current.HeroPosition.YRaw - 1));
         SpriteAction heroAction = ResolveHeroAction(current, next, _recentEvents);
         foreach (AllyFrame ally in current.Allies ?? [])
-        {
-            Vector2 allyPosition = MapPoint(field, ally.Position) + VisualFootwork(ally.EntityId, elapsed, 2.6f);
-            _positions[ally.EntityId] = allyPosition;
-            DrawShadow(allyPosition + new Vector2(0, 5), 7);
-            if (ally.SkillId.Length > 0)
-            {
-                AllyFrame? nextAlly = next.Allies?.FirstOrDefault(item => item.EntityId == ally.EntityId);
-                SceneEvent? action = _recentEvents.LastOrDefault(item => EventSource(item, ally.EntityId) && item.Value > 0);
-                Facing facing = FacingBetween(ally.Position, nextAlly?.Position ?? ally.Position,
-                    action?.EffectPosition ?? current.HeroPosition);
-                SpriteAction unitAction = nextAlly is not null && nextAlly.Position != ally.Position ? SpriteAction.Move :
-                    action is not null && current.AtMilliseconds - action.AtMilliseconds < 500 ? SpriteAction.Attack : SpriteAction.Idle;
-                if (ally.EntityId.StartsWith("phantom:", StringComparison.Ordinal))
-                {
-                    DrawArtSprite(_actorAnimationAtlas, hero ? 0 : 1, facing, unitAction, elapsed, allyPosition,
-                        new Vector2(36, 46), ArtContract.ActorRigCount, ArtContract.ActorCellWidth, ArtContract.ActorCellHeight,
-                        tint: new Color(0.55f, 0.82f, 1f, 0.5f));
-                    continue;
-                }
-                int unitRig = ally.SkillId switch
-                {
-                    "archetypes.skill.summon_boneguard" => ArtContract.EnemyRig("core.enemy.oathless_guard"),
-                    "archetypes.skill.summon_soulbow" => ArtContract.EnemyRig("core.enemy.ash_bone_archer"),
-                    "archetypes.skill.summon_spirit_beast" => ArtContract.EnemyRig("core.enemy.gate_hound"),
-                    _ => -1,
-                };
-                if (unitRig >= 0)
-                    DrawArtSprite(_enemyAnimationAtlas, unitRig, facing, unitAction, elapsed, allyPosition,
-                        new Vector2(36, 46), ArtContract.EnemyBodyRigCount, ArtContract.ActorCellWidth, ArtContract.ActorCellHeight);
-                else
-                {
-                    // Static construct silhouette uses its placed base and barrel, not a walking character rig.
-                    DrawRect(new Rect2(allyPosition + new Vector2(-11, -9), new Vector2(22, 17)), new Color("516169"));
-                    DrawLine(allyPosition + new Vector2(0, -8), allyPosition + new Vector2(0, -24), new Color("b7ac83"), 6);
-                }
-                DrawBar(new Rect2(allyPosition + new Vector2(-17, 11), new Vector2(34, 4)),
-                    (float)ally.Life / Math.Max(1, ally.MaximumLife), new Color("54b599"));
-                continue;
-            }
-            int rig = 1 + StableVisualIndex(ally.EntityId, 4);
-            DrawArtSprite(_actorAnimationAtlas, rig, heroFacing,
-                heroAction == SpriteAction.Idle ? SpriteAction.Idle : heroAction,
-                elapsed, allyPosition, new Vector2(36, 46), ArtContract.ActorRigCount,
-                ArtContract.ActorCellWidth, ArtContract.ActorCellHeight);
-        }
+            DrawSpatialAlly(field, ally, current, next, elapsed, hero, heroFacing, heroAction);
         DrawArtSprite(_actorAnimationAtlas, hero ? 0 : 1, heroFacing, heroAction, elapsed,
             actor, new Vector2(44, 56), ArtContract.ActorRigCount,
             ArtContract.ActorCellWidth, ArtContract.ActorCellHeight,
@@ -443,6 +401,73 @@ public partial class WorldView : Control
         DrawString(ThemeDB.FallbackFont, bounds.Position + new Vector2(16, 59),
             $"节点 {Math.Max(1, current.NodeIndex)}/{timeline.NodeCount} · {mechanic} · 队伍 {(current.Allies?.Count ?? 0) + 1} · 敌人 {alive}/{current.Enemies.Count} · 目标 {target}",
             HorizontalAlignment.Left, -1, 13, new Color("c6bca9"));
+    }
+
+    private void DrawSpatialAlly(Rect2 field, AllyFrame ally, SpatialFrame current, SpatialFrame next,
+        long elapsed, bool hero, Facing heroFacing, SpriteAction heroAction)
+    {
+        Vector2 position = MapPoint(field, ally.Position) + VisualFootwork(ally.EntityId, elapsed, 2.6f);
+        _positions[ally.EntityId] = position;
+        DrawShadow(position + new Vector2(0, 5), 7);
+        if (ally.SkillId.Length > 0)
+        {
+            DrawCombatUnit(ally, current, next, elapsed, hero, position);
+            DrawBar(new Rect2(position + new Vector2(-17, 11), new Vector2(34, 4)),
+                (float)ally.Life / Math.Max(1, ally.MaximumLife), new Color("54b599"));
+            return;
+        }
+        int rig = 1 + StableVisualIndex(ally.EntityId, 4);
+        DrawArtSprite(_actorAnimationAtlas, rig, heroFacing,
+            heroAction == SpriteAction.Idle ? SpriteAction.Idle : heroAction,
+            elapsed, position, new Vector2(36, 46), ArtContract.ActorRigCount,
+            ArtContract.ActorCellWidth, ArtContract.ActorCellHeight);
+    }
+
+    private void DrawCombatUnit(AllyFrame ally, SpatialFrame current, SpatialFrame next, long elapsed,
+        bool hero, Vector2 position)
+    {
+        AllyFrame? nextAlly = next.Allies?.FirstOrDefault(item => item.EntityId == ally.EntityId);
+        SceneEvent? action = _recentEvents.LastOrDefault(item => EventSource(item, ally.EntityId) && item.Value > 0);
+        SceneEvent? hit = RecentUnitHit(ally.EntityId, current.AtMilliseconds);
+        Facing facing = FacingBetween(ally.Position, nextAlly?.Position ?? ally.Position,
+            action?.EffectPosition ?? current.HeroPosition);
+        SpriteAction unitAction = ResolveUnitAction(ally, nextAlly, action, hit, current.AtMilliseconds);
+        SceneEvent? timedAction = hit ?? action;
+        long actionAge = timedAction is null ? elapsed : Math.Max(0, current.AtMilliseconds - timedAction.AtMilliseconds);
+        if (TryDrawCharacterUnit(ally, hero, facing, unitAction, actionAge, position)) return;
+        DrawArtSprite(_unitAnimationAtlas, ArtContract.UnitRig(ally.SkillId), facing, unitAction, actionAge,
+            position, new Vector2(36, 46), ArtContract.UnitRigCount,
+            ArtContract.ActorCellWidth, ArtContract.ActorCellHeight);
+    }
+
+    private bool TryDrawCharacterUnit(AllyFrame ally, bool hero, Facing facing, SpriteAction action,
+        long actionAge, Vector2 position)
+    {
+        if (ally.EntityId.StartsWith("phantom:", StringComparison.Ordinal))
+        {
+            DrawArtSprite(_actorAnimationAtlas, hero ? 0 : 1, facing, action, actionAge, position,
+                new Vector2(36, 46), ArtContract.ActorRigCount, ArtContract.ActorCellWidth,
+                ArtContract.ActorCellHeight, tint: new Color(0.55f, 0.82f, 1f, 0.5f));
+            return true;
+        }
+        if (ally.EntityId != "mercenary") return false;
+        DrawArtSprite(_actorAnimationAtlas, 1, facing, action, actionAge, position,
+            new Vector2(36, 46), ArtContract.ActorRigCount,
+            ArtContract.ActorCellWidth, ArtContract.ActorCellHeight);
+        return true;
+    }
+
+    private SceneEvent? RecentUnitHit(string entityId, long atMilliseconds) =>
+        _recentEvents.LastOrDefault(item => EventTargets(item, entityId) &&
+            item.Kind == SceneEventKind.EnemyAttack && item.Value > 0 && atMilliseconds - item.AtMilliseconds < 350);
+
+    private static SpriteAction ResolveUnitAction(AllyFrame ally, AllyFrame? next, SceneEvent? action,
+        SceneEvent? hit, long atMilliseconds)
+    {
+        if (hit is not null) return SpriteAction.Hit;
+        if (next is not null && next.Position != ally.Position) return SpriteAction.Move;
+        return action is not null && atMilliseconds - action.AtMilliseconds < 500
+            ? SpriteAction.Attack : SpriteAction.Idle;
     }
 
     private static Vector2 VisualFootwork(string stableId, long elapsed, float amplitude)
@@ -538,6 +563,16 @@ public partial class WorldView : Control
             }
             if (visual is not null && age < .86f)
             {
+                int effectRange = VisualCatalog.EffectRangeRaw(item.Detail);
+                if (effectRange > 0 && visual.Shape is SkillShape.Circle or SkillShape.Cone or
+                    SkillShape.GroundArea or SkillShape.MovementCircle)
+                {
+                    float rangePixels = effectRange * field.Size.X / (SceneTimeline.LogicalWidth * 1_000f);
+                    Color rangeColor = DamageColor(item.Detail, .2f * (1 - age));
+                    DrawCircle(target, rangePixels, rangeColor);
+                    DrawArc(target, rangePixels, 0, MathF.Tau, 40,
+                        DamageColor(item.Detail, .7f * (1 - age)), 1.5f);
+                }
                 float size = 38f * visual.ScaleBasisPoints / 10_000f * (visual.Signature ? 1.12f : 1f);
                 Vector2 variation = new((visual.VariationSeed % 3 - 1) * 2, ((visual.VariationSeed / 3) % 3 - 1) * 2);
                 Vector2 center = (visual.UsesSourceToTarget ? source.Lerp(target, Math.Clamp(age * 1.25f, 0, 1)) : target) + variation;
