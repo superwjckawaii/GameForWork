@@ -181,12 +181,12 @@ public static class WarriorAscendancyRules
             : baseMaximum;
 
     public static int SpellBlockChanceBasisPoints(int baseChance, int finalAttackBlockChance,
-        CombatProfile profile, bool hasShield)
+        CombatProfile profile, bool hasShield, int minimumInheritanceBasisPoints = 0)
     {
         int result = baseChance;
         if (hasShield && profile.Has(WarriorNodeIds.BastionSpellBlockSmall)) result = checked(result + 800);
-        if (profile.Has(WarriorNodeIds.BastionSpellBlockCore))
-            result = checked(result + finalAttackBlockChance * 6 / 10);
+        int inheritance = Math.Max(minimumInheritanceBasisPoints, profile.Has(WarriorNodeIds.BastionSpellBlockCore) ? 6000 : 0);
+        result = checked(result + (int)((long)finalAttackBlockChance * inheritance / 10000));
         return result;
     }
 }

@@ -61,7 +61,8 @@ public sealed partial class SpatialCombatRunner
                 DamageType.Lightning => EnemyDamageType.Lightning,
                 _ => EnemyDamageType.Void
             };
-            int defended = request.EquipmentRuntime!.MitigateDamageOverTime(request.Build.Sheet, raw, damageType, tick, 1);
+            int defended = request.EquipmentRuntime!.MitigateDamageOverTime(hero.Sheet, raw, damageType, tick, 1);
+            defended = ScaleCombatValue(defended, ResistanceMasteryRules.IncomingMultiplier(hero.Sheet, request.Build.PassiveProfile ?? Campaign.Progression.PassiveModifiers.Empty, damageType, false));
             return dps * defended / raw * (10_000 + hero.HarmfulStatus.Effect(Ailment.Shock)) / 10_000m *
                 (request.Buffs?.IncomingDamageMultiplier(!request.Build.HasUsableWeapon, tick, false) ?? 10_000) / 10_000m;
         }))

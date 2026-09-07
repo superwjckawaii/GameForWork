@@ -19,22 +19,22 @@ public sealed partial class ResourceState
 
     private int ShieldManaCost(int mana, SkillTag tags) => tags.HasFlag(SkillTag.Spell) && Mastery("能量护盾", 6) ? mana / 2 : 0;
 
-    public bool CanPaySkillCost(int life, int mana, SkillTag tags, bool allowOvercharge = true, int extraShield = 0)
+    public bool CanPaySkillCost(int life, int mana, SkillTag tags, bool allowOvercharge = true, int extraShield = 0, bool waiveMana = false)
     {
         if (!IsAlive || life < 0 || mana < 0) return false;
         int shield = life > 0 ? 0 : ShieldManaCost(mana, tags);
         int available = allowOvercharge && tags.HasFlag(SkillTag.Spell) ? AvailableSpellMana : Mana;
-        return Shield >= (long)shield + extraShield && (life > 0 ? Life > life : available >= mana - shield);
+        return Shield >= (long)shield + extraShield && (life > 0 ? Life > life : (waiveMana || available >= mana - shield));
     }
 
     /// <summary>Checks every resource before payment; only successful self casts advance cast-based masteries.</summary>
-    public bool TryPaySkillCost(string skillId, int life, int mana, bool selfCast = true, bool allowOvercharge = true, int extraShield = 0)
+    public bool TryPaySkillCost(string skillId, int life, int mana, bool selfCast = true, bool allowOvercharge = true, int extraShield = 0, bool waiveMana = false)
     {
         SkillTag tags = SkillDefinitions.Get(skillId).Tags;
         LastSpellFullyFunded = false;
         LastSkillPaymentMultiplier = 10_000;
         LastSkillManaPaid = LastSkillLifePaid = 0;
-        if (!CanPaySkillCost(life, mana, tags, allowOvercharge, extraShield)) return false;
+        if (!CanPaySkillCost(life, mana, tags, allowOvercharge, extraShield, waiveMana)) return false;
         bool eligible = selfCast && (tags & (SkillTag.Attack | SkillTag.Spell)) != 0 &&
             (tags & (SkillTag.Trigger | SkillTag.Counter | SkillTag.Reservation)) == 0;
         bool channel = eligible && tags.HasFlag(SkillTag.Channelling);
@@ -53,8 +53,11 @@ public sealed partial class ResourceState
         {
             int shield = ShieldManaCost(mana, tags);
             Shield -= shield;
-            if (tags.HasFlag(SkillTag.Spell)) TryPaySpellMana(mana - shield, allowOvercharge);
-            else Mana -= mana;
+            if (!waiveMana)
+            {
+                if (tags.HasFlag(SkillTag.Spell)) TryPaySpellMana(mana - shield, allowOvercharge);
+                else Mana -= mana;
+            }
             if (shield > 0) LastSpellFullyFunded = false;
         }
         LastSkillManaPaid = manaBefore - Mana;

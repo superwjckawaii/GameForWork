@@ -262,6 +262,75 @@
         "格守生息：成功格挡后 4 秒，每秒分别再生最大生命、最大护盾的 2%，刷新不叠加，不是瞬间回血。",
         "格反蓄势：成功格挡后，4 秒内下一次自行攻击或施法的击中造成 50% 更多伤害；只储存一次，获取冷却 1 秒。",
         "失守壁垒：连续 3 秒没有成功格挡时，获得一次必定格挡，用于下一次可格挡的击中；任何成功格挡都会消耗或清除该状态并重新计时，无法格挡规则优先。"
+      ],
+      "smallNodes": [
+        {
+          "description": "小点：攻击格挡概率 +3 个百分点，护甲提高 10%",
+          "effects": [
+            {
+              "kind": "BlockChanceBasisPoints",
+              "value": 300
+            },
+            {
+              "kind": "IncreasedArmorBasisPoints",
+              "value": 1000
+            }
+          ]
+        },
+        {
+          "description": "小点：攻击格挡概率 +3 个百分点，护甲提高 10%",
+          "effects": [
+            {
+              "kind": "BlockChanceBasisPoints",
+              "value": 300
+            },
+            {
+              "kind": "IncreasedArmorBasisPoints",
+              "value": 1000
+            }
+          ]
+        },
+        {
+          "description": "小点：攻击格挡概率 +3 个百分点，护甲提高 10%",
+          "effects": [
+            {
+              "kind": "BlockChanceBasisPoints",
+              "value": 300
+            },
+            {
+              "kind": "IncreasedArmorBasisPoints",
+              "value": 1000
+            }
+          ]
+        },
+        {
+          "description": "小点：攻击格挡概率 +3 个百分点，护甲提高 10%",
+          "effects": [
+            {
+              "kind": "BlockChanceBasisPoints",
+              "value": 300
+            },
+            {
+              "kind": "IncreasedArmorBasisPoints",
+              "value": 1000
+            }
+          ]
+        }
+      ],
+      "notableNodes": [
+        {
+          "description": "显著：攻击格挡概率 +8 个百分点，护甲提高 40%",
+          "effects": [
+            {
+              "kind": "BlockChanceBasisPoints",
+              "value": 800
+            },
+            {
+              "kind": "IncreasedArmorBasisPoints",
+              "value": 4000
+            }
+          ]
+        }
       ]
     },
     {
@@ -865,6 +934,75 @@
         "格守生息：成功格挡后 4 秒，每秒分别再生最大生命、最大护盾的 2%，刷新不叠加，不是瞬间回血。",
         "格反蓄势：成功格挡后，4 秒内下一次自行攻击或施法的击中造成 50% 更多伤害；只储存一次，获取冷却 1 秒。",
         "失守壁垒：连续 3 秒没有成功格挡时，获得一次必定格挡，用于下一次可格挡的击中；任何成功格挡都会消耗或清除该状态并重新计时，无法格挡规则优先。"
+      ],
+      "smallNodes": [
+        {
+          "description": "小点：法术格挡概率 +3 个百分点，护盾提高 6%",
+          "effects": [
+            {
+              "kind": "SpellBlockChanceBasisPoints",
+              "value": 300
+            },
+            {
+              "kind": "IncreasedShieldBasisPoints",
+              "value": 600
+            }
+          ]
+        },
+        {
+          "description": "小点：法术格挡概率 +3 个百分点，护盾提高 6%",
+          "effects": [
+            {
+              "kind": "SpellBlockChanceBasisPoints",
+              "value": 300
+            },
+            {
+              "kind": "IncreasedShieldBasisPoints",
+              "value": 600
+            }
+          ]
+        },
+        {
+          "description": "小点：法术格挡概率 +3 个百分点，护盾提高 6%",
+          "effects": [
+            {
+              "kind": "SpellBlockChanceBasisPoints",
+              "value": 300
+            },
+            {
+              "kind": "IncreasedShieldBasisPoints",
+              "value": 600
+            }
+          ]
+        },
+        {
+          "description": "小点：法术格挡概率 +3 个百分点，护盾提高 6%",
+          "effects": [
+            {
+              "kind": "SpellBlockChanceBasisPoints",
+              "value": 300
+            },
+            {
+              "kind": "IncreasedShieldBasisPoints",
+              "value": 600
+            }
+          ]
+        }
+      ],
+      "notableNodes": [
+        {
+          "description": "显著：法术格挡概率 +8 个百分点，护盾提高 30%",
+          "effects": [
+            {
+              "kind": "SpellBlockChanceBasisPoints",
+              "value": 800
+            },
+            {
+              "kind": "IncreasedShieldBasisPoints",
+              "value": 3000
+            }
+          ]
+        }
       ]
     },
     {
@@ -1006,6 +1144,87 @@
         "御元反攻：最近 4 秒受到过敌方实际元素击中伤害时，元素击中造成 40% 更多伤害。",
         "元素静护：受到的元素持续伤害总降 20%，不提供异常避免、免疫或解除。",
         "全域抗御：当前三元素抗性分别达到自身上限时，受到的元素伤害总降 10%。"
+      ],
+      "smallNodes": [
+        {
+          "description": "小点：三元素抗性各 +8 个百分点",
+          "effects": [
+            {
+              "kind": "FireResistanceBasisPoints",
+              "value": 800
+            },
+            {
+              "kind": "ColdResistanceBasisPoints",
+              "value": 800
+            },
+            {
+              "kind": "LightningResistanceBasisPoints",
+              "value": 800
+            }
+          ]
+        },
+        {
+          "description": "小点：三元素抗性各 +8 个百分点",
+          "effects": [
+            {
+              "kind": "FireResistanceBasisPoints",
+              "value": 800
+            },
+            {
+              "kind": "ColdResistanceBasisPoints",
+              "value": 800
+            },
+            {
+              "kind": "LightningResistanceBasisPoints",
+              "value": 800
+            }
+          ]
+        },
+        {
+          "description": "小点：三元素抗性各 +8 个百分点",
+          "effects": [
+            {
+              "kind": "FireResistanceBasisPoints",
+              "value": 800
+            },
+            {
+              "kind": "ColdResistanceBasisPoints",
+              "value": 800
+            },
+            {
+              "kind": "LightningResistanceBasisPoints",
+              "value": 800
+            }
+          ]
+        },
+        {
+          "description": "小点：三元素抗性各 +8 个百分点",
+          "effects": [
+            {
+              "kind": "FireResistanceBasisPoints",
+              "value": 800
+            },
+            {
+              "kind": "ColdResistanceBasisPoints",
+              "value": 800
+            },
+            {
+              "kind": "LightningResistanceBasisPoints",
+              "value": 800
+            }
+          ]
+        }
+      ],
+      "notableNodes": [
+        {
+          "description": "显著：最大三元素抗性各 +3 个百分点",
+          "effects": [
+            {
+              "kind": "MaximumElementalResistanceBasisPoints",
+              "value": 300
+            }
+          ]
+        }
       ]
     },
     {
@@ -1359,6 +1578,71 @@
         "灵障返生：最近 1 秒实际承受过持续伤害时，每秒分别再生最大生命、最大护盾的 1.5%。",
         "静息灵壁：最近 4 秒没有受到实际击中伤害时，灵障更多 80%；闪避、完全格挡、零伤害不打断条件。",
         "灵障侵袭：每完整 100 点最终灵障，对敌人造成的持续伤害提高 8%，不设增伤上限。"
+      ],
+      "smallNodes": [
+        {
+          "description": "小点：灵障提高 15%，生命提高 5%",
+          "effects": [
+            {
+              "kind": "IncreasedSpiritBarrierBasisPoints",
+              "value": 1500
+            },
+            {
+              "kind": "IncreasedMaximumLifeBasisPoints",
+              "value": 500
+            }
+          ]
+        },
+        {
+          "description": "小点：灵障提高 15%，生命提高 5%",
+          "effects": [
+            {
+              "kind": "IncreasedSpiritBarrierBasisPoints",
+              "value": 1500
+            },
+            {
+              "kind": "IncreasedMaximumLifeBasisPoints",
+              "value": 500
+            }
+          ]
+        },
+        {
+          "description": "小点：灵障提高 15%，生命提高 5%",
+          "effects": [
+            {
+              "kind": "IncreasedSpiritBarrierBasisPoints",
+              "value": 1500
+            },
+            {
+              "kind": "IncreasedMaximumLifeBasisPoints",
+              "value": 500
+            }
+          ]
+        },
+        {
+          "description": "小点：灵障提高 15%，生命提高 5%",
+          "effects": [
+            {
+              "kind": "IncreasedSpiritBarrierBasisPoints",
+              "value": 1500
+            },
+            {
+              "kind": "IncreasedMaximumLifeBasisPoints",
+              "value": 500
+            }
+          ]
+        }
+      ],
+      "notableNodes": [
+        {
+          "description": "显著：灵障更多 40%",
+          "effects": [
+            {
+              "kind": "MoreSpiritBarrierBasisPoints",
+              "value": 4000
+            }
+          ]
+        }
       ]
     },
     {
@@ -1406,6 +1690,75 @@
         "余虚回生：最近 4 秒受到过敌方实际虚空击中伤害时，每秒分别再生最大生命、最大护盾的 2%。",
         "幽渊反攻：最近 4 秒受到过敌方实际虚空击中伤害时，虚空伤害造成 40% 更多伤害。",
         "满抗稳固：当前虚空抗性达到自身上限时，受到的虚空击中伤害总降 15%。"
+      ],
+      "smallNodes": [
+        {
+          "description": "小点：虚空抗性 +12 个百分点，灵障提高 10%",
+          "effects": [
+            {
+              "kind": "VoidResistanceBasisPoints",
+              "value": 1200
+            },
+            {
+              "kind": "IncreasedSpiritBarrierBasisPoints",
+              "value": 1000
+            }
+          ]
+        },
+        {
+          "description": "小点：虚空抗性 +12 个百分点，灵障提高 10%",
+          "effects": [
+            {
+              "kind": "VoidResistanceBasisPoints",
+              "value": 1200
+            },
+            {
+              "kind": "IncreasedSpiritBarrierBasisPoints",
+              "value": 1000
+            }
+          ]
+        },
+        {
+          "description": "小点：虚空抗性 +12 个百分点，灵障提高 10%",
+          "effects": [
+            {
+              "kind": "VoidResistanceBasisPoints",
+              "value": 1200
+            },
+            {
+              "kind": "IncreasedSpiritBarrierBasisPoints",
+              "value": 1000
+            }
+          ]
+        },
+        {
+          "description": "小点：虚空抗性 +12 个百分点，灵障提高 10%",
+          "effects": [
+            {
+              "kind": "VoidResistanceBasisPoints",
+              "value": 1200
+            },
+            {
+              "kind": "IncreasedSpiritBarrierBasisPoints",
+              "value": 1000
+            }
+          ]
+        }
+      ],
+      "notableNodes": [
+        {
+          "description": "显著：虚空抗性 +30 个百分点，灵障提高 40%",
+          "effects": [
+            {
+              "kind": "VoidResistanceBasisPoints",
+              "value": 3000
+            },
+            {
+              "kind": "IncreasedSpiritBarrierBasisPoints",
+              "value": 4000
+            }
+          ]
+        }
       ]
     },
     {
@@ -1501,6 +1854,91 @@
         "余虚回生：最近 4 秒受到过敌方实际虚空击中伤害时，每秒分别再生最大生命、最大护盾的 2%。",
         "幽渊反攻：最近 4 秒受到过敌方实际虚空击中伤害时，虚空伤害造成 40% 更多伤害。",
         "满抗稳固：当前虚空抗性达到自身上限时，受到的虚空击中伤害总降 15%。"
+      ],
+      "smallNodes": [
+        {
+          "description": "小点：虚空抗性 +8 个百分点，生命与护盾分别提高 3%",
+          "effects": [
+            {
+              "kind": "VoidResistanceBasisPoints",
+              "value": 800
+            },
+            {
+              "kind": "IncreasedMaximumLifeBasisPoints",
+              "value": 300
+            },
+            {
+              "kind": "IncreasedShieldBasisPoints",
+              "value": 300
+            }
+          ]
+        },
+        {
+          "description": "小点：虚空抗性 +8 个百分点，生命与护盾分别提高 3%",
+          "effects": [
+            {
+              "kind": "VoidResistanceBasisPoints",
+              "value": 800
+            },
+            {
+              "kind": "IncreasedMaximumLifeBasisPoints",
+              "value": 300
+            },
+            {
+              "kind": "IncreasedShieldBasisPoints",
+              "value": 300
+            }
+          ]
+        },
+        {
+          "description": "小点：虚空抗性 +8 个百分点，生命与护盾分别提高 3%",
+          "effects": [
+            {
+              "kind": "VoidResistanceBasisPoints",
+              "value": 800
+            },
+            {
+              "kind": "IncreasedMaximumLifeBasisPoints",
+              "value": 300
+            },
+            {
+              "kind": "IncreasedShieldBasisPoints",
+              "value": 300
+            }
+          ]
+        },
+        {
+          "description": "小点：虚空抗性 +8 个百分点，生命与护盾分别提高 3%",
+          "effects": [
+            {
+              "kind": "VoidResistanceBasisPoints",
+              "value": 800
+            },
+            {
+              "kind": "IncreasedMaximumLifeBasisPoints",
+              "value": 300
+            },
+            {
+              "kind": "IncreasedShieldBasisPoints",
+              "value": 300
+            }
+          ]
+        }
+      ],
+      "notableNodes": [
+        {
+          "description": "显著：最大虚空抗性 +3 个百分点，虚空抗性 +20 个百分点",
+          "effects": [
+            {
+              "kind": "MaximumVoidResistanceBasisPoints",
+              "value": 300
+            },
+            {
+              "kind": "VoidResistanceBasisPoints",
+              "value": 2000
+            }
+          ]
+        }
       ]
     },
     {
@@ -1779,6 +2217,59 @@
         "灵障返生：最近 1 秒实际承受过持续伤害时，每秒分别再生最大生命、最大护盾的 1.5%。",
         "静息灵壁：最近 4 秒没有受到实际击中伤害时，灵障更多 80%；闪避、完全格挡、零伤害不打断条件。",
         "灵障侵袭：每完整 100 点最终灵障，对敌人造成的持续伤害提高 8%，不设增伤上限。"
+      ],
+      "smallNodes": [
+        {
+          "description": "小点：灵障提高 20%",
+          "effects": [
+            {
+              "kind": "IncreasedSpiritBarrierBasisPoints",
+              "value": 2000
+            }
+          ]
+        },
+        {
+          "description": "小点：灵障提高 20%",
+          "effects": [
+            {
+              "kind": "IncreasedSpiritBarrierBasisPoints",
+              "value": 2000
+            }
+          ]
+        },
+        {
+          "description": "小点：灵障提高 20%",
+          "effects": [
+            {
+              "kind": "IncreasedSpiritBarrierBasisPoints",
+              "value": 2000
+            }
+          ]
+        },
+        {
+          "description": "小点：灵障提高 20%",
+          "effects": [
+            {
+              "kind": "IncreasedSpiritBarrierBasisPoints",
+              "value": 2000
+            }
+          ]
+        }
+      ],
+      "notableNodes": [
+        {
+          "description": "显著：灵障提高 60%，基础灵障 +150",
+          "effects": [
+            {
+              "kind": "IncreasedSpiritBarrierBasisPoints",
+              "value": 6000
+            },
+            {
+              "kind": "FlatSpiritBarrier",
+              "value": 150
+            }
+          ]
+        }
       ]
     },
     {
@@ -1849,6 +2340,75 @@
         "静养复苏：最近 4 秒未受到实际击中伤害时，生命与护盾再生分别更多 60%。",
         "生息转灵：生命基础再生量的 50% 转为等量护盾基础再生量；剩余 50% 继续恢复生命。",
         "生息稳固：生命与护盾再生率分别提高 100%，药剂恢复量降低 40%。"
+      ],
+      "smallNodes": [
+        {
+          "description": "小点：每秒再生最大生命 0.4%，生命再生率提高 10%",
+          "effects": [
+            {
+              "kind": "MaximumLifeRegenerationBasisPoints",
+              "value": 40
+            },
+            {
+              "kind": "IncreasedLifeRegenerationBasisPoints",
+              "value": 1000
+            }
+          ]
+        },
+        {
+          "description": "小点：每秒再生最大生命 0.4%，生命再生率提高 10%",
+          "effects": [
+            {
+              "kind": "MaximumLifeRegenerationBasisPoints",
+              "value": 40
+            },
+            {
+              "kind": "IncreasedLifeRegenerationBasisPoints",
+              "value": 1000
+            }
+          ]
+        },
+        {
+          "description": "小点：每秒再生最大生命 0.4%，生命再生率提高 10%",
+          "effects": [
+            {
+              "kind": "MaximumLifeRegenerationBasisPoints",
+              "value": 40
+            },
+            {
+              "kind": "IncreasedLifeRegenerationBasisPoints",
+              "value": 1000
+            }
+          ]
+        },
+        {
+          "description": "小点：每秒再生最大生命 0.4%，生命再生率提高 10%",
+          "effects": [
+            {
+              "kind": "MaximumLifeRegenerationBasisPoints",
+              "value": 40
+            },
+            {
+              "kind": "IncreasedLifeRegenerationBasisPoints",
+              "value": 1000
+            }
+          ]
+        }
+      ],
+      "notableNodes": [
+        {
+          "description": "显著：每秒再生最大生命 2%，生命再生率提高 20%",
+          "effects": [
+            {
+              "kind": "MaximumLifeRegenerationBasisPoints",
+              "value": 200
+            },
+            {
+              "kind": "IncreasedLifeRegenerationBasisPoints",
+              "value": 2000
+            }
+          ]
+        }
       ]
     },
     {
@@ -2038,6 +2598,75 @@
         "静养复苏：最近 4 秒未受到实际击中伤害时，生命与护盾再生分别更多 60%。",
         "生息转灵：生命基础再生量的 50% 转为等量护盾基础再生量；剩余 50% 继续恢复生命。",
         "生息稳固：生命与护盾再生率分别提高 100%，药剂恢复量降低 40%。"
+      ],
+      "smallNodes": [
+        {
+          "description": "小点：每秒再生最大护盾 0.3%，护盾再生率提高 10%",
+          "effects": [
+            {
+              "kind": "MaximumShieldRegenerationBasisPoints",
+              "value": 30
+            },
+            {
+              "kind": "IncreasedShieldRegenerationBasisPoints",
+              "value": 1000
+            }
+          ]
+        },
+        {
+          "description": "小点：每秒再生最大护盾 0.3%，护盾再生率提高 10%",
+          "effects": [
+            {
+              "kind": "MaximumShieldRegenerationBasisPoints",
+              "value": 30
+            },
+            {
+              "kind": "IncreasedShieldRegenerationBasisPoints",
+              "value": 1000
+            }
+          ]
+        },
+        {
+          "description": "小点：每秒再生最大护盾 0.3%，护盾再生率提高 10%",
+          "effects": [
+            {
+              "kind": "MaximumShieldRegenerationBasisPoints",
+              "value": 30
+            },
+            {
+              "kind": "IncreasedShieldRegenerationBasisPoints",
+              "value": 1000
+            }
+          ]
+        },
+        {
+          "description": "小点：每秒再生最大护盾 0.3%，护盾再生率提高 10%",
+          "effects": [
+            {
+              "kind": "MaximumShieldRegenerationBasisPoints",
+              "value": 30
+            },
+            {
+              "kind": "IncreasedShieldRegenerationBasisPoints",
+              "value": 1000
+            }
+          ]
+        }
+      ],
+      "notableNodes": [
+        {
+          "description": "显著：每秒再生最大护盾 1.5%，护盾再生率提高 40%",
+          "effects": [
+            {
+              "kind": "MaximumShieldRegenerationBasisPoints",
+              "value": 150
+            },
+            {
+              "kind": "IncreasedShieldRegenerationBasisPoints",
+              "value": 4000
+            }
+          ]
+        }
       ]
     },
     {
@@ -2586,6 +3215,83 @@
         "抑法生息：成功压制后 4 秒，每秒分别再生最大生命、最大护盾的 2%，刷新不叠加。",
         "抑法反攻：成功压制后 4 秒，击中造成 35% 更多伤害。",
         "溢压转锋：封顶前压制概率每超出 100% 一个百分点，击中伤害提高 3%，不另设增伤上限；幸运不制造溢出概率。"
+      ],
+      "smallNodes": [
+        {
+          "description": "小点：压制概率 +6 个百分点，闪避提高 5%",
+          "effects": [
+            {
+              "kind": "SpellSuppressionBasisPoints",
+              "value": 600
+            },
+            {
+              "kind": "IncreasedEvasionBasisPoints",
+              "value": 500
+            }
+          ]
+        },
+        {
+          "description": "小点：压制概率 +6 个百分点，闪避提高 5%",
+          "effects": [
+            {
+              "kind": "SpellSuppressionBasisPoints",
+              "value": 600
+            },
+            {
+              "kind": "IncreasedEvasionBasisPoints",
+              "value": 500
+            }
+          ]
+        },
+        {
+          "description": "小点：压制概率 +6 个百分点，闪避提高 5%",
+          "effects": [
+            {
+              "kind": "SpellSuppressionBasisPoints",
+              "value": 600
+            },
+            {
+              "kind": "IncreasedEvasionBasisPoints",
+              "value": 500
+            }
+          ]
+        },
+        {
+          "description": "小点：压制概率 +6 个百分点，闪避提高 5%",
+          "effects": [
+            {
+              "kind": "SpellSuppressionBasisPoints",
+              "value": 600
+            },
+            {
+              "kind": "IncreasedEvasionBasisPoints",
+              "value": 500
+            }
+          ]
+        }
+      ],
+      "notableNodes": [
+        {
+          "description": "显著：压制概率 +18 个百分点，三元素抗性各 +10 个百分点",
+          "effects": [
+            {
+              "kind": "SpellSuppressionBasisPoints",
+              "value": 1800
+            },
+            {
+              "kind": "FireResistanceBasisPoints",
+              "value": 1000
+            },
+            {
+              "kind": "ColdResistanceBasisPoints",
+              "value": 1000
+            },
+            {
+              "kind": "LightningResistanceBasisPoints",
+              "value": 1000
+            }
+          ]
+        }
       ]
     },
     {
@@ -2818,6 +3524,115 @@
         "御元反攻：最近 4 秒受到过敌方实际元素击中伤害时，元素击中造成 40% 更多伤害。",
         "元素静护：受到的元素持续伤害总降 20%，不提供异常避免、免疫或解除。",
         "全域抗御：当前三元素抗性分别达到自身上限时，受到的元素伤害总降 10%。"
+      ],
+      "smallNodes": [
+        {
+          "description": "小点：三元素抗性各 +6 个百分点，生命提高 2%",
+          "effects": [
+            {
+              "kind": "FireResistanceBasisPoints",
+              "value": 600
+            },
+            {
+              "kind": "ColdResistanceBasisPoints",
+              "value": 600
+            },
+            {
+              "kind": "LightningResistanceBasisPoints",
+              "value": 600
+            },
+            {
+              "kind": "IncreasedMaximumLifeBasisPoints",
+              "value": 200
+            }
+          ]
+        },
+        {
+          "description": "小点：三元素抗性各 +6 个百分点，生命提高 2%",
+          "effects": [
+            {
+              "kind": "FireResistanceBasisPoints",
+              "value": 600
+            },
+            {
+              "kind": "ColdResistanceBasisPoints",
+              "value": 600
+            },
+            {
+              "kind": "LightningResistanceBasisPoints",
+              "value": 600
+            },
+            {
+              "kind": "IncreasedMaximumLifeBasisPoints",
+              "value": 200
+            }
+          ]
+        },
+        {
+          "description": "小点：三元素抗性各 +6 个百分点，生命提高 2%",
+          "effects": [
+            {
+              "kind": "FireResistanceBasisPoints",
+              "value": 600
+            },
+            {
+              "kind": "ColdResistanceBasisPoints",
+              "value": 600
+            },
+            {
+              "kind": "LightningResistanceBasisPoints",
+              "value": 600
+            },
+            {
+              "kind": "IncreasedMaximumLifeBasisPoints",
+              "value": 200
+            }
+          ]
+        },
+        {
+          "description": "小点：三元素抗性各 +6 个百分点，生命提高 2%",
+          "effects": [
+            {
+              "kind": "FireResistanceBasisPoints",
+              "value": 600
+            },
+            {
+              "kind": "ColdResistanceBasisPoints",
+              "value": 600
+            },
+            {
+              "kind": "LightningResistanceBasisPoints",
+              "value": 600
+            },
+            {
+              "kind": "IncreasedMaximumLifeBasisPoints",
+              "value": 200
+            }
+          ]
+        }
+      ],
+      "notableNodes": [
+        {
+          "description": "显著：最大三元素抗性各 +2 个百分点，三元素抗性各 +15 个百分点",
+          "effects": [
+            {
+              "kind": "MaximumElementalResistanceBasisPoints",
+              "value": 200
+            },
+            {
+              "kind": "FireResistanceBasisPoints",
+              "value": 1500
+            },
+            {
+              "kind": "ColdResistanceBasisPoints",
+              "value": 1500
+            },
+            {
+              "kind": "LightningResistanceBasisPoints",
+              "value": 1500
+            }
+          ]
+        }
       ]
     },
     {
@@ -3227,6 +4042,75 @@
         "抑法生息：成功压制后 4 秒，每秒分别再生最大生命、最大护盾的 2%，刷新不叠加。",
         "抑法反攻：成功压制后 4 秒，击中造成 35% 更多伤害。",
         "溢压转锋：封顶前压制概率每超出 100% 一个百分点，击中伤害提高 3%，不另设增伤上限；幸运不制造溢出概率。"
+      ],
+      "smallNodes": [
+        {
+          "description": "小点：压制概率 +4 个百分点，护盾提高 6%",
+          "effects": [
+            {
+              "kind": "SpellSuppressionBasisPoints",
+              "value": 400
+            },
+            {
+              "kind": "IncreasedShieldBasisPoints",
+              "value": 600
+            }
+          ]
+        },
+        {
+          "description": "小点：压制概率 +4 个百分点，护盾提高 6%",
+          "effects": [
+            {
+              "kind": "SpellSuppressionBasisPoints",
+              "value": 400
+            },
+            {
+              "kind": "IncreasedShieldBasisPoints",
+              "value": 600
+            }
+          ]
+        },
+        {
+          "description": "小点：压制概率 +4 个百分点，护盾提高 6%",
+          "effects": [
+            {
+              "kind": "SpellSuppressionBasisPoints",
+              "value": 400
+            },
+            {
+              "kind": "IncreasedShieldBasisPoints",
+              "value": 600
+            }
+          ]
+        },
+        {
+          "description": "小点：压制概率 +4 个百分点，护盾提高 6%",
+          "effects": [
+            {
+              "kind": "SpellSuppressionBasisPoints",
+              "value": 400
+            },
+            {
+              "kind": "IncreasedShieldBasisPoints",
+              "value": 600
+            }
+          ]
+        }
+      ],
+      "notableNodes": [
+        {
+          "description": "显著：压制概率 +12 个百分点，成功压制的减伤效果 +5 个百分点",
+          "effects": [
+            {
+              "kind": "SpellSuppressionBasisPoints",
+              "value": 1200
+            },
+            {
+              "kind": "SpellSuppressionEffectBasisPoints",
+              "value": 500
+            }
+          ]
+        }
       ]
     },
     {
@@ -3550,6 +4434,136 @@
         "格守生息：成功格挡后 4 秒，每秒分别再生最大生命、最大护盾的 2%，刷新不叠加，不是瞬间回血。",
         "格反蓄势：成功格挡后，4 秒内下一次自行攻击或施法的击中造成 50% 更多伤害；只储存一次，获取冷却 1 秒。",
         "失守壁垒：连续 3 秒没有成功格挡时，获得一次必定格挡，用于下一次可格挡的击中；任何成功格挡都会消耗或清除该状态并重新计时，无法格挡规则优先。"
+      ],
+      "smallNodes": [
+        {
+          "description": "小点：攻击、法术格挡概率各 +3 个百分点",
+          "effects": [
+            {
+              "kind": "BlockChanceBasisPoints",
+              "value": 300
+            },
+            {
+              "kind": "SpellBlockChanceBasisPoints",
+              "value": 300
+            }
+          ]
+        },
+        {
+          "description": "小点：攻击、法术格挡概率各 +3 个百分点",
+          "effects": [
+            {
+              "kind": "BlockChanceBasisPoints",
+              "value": 300
+            },
+            {
+              "kind": "SpellBlockChanceBasisPoints",
+              "value": 300
+            }
+          ]
+        },
+        {
+          "description": "小点：攻击、法术格挡概率各 +3 个百分点",
+          "effects": [
+            {
+              "kind": "BlockChanceBasisPoints",
+              "value": 300
+            },
+            {
+              "kind": "SpellBlockChanceBasisPoints",
+              "value": 300
+            }
+          ]
+        },
+        {
+          "description": "小点：攻击、法术格挡概率各 +3 个百分点",
+          "effects": [
+            {
+              "kind": "BlockChanceBasisPoints",
+              "value": 300
+            },
+            {
+              "kind": "SpellBlockChanceBasisPoints",
+              "value": 300
+            }
+          ]
+        },
+        {
+          "description": "小点：攻击、法术格挡概率各 +3 个百分点",
+          "effects": [
+            {
+              "kind": "BlockChanceBasisPoints",
+              "value": 300
+            },
+            {
+              "kind": "SpellBlockChanceBasisPoints",
+              "value": 300
+            }
+          ]
+        },
+        {
+          "description": "小点：攻击、法术格挡概率各 +3 个百分点",
+          "effects": [
+            {
+              "kind": "BlockChanceBasisPoints",
+              "value": 300
+            },
+            {
+              "kind": "SpellBlockChanceBasisPoints",
+              "value": 300
+            }
+          ]
+        },
+        {
+          "description": "小点：攻击、法术格挡概率各 +3 个百分点",
+          "effects": [
+            {
+              "kind": "BlockChanceBasisPoints",
+              "value": 300
+            },
+            {
+              "kind": "SpellBlockChanceBasisPoints",
+              "value": 300
+            }
+          ]
+        },
+        {
+          "description": "小点：攻击、法术格挡概率各 +3 个百分点",
+          "effects": [
+            {
+              "kind": "BlockChanceBasisPoints",
+              "value": 300
+            },
+            {
+              "kind": "SpellBlockChanceBasisPoints",
+              "value": 300
+            }
+          ]
+        }
+      ],
+      "notableNodes": [
+        {
+          "description": "双重架势：两种格挡概率各 +6 个百分点",
+          "effects": [
+            {
+              "kind": "BlockChanceBasisPoints",
+              "value": 600
+            },
+            {
+              "kind": "SpellBlockChanceBasisPoints",
+              "value": 600
+            }
+          ]
+        },
+        {
+          "description": "格后固守：成功格挡后 4 秒，受到未格挡击中伤害总降 10%",
+          "effects": [
+            {
+              "kind": "RecentBlockUnblockedHitLessBasisPoints",
+              "value": 1000
+            }
+          ]
+        }
       ]
     },
     {
@@ -3905,6 +4919,140 @@
         "静养复苏：最近 4 秒未受到实际击中伤害时，生命与护盾再生分别更多 60%。",
         "生息转灵：生命基础再生量的 50% 转为等量护盾基础再生量；剩余 50% 继续恢复生命。",
         "生息稳固：生命与护盾再生率分别提高 100%，药剂恢复量降低 40%。"
+      ],
+      "smallNodes": [
+        {
+          "description": "小点：生命、护盾再生率分别提高 15%",
+          "effects": [
+            {
+              "kind": "IncreasedLifeRegenerationBasisPoints",
+              "value": 1500
+            },
+            {
+              "kind": "IncreasedShieldRegenerationBasisPoints",
+              "value": 1500
+            }
+          ]
+        },
+        {
+          "description": "小点：生命、护盾再生率分别提高 15%",
+          "effects": [
+            {
+              "kind": "IncreasedLifeRegenerationBasisPoints",
+              "value": 1500
+            },
+            {
+              "kind": "IncreasedShieldRegenerationBasisPoints",
+              "value": 1500
+            }
+          ]
+        },
+        {
+          "description": "小点：生命、护盾再生率分别提高 15%",
+          "effects": [
+            {
+              "kind": "IncreasedLifeRegenerationBasisPoints",
+              "value": 1500
+            },
+            {
+              "kind": "IncreasedShieldRegenerationBasisPoints",
+              "value": 1500
+            }
+          ]
+        },
+        {
+          "description": "小点：生命、护盾再生率分别提高 15%",
+          "effects": [
+            {
+              "kind": "IncreasedLifeRegenerationBasisPoints",
+              "value": 1500
+            },
+            {
+              "kind": "IncreasedShieldRegenerationBasisPoints",
+              "value": 1500
+            }
+          ]
+        },
+        {
+          "description": "小点：生命、护盾再生率分别提高 15%",
+          "effects": [
+            {
+              "kind": "IncreasedLifeRegenerationBasisPoints",
+              "value": 1500
+            },
+            {
+              "kind": "IncreasedShieldRegenerationBasisPoints",
+              "value": 1500
+            }
+          ]
+        },
+        {
+          "description": "小点：生命、护盾再生率分别提高 15%",
+          "effects": [
+            {
+              "kind": "IncreasedLifeRegenerationBasisPoints",
+              "value": 1500
+            },
+            {
+              "kind": "IncreasedShieldRegenerationBasisPoints",
+              "value": 1500
+            }
+          ]
+        },
+        {
+          "description": "小点：生命、护盾再生率分别提高 15%",
+          "effects": [
+            {
+              "kind": "IncreasedLifeRegenerationBasisPoints",
+              "value": 1500
+            },
+            {
+              "kind": "IncreasedShieldRegenerationBasisPoints",
+              "value": 1500
+            }
+          ]
+        },
+        {
+          "description": "小点：生命、护盾再生率分别提高 15%",
+          "effects": [
+            {
+              "kind": "IncreasedLifeRegenerationBasisPoints",
+              "value": 1500
+            },
+            {
+              "kind": "IncreasedShieldRegenerationBasisPoints",
+              "value": 1500
+            }
+          ]
+        }
+      ],
+      "notableNodes": [
+        {
+          "description": "持久生机：每秒分别再生最大生命、最大护盾的 2%",
+          "effects": [
+            {
+              "kind": "MaximumLifeRegenerationBasisPoints",
+              "value": 200
+            },
+            {
+              "kind": "MaximumShieldRegenerationBasisPoints",
+              "value": 200
+            }
+          ]
+        },
+        {
+          "description": "绝境复苏：生命不高于 50% 时生命再生更多 50%，护盾不高于 50% 时护盾再生更多 50%",
+          "effects": [
+            {
+              "kind": "LowLifeMoreRegenerationBasisPoints",
+              "value": 5000
+            },
+            {
+              "kind": "LowShieldMoreRegenerationBasisPoints",
+              "value": 5000
+            }
+          ]
+        }
       ]
     },
     {

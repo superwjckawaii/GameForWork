@@ -47,7 +47,7 @@ public sealed class FlaskRack
     private int Value(FlaskBottle bottle, ItemModifierKind kind) => bottle.Input.Modifiers.GetValueOrDefault(kind) +
         (kind is ItemModifierKind.FlaskRepeatEffect or ItemModifierKind.FlaskOverflowCharges or ItemModifierKind.FlaskCleanseBleedPoison or
             ItemModifierKind.FlaskCleanseElementalAilments or ItemModifierKind.FlaskCleanseCurses ? 0 : _equipment.Value(kind)) +
-        (kind == ItemModifierKind.IncreasedFlaskRecoveryAmountBasisPoints ? bottle.Input.Quality * 100 : 0);
+        (kind == ItemModifierKind.IncreasedFlaskRecoveryAmountBasisPoints ? bottle.Input.Quality * 100 - (RegenerationMasteryRules.Has(_build.PassiveProfile ?? Campaign.Progression.PassiveModifiers.Empty, 6) ? 4_000 : 0) : 0);
     private int Effect(FlaskBottle bottle) => Value(bottle, ItemModifierKind.MoreFlaskEffectBasisPoints) + (_equipment.Has("余烬锁链") ? 3_000 : 0);
     private int Cost(FlaskBottle bottle) => Math.Max(1, (int)decimal.Ceiling((bottle.Input.Kind is FlaskKind.Life or FlaskKind.Mana ? 10 : 20) *
         Math.Max(0, 10_000 + Value(bottle, ItemModifierKind.IncreasedFlaskChargesPerUseBasisPoints)) / 10_000m));

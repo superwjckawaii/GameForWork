@@ -11,7 +11,7 @@ namespace GameForWork.Core.Combat;
 
 public sealed record CombatHitSnapshot(string TargetId, Point Origin, ResolvedSkill Skill, SkillConfiguration Configuration,
     TeamBuild Build, DamagePacket OffensivePacket, IReadOnlyList<DamageBranch> AilmentSource, bool Critical,
-    int AppliedCriticalMultiplier = 10_000, int OffsetMilliseconds = 0, int AreaPositionMultiplier = 10_000);
+    int AppliedCriticalMultiplier = 10_000, int OffsetMilliseconds = 0, int AreaPositionMultiplier = 10_000, int ResistanceSnapshotTick = 0, int ElementalHitUntil = 0, int VoidHitUntil = 0, int SpellDamageMultiplier = 10000);
 public sealed record CombatActionSnapshot(string Id, string SkillId, SkillTag Tags, bool Unarmed,
     int StartedMilliseconds, int CompletesMilliseconds, IReadOnlyList<CombatHitSnapshot> Hits, bool Triggered = false);
 public sealed record DeferredCombatCopy(string Id, CombatActionSnapshot Action, int DueMilliseconds,

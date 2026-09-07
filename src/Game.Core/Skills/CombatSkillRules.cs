@@ -39,7 +39,7 @@ public sealed record ResolvedSkill(
     bool OverloadRepeatsEveryThirdUse = false,
     int TemperanceLevelPerLayer = 0,
     int TemperanceQualityPerLayer = 0, int BaseAreaRadiusRaw = 0, int AreaMoreBasisPoints = 10_000, int AreaIncreasedBasisPoints = 0, bool AlwaysHit = false, SkillTag AdditionalTags = SkillTag.None, int AdditionalAttackSpeedBasisPoints = 0, int AdditionalCastSpeedBasisPoints = 0,
-    ProjectileMechanics? ProjectileMechanics = null)
+    ProjectileMechanics? ProjectileMechanics = null, bool WaiveManaCost = false)
 {
     public int AreaMultiplierBasisPoints => Math.Max(2_500, CombatRules.ApplyMore(Math.Max(0, 10_000 + AreaIncreasedBasisPoints), [AreaMoreBasisPoints]));
     public int AreaRadiusRaw => AreaRules.Radius(BaseAreaRadiusRaw > 0 ? BaseAreaRadiusRaw : RangeRaw, AreaMultiplierBasisPoints);
@@ -205,7 +205,7 @@ public static class CombatSkillRules
         mana = MasteryRuntime.ManaCost(passive, definition.Tags, mana);
         life = Math.Max(0, checked(life * Math.Max(0, 10_000 - passive.ReducedSkillCostBasisPoints) / 10_000));
         range = Math.Max(1, checked(range * (10_000 + passive.IncreasedSkillRangeBasisPoints) / 10_000));
-        cooldown = Math.Max(1, checked(cooldown * 10_000 / Math.Max(1, 10_000 + passive.IncreasedCooldownRecoveryBasisPoints)));
+        cooldown = Math.Max(1, checked(cooldown * 10_000 / Math.Max(1, 10_000 + passive.IncreasedCooldownRecoveryBasisPoints + AttackMasteryRules.CooldownRecovery(passive, definition.Tags))));
         if (cooldown > 1 && MasteryRuntime.Has(passive, "触发_冷却", 4))
             cooldown = Math.Max(2, checked(cooldown * 13_000 / 10_000));
         ailmentChance = Math.Clamp(ailmentChance + (active.Ailment == Ailment.Bleed ? bleed : 0), 0, 10_000);
@@ -225,7 +225,7 @@ public static class CombatSkillRules
 
     public static bool TryPay(ResourceState resources, ResolvedSkill skill, bool allowOvercharge = true, bool selfCast = true) =>
         resources.TryPaySkillCost(skill.SkillId, skill.LifeCost, skill.ManaCost, selfCast, allowOvercharge,
-            Combat.GuardState.ShieldCost(skill.SkillId, resources.MaximumShield));
+            Combat.GuardState.ShieldCost(skill.SkillId, resources.MaximumShield), waiveMana: skill.WaiveManaCost);
 
     public static int DamageMultiplier(ResolvedSkill skill, int life, int maximumLife)
     {
@@ -312,9 +312,10 @@ public static class CombatSkillRules
     {
         var equipment = build.CombatEquipment ?? Equipment.EquipmentCombatLoadout.Empty;
         var passive = build.PassiveProfile ?? PassiveModifiers.Empty;
-        int common = build.IncreasedGenericDamageBasisPoints + (tags.HasFlag(SkillTag.Attack) ? build.IncreasedDamageBasisPoints - equipment.PhysicalIncreaseIncludedInAttack : 0) +
+        int common = AttackMasteryRules.DamageIncrease(passive, tags) + build.IncreasedGenericDamageBasisPoints + (tags.HasFlag(SkillTag.Attack) ? build.IncreasedDamageBasisPoints - equipment.PhysicalIncreaseIncludedInAttack : 0) +
             passive.DamageFor(tags & ~(SkillTag.Physical | SkillTag.Elemental | SkillTag.Void), damageOverTime) + additionalIncreasedBasisPoints;
-        if (!damageOverTime) common += passive.SpecializedValue(PassiveEffectKind.IncreasedHitDamageBasisPoints);
+        if (damageOverTime) common += SpiritBarrierMasteryRules.DamageIncrease(build.Sheet, passive);
+        if (!damageOverTime) common += SuppressionMasteryRules.OverflowHitIncrease(passive, build.Sheet.SpellSuppressionBasisPoints) + passive.SpecializedValue(PassiveEffectKind.IncreasedHitDamageBasisPoints) + CriticalMasteryRules.ConvertedHitIncrease(passive, build.IncreasedCriticalChanceBasisPoints);
         if (tags.HasFlag(SkillTag.Attack)) common += Ascendancies.WarriorAscendancyRules.IncreasedAttackDamageBasisPoints(
             build.Ascendancy ?? Ascendancies.CombatProfile.Empty, build.Sheet.Attributes.Physique);
         if (tags.HasFlag(SkillTag.Attack)) common += UnarmedRules.DamageIncrease(build);

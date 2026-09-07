@@ -55,7 +55,7 @@ public sealed partial class SpatialCombatRunner
                         if (count >= maximum) continue;
                         areaHits[key] = count + 1;
                     }
-                    if (copy.Source is "mastery:unarmed-repeat" or "support:movement-echo" && !hit.Build.AlwaysHit && !hit.Skill.AlwaysHit && random.NextBasisPoints() >=
+                    if (copy.Source is "mastery:unarmed-repeat" or "support:movement-echo" && !hit.Build.AlwaysHit && !MasteryRuntime.AlwaysHits(hit.Build.PassiveProfile ?? Campaign.Progression.PassiveModifiers.Empty, copy.Action.Tags) && !hit.Skill.AlwaysHit && random.NextBasisPoints() >=
                         DamageRules.HitChance(hit.Build.Sheet.Accuracy(hit.Build.FlatAccuracy + UnarmedRules.Accuracy(hit.Skill.SkillId, hit.Build)).Value, enemy.Scaled.Evasion, false).Value)
                     {
                         events.Add(Event(tick, SpatialEventKind.SkillEffect, "hero", enemy.EntityId, 0, origin, enemy.Position, $"{copy.Source}|miss"));
@@ -83,19 +83,22 @@ public sealed partial class SpatialCombatRunner
                     if (copy.RollCritical)
                     {
                         if (critical) multiplier = (int)((long)multiplier * 10_000 / Math.Max(1, hit.AppliedCriticalMultiplier));
-                        critical = !hit.Build.CannotCrit && !MasteryRuntime.CannotCrit(hit.Build.PassiveProfile ?? Campaign.Progression.PassiveModifiers.Empty) && random.NextBasisPoints() < CombatRules.CriticalChance(
-                            copy.Action.Tags.HasFlag(SkillTag.Spell) ? SpellHitRules.BaseCriticalChance(hit.Skill.SkillId,
-                                (int)Math.Sqrt(Point.DistanceSquared(origin, enemy.Position)), hit.Configuration.Quality) :
-                                UnarmedRules.Source(hit.Skill.SkillId, hit.Build.Weapon).CriticalChanceBasisPoints + UnarmedRules.CriticalBonus(hit.Configuration), hit.Build.IncreasedCriticalChanceBasisPoints);
-                        if (critical) multiplier = ScaleCombatValue(multiplier, hit.Build.CriticalMultiplierBasisPoints);
+                        critical = !hit.Build.CannotCrit && !MasteryRuntime.CannotCrit(hit.Build.PassiveProfile ?? Campaign.Progression.PassiveModifiers.Empty, copy.Action.Tags, hit.Build.Weapon) &&
+                            CriticalMasteryRules.Roll(hit.Build.PassiveProfile ?? Campaign.Progression.PassiveModifiers.Empty,
+                                CriticalHitRules.Chance(hit.Build, hit.Skill, hit.Configuration, (int)Math.Sqrt(Point.DistanceSquared(origin, enemy.Position))), random);
+                        if (critical) multiplier = ScaleCombatValue(multiplier, CriticalHitRules.Multiplier(hit.Build, hit.Configuration));
                     }
                     int TargetDamage(DamageBranch branch)
                     {
                         int amount = VoidDebuffed(enemy, tick) ? branch.DebuffedBaseDamage ?? branch.BaseDamage : branch.BaseDamage;
                         amount = ScaleCombatValue(amount, multiplier);
+                        if (copy.Action.Tags.HasFlag(SkillTag.Attack)) amount = ScaleCombatValue(amount, AttackMasteryRules.TargetMultiplier(hit.Build.PassiveProfile ?? Campaign.Progression.PassiveModifiers.Empty, enemy.Rarity is EnemyRarity.Rare or EnemyRarity.Boss));
+                        if (copy.Action.Tags.HasFlag(SkillTag.Attack) && MasteryRuntime.Has(hit.Build.PassiveProfile ?? Campaign.Progression.PassiveModifiers.Empty, "攻击", 6)) amount = ScaleCombatValue(amount, request.Conditions?.AttackMultiplier(enemy.EntityId, tick) ?? 10_000);
                         amount = ScaleCombatValue(amount, ElementalRules.TargetMultiplier(hit.Build.Ascendancy, branch.CurrentType, ElementalStatus(enemy, tick), true, critical));
                         if (branch.CurrentType == DamageType.Cold) amount = ScaleCombatValue(amount, ElementalControlMasteryRules.ColdHitMultiplier(hit.Build.PassiveProfile ?? Campaign.Progression.PassiveModifiers.Empty, tick, enemy.ColdPursuitUntil));
                         amount = ScaleCombatValue(amount, ElementalControlMasteryRules.HitMultiplier(hit.Build.PassiveProfile ?? Campaign.Progression.PassiveModifiers.Empty, tick, enemy.ParalysisPursuitUntil));
+                        amount = ScaleCombatValue(amount, CriticalMasteryRules.TargetMultiplier(hit.Build.PassiveProfile ?? Campaign.Progression.PassiveModifiers.Empty, critical,
+                            enemy.ChillEffect > 0 && tick < enemy.ImpairedUntilTick || tick < enemy.FrozenUntil || enemy.ShockEffect > 0 && tick < enemy.ShockUntil || tick < enemy.ParalyzedUntil || tick < enemy.StunnedUntilTick));
                         amount = ScaleCombatValue(amount, StunMasteryRules.HitMultiplier(hit.Build.PassiveProfile ?? Campaign.Progression.PassiveModifiers.Empty, tick, enemy.StunPursuitUntil));
                         amount = ScaleCombatValue(amount, 10_000 + enemy.ShockEffect);
                         amount = ScaleCombatValue(amount, 10_000 + enemy.Curses.Effect("archetypes.skill.death_mark", tick));
@@ -128,7 +131,7 @@ public sealed partial class SpatialCombatRunner
                     }
                     else
                     {
-                        request.EquipmentRuntime.InAction(context, () => ApplyHeroDamage(request with { Build = hit.Build }, hit.Skill,
+                        request.EquipmentRuntime.InAction(context, () => ApplyHeroDamage(request with { Build = hit.Build, ResistanceSnapshotTick = hit.ResistanceSnapshotTick, ElementalHitUntilSnapshot = hit.ElementalHitUntil, VoidHitUntilSnapshot = hit.VoidHitUntil, SpellDamageMultiplierSnapshot = hit.SpellDamageMultiplier }, hit.Skill,
                             hit.Configuration, enemy, hero, random, tick, hit.Origin, damage, critical, events,
                             ailmentSource: hit.AilmentSource.Select(branch => branch with { BaseDamage = ScaleCombatValue(branch.BaseDamage, multiplier) }).ToArray()));
                         replayed.Add(hit with { TargetId = enemy.EntityId });

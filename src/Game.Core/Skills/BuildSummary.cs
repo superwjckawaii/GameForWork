@@ -127,23 +127,21 @@ public static class BuildSummaryRules
         var added = new AddedWeaponDamage(Average(local?.Fire), Average(local?.Cold), Average(local?.Lightning), Average(local?.Void));
         var spellRange = SpellHitRules.DamageRange(skill, configuration.Level);
         int raw = spell ? (spellRange.Minimum + spellRange.Maximum) / 2 :
-            CombatSkillRules.BaseDamage(skill, tags, weapon, build.AddedPhysicalDamage,
+            CombatSkillRules.BaseDamage(skill, tags, weapon, AttackMasteryRules.AddedDamage(passive, build.AddedPhysicalDamage),
                 MasteryDamageRules.ExpectedPhysicalRoll(weapon.MinimumPhysicalDamage, weapon.MaximumPhysicalDamage,
                     MasteryRuntime.Has(passive, "物理", 5)));
         var increases = CombatSkillRules.OffensiveIncreases(build, tags, skill.Role == SkillRole.DamageOverTime);
         int accuracy = build.Sheet.Accuracy(build.FlatAccuracy + UnarmedRules.Accuracy(skill.SkillId, build)).Value;
-        int hitChance = build.AlwaysHit || spell ? 10_000 : DamageRules.HitChance(accuracy, 20, false).Value;
-        var criticalSupport = configuration.Supports.HasFlag(SkillSupport.CriticalStrikes) ? CombatSkillRules.SupportLink(configuration, SkillSupport.CriticalStrikes) : null;
-        int criticalChance = build.CannotCrit || MasteryRuntime.CannotCrit(passive) || skill.Role == SkillRole.DamageOverTime ? 0 :
-            CombatRules.CriticalChance((spell ? SpellHitRules.BaseCriticalChance(skill.SkillId, 1_000, configuration.Quality) : weapon.CriticalChanceBasisPoints + UnarmedRules.CriticalBonus(configuration)) +
-                (criticalSupport is null ? 0 : CombatSkillRules.SupportValue(configuration, SkillSupport.CriticalStrikes) * 100), build.IncreasedCriticalChanceBasisPoints);
-        int criticalMultiplier = build.CriticalMultiplierBasisPoints + (criticalSupport is null ? 0 :
-            ActiveSkillCatalog.Interpolate(1_500, 3_000, criticalSupport.Level, false) + criticalSupport.Quality * 50);
+        int hitChance = build.AlwaysHit || MasteryRuntime.AlwaysHits(passive, tags) || spell ? 10_000 : DamageRules.HitChance(accuracy, 20, false).Value;
+        int criticalChance = CriticalMasteryRules.ExpectedChance(passive, CriticalHitRules.Chance(build, skill, configuration, 1_000));
+        int criticalMultiplier = CriticalHitRules.Multiplier(build, configuration);
+        int activationMultiplier = tags.HasFlag(SkillTag.Attack) ? ScaleToInt(AttackMasteryRules.TargetMultiplier(passive, true), AttackMasteryRules.ActivationMultiplier(passive, true)) : 10_000;
+        if (spell) activationMultiplier = CombatRules.ApplyMore(10000, [SpellMasteryRules.ActivationMultiplier(passive, SpellMasteryRules.Self(skill.SkillId, tags)), SpellMasteryRules.HitMultiplier(passive)]);
         DamageBreakdown Packet(int armor, DamageModifiers? modifiers, bool scale, int critical = 10_000) => DamagePacketRules.ResolveMixed(
             raw, skill.DamageType, added, configuration.Supports, armor, 0, 0, 0, 0,
             equipment: build.CombatEquipment?.Modifiers, modifiers: modifiers,
             scaleBranch: scale ? branch => ScaleToInt(CombatSkillRules.ScaleOffensiveDamage(branch.BaseDamage, skill, configuration,
-                build, tags, 100_000, 100_000, targetRareOrBoss: true, applyIncreased: false, damageHistory: branch.History), critical) : null,
+                build, tags, 100_000, 100_000, targetRareOrBoss: true, applyIncreased: false, damageHistory: branch.History), ScaleToInt(critical, activationMultiplier)) : null,
             configuration: configuration, addedDamageEffectiveness: spell ? SpellHitRules.Effectiveness(skill.SkillId) : 10_000,
             mastery: new(passive, skill.Role != SkillRole.DamageOverTime), ascendancy: build.Ascendancy);
         int armor = configuration.Supports.HasFlag(SkillSupport.ArmorPierce) ? 17 : 25;
@@ -193,7 +191,11 @@ public static class BuildSummaryRules
             sheet.MaximumBlockChanceBasisPoints, ascendancy, build.HasShield);
         int finalPhysicalBlock = Math.Clamp(physicalBlock, 0, physicalBlockMaximum);
         int spellBlock = Ascendancies.WarriorAscendancyRules.SpellBlockChanceBasisPoints(
-            sheet.SpellBlockChanceBasisPoints, finalPhysicalBlock, ascendancy, build.HasShield);
+            sheet.SpellBlockChanceBasisPoints, BlockMasteryRules.Has(build.PassiveProfile ?? PassiveModifiers.Empty, 2) ? physicalBlock : finalPhysicalBlock,
+            ascendancy, build.HasShield, BlockMasteryRules.Has(build.PassiveProfile ?? PassiveModifiers.Empty, 2) ? 5000 : 0);
+        physicalBlock = BlockMasteryRules.Chance(build.PassiveProfile ?? PassiveModifiers.Empty, physicalBlock);
+        spellBlock = BlockMasteryRules.Chance(build.PassiveProfile ?? PassiveModifiers.Empty, spellBlock);
+        finalPhysicalBlock = Math.Clamp(physicalBlock, 0, Math.Min(9000, physicalBlockMaximum));
         return new DefenseBreakdown(
             sheet.MaximumLife().Value,
             sheet.MaximumShield().Value,
@@ -214,9 +216,9 @@ public static class BuildSummaryRules
             physicalBlock,
             finalPhysicalBlock,
             spellBlock,
-            Math.Clamp(spellBlock, 0, sheet.MaximumSpellBlockChanceBasisPoints),
+            Math.Clamp(spellBlock, 0, Math.Min(9000, sheet.MaximumSpellBlockChanceBasisPoints)),
             sheet.SpellSuppressionBasisPoints,
-            sheet.EffectiveSpellSuppressionBasisPoints);
+            SuppressionMasteryRules.ExpectedChance(build.PassiveProfile ?? PassiveModifiers.Empty, sheet.SpellSuppressionBasisPoints));
     }
 
     private static int ScaleToInt(long value, long basisPoints) =>

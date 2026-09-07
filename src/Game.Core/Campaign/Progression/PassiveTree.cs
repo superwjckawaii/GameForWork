@@ -122,6 +122,20 @@ public enum PassiveEffectKind
     AdditionalErosionMaximum,
     VoidHitErosionChanceBasisPoints,
     VoidHitWitherChanceBasisPoints,
+    MaximumElementalResistanceBasisPoints,
+    MaximumVoidResistanceBasisPoints,
+    IncreasedSpiritBarrierBasisPoints,
+    FlatSpiritBarrier,
+    MoreSpiritBarrierBasisPoints,
+    SpellSuppressionEffectBasisPoints,
+    MaximumLifeRegenerationBasisPoints,
+    MaximumShieldRegenerationBasisPoints,
+    IncreasedLifeRegenerationBasisPoints,
+    IncreasedShieldRegenerationBasisPoints,
+    LowLifeMoreRegenerationBasisPoints,
+    LowShieldMoreRegenerationBasisPoints,
+    SpellBlockChanceBasisPoints,
+    RecentBlockUnblockedHitLessBasisPoints,
 }
 
 public sealed record PassiveEffect(PassiveEffectKind Kind, int Value = 0);

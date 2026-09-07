@@ -150,7 +150,10 @@ public static class DamagePacketRules
             double growth = Math.Pow(1.07, Math.Clamp(level, 1, 40) - 1);
             minimum = (int)Math.Round(minimum * growth); maximum = (int)Math.Round(maximum * growth);
             int value = random is null ? (minimum + maximum + 1) / 2 : minimum + (int)(random.NextUInt() % (uint)(maximum - minimum + 1));
-            return (int)Math.Min(int.MaxValue, (long)value * addedDamageEffectiveness / 10_000);
+            int addedMultiplier = configuration is not null && mastery is { } addedContext &&
+                SkillDefinitions.Get(configuration.SkillId).Tags.HasFlag(SkillTag.Attack) && MasteryRuntime.Has(addedContext.Profile, "攻击", 1) ? 14_000 : 10_000;
+            if (configuration is not null && mastery is { } spellContext && SkillDefinitions.Get(configuration.SkillId).Tags.HasFlag(SkillTag.Spell) && SpellMasteryRules.Has(spellContext.Profile, 1)) addedMultiplier = 16000;
+            return (int)Math.Min(int.MaxValue, (long)value * addedDamageEffectiveness * addedMultiplier / 100_000_000);
         }
 
         void AddWeaponPacket(int damage, DamageType damageType)

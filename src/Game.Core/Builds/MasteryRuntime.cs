@@ -34,6 +34,21 @@ public static class MasteryRuntime
 
     public static CharacterSheet ApplySheet(CharacterSheet sheet, PassiveModifiers profile, WeaponProfile weapon, bool hasShield)
     {
+        sheet = sheet with
+        {
+            SpellBlockChanceBasisPoints = sheet.SpellBlockChanceBasisPoints + profile.SpecializedValue(PassiveEffectKind.SpellBlockChanceBasisPoints),
+            MaximumElementalResistanceBasisPoints = sheet.MaximumElementalResistanceBasisPoints + profile.SpecializedValue(PassiveEffectKind.MaximumElementalResistanceBasisPoints),
+            MaximumVoidResistanceBasisPoints = sheet.MaximumVoidResistanceBasisPoints + profile.SpecializedValue(PassiveEffectKind.MaximumVoidResistanceBasisPoints),
+            FlatSpiritBarrier = sheet.FlatSpiritBarrier + profile.SpecializedValue(PassiveEffectKind.FlatSpiritBarrier),
+            IncreasedSpiritBarrierBasisPoints = sheet.IncreasedSpiritBarrierBasisPoints + profile.SpecializedValue(PassiveEffectKind.IncreasedSpiritBarrierBasisPoints),
+            SpiritBarrierMultiplierBasisPoints = CombatRules.ApplyMore(sheet.SpiritBarrierMultiplierBasisPoints, [10000 + profile.SpecializedValue(PassiveEffectKind.MoreSpiritBarrierBasisPoints)]),
+            SpellSuppressionEffectBasisPoints = sheet.SpellSuppressionEffectBasisPoints + profile.SpecializedValue(PassiveEffectKind.SpellSuppressionEffectBasisPoints),
+            MaximumLifeRegenerationBasisPoints = sheet.MaximumLifeRegenerationBasisPoints + profile.SpecializedValue(PassiveEffectKind.MaximumLifeRegenerationBasisPoints),
+            MaximumShieldRegenerationBasisPoints = sheet.MaximumShieldRegenerationBasisPoints + profile.SpecializedValue(PassiveEffectKind.MaximumShieldRegenerationBasisPoints),
+            IncreasedLifeRegenerationBasisPoints = sheet.IncreasedLifeRegenerationBasisPoints + profile.SpecializedValue(PassiveEffectKind.IncreasedLifeRegenerationBasisPoints),
+            IncreasedShieldRegenerationBasisPoints = sheet.IncreasedShieldRegenerationBasisPoints + profile.SpecializedValue(PassiveEffectKind.IncreasedShieldRegenerationBasisPoints)
+        };
+        sheet = BlockMasteryRules.Apply(RegenerationMasteryRules.Apply(ResistanceMasteryRules.Apply(sheet, profile), profile), profile);
         bool convertEvasion = Has(profile, "护甲", 1);
         if (convertEvasion) sheet = sheet with
         {
@@ -43,7 +58,10 @@ public static class MasteryRuntime
         int lifeDefense = Has(profile, "生命", 5) ? Math.Min(10, sheet.MaximumLife().Value / 500) * 1_000 : 0;
         sheet = sheet with
         {
-            ArmorMultiplierBasisPoints = CombatRules.ApplyMore(sheet.ArmorMultiplierBasisPoints, [ArmorMultiplier(profile, weapon)]),
+            SpiritBarrierMultiplierBasisPoints = CombatRules.ApplyMore(sheet.SpiritBarrierMultiplierBasisPoints, [Has(profile, "灵障", 0) ? 15_000 : 10_000, Has(profile, "灵障", 1) ? 13_000 : 10_000]),
+            SpellSuppressionBasisPoints = sheet.SpellSuppressionBasisPoints + SuppressionMasteryRules.ChanceBonus(profile),
+            SpellSuppressionEffectBasisPoints = sheet.SpellSuppressionEffectBasisPoints + SuppressionMasteryRules.EffectBonus(profile),
+            ArmorMultiplierBasisPoints = CombatRules.ApplyMore(sheet.ArmorMultiplierBasisPoints, [ArmorMultiplier(profile, weapon), Has(profile, "灵障", 0) ? 8_000 : 10_000]),
             EvasionMultiplierBasisPoints = convertEvasion ? 0 : CombatRules.ApplyMore(sheet.EvasionMultiplierBasisPoints, [EvasionMultiplier(profile, weapon, hasShield)]),
             IncreasedArmorBasisPoints = sheet.IncreasedArmorBasisPoints + lifeDefense,
             IncreasedSpiritBarrierBasisPoints = sheet.IncreasedSpiritBarrierBasisPoints + lifeDefense,
@@ -71,6 +89,7 @@ public static class MasteryRuntime
         {
             if (Has(profile, "能量护盾", 3) && resource.Shield > 0) result = Multiply(result, 8_000);
             if (Has(profile, "虚空", 6)) result = Multiply(result, 9_000);
+            if (Has(profile, "灵障", 2)) result = Multiply(result, 8_500);
         }
         return result;
     }
@@ -83,8 +102,9 @@ public static class MasteryRuntime
         return result;
     }
     public static int ManaCost(PassiveModifiers profile, SkillTag tags, int cost) => CombatRules.ApplyMore(cost,
-        [Has(profile, "法力", 3) ? 5_000 : 10_000, Has(profile, "法力", 6) ? 15_000 : 10_000,
-            (tags & (SkillTag.Attack | SkillTag.Spell)) != 0 && Has(profile, "能量护盾", 5) ? 12_000 : 10_000]);
+        [tags.HasFlag(SkillTag.Spell) ? SpellMasteryRules.ManaMultiplier(profile) : 10000, Has(profile, "灵障", 2) ? 12_000 : 10_000, Has(profile, "法力", 3) ? 5_000 : 10_000, Has(profile, "法力", 6) ? 15_000 : 10_000,
+            (tags & (SkillTag.Attack | SkillTag.Spell)) != 0 && Has(profile, "能量护盾", 5) ? 12_000 : 10_000,
+            tags.HasFlag(SkillTag.Attack) && Has(profile, "攻击", 2) ? 12_500 : 10_000]);
 
     public static bool HasManaWard(PassiveModifiers profile, WeaponProfile weapon) => Has(profile, "法杖", 6) && IsFamily(weapon, WeaponFamily.Wand);
     public static int ManaDamageShare(PassiveModifiers profile, WeaponProfile weapon) =>
@@ -124,6 +144,9 @@ public static class MasteryRuntime
     {
         if (profile.MasteryMechanics.Length == 0) return 10_000;
         int result = 10_000;
+        if ((tags & (SkillTag.Attack | SkillTag.Spell)) != 0 && RegenerationMasteryRules.Has(profile, 2)) result = Multiply(result, 9_000);
+        if (tags.HasFlag(SkillTag.Spell)) result = Multiply(result, SpellMasteryRules.SpeedMultiplier(profile));
+        if (tags.HasFlag(SkillTag.Attack) && Has(profile, "攻击", 2)) result = Multiply(result, 12_500);
         if (tags.HasFlag(SkillTag.Attack) && IsFamily(weapon, WeaponFamily.Sword) && Has(profile, "剑类", 6))
             result = Multiply(result, 13_500);
         if (tags.HasFlag(SkillTag.Attack) && IsCategory(weapon, ItemCategory.TwoHandWeapon) && Has(profile, "双手", 0))
@@ -133,9 +156,10 @@ public static class MasteryRuntime
         return result;
     }
 
-    public static bool CannotCrit(PassiveModifiers profile) =>
-        Has(profile, "眩晕", 1) || Has(profile, "暴击", 6) || Has(profile, "斧类", 0) ||
-        Has(profile, "攻击", 0);
+    public static bool CannotCrit(PassiveModifiers profile, SkillTag tags = SkillTag.None, WeaponProfile? weapon = null) =>
+        Has(profile, "眩晕", 1) || Has(profile, "暴击", 6) ||
+        tags.HasFlag(SkillTag.Attack) && weapon is not null && IsFamily(weapon, WeaponFamily.Axe) && Has(profile, "斧类", 0) ||
+        tags.HasFlag(SkillTag.Attack) && Has(profile, "攻击", 0);
 
     public static bool AlwaysHits(PassiveModifiers profile, SkillTag tags) =>
         tags.HasFlag(SkillTag.Attack) && Has(profile, "攻击", 0);
@@ -186,6 +210,7 @@ public static class MasteryRuntime
         int result = Has(profile, "生命", 0) ? 5_000 : 10_000;
         if (Has(profile, "能量护盾", 0)) result = Multiply(result, 14_000);
         if (Has(profile, "能量护盾", 1)) result = Multiply(result, 11_500);
+        if (Has(profile, "灵障", 1)) result = Multiply(result, 11_500);
         return result;
     }
 

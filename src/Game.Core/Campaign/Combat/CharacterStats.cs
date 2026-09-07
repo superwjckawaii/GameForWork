@@ -56,16 +56,21 @@ public sealed record CharacterSheet(
     int LifeRecoveryMultiplierBasisPoints = 10_000,
     int IncreasedShieldRechargeRateBasisPoints = 0,
     int ArmorMultiplierBasisPoints = 10_000, int EvasionMultiplierBasisPoints = 10_000,
-    int AdditionalManaRegenerationBasisPoints = 0, int IncreasedLifeRegenerationBasisPoints = 0)
+    int AdditionalManaRegenerationBasisPoints = 0, int IncreasedLifeRegenerationBasisPoints = 0,
+    bool EqualElementalMaximum = false, int ElementalOverflowDefenseRate = 0, int VoidOverflowBarrierRate = 0, int LifeRegenerationMultiplierBasisPoints = 10_000, int ShieldRegenerationMultiplierBasisPoints = 10_000, int IncreasedShieldRegenerationBasisPoints = 0, bool ConvertLifeRegenerationToShield = false, int SpiritBarrierMultiplierBasisPoints = 10_000, int ConditionalSpiritBarrierMultiplierBasisPoints = 10_000)
 {
     public int ResistanceMaximum(EnemyDamageType type) => type switch
     {
-        EnemyDamageType.Fire => Math.Min(9_000, MaximumElementalResistanceBasisPoints + MaximumFireResistanceBonusBasisPoints),
-        EnemyDamageType.Cold => Math.Min(9_000, MaximumElementalResistanceBasisPoints + MaximumColdResistanceBonusBasisPoints),
-        EnemyDamageType.Lightning => Math.Min(9_000, MaximumElementalResistanceBasisPoints + MaximumLightningResistanceBonusBasisPoints),
+        EnemyDamageType.Fire => Math.Min(9_000, MaximumElementalResistanceBasisPoints + (EqualElementalMaximum ? HighestElementalMaximumBonus : MaximumFireResistanceBonusBasisPoints)),
+        EnemyDamageType.Cold => Math.Min(9_000, MaximumElementalResistanceBasisPoints + (EqualElementalMaximum ? HighestElementalMaximumBonus : MaximumColdResistanceBonusBasisPoints)),
+        EnemyDamageType.Lightning => Math.Min(9_000, MaximumElementalResistanceBasisPoints + (EqualElementalMaximum ? HighestElementalMaximumBonus : MaximumLightningResistanceBonusBasisPoints)),
         EnemyDamageType.Void => Math.Min(9_000, MaximumVoidResistanceBasisPoints),
         _ => MaximumPhysicalResistanceBasisPoints,
     };
+    private int HighestElementalMaximumBonus => Math.Max(MaximumFireResistanceBonusBasisPoints, Math.Max(MaximumColdResistanceBonusBasisPoints, MaximumLightningResistanceBonusBasisPoints));
+    public int ElementalOverflowDefenseIncrease => (int)Math.Min(int.MaxValue, ((long)Math.Max(0, FireResistanceBasisPoints - ResistanceMaximum(EnemyDamageType.Fire)) +
+        Math.Max(0, ColdResistanceBasisPoints - ResistanceMaximum(EnemyDamageType.Cold)) + Math.Max(0, LightningResistanceBasisPoints - ResistanceMaximum(EnemyDamageType.Lightning))) / 500 * ElementalOverflowDefenseRate);
+    public int VoidOverflowBarrierIncrease => (int)Math.Min(int.MaxValue, Math.Max(0, (long)VoidResistanceBasisPoints - ResistanceMaximum(EnemyDamageType.Void)) / 500 * VoidOverflowBarrierRate);
     public int CappedResistance(int value) => Math.Clamp(value, CombatRules.MinimumResistance,
         MaximumElementalResistanceBasisPoints);
 
@@ -119,7 +124,7 @@ public sealed record CharacterSheet(
 
     public CalculatedValue Armor(bool lowLife = false, bool tenacious = false)
     {
-        int increased = IncreasedArmorBasisPoints + (lowLife && tenacious ? 3_000 : 0);
+        int increased = IncreasedArmorBasisPoints + ElementalOverflowDefenseIncrease + (lowLife && tenacious ? 3_000 : 0);
         int value = CombatRules.ApplyMore(ApplyIncreased(Equipment.Armor, increased), [ArmorMultiplierBasisPoints]);
         return CalculatedValue.Single(
             "护甲",
@@ -130,19 +135,22 @@ public sealed record CharacterSheet(
     public CalculatedValue Evasion()
     {
         int baseEvasion = checked(Equipment.Evasion + Attributes.Dexterity);
-        int value = CombatRules.ApplyMore(ApplyIncreased(baseEvasion, IncreasedEvasionBasisPoints), [EvasionMultiplierBasisPoints]);
+        int increased = IncreasedEvasionBasisPoints + ElementalOverflowDefenseIncrease;
+        int value = CombatRules.ApplyMore(ApplyIncreased(baseEvasion, increased), [EvasionMultiplierBasisPoints]);
         return CalculatedValue.Single(
             "闪避",
-            $"({Equipment.Evasion} + {Attributes.Dexterity}) × (10000 + {IncreasedEvasionBasisPoints}) / 10000 × {EvasionMultiplierBasisPoints} / 10000",
+            $"({Equipment.Evasion} + {Attributes.Dexterity}) × (10000 + {increased}) / 10000 × {EvasionMultiplierBasisPoints} / 10000",
             value);
     }
 
     public CalculatedValue SpiritBarrier()
     {
+        int increased = IncreasedSpiritBarrierBasisPoints + VoidOverflowBarrierIncrease;
         int value = CombatRules.SpiritBarrier(Level, Attributes.Spirit, EquipmentSpiritBarrier,
-            FlatSpiritBarrier, IncreasedSpiritBarrierBasisPoints);
+            FlatSpiritBarrier, increased);
+        value = CombatRules.ApplyMore(value, [SpiritBarrierMultiplierBasisPoints, ConditionalSpiritBarrierMultiplierBasisPoints]);
         return CalculatedValue.Single("灵障",
-            $"(2 × {Level} + 4 × {Attributes.Spirit} + {EquipmentSpiritBarrier} + {FlatSpiritBarrier}) × (10000 + {IncreasedSpiritBarrierBasisPoints}) / 10000",
+            $"(2 × {Level} + 4 × {Attributes.Spirit} + {EquipmentSpiritBarrier} + {FlatSpiritBarrier}) × (10000 + {increased}) / 10000 × {SpiritBarrierMultiplierBasisPoints} / 10000 × {ConditionalSpiritBarrierMultiplierBasisPoints} / 10000",
             value);
     }
 
@@ -182,12 +190,14 @@ public sealed record CharacterSheet(
             value);
     }
 
+    private decimal BaseLifeRegeneration => Math.Max(0, FlatLifeRegeneration) + (long)MaximumLife().Value * Math.Max(0, MaximumLifeRegenerationBasisPoints) / 10_000;
+    public decimal ShieldRegenerationPerSecond => ((decimal)MaximumShield().Value * Math.Max(0, MaximumShieldRegenerationBasisPoints) / 10_000 +
+        (ConvertLifeRegenerationToShield ? BaseLifeRegeneration / 2 : 0)) * Math.Max(0L, 10_000L + IncreasedRecoveryRateBasisPoints + IncreasedShieldRegenerationBasisPoints) / 10_000 * ShieldRegenerationMultiplierBasisPoints / 10_000;
     public CalculatedValue LifeRegenerationPerSecond()
     {
-        int value = ApplyIncreased(Math.Max(0, FlatLifeRegeneration) +
-            (int)((long)MaximumLife().Value * MaximumLifeRegenerationBasisPoints / 10_000), Math.Max(-10_000, IncreasedRecoveryRateBasisPoints + IncreasedLifeRegenerationBasisPoints));
-        return CalculatedValue.Single("每秒生命恢复",
-            $"({Math.Max(0, FlatLifeRegeneration)} + {MaximumLife().Value} × {MaximumLifeRegenerationBasisPoints} / 10000) × (10000 + {IncreasedRecoveryRateBasisPoints} + {IncreasedLifeRegenerationBasisPoints}) / 10000", value);
+        decimal basis = BaseLifeRegeneration * (ConvertLifeRegenerationToShield ? .5m : 1m);
+        int value = (int)Math.Min(int.MaxValue, basis * Math.Max(0L, 10_000L + IncreasedRecoveryRateBasisPoints + IncreasedLifeRegenerationBasisPoints) / 10_000 * LifeRegenerationMultiplierBasisPoints / 10_000);
+        return CalculatedValue.Single("每秒生命恢复", $"{basis} × (10000 + {IncreasedRecoveryRateBasisPoints} + {IncreasedLifeRegenerationBasisPoints}) / 10000 × {LifeRegenerationMultiplierBasisPoints} / 10000", value);
     }
 
     public CalculatedValue ShieldRecoveryPerSecond()
@@ -389,8 +399,7 @@ public sealed partial class ResourceState
         HealLife(_lifeRecoveryRemainder / ticksPerSecond);
         _lifeRecoveryRemainder %= ticksPerSecond;
 
-        _shieldRegenerationRemainder += (decimal)MaximumShield * Sheet.MaximumShieldRegenerationBasisPoints *
-            Math.Max(0L, 10_000L + Sheet.IncreasedRecoveryRateBasisPoints) / (10_000m * 10_000 * ticksPerSecond);
+        _shieldRegenerationRemainder += Sheet.ShieldRegenerationPerSecond / ticksPerSecond;
         int regeneratedShield = (int)Math.Min(int.MaxValue, decimal.Truncate(_shieldRegenerationRemainder));
         RestoreShield(regeneratedShield);
         _shieldRegenerationRemainder -= regeneratedShield;

@@ -51,6 +51,10 @@ public sealed partial class SpatialCombatRunner
             OffenseSnapshot = request.EquipmentRuntime!.SnapshotOffense(hero),
             ResourceDamageMultiplierSnapshot = MasteryRuntime.OffensiveResourceMultiplier(request.Build.PassiveProfile ?? Campaign.Progression.PassiveModifiers.Empty, hero),
             ArmorSnapshot = HeroCurrentArmor(request, hero, tick),
+            SpellDamageMultiplierSnapshot = SpellActionMultiplier(request, skill),
+            ResistanceSnapshotTick = tick,
+            ElementalHitUntilSnapshot = request.Conditions?.ElementalHitRecentUntil ?? 0,
+            VoidHitUntilSnapshot = request.Conditions?.VoidHitRecentUntil ?? 0,
             RuneFields = null,
             ElementalSourceSelf = !request.EquipmentRuntime.CaptureAction().Triggered,
             ElementalMultiplierSnapshot = request.Elemental?.Begin(request.EquipmentRuntime.ActionId, SkillDefinitions.Get(skill.SkillId).Tags, tick, request.EquipmentRuntime.CaptureAction().Triggered) ?? 10_000,
@@ -112,6 +116,16 @@ public sealed partial class SpatialCombatRunner
         return true;
     }
 
+    private static int SpellActionMultiplier(NodeCombatRequest request, ResolvedSkill skill)
+    {
+        var tags = SkillDefinitions.Get(skill.SkillId).Tags | skill.AdditionalTags;
+        if (!tags.HasFlag(SkillTag.Spell)) return 10000;
+        return request.SpellDamageMultiplierSnapshot ?? CombatRules.ApplyMore(
+            SpellMasteryRules.ActivationMultiplier(request.Build.PassiveProfile ?? PassiveModifiers.Empty,
+                SpellMasteryRules.Self(skill.SkillId, tags, request.EquipmentRuntime?.CaptureAction().Triggered == true)),
+            [request.SpellCasts?.Multiplier(request.EquipmentRuntime?.ActionId ?? "") ?? 10000]);
+    }
+
     private static DamageBreakdown SnapshotGroundDamage(NodeCombatRequest request, ResolvedSkill skill, SkillConfiguration configuration,
         int raw, bool weaponDerived, bool rare, int multiplier, bool voidDebuffed = false)
     {
@@ -127,8 +141,11 @@ public sealed partial class SpatialCombatRunner
                 if (request.Auras?.ExclusiveElement is { } allowed && branch.CurrentType is DamageType.Fire or DamageType.Cold or DamageType.Lightning && branch.CurrentType != allowed) return 0;
                 int scaled = CombatSkillRules.ScaleOffensiveDamage(voidDebuffed ? branch.DebuffedBaseDamage ?? branch.BaseDamage : branch.BaseDamage, skill, configuration, request.Build, tags,
                     1, 1, ScaleCombatValue(ScaleCombatValue(multiplier, request.ActionMultiplierSnapshot ?? 10_000), request.ElementalMultiplierSnapshot ?? 10_000), targetRareOrBoss: rare, applyIncreased: false, damageHistory: branch.History);
+                scaled = ScaleCombatValue(scaled, SpellActionMultiplier(request, skill));
                 scaled = ScaleCombatValue(scaled, DamageOverTimeMasteryRules.OutputMultiplier(
                     request.Build.PassiveProfile ?? Campaign.Progression.PassiveModifiers.Empty, false));
+                scaled = ScaleCombatValue(scaled, ResistanceMasteryRules.OutgoingMultiplier(request.Build.PassiveProfile ?? PassiveModifiers.Empty,
+                    branch.CurrentType, false, request.ResistanceSnapshotTick ?? 0, request.ElementalHitUntilSnapshot ?? 0, request.VoidHitUntilSnapshot ?? 0));
                 return ScaleCombatValue(scaled, 10_000 + modifiers.GetValueOrDefault(ItemModifierKind.DamageOverTimeMultiplierBasisPoints));
             }, configuration: configuration, allowAddedHitDamage: false,
             mastery: new(request.Build.PassiveProfile ?? Campaign.Progression.PassiveModifiers.Empty, false), ascendancy: request.Build.Ascendancy);

@@ -58,7 +58,7 @@ public sealed partial class SpatialCombatRunner
             {
                 decimal damage = branch.BaseDamage;
                 if (SkillDefinitions.Get(skill.SkillId).Tags.HasFlag(SkillTag.Attack)) damage *= skill.BaseDamageBasisPoints / 10_000m;
-                int common = request.Build.IncreasedGenericDamageBasisPoints + Value(ItemModifierKind.IncreasedDamageOverTimeBasisPoints) + passive.IncreasedDamageOverTimeBasisPoints +
+                int common = SpiritBarrierMasteryRules.DamageIncrease(request.Build.Sheet, passive) + request.Build.IncreasedGenericDamageBasisPoints + Value(ItemModifierKind.IncreasedDamageOverTimeBasisPoints) + passive.IncreasedDamageOverTimeBasisPoints +
                     Value(kind switch
                     {
                         Ailment.Bleed => ItemModifierKind.IncreasedBleedDamageBasisPoints,
@@ -90,13 +90,19 @@ public sealed partial class SpatialCombatRunner
                 damage *= (10_000m + passive.MoreDamageBasisPoints) / 10_000;
                 damage *= (10_000m + request.Build.MoreDamageOverTimeBasisPoints) / 10_000;
                 if (kind == Ailment.Bleed) damage *= (10_000m + request.Build.MoreBleedDamageBasisPoints) / 10_000;
-                damage *= (10_000m + Value(ItemModifierKind.DamageOverTimeMultiplierBasisPoints) + (kind == Ailment.Ignite && MasteryRuntime.Has(passive, "点燃", 6) ? 3_000 : 0) + (critical ? 5_000 + (kind == Ailment.Poison && MasteryRuntime.Has(passive, "中毒", 3) ? 10_000 : 0) : 0)) / 10_000;
+                damage *= (10_000m + Value(ItemModifierKind.DamageOverTimeMultiplierBasisPoints) + (kind == Ailment.Ignite && MasteryRuntime.Has(passive, "点燃", 6) ? 3_000 : 0) + (critical ? 5_000 + CriticalMasteryRules.AilmentMultiplierBonus(passive) + (kind == Ailment.Poison && MasteryRuntime.Has(passive, "中毒", 3) ? 10_000 : 0) : 0)) / 10_000;
+                if (critical) damage *= CriticalMasteryRules.AilmentDamageMultiplier(passive) / 10_000m;
+                if (SkillDefinitions.Get(skill.SkillId).Tags.HasFlag(SkillTag.Spell))
+                    damage *= SpellActionMultiplier(request, skill) / 10000m * SpellMasteryRules.AilmentMultiplier(passive) / 10000m;
                 if (configuration.Supports.HasFlag(SkillSupport.Brutality) && output != DamageType.Physical) continue;
                 damage *= MasteryDamageRules.AilmentMultiplier(passive, branch, output, kind == Ailment.Poison) / 10_000m;
                 if (kind == Ailment.Bleed)
                     damage *= (MasteryRuntime.Has(passive, "流血", 0) ? 2m : 1m) * (MasteryRuntime.Has(passive, "流血", 2) ? .8m : 1m);
                 if (kind == Ailment.Ignite && MasteryRuntime.Has(passive, "点燃", 0)) damage *= 1.3m;
                 damage *= DamageOverTimeMasteryRules.OutputMultiplier(passive, true) / 10_000m;
+                damage *= ResistanceMasteryRules.OutgoingMultiplier(passive, output, false, request.ResistanceSnapshotTick ?? tick,
+                    request.ElementalHitUntilSnapshot ?? request.Conditions?.ElementalHitRecentUntil ?? 0,
+                    request.VoidHitUntilSnapshot ?? request.Conditions?.VoidHitRecentUntil ?? 0) / 10_000m;
                 total += damage;
             }
             return total;
@@ -220,7 +226,7 @@ public sealed partial class SpatialCombatRunner
         enemy.StunnedUntilTick = Math.Max(enemy.StunnedUntilTick, until);
         if (!propagated) enemy.OriginalStunUntil = Math.Max(enemy.OriginalStunUntil, until);
         enemy.StunPursuitUntil = tick + 80;
-        request.Stun?.Applied(tick);
+        request.Conditions?.Stunned(tick);
         if (MasteryRuntime.Has(passive, "眩晕", 6) && tick >= enemy.StunArmorBreakReadyTick)
         {
             enemy.StunArmorBreakReadyTick = tick + 20;

@@ -35,11 +35,11 @@ public sealed class StunMasteryTests
     [Fact]
     public void PursuitAndSpeedExpireIndependentlyOfControl()
     {
-        var state = new StunCombatState();
-        state.Applied(10);
-        Assert.Equal(13_500, StunMasteryRules.HitMultiplier(Rules(3), 89, state.RecentUntil));
-        Assert.Equal(12_000, StunMasteryRules.SpeedMultiplier(Rules(5), 89, state.RecentUntil));
-        Assert.Equal(10_000, StunMasteryRules.SpeedMultiplier(Rules(5), 90, state.RecentUntil));
+        var state = new CombatConditionState();
+        state.Stunned(10);
+        Assert.Equal(13_500, StunMasteryRules.HitMultiplier(Rules(3), 89, state.StunRecentUntil));
+        Assert.Equal(12_000, StunMasteryRules.SpeedMultiplier(Rules(5), 89, state.StunRecentUntil));
+        Assert.Equal(10_000, StunMasteryRules.SpeedMultiplier(Rules(5), 90, state.StunRecentUntil));
         var build = Build(Rules()) with { IncreasedAttackSpeedBasisPoints = 10_000 };
         Assert.Equal(5_000, CombatSkillRules.ActionFrequencyMilliPerSecond(build with { AttackCastSpeedMultiplierBasisPoints = 12_000 },
             8, 0, SkillTag.Attack) * 10_000 / 12_000);
