@@ -620,7 +620,7 @@ public sealed partial class SpatialCombatRunner
                     if (aura?.ExclusiveElement is { } allowed && branch.CurrentType is DamageType.Fire or DamageType.Cold or DamageType.Lightning && branch.CurrentType != allowed) return 0;
                     int value = ScaleCombatValue(branch.BaseDamage, 10_000 + enemy.ShockEffect);
                     value = ScaleCombatValue(value, 10_000 + enemy.Curses.Effect("archetypes.skill.death_mark", tick));
-                    return branch.CurrentType == DamageType.Void ? ScaleCombatValue(value, CombatRules.WitherMultiplier(enemy.Ailments.Stack(Ailment.Wither, tick))) : value;
+                    return branch.CurrentType == DamageType.Void ? ScaleCombatValue(value, CombatRules.WitherMultiplier(enemy.Ailments.Stack(Ailment.Wither, tick), 15)) : value;
                 }).Total;
             damage = Math.Min(enemy.Life, damage);
             enemy.Life -= damage;

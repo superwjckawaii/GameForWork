@@ -12,7 +12,9 @@ public sealed class AilmentState
 {
     private readonly List<DamageOverTimeInstance> _instances = [];
     private readonly Dictionary<(Ailment, DamageType), decimal> _remainders = [];
-    private readonly Dictionary<Ailment, (int Count, int Until)> _debuffs = [];
+    private sealed record DebuffStack(Ailment Kind, int Until, bool Propagated, string Id);
+    private readonly List<DebuffStack> _debuffs = [];
+    private readonly HashSet<(Ailment Kind, string Action)> _debuffExtraActions = [];
     private readonly HashSet<(AilmentState Source, string Instance)> _received = [];
     private readonly HashSet<(Ailment Kind, string Action)> _settledActions = [];
     private readonly HashSet<string> _poisonCopyActions = [];
@@ -30,7 +32,7 @@ public sealed class AilmentState
     {
         _instances.RemoveAll(instance => kinds.Contains(instance.Kind));
         foreach (var key in _remainders.Keys.Where(key => kinds.Contains(key.Item1)).ToArray()) _remainders.Remove(key);
-        foreach (var kind in kinds) _debuffs.Remove(kind);
+        _debuffs.RemoveAll(stack => kinds.Contains(stack.Kind));
     }
 
     public void Apply(Ailment kind, DamageType type, decimal dps, int durationMilliseconds,
@@ -58,9 +60,45 @@ public sealed class AilmentState
         return dps * more;
     }
 
-    public int Stack(Ailment kind, int tick) => _debuffs.TryGetValue(kind, out var value) && tick < value.Until ? value.Count : 0;
-    public void AddStack(Ailment kind, int count, int maximum, int durationTicks, int tick) =>
-        _debuffs[kind] = (Math.Min(maximum, Stack(kind, tick) + Math.Max(0, count)), tick + durationTicks);
+    public int Stack(Ailment kind, int tick) => _debuffs.Count(stack => stack.Kind == kind && tick < stack.Until);
+    public void AddStack(Ailment kind, int count, int maximum, int durationTicks, int tick)
+    {
+        _debuffs.RemoveAll(stack => tick >= stack.Until);
+        if (durationTicks <= 0 || maximum <= 0) return;
+        for (int i = 0; i < Math.Min(maximum, Math.Max(0, count)); i++)
+        {
+            if (Stack(kind, tick) >= maximum)
+                _debuffs.Remove(_debuffs.Where(stack => stack.Kind == kind).MinBy(stack => stack.Until)!);
+            _debuffs.Add(new(kind, tick + durationTicks, false, $"debuff:{++_sequence}"));
+        }
+    }
+    public void ApplyVoidDebuff(GameForWork.Core.Campaign.Progression.PassiveModifiers passive, Ailment kind,
+        int tick, string action, bool selfCast, int durationReduction = 0)
+    {
+        if (kind is not (Ailment.Erosion or Ailment.Wither)) return;
+        int count = 1;
+        if (selfCast && MasteryRuntime.Has(passive, "侵蚀_凋零", 2) && _debuffExtraActions.Add((kind, action))) count++;
+        int duration = CombatRules.ApplyIncreased(kind == Ailment.Erosion ? 120 : 80,
+            (MasteryRuntime.Has(passive, "侵蚀_凋零", 3) ? 20_000 : 0) + passive.SpecializedValue(kind == Ailment.Erosion
+                ? GameForWork.Core.Campaign.Progression.PassiveEffectKind.IncreasedErosionDurationBasisPoints
+                : GameForWork.Core.Campaign.Progression.PassiveEffectKind.IncreasedWitherDurationBasisPoints));
+        AddStack(kind, count, VoidDebuffMasteryRules.Maximum(passive, kind),
+            CombatRules.ApplyIncreased(duration, -Math.Clamp(durationReduction, 0, 10_000)), tick);
+    }
+    public void SpreadDebuffsTo(AilmentState target, GameForWork.Core.Campaign.Progression.PassiveModifiers passive,
+        int tick, Func<bool>? targetAllows = null)
+    {
+        if (ReferenceEquals(this, target)) return;
+        foreach (var kind in new[] { Ailment.Erosion, Ailment.Wither })
+            foreach (var stack in _debuffs.Where(stack => stack.Kind == kind && !stack.Propagated && tick < stack.Until)
+                .OrderByDescending(stack => stack.Until).Take(5))
+            {
+                if (!target._received.Add((this, stack.Id)) || !(targetAllows?.Invoke() ?? true)) continue;
+                target._debuffs.RemoveAll(value => tick >= value.Until);
+                if (target.Stack(kind, tick) >= VoidDebuffMasteryRules.Maximum(passive, kind)) continue;
+                target._debuffs.Add(stack with { Propagated = true });
+            }
+    }
 
     private static decimal Dps(DamageOverTimeInstance instance, bool voidDebuffed) =>
         voidDebuffed ? instance.DebuffedDamagePerSecond ?? instance.DamagePerSecond : instance.DamagePerSecond;
@@ -107,9 +145,9 @@ public sealed class AilmentState
             _instances.RemoveAll(consumed.Contains);
             return consumed.Length;
         }
-        int count = Math.Min(maximum, Stack(kind, tick));
-        if (_debuffs.TryGetValue(kind, out var value)) _debuffs[kind] = (value.Count - count, value.Until);
-        return count;
+        var stacks = _debuffs.Where(stack => stack.Kind == kind && tick < stack.Until).OrderBy(stack => stack.Until).Take(Math.Max(0, maximum)).ToArray();
+        foreach (var stack in stacks) _debuffs.Remove(stack);
+        return stacks.Length;
     }
     public void SpreadTo(AilmentState target, Ailment kind, Func<bool>? targetAllows = null, int maximum = int.MaxValue, bool voidDebuffed = false)
     {

@@ -186,7 +186,7 @@ public sealed record NodeCombatRequest(
     EquipmentCombatRuntime? EquipmentRuntime = null,
     Combat.CombatActionQueue? Actions = null, Combat.AuraCombatProfile? Auras = null,
     Combat.FlaskRack? FlaskState = null, Combat.GuardState? Guard = null, Combat.CombatBuffState? Buffs = null,
-    Combat.ReactionState? Reactions = null, Combat.ChannelCostState? ChannelCosts = null,
+    Combat.ReactionState? Reactions = null, Combat.ChannelCostState? ChannelCosts = null, Combat.StunCombatState? Stun = null,
     EquipmentOffenseSnapshot? OffenseSnapshot = null, Combat.RuneFieldState? RuneFields = null,
     int? ActionMultiplierSnapshot = null, int? SpellEnergyIncreaseSnapshot = null, Combat.TeamProtectionState? TeamProtection = null,
     int? ResourceDamageMultiplierSnapshot = null, int? ArmorSnapshot = null, Combat.UnarmedCombatState? Unarmed = null, Combat.ElementalCombatState? Elemental = null, int? ElementalMultiplierSnapshot = null, bool ElementalSourceSelf = false,
@@ -221,7 +221,7 @@ public sealed partial class SpatialCombatRunner
         var equipment = request.EquipmentRuntime ?? new EquipmentCombatRuntime(request.Build.CombatEquipment ?? EquipmentCombatLoadout.Empty, seed);
         TeamBuild originalBuild = request.Build;
         request = request with { RuneFields = new(request.Build.Ascendancy) };
-        request = request with { EquipmentRuntime = equipment, Actions = new Combat.CombatActionQueue(request.Build.Ascendancy), Guard = new Combat.GuardState(request.Build.Ascendancy), Buffs = new Combat.CombatBuffState(request.Build.Ascendancy), Reactions = new Combat.ReactionState(request.Build.PassiveProfile), ChannelCosts = new Combat.ChannelCostState(), DamageOverTimeRecovery = new DamageOverTimeRecoveryState() };
+        request = request with { EquipmentRuntime = equipment, Actions = new Combat.CombatActionQueue(request.Build.Ascendancy), Guard = new Combat.GuardState(request.Build.Ascendancy), Buffs = new Combat.CombatBuffState(request.Build.Ascendancy), Reactions = new Combat.ReactionState(request.Build.PassiveProfile), ChannelCosts = new Combat.ChannelCostState(), Stun = new Combat.StunCombatState(), DamageOverTimeRecovery = new DamageOverTimeRecoveryState() };
         request = request with { TeamProtection = new(request.Build.Ascendancy?.Has("core.ascendancy.spirit_cantor.protection.core") == true) };
         var hero = new ResourceState(
             request.Build.Sheet,
@@ -442,6 +442,7 @@ public sealed partial class SpatialCombatRunner
             {
                 Build = buffedBuild with
                 {
+                    AttackCastSpeedMultiplierBasisPoints = ScaleCombatValue(buffedBuild.AttackCastSpeedMultiplierBasisPoints, StunMasteryRules.SpeedMultiplier(buffedBuild.PassiveProfile ?? PassiveModifiers.Empty, tick, request.Stun!.RecentUntil)),
                     IncreasedActionSpeedBasisPoints = buffedBuild.IncreasedActionSpeedBasisPoints + equipment.SpeedBonus(tick) - hero.HarmfulStatus.Effect(Ailment.Chill),
                     MovementSpeedBasisPoints = buffedBuild.MovementSpeedBasisPoints + equipment.MovementBonus(tick) + flasks.Buff(ItemModifierKind.FlaskBuffMovementSpeedBasisPoints) +
                     (equipment.Has("朝圣者之债") ? Math.Min(4_500, flasks.UnusedUses * 300) : 0) - hero.HarmfulStatus.Effect(Ailment.Chill),
@@ -643,8 +644,11 @@ public sealed partial class SpatialCombatRunner
                             request.Guard!.Extend(Math.Max(1, (guardUntilTick - tick) / 4));
                             guardUntilTick = request.Guard.Expires;
                         }
-                        cooldowns.Start(skillCatalogSkill with { CooldownTicks = Math.Max(1,
-                            skillCatalogSkill.CooldownTicks * 10_000 / (10_000 + request.Buffs.CooldownRecovery(chosen))) }, tick, hero);
+                        cooldowns.Start(skillCatalogSkill with
+                        {
+                            CooldownTicks = Math.Max(1,
+                            skillCatalogSkill.CooldownTicks * 10_000 / (10_000 + request.Buffs.CooldownRecovery(chosen)))
+                        }, tick, hero);
                         heroNextActionTick = tick + (skillCatalogTags.HasFlag(SkillTag.Channelling) ? 5 :
                             CombatSkillRules.ActionDelay(request.Build, skillCatalogSkill, skillCatalogTags));
                         if (UnarmedRules.Repeats(chosen, request.Build)) heroNextActionTick += heroNextActionTick - tick;
@@ -753,7 +757,7 @@ public sealed partial class SpatialCombatRunner
                         int frequency = CombatRules.AttackFrequencyMilliPerSecond(
                             heavyStrike.UncappedAttackFrequencyMilliPerSecond,
                             speedBasisPoints - 10_000,
-                            [masterySpeed]);
+                            [masterySpeed, request.Build.AttackCastSpeedMultiplierBasisPoints]);
                         int attackCount = CombatRules.AttacksForScheduledSimulationTick(frequency,
                             ref heavyStrikeFrequencyCarry);
                         for (int attack = 0; attack < attackCount && target.Life > 0; attack++)
@@ -1281,9 +1285,10 @@ public sealed partial class SpatialCombatRunner
                     offensiveBranches.Add(branch with { BaseDamage = scaled, DebuffedBaseDamage = debuffed });
                 if (VoidDebuffed(enemy, tick) && debuffed.HasValue) scaled = debuffed.Value;
                 scaled = ScaleCombatValue(scaled, ElementalRules.TargetMultiplier(request.Build.Ascendancy, branch.CurrentType, ElementalStatus(enemy, tick), skill.Role != SkillRole.DamageOverTime, critical));
-                if (branch.CurrentType == DamageType.Cold)
+                if (skill.Role != SkillRole.DamageOverTime && branch.CurrentType == DamageType.Cold)
                     scaled = ScaleCombatValue(scaled, ElementalControlMasteryRules.ColdHitMultiplier(profile, tick, enemy.ColdPursuitUntil));
-                scaled = ScaleCombatValue(scaled, ElementalControlMasteryRules.HitMultiplier(profile, tick, enemy.ParalysisPursuitUntil));
+                if (skill.Role != SkillRole.DamageOverTime) scaled = ScaleCombatValue(scaled, ElementalControlMasteryRules.HitMultiplier(profile, tick, enemy.ParalysisPursuitUntil));
+                if (skill.Role != SkillRole.DamageOverTime) scaled = ScaleCombatValue(scaled, StunMasteryRules.HitMultiplier(profile, tick, enemy.StunPursuitUntil));
                 if (skill.Role != SkillRole.DamageOverTime) scaled = ScaleCombatValue(scaled,
                     AilmentMasteryRules.BleedingTargetHitMultiplier(request.Build.PassiveProfile ?? PassiveModifiers.Empty, enemy.Ailments));
                 scaled = ScaleCombatValue(scaled, 10_000 + enemy.ShockEffect);
@@ -1291,7 +1296,8 @@ public sealed partial class SpatialCombatRunner
                 if (branch.CurrentType == DamageType.Void)
                 {
                     scaled = ScaleCombatValue(scaled, 10_000 + enemy.Curses.Effect("archetypes.skill.doom_brand", tick));
-                    scaled = ScaleCombatValue(scaled, CombatRules.WitherMultiplier(enemy.Ailments.Stack(Ailment.Wither, tick)));
+                    scaled = ScaleCombatValue(scaled, CombatRules.WitherMultiplier(enemy.Ailments.Stack(Ailment.Wither, tick), 15));
+                    if (skill.Role != SkillRole.DamageOverTime) scaled = ScaleCombatValue(scaled, VoidDebuffMasteryRules.HitMultiplier(profile, enemy.Ailments, tick));
                 }
                 return scaled;
             }, branches => ailmentSource.AddRange(branches), configuration,
@@ -1712,6 +1718,7 @@ public sealed partial class SpatialCombatRunner
                 damage = ScaleCombatValue(damage, hero.RecentEvadeHitMultiplier(tick));
                 if (enemy.Ailments.Count(Ailment.Poison) >= 10 && MasteryRuntime.Has(request.Build.PassiveProfile ?? PassiveModifiers.Empty, "中毒", 5))
                     damage = ScaleCombatValue(damage, 8_500);
+                damage = ScaleCombatValue(damage, VoidDebuffMasteryRules.IncomingHitMultiplier(request.Build.PassiveProfile ?? PassiveModifiers.Empty, enemy.Ailments, tick));
                 damage = request.Guard?.Absorb(damage, activeSkill.DamageType, tick) ?? damage;
                 if (request.EquipmentRuntime is { } equipment)
                     damage = equipment.ApplyEnemyDamage(hero, damage, true, tick, request.VirtueVice, blocked);
@@ -1800,7 +1807,7 @@ public sealed partial class SpatialCombatRunner
         resistance += type == SkillDamageType.Void ? request.EnemyVoidResistanceBasisPoints : request.EnemyElementalResistanceBasisPoints;
         if (type is SkillDamageType.Fire or SkillDamageType.Cold or SkillDamageType.Lightning)
             resistance -= enemy.Curses.Effect("archetypes.skill.elemental_hex", enemy.CurrentTick);
-        if (type == SkillDamageType.Void) resistance -= CombatRules.CorrosionResistanceReduction(enemy.Ailments.Stack(Ailment.Erosion, enemy.CurrentTick));
+        if (type == SkillDamageType.Void) resistance -= CombatRules.CorrosionResistanceReduction(enemy.Ailments.Stack(Ailment.Erosion, enemy.CurrentTick), 10);
         return Math.Clamp(resistance, CombatRules.MinimumResistance, 7_500) -
             (penetrate ? (request.Build.CombatEquipment?.Penetration(type) ?? 0) +
                 (type == SkillDamageType.Void && MasteryRuntime.Has(request.Build.PassiveProfile ?? PassiveModifiers.Empty, "虚空", 5) ? 2_000 : 0) : 0);
@@ -1895,6 +1902,11 @@ public sealed partial class SpatialCombatRunner
         {
             enemy.KillCharged = true;
             var passives = request.Build.PassiveProfile ?? PassiveModifiers.Empty;
+            if (!enemy.MasteryDeathSuppressed && tick < enemy.OriginalStunUntil && MasteryRuntime.Has(passives, "眩晕", 4))
+                foreach (var target in enemyUnits.Where(candidate => candidate.Life > 0 && InRange(enemy.Position, candidate.Position, 4_000))
+                    .OrderBy(candidate => Point.DistanceSquared(enemy.Position, candidate.Position)).ThenBy(candidate => candidate.EntityId, StringComparer.Ordinal).Take(5))
+                    if (target.Profile.AilmentAvoidanceBasisPoints <= 0 || random.NextBasisPoints() >= target.Profile.AilmentAvoidanceBasisPoints)
+                        ApplyStun(request, target, tick, enemy.Position, events, true);
             if (!enemy.MasteryDeathSuppressed && ElementalControlMasteryRules.CanSpreadChill(
                     passives, enemy.ChillEffect, tick, enemy.ImpairedUntilTick, enemy.PropagatedChill))
                 foreach (EnemyUnit target in enemyUnits.Where(candidate => candidate.Life > 0 &&
@@ -1939,6 +1951,11 @@ public sealed partial class SpatialCombatRunner
                             () => target.Profile.AilmentAvoidanceBasisPoints <= 0 || random.NextBasisPoints() >= target.Profile.AilmentAvoidanceBasisPoints,
                             kind == Ailment.Poison ? 5 : 1, VoidDebuffed(enemy, tick));
                     }
+            if (MasteryRuntime.Has(passives, "侵蚀_凋零", 4))
+                foreach (var target in enemyUnits.Where(candidate => candidate.Life > 0 && InRange(enemy.Position, candidate.Position, 4_000))
+                    .OrderBy(candidate => Point.DistanceSquared(enemy.Position, candidate.Position)).ThenBy(candidate => candidate.EntityId, StringComparer.Ordinal).Take(5))
+                    enemy.Ailments.SpreadDebuffsTo(target.Ailments, passives, tick,
+                        () => target.Profile.AilmentAvoidanceBasisPoints <= 0 || random.NextBasisPoints() >= target.Profile.AilmentAvoidanceBasisPoints);
             if (enemy.Summoned) continue;
             equipment.Killed(enemy.Rarity, tick);
             int charges = enemy.Rarity switch
@@ -2278,6 +2295,7 @@ public sealed partial class SpatialCombatRunner
         public int LastTelegraphTick { get; set; } = int.MinValue;
         public int RuptureStacks { get; set; }
         public int StunnedUntilTick { get; set; }
+        public int OriginalStunUntil, StunPursuitUntil, StunArmorBreakReadyTick;
         public int StunImmuneUntilTick { get; set; }
         public bool KillCharged { get; set; }
         public int ActionSequence { get; set; }

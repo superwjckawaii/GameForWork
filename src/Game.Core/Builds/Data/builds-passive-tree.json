@@ -312,6 +312,59 @@
         "昏沉蔓延：你击杀眩晕敌人时，对半径 4 内最多 5 个敌人施加基础 0.35 秒的眩晕；接受持续时间修正、目标避免和单次上限，不再检查伤害阈值。传播造成的眩晕不能继续触发传播。",
         "压制步调：最近 4 秒内你成功眩晕过敌人时，攻击与施法速度分别总增 20%。",
         "击溃防线：成功眩晕敌人后施加 3 层破甲，每个目标每秒最多一次；遵守破甲上限，不强化触发眩晕的那次击中。"
+      ],
+      "smallNodes": [
+        {
+          "description": "震颅：造成眩晕的概率提高 30%",
+          "effects": [
+            {
+              "kind": "IncreasedStunChanceBasisPoints",
+              "value": 3000
+            }
+          ]
+        },
+        {
+          "description": "沉击：击中伤害提高 20%",
+          "effects": [
+            {
+              "kind": "IncreasedHitDamageBasisPoints",
+              "value": 2000
+            }
+          ]
+        },
+        {
+          "description": "震心：造成眩晕的概率提高 30%",
+          "effects": [
+            {
+              "kind": "IncreasedStunChanceBasisPoints",
+              "value": 3000
+            }
+          ]
+        },
+        {
+          "description": "昏沉：眩晕持续时间提高 25%",
+          "effects": [
+            {
+              "kind": "IncreasedStunDurationBasisPoints",
+              "value": 2500
+            }
+          ]
+        }
+      ],
+      "notableNodes": [
+        {
+          "description": "裂颅重击·显著：你的击中判定眩晕时，目标有效眩晕阈值降低 25%；击中伤害提高 40%",
+          "effects": [
+            {
+              "kind": "ReducedStunThresholdBasisPoints",
+              "value": 2500
+            },
+            {
+              "kind": "IncreasedHitDamageBasisPoints",
+              "value": 4000
+            }
+          ]
+        }
       ]
     },
     {
@@ -1498,6 +1551,63 @@
         "枯界传播：有你的侵蚀或凋零的敌人死亡时，将两种减益各最多 5 层复制给半径 4 内最多 5 个敌人，保留剩余时间；传播副本不能继续传播，不触发额外叠层。",
         "深蚀回响：对至少有 5 层侵蚀、10 层凋零的敌人，最终虚空击中造成 40% 更多伤害。",
         "枯萎压制：至少承受 10 层凋零、且其中包含你施加层数的敌人，对你造成的击中伤害总降 15%。"
+      ],
+      "smallNodes": [
+        {
+          "description": "黯袭：虚空伤害提高 20%",
+          "effects": [
+            {
+              "kind": "IncreasedVoidDamageBasisPoints",
+              "value": 2000
+            }
+          ]
+        },
+        {
+          "description": "久蚀：侵蚀持续时间提高 40%",
+          "effects": [
+            {
+              "kind": "IncreasedErosionDurationBasisPoints",
+              "value": 4000
+            }
+          ]
+        },
+        {
+          "description": "渗界：虚空持续伤害提高 20%",
+          "effects": [
+            {
+              "kind": "IncreasedVoidDamageBasisPoints",
+              "value": 2000
+            }
+          ]
+        },
+        {
+          "description": "迅蚀：攻击与施法速度分别提高 4%",
+          "effects": [
+            {
+              "kind": "IncreasedAttackSpeedBasisPoints",
+              "value": 400
+            },
+            {
+              "kind": "IncreasedCastSpeedBasisPoints",
+              "value": 400
+            }
+          ]
+        }
+      ],
+      "notableNodes": [
+        {
+          "description": "蚀界之痕·显著：自行攻击或法术的虚空击中必定施加 1 层侵蚀；侵蚀层数上限 +2",
+          "effects": [
+            {
+              "kind": "VoidHitErosionChanceBasisPoints",
+              "value": 10000
+            },
+            {
+              "kind": "AdditionalErosionMaximum",
+              "value": 2
+            }
+          ]
+        }
       ]
     },
     {
@@ -1548,6 +1658,59 @@
         "枯界传播：有你的侵蚀或凋零的敌人死亡时，将两种减益各最多 5 层复制给半径 4 内最多 5 个敌人，保留剩余时间；传播副本不能继续传播，不触发额外叠层。",
         "深蚀回响：对至少有 5 层侵蚀、10 层凋零的敌人，最终虚空击中造成 40% 更多伤害。",
         "枯萎压制：至少承受 10 层凋零、且其中包含你施加层数的敌人，对你造成的击中伤害总降 15%。"
+      ],
+      "smallNodes": [
+        {
+          "description": "枯引：自行攻击或法术的虚空击中施加 1 层凋零的概率 +25 个百分点",
+          "effects": [
+            {
+              "kind": "VoidHitWitherChanceBasisPoints",
+              "value": 2500
+            }
+          ]
+        },
+        {
+          "description": "久凋：凋零持续时间提高 40%",
+          "effects": [
+            {
+              "kind": "IncreasedWitherDurationBasisPoints",
+              "value": 4000
+            }
+          ]
+        },
+        {
+          "description": "黯潮：虚空伤害提高 20%",
+          "effects": [
+            {
+              "kind": "IncreasedVoidDamageBasisPoints",
+              "value": 2000
+            }
+          ]
+        },
+        {
+          "description": "凋引：上述施加凋零概率 +25 个百分点",
+          "effects": [
+            {
+              "kind": "VoidHitWitherChanceBasisPoints",
+              "value": 2500
+            }
+          ]
+        }
+      ],
+      "notableNodes": [
+        {
+          "description": "凋零回廊·显著：上述施加凋零概率 +50 个百分点；凋零持续时间提高 60%",
+          "effects": [
+            {
+              "kind": "VoidHitWitherChanceBasisPoints",
+              "value": 5000
+            },
+            {
+              "kind": "IncreasedWitherDurationBasisPoints",
+              "value": 6000
+            }
+          ]
+        }
       ]
     },
     {
@@ -2702,6 +2865,63 @@
         "昏沉蔓延：你击杀眩晕敌人时，对半径 4 内最多 5 个敌人施加基础 0.35 秒的眩晕；接受持续时间修正、目标避免和单次上限，不再检查伤害阈值。传播造成的眩晕不能继续触发传播。",
         "压制步调：最近 4 秒内你成功眩晕过敌人时，攻击与施法速度分别总增 20%。",
         "击溃防线：成功眩晕敌人后施加 3 层破甲，每个目标每秒最多一次；遵守破甲上限，不强化触发眩晕的那次击中。"
+      ],
+      "smallNodes": [
+        {
+          "description": "久震：眩晕持续时间提高 25%",
+          "effects": [
+            {
+              "kind": "IncreasedStunDurationBasisPoints",
+              "value": 2500
+            }
+          ]
+        },
+        {
+          "description": "进逼：攻击与施法速度分别提高 4%",
+          "effects": [
+            {
+              "kind": "IncreasedAttackSpeedBasisPoints",
+              "value": 400
+            },
+            {
+              "kind": "IncreasedCastSpeedBasisPoints",
+              "value": 400
+            }
+          ]
+        },
+        {
+          "description": "压阵：造成眩晕的概率提高 30%",
+          "effects": [
+            {
+              "kind": "IncreasedStunChanceBasisPoints",
+              "value": 3000
+            }
+          ]
+        },
+        {
+          "description": "滞神：眩晕持续时间提高 25%",
+          "effects": [
+            {
+              "kind": "IncreasedStunDurationBasisPoints",
+              "value": 2500
+            }
+          ]
+        }
+      ],
+      "notableNodes": [
+        {
+          "description": "镇军震慑·显著：造成眩晕的概率提高 60%，眩晕持续时间提高 80%",
+          "effects": [
+            {
+              "kind": "IncreasedStunChanceBasisPoints",
+              "value": 6000
+            },
+            {
+              "kind": "IncreasedStunDurationBasisPoints",
+              "value": 8000
+            }
+          ]
+        }
       ]
     },
     {

@@ -14,6 +14,8 @@ public sealed partial class SpatialCombatRunner
         Point start, Point end, string target, int radius, int created, int duration, int interval, int multiplier)
     {
         public NodeCombatRequest Request { get; } = request;
+        public string ActionId { get; } = request.Actions?.CanonicalAction(request.EquipmentRuntime?.ActionId ?? "") ?? $"{created}:{skill.SkillId}";
+        public bool SelfCast { get; } = request.EquipmentRuntime?.CaptureAction() is not { Triggered: true } and not { Copy: true };
         public ResolvedSkill Skill { get; } = skill;
         public SkillConfiguration Configuration { get; } = configuration;
         public Point Start { get; } = start;
@@ -174,7 +176,9 @@ public sealed partial class SpatialCombatRunner
                     Apply(DamageType.Physical, dps.Physical); Apply(DamageType.Fire, dps.Fire); Apply(DamageType.Cold, dps.Cold);
                     Apply(DamageType.Lightning, dps.Lightning); Apply(DamageType.Void, dps.Void);
                     if (area.Skill.SkillId == SkillIds.VoidDecayField && (tick - area.Created) % 20 == 0)
-                        enemy.Ailments.AddStack(Ailment.Erosion, 1, 5, 120, tick);
+                        if (enemy.Profile.AilmentAvoidanceBasisPoints <= 0 || random.NextBasisPoints() >= enemy.Profile.AilmentAvoidanceBasisPoints)
+                            enemy.Ailments.ApplyVoidDebuff(area.Request.Build.PassiveProfile ?? PassiveModifiers.Empty, Ailment.Erosion, tick,
+                                area.ActionId, area.SelfCast, enemy.Profile.ReducedAilmentDurationBasisPoints);
                     if (area.Skill.SkillId == "archetypes.skill.corrosive_trap")
                     { enemy.ChillEffect = Math.Max(enemy.ChillEffect, 2_000); enemy.ImpairedUntilTick = tick + 1; }
                     void Apply(DamageType type, int value)

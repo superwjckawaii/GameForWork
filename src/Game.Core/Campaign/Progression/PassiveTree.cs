@@ -112,6 +112,16 @@ public enum PassiveEffectKind
     IncreasedEnergyShieldRechargeBasisPoints,
     IncreasedAreaEffectBasisPoints,
     DistantHitMoreBasisPoints,
+    IncreasedStunChanceBasisPoints,
+    ReducedStunThresholdBasisPoints,
+    IncreasedStunDurationBasisPoints,
+    IncreasedHitDamageBasisPoints,
+    IncreasedCastSpeedBasisPoints,
+    IncreasedErosionDurationBasisPoints,
+    IncreasedWitherDurationBasisPoints,
+    AdditionalErosionMaximum,
+    VoidHitErosionChanceBasisPoints,
+    VoidHitWitherChanceBasisPoints,
 }
 
 public sealed record PassiveEffect(PassiveEffectKind Kind, int Value = 0);

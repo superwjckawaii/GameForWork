@@ -83,7 +83,7 @@ public sealed partial class SpatialCombatRunner
                     if (copy.RollCritical)
                     {
                         if (critical) multiplier = (int)((long)multiplier * 10_000 / Math.Max(1, hit.AppliedCriticalMultiplier));
-                        critical = !hit.Build.CannotCrit && random.NextBasisPoints() < CombatRules.CriticalChance(
+                        critical = !hit.Build.CannotCrit && !MasteryRuntime.CannotCrit(hit.Build.PassiveProfile ?? Campaign.Progression.PassiveModifiers.Empty) && random.NextBasisPoints() < CombatRules.CriticalChance(
                             copy.Action.Tags.HasFlag(SkillTag.Spell) ? SpellHitRules.BaseCriticalChance(hit.Skill.SkillId,
                                 (int)Math.Sqrt(Point.DistanceSquared(origin, enemy.Position)), hit.Configuration.Quality) :
                                 UnarmedRules.Source(hit.Skill.SkillId, hit.Build.Weapon).CriticalChanceBasisPoints + UnarmedRules.CriticalBonus(hit.Configuration), hit.Build.IncreasedCriticalChanceBasisPoints);
@@ -94,12 +94,16 @@ public sealed partial class SpatialCombatRunner
                         int amount = VoidDebuffed(enemy, tick) ? branch.DebuffedBaseDamage ?? branch.BaseDamage : branch.BaseDamage;
                         amount = ScaleCombatValue(amount, multiplier);
                         amount = ScaleCombatValue(amount, ElementalRules.TargetMultiplier(hit.Build.Ascendancy, branch.CurrentType, ElementalStatus(enemy, tick), true, critical));
+                        if (branch.CurrentType == DamageType.Cold) amount = ScaleCombatValue(amount, ElementalControlMasteryRules.ColdHitMultiplier(hit.Build.PassiveProfile ?? Campaign.Progression.PassiveModifiers.Empty, tick, enemy.ColdPursuitUntil));
+                        amount = ScaleCombatValue(amount, ElementalControlMasteryRules.HitMultiplier(hit.Build.PassiveProfile ?? Campaign.Progression.PassiveModifiers.Empty, tick, enemy.ParalysisPursuitUntil));
+                        amount = ScaleCombatValue(amount, StunMasteryRules.HitMultiplier(hit.Build.PassiveProfile ?? Campaign.Progression.PassiveModifiers.Empty, tick, enemy.StunPursuitUntil));
                         amount = ScaleCombatValue(amount, 10_000 + enemy.ShockEffect);
                         amount = ScaleCombatValue(amount, 10_000 + enemy.Curses.Effect("archetypes.skill.death_mark", tick));
                         amount = ScaleCombatValue(amount, AilmentMasteryRules.BleedingTargetHitMultiplier(hit.Build.PassiveProfile ?? Campaign.Progression.PassiveModifiers.Empty, enemy.Ailments));
                         if (branch.CurrentType == DamageType.Void)
                         {
-                            amount = ScaleCombatValue(amount, ScaleCombatValue(CombatRules.WitherMultiplier(enemy.Ailments.Stack(Ailment.Wither, tick)),
+                            amount = ScaleCombatValue(amount, VoidDebuffMasteryRules.HitMultiplier(hit.Build.PassiveProfile ?? Campaign.Progression.PassiveModifiers.Empty, enemy.Ailments, tick));
+                            amount = ScaleCombatValue(amount, ScaleCombatValue(CombatRules.WitherMultiplier(enemy.Ailments.Stack(Ailment.Wither, tick), 15),
                                 10_000 + enemy.Curses.Effect("archetypes.skill.doom_brand", tick)));
                         }
                         return amount;

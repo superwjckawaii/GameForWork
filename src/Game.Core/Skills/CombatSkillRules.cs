@@ -314,6 +314,7 @@ public static class CombatSkillRules
         var passive = build.PassiveProfile ?? PassiveModifiers.Empty;
         int common = build.IncreasedGenericDamageBasisPoints + (tags.HasFlag(SkillTag.Attack) ? build.IncreasedDamageBasisPoints - equipment.PhysicalIncreaseIncludedInAttack : 0) +
             passive.DamageFor(tags & ~(SkillTag.Physical | SkillTag.Elemental | SkillTag.Void), damageOverTime) + additionalIncreasedBasisPoints;
+        if (!damageOverTime) common += passive.SpecializedValue(PassiveEffectKind.IncreasedHitDamageBasisPoints);
         if (tags.HasFlag(SkillTag.Attack)) common += Ascendancies.WarriorAscendancyRules.IncreasedAttackDamageBasisPoints(
             build.Ascendancy ?? Ascendancies.CombatProfile.Empty, build.Sheet.Attributes.Physique);
         if (tags.HasFlag(SkillTag.Attack)) common += UnarmedRules.DamageIncrease(build);
@@ -357,9 +358,11 @@ public static class CombatSkillRules
     {
         PassiveModifiers passive = build.PassiveProfile ?? PassiveModifiers.Empty;
         int masterySpeed = MasteryRuntime.ActionSpeedMultiplier(passive, tags, build.Weapon);
+        if ((tags & (SkillTag.Attack | SkillTag.Spell)) != 0)
+            masterySpeed = (int)((long)masterySpeed * build.AttackCastSpeedMultiplierBasisPoints / 10_000);
         int increasedSpeed = build.IncreasedActionSpeedBasisPoints;
         if (tags.HasFlag(SkillTag.Attack)) increasedSpeed = checked(increasedSpeed + build.IncreasedAttackSpeedBasisPoints + UnarmedRules.AttackSpeed(build) + additionalAttackSpeed);
-        if (tags.HasFlag(SkillTag.Spell)) increasedSpeed = checked(increasedSpeed + build.IncreasedCastSpeedBasisPoints + additionalCastSpeed +
+        if (tags.HasFlag(SkillTag.Spell)) increasedSpeed = checked(increasedSpeed + build.IncreasedCastSpeedBasisPoints + passive.SpecializedValue(PassiveEffectKind.IncreasedCastSpeedBasisPoints) + additionalCastSpeed +
             (build.CombatEquipment?.Value(GameForWork.Core.Campaign.Items.ItemModifierKind.IncreasedCastSpeedBasisPoints) ?? 0));
         return Math.Max(1, checked((int)((long)Math.Max(1, baseTicks) * 10_000 * 10_000 /
             Math.Max(10_000_000, (long)(10_000 + increasedSpeed) * masterySpeed))));
@@ -373,6 +376,8 @@ public static class CombatSkillRules
 
         PassiveModifiers passive = build.PassiveProfile ?? PassiveModifiers.Empty;
         int masterySpeed = MasteryRuntime.ActionSpeedMultiplier(passive, tags, build.Weapon);
+        if ((tags & (SkillTag.Attack | SkillTag.Spell)) != 0)
+            masterySpeed = (int)((long)masterySpeed * build.AttackCastSpeedMultiplierBasisPoints / 10_000);
         int increasedSpeed = checked(build.IncreasedActionSpeedBasisPoints + build.IncreasedAttackSpeedBasisPoints + UnarmedRules.AttackSpeed(build) + additionalAttackSpeed);
         int baseFrequency = baseTicks <= 1
             ? Math.Max(1, build.Weapon.AttacksPerSecondMilli)

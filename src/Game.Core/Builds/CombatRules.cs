@@ -302,8 +302,8 @@ public static class CombatRules
     public static int StunChance(int finalHitDamage, int threshold, int thresholdReductionBasisPoints = 0,
         int chanceIncreaseBasisPoints = 0)
     {
-        int effectiveThreshold = ApplyIncreased(Math.Max(1, threshold),
-            -Math.Clamp(thresholdReductionBasisPoints, 0, 7_500));
+        int effectiveThreshold = Math.Max(1, ApplyIncreased(Math.Max(1, threshold),
+            -Math.Clamp(thresholdReductionBasisPoints, 0, 7_500)));
         int raw = checked((int)Math.Min(Basis, 20_000L * Math.Max(0, finalHitDamage) / effectiveThreshold));
         return Math.Clamp(ApplyIncreased(raw, chanceIncreaseBasisPoints), 0, Basis);
     }

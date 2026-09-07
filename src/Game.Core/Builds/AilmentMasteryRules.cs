@@ -10,6 +10,7 @@ public static class AilmentMasteryRules
     {
         ("builds.mastery.流血", 0 or 1) or ("builds.mastery.斧类", 2) => "bleed",
         ("builds.mastery.点燃", 0 or 1) => "ignite",
+        ("builds.mastery.感电_麻痹", 2 or 4) => "lightning_control",
         _ => null,
     };
     public static void Configure(AilmentState state, PassiveModifiers passive, bool twinBleeds = false, bool twinIgnites = false)

@@ -147,57 +147,88 @@ public sealed partial class SpatialCombatRunner
             if (chill.EffectBasisPoints > 0)
             {
                 enemy.ChillEffect = Math.Max(enemy.ChillEffect, chill.EffectBasisPoints);
-                enemy.ImpairedUntilTick = tick + Duration(chill.DurationMilliseconds) / TickMilliseconds;
+                enemy.ImpairedUntilTick = Math.Max(enemy.ImpairedUntilTick, tick + Duration(chill.DurationMilliseconds) / TickMilliseconds);
                 enemy.PropagatedChill = false;
             }
+        }
+        if (hit.Cold > 0)
+        {
             if (Allowed(Ailment.Freeze, Chance(Ailment.Freeze), critical))
             {
                 int freezeThreshold = enemy.Boss && Element("cold", "core") ? Math.Max(1, threshold * 6 / 10) : threshold;
-                freezeThreshold = ElementalControlMasteryRules.FreezeThreshold(passive, freezeThreshold);
-                var freeze = CombatRules.Freeze(hit.Cold, freezeThreshold,
+                var freeze = CombatRules.Freeze(ElementalControlMasteryRules.FreezeDamage(passive, hit.Cold), freezeThreshold,
                     Value(ItemModifierKind.FreezeEffectBasisPoints) + effectIncrease + (Element("ailment") ? 2_500 : 0),
-                    enemy.Boss ? 1_000 : enemy.Elite ? 2_000 : 3_000,
+                    enemy.Boss ? 1_000 : enemy.Rarity == EnemyRarity.Rare ? 2_000 : 3_000,
                     MasteryRuntime.Has(passive, "冰缓_冻结", 1) ? 1 : 300);
                 if (freeze.DurationMilliseconds > 0)
                 {
-                    bool newlyFrozen = tick >= enemy.FrozenUntil;
                     enemy.FrozenUntil = Math.Max(enemy.FrozenUntil, tick + freeze.DurationMilliseconds / TickMilliseconds);
-                    if (newlyFrozen) enemy.ColdPursuitUntil = tick + 80;
+                    enemy.ColdPursuitUntil = tick + 80;
                 }
             }
         }
-        int lightningThreshold = ElementalControlMasteryRules.LightningThreshold(passive, threshold, critical);
+        int lightningDamage = ElementalControlMasteryRules.LightningDamage(passive, hit.Lightning, critical);
         if (hit.Lightning > 0 && ElementalControlMasteryRules.CanShock(passive) &&
             Allowed(Ailment.Shock, Chance(Ailment.Shock) + Value(ItemModifierKind.ShockChanceBasisPoints), critical))
         {
             int cap = ElementalControlMasteryRules.ShockMaximum(passive, Element("lightning", "core") ? 7_500 : 5_000);
-            var shock = CombatRules.Shock(hit.Lightning, lightningThreshold, cap,
-                Value(ItemModifierKind.ShockEffectBasisPoints) + (Element("lightning") ? 2_500 : 0) + effectIncrease);
+            var shock = CombatRules.Shock(lightningDamage, threshold, cap,
+                Value(ItemModifierKind.ShockEffectBasisPoints) + (Element("lightning") ? 2_500 : 0) + effectIncrease +
+                (MasteryRuntime.Has(passive, "感电_麻痹", 4) ? 10_000 : 0));
             enemy.ShockEffect = Math.Max(enemy.ShockEffect, Math.Min(cap, ElementalControlMasteryRules.ShockEffect(passive, shock.EffectBasisPoints)));
-            enemy.ShockUntil = tick + Duration(2_000) / TickMilliseconds;
+            enemy.ShockUntil = Math.Max(enemy.ShockUntil, tick + Duration(2_000) / TickMilliseconds);
         }
         if (hit.Lightning > 0 && ElementalControlMasteryRules.CanParalyze(passive) &&
             Allowed(Ailment.Paralysis, ElementalControlMasteryRules.ParalysisChance(passive, Chance(Ailment.Paralysis))))
         {
-            enemy.Paralysis += CombatRules.Paralysis(hit.Lightning, lightningThreshold,
+            enemy.Paralysis += CombatRules.Paralysis(lightningDamage, threshold,
                 ElementalControlMasteryRules.ParalysisAccumulationIncrease(passive)).AccumulationBasisPoints;
             enemy.ParalysisLastTick = tick;
             if (enemy.Paralysis >= 10_000)
             {
-                bool newlyParalyzed = tick >= enemy.ParalyzedUntil;
                 enemy.Paralysis = 0;
-                enemy.ParalyzedUntil = Math.Max(enemy.ParalyzedUntil, tick + Duration(enemy.Boss ? 350 : enemy.Elite ? 600 : 1_000) / TickMilliseconds);
-                if (newlyParalyzed) enemy.ParalysisPursuitUntil = tick + 80;
+                enemy.ParalyzedUntil = Math.Max(enemy.ParalyzedUntil, tick + (enemy.Boss ? 350 : enemy.Rarity == EnemyRarity.Rare ? 600 : enemy.Rarity == EnemyRarity.Magic ? 800 : 1_000) / TickMilliseconds);
+                enemy.ParalysisPursuitUntil = tick + 80;
             }
         }
-        if (skill.Ailment is Ailment.Erosion or Ailment.Wither && Allowed(skill.Ailment, skill.AilmentChanceBasisPoints))
-            enemy.Ailments.AddStack(skill.Ailment, 1, skill.Ailment == Ailment.Erosion ? 5 : 10,
-                skill.Ailment == Ailment.Erosion ? 120 : 80, tick);
+        bool selfAction = request.EquipmentRuntime?.CaptureAction() is not { Triggered: true } and not { Copy: true };
+        bool qualifiedVoid = selfAction && hit.Void > 0 && (SkillDefinitions.Get(skill.SkillId).Tags & (SkillTag.Attack | SkillTag.Spell)) != 0;
+        foreach (var kind in new[] { Ailment.Erosion, Ailment.Wither })
+        {
+            int chance = (skill.Ailment == kind ? skill.AilmentChanceBasisPoints : 0) + (qualifiedVoid ? passive.SpecializedValue(
+                kind == Ailment.Erosion ? PassiveEffectKind.VoidHitErosionChanceBasisPoints : PassiveEffectKind.VoidHitWitherChanceBasisPoints) : 0);
+            if (chance > 0 && Allowed(kind, chance))
+                enemy.Ailments.ApplyVoidDebuff(passive, kind, tick,
+                    request.Actions?.CanonicalAction(request.EquipmentRuntime?.ActionId ?? "") ?? $"{tick}:{skill.SkillId}",
+                    selfAction, enemy.Profile.ReducedAilmentDurationBasisPoints);
+        }
         if (Allowed(Ailment.ArmorBreak, (skill.Ailment == Ailment.ArmorBreak ? skill.AilmentChanceBasisPoints : 0) +
             (hit.Physical > 0 ? request.Auras?.PhysicalArmorBreakChance ?? 0 : 0)))
         { enemy.ArmorBreakStacks = Math.Min(5, enemy.ArmorBreakStacks + 1); enemy.ArmorBreakUntil = tick + 100; }
-        if (skill.Ailment == Ailment.Stun && Allowed(Ailment.Stun, CombatRules.StunChance(hit.Total, threshold)))
-            enemy.StunnedUntilTick = tick + (enemy.Boss ? 6 : 12);
+        if (Allowed(Ailment.Stun, StunMasteryRules.Chance(passive, hit.Total, threshold)))
+            ApplyStun(request, enemy, tick, origin, events, false);
+    }
+
+    private static void ApplyStun(NodeCombatRequest request, EnemyUnit enemy, int tick, Point origin,
+        ICollection<SpatialEvent> events, bool propagated)
+    {
+        var passive = request.Build.PassiveProfile ?? PassiveModifiers.Empty;
+        int duration = StunMasteryRules.Duration(passive, enemy.Boss ? 500 : enemy.Rarity == EnemyRarity.Rare ? 1_000 : 1_500,
+            enemy.Profile.ReducedAilmentDurationBasisPoints);
+        if (duration <= 0) return;
+        int until = tick + Math.Max(1, duration / TickMilliseconds);
+        enemy.StunnedUntilTick = Math.Max(enemy.StunnedUntilTick, until);
+        if (!propagated) enemy.OriginalStunUntil = Math.Max(enemy.OriginalStunUntil, until);
+        enemy.StunPursuitUntil = tick + 80;
+        request.Stun?.Applied(tick);
+        if (MasteryRuntime.Has(passive, "眩晕", 6) && tick >= enemy.StunArmorBreakReadyTick)
+        {
+            enemy.StunArmorBreakReadyTick = tick + 20;
+            enemy.ArmorBreakStacks = Math.Min(request.AscendancyRuntime?.ArmorBreakMaximum ?? 5, enemy.ArmorBreakStacks + 3);
+            enemy.ArmorBreakUntil = Math.Max(enemy.ArmorBreakUntil, tick + 100);
+        }
+        events.Add(Event(tick, SpatialEventKind.Ailment, "hero", enemy.EntityId, duration, origin, enemy.Position,
+            propagated ? "mastery:stun-spread" : "ailment:stun"));
     }
 
     private static decimal DefendEnemyDot(NodeCombatRequest request, EnemyUnit enemy, DamageType type, decimal dps, int tick)
@@ -211,7 +242,7 @@ public sealed partial class SpatialCombatRunner
         damage *= ElementalRules.TargetMultiplier(request.Build.Ascendancy, type, ElementalStatus(enemy, tick), false, false) / 10_000m;
         damage *= (10_000 + enemy.ShockEffect) / 10_000m;
         if (type == DamageType.Void)
-            damage *= CombatRules.WitherMultiplier(enemy.Ailments.Stack(Ailment.Wither, tick)) / 10_000m *
+            damage *= CombatRules.WitherMultiplier(enemy.Ailments.Stack(Ailment.Wither, tick), 15) / 10_000m *
                 (10_000 + enemy.Curses.Effect("archetypes.skill.doom_brand", tick)) / 10_000m;
         damage *= (10_000 - CombatRules.SpiritBarrierReduction(enemy.Profile.SpiritBarrier, (int)Math.Min(int.MaxValue, damage))) / 10_000m;
         return damage;
