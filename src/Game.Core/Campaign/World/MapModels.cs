@@ -382,7 +382,8 @@ public sealed record TeamBuild(
     int MoreRareBossDamageBasisPoints = 0,
     bool HasOffHand = false,
     GameForWork.Core.Equipment.EquipmentCombatLoadout? CombatEquipment = null,
-    int MoreBleedDamageBasisPoints = 0, int IncreasedCastSpeedBasisPoints = 0, int WarSongMoreDamageBasisPoints = 0, int IncreasedGenericDamageBasisPoints = 0);
+    int MoreBleedDamageBasisPoints = 0, int IncreasedCastSpeedBasisPoints = 0, int WarSongMoreDamageBasisPoints = 0,
+    int IncreasedGenericDamageBasisPoints = 0, TeamBuild? AttachedMercenary = null);
 
 public sealed record MapNodeResult(
     int NodeIndex,

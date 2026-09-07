@@ -389,7 +389,7 @@ public sealed partial class SpatialCombatRunner
             request.Build.PartySize, request.Build.FrontlineCount, request.VirtueVice, 0, army, request.Actions);
 
         for (tick = 0; (request.MaximumTicks == 0 || tick < request.MaximumTicks) &&
-             hero.IsAlive && enemies.Any(enemy => enemy.Life > 0); tick++)
+             (hero.IsAlive || army.MercenaryAlive) && enemies.Any(enemy => enemy.Life > 0); tick++)
         {
             hero.HarmfulStatus.Tick = tick;
             request.Reactions!.Tick = tick;
@@ -461,7 +461,20 @@ public sealed partial class SpatialCombatRunner
             hero.AdvanceRegenerationTick(tick);
             request.TeamProtection!.Update("hero", hero.Life, hero.MaximumLife, hero.MaximumShield, auras.ActiveIds.Count > 0, tick);
             AdvancePlayerStatus(request, hero, heroPosition, tick, events);
-            if (!hero.IsAlive) break;
+            if (!hero.IsAlive)
+            {
+                army.Advance(enemies, heroPosition, random, tick, events, heroTargetId, request.Build);
+                heroPosition = ResolveEnemies(request, enemies, hero, heroPosition, random, tick, events, flasks,
+                    guardUntilTick, guardReductionBasisPoints, shieldCounter, shieldCounterConfiguration,
+                    ref shieldCounterReadyTick, ascendancyRuntime, hazards, ref rootedUntilTick, fortificationLayers, army,
+                    _ => { });
+                foreach (EnemyHazard hazard in hazards.Where(hazard => hazard.Expires > tick && tick >= hazard.Start && (tick - hazard.Start) % 10 == 0))
+                    army.ReceiveHazard(hazard, tick, events);
+                if (request.MaximumTicks > 0 || (tick & 3) == 0)
+                    CaptureFrame(frames, tick * TickMilliseconds, request.NodeIndex, heroPosition, hero, heroTargetId, enemies,
+                        request.Build.PartySize, request.Build.FrontlineCount, request.VirtueVice, tick, army, request.Actions);
+                continue;
+            }
             if (tick >= fortificationUntilTick) fortificationLayers = 0;
             if (tick > 0 && tick % 20 == 0)
             {
@@ -1410,7 +1423,7 @@ public sealed partial class SpatialCombatRunner
             hero.UpdateSheet(request.RuneFields?.Apply(request.Build.Sheet, heroPosition) ?? request.Build.Sheet);
             if (tick < enemy.FrozenUntil || tick < enemy.ParalyzedUntil || tick < enemy.StunnedUntilTick) continue;
             EnemySkillProfile activeSkill = enemy.Profile.EffectiveSkills[enemy.ActionSequence % enemy.Profile.EffectiveSkills.Count];
-            if (army.ReceiveEnemyAction(enemy, activeSkill, heroPosition, request, random, tick, events)) continue;
+            if (army.ReceiveEnemyAction(enemy, activeSkill, heroPosition, hero.IsAlive, request, random, tick, events)) continue;
             if (request.Actions?.UntargetableUntil > tick && enemy.TelegraphTarget is null) continue;
             BossDefinition? bossDefinition = enemy.Boss ? Bosses.TryGet(enemy.Profile.StableId) : null;
             if (bossDefinition is not null)
@@ -1454,7 +1467,8 @@ public sealed partial class SpatialCombatRunner
                 distance = Point.DistanceSquared(enemy.Position, heroPosition);
             }
 
-            if (tick < enemy.NextActionTick || enemy.TelegraphTarget is null && distance > (long)range * range || !hero.IsAlive)
+            if (tick < enemy.NextActionTick || enemy.TelegraphTarget is null && distance > (long)range * range ||
+                !hero.IsAlive && !army.MercenaryAlive)
             {
                 continue;
             }

@@ -1,5 +1,4 @@
 namespace GameForWork.Core.Campaign.Combat;
-
 public enum BattleOutcome
 {
     HeroVictory,

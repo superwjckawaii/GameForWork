@@ -2,7 +2,6 @@ using GameForWork.Core.Ascendancies;
 using GameForWork.Core.Builds;
 using GameForWork.Core.Campaign.World;
 using GameForWork.Core.Characters;
-
 namespace GameForWork.Core.Skills;
 
 public readonly record struct ElementalAilments(bool Ignited, bool Chilled, bool Frozen, bool Shocked, bool Paralyzed = false);

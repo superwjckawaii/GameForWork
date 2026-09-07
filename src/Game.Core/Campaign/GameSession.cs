@@ -1373,8 +1373,14 @@ public sealed class GameSession
             BuildActiveSkills(), AscendancyProfile()), configuration);
     }
 
-    private void RefreshHeroTeamBuild() => World.Hero.UpdateBuild(
-        ToTeamBuild(_heroBuild, HeavyStrikeSupports, HeroAi, BuildActiveSkills(), AscendancyProfile()));
+    private void RefreshHeroTeamBuild()
+    {
+        CombatProfile ascendancy = AscendancyProfile();
+        TeamBuild build = ToTeamBuild(_heroBuild, HeavyStrikeSupports, HeroAi, BuildActiveSkills(), ascendancy);
+        if (ascendancy.Has(ClassNodeIds.CantorBlessingCore))
+            build = build with { AttachedMercenary = Town.BuildAvailableCompanion(World.Hero.Progression.Level) };
+        World.Hero.UpdateBuild(build);
+    }
 
     private CombatProfile AscendancyProfile() => new(Endgame.SelectedAscendancy,
         Endgame.AscendancyPassives.Order(StringComparer.Ordinal).ToArray(), Endgame.CombatConfiguration.Snapshot());

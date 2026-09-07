@@ -2,7 +2,6 @@ using GameForWork.Core.Builds;
 using GameForWork.Core.Campaign.Combat;
 using GameForWork.Core.Campaign.World;
 using GameForWork.Core.Skills;
-
 namespace GameForWork.Tests;
 
 public sealed class SkillSpeedTests

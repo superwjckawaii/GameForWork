@@ -287,6 +287,33 @@ public sealed class TownState
     public IReadOnlyList<MercenaryMember> ActiveMembers() => _formation.Where(id => !string.IsNullOrEmpty(id))
         .Select(id => _roster.First(member => member.Identity.StableId == id)).ToArray();
 
+    public TeamBuild? BuildAvailableCompanion(int fallbackLevel)
+    {
+        HashSet<string> dispatched = ActiveMembers().Select(member => member.Identity.StableId).ToHashSet(StringComparer.Ordinal);
+        MercenaryMember? member = _roster.FirstOrDefault(candidate => !dispatched.Contains(candidate.Identity.StableId));
+        if (member is null) return null;
+        var skill = new SkillConfiguration(SkillIds.HeavyStrike, SkillSupport.Bleed);
+        AssembledCharacterBuild assembled = CharacterBuildAssembler.Assemble(
+            Math.Max(fallbackLevel, member.Level), member.Identity.FinalAttributes, member.Equipment,
+            new PassiveTreeAllocation(), skill);
+        return new TeamBuild(
+            assembled.Sheet, assembled.EffectiveWeapon, skill,
+            FlatAccuracy: 70 + assembled.FlatAccuracy,
+            IncreasedDamageBasisPoints: assembled.IncreasedAttackDamageBasisPoints,
+            IncreasedCriticalChanceBasisPoints: assembled.IncreasedCriticalChanceBasisPoints,
+            IncreasedBleedChanceBasisPoints: assembled.IncreasedBleedChanceBasisPoints,
+            UseWarCry: false,
+            AiSummary: $"同行佣兵 {member.Identity.Name}；自主接敌并跟随主角目标。",
+            AddedPhysicalDamage: assembled.AddedPhysicalDamage,
+            HeavyStrikeProfile: assembled.HeavyStrike,
+            HasShield: assembled.Equipment.HasShield,
+            BlockChanceBasisPoints: assembled.Equipment.HasShield ? 2_000 : 0,
+            HasUsableWeapon: assembled.HasUsableWeapon,
+            LocalWeaponStats: assembled.Equipment.LocalWeapon,
+            CombatEquipment: assembled.CombatEquipment,
+            VirtueViceLoadout: assembled.VirtueViceLoadout);
+    }
+
     public void AddActiveExperience(int amount)
     {
         foreach (MercenaryMember member in ActiveMembers()) member.AddExperience(amount);
