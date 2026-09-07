@@ -70,6 +70,8 @@ public sealed class AilmentState
         .Concat(_instances.Where(instance => instance.Kind == Ailment.Ground).GroupBy(instance => instance.SourceId)
             .SelectMany(group => group.GroupBy(instance => instance.InstanceId).MaxBy(candidate => candidate.Sum(instance => Dps(instance, voidDebuffed)))!));
     public int Count(Ailment kind) => Active().Count(instance => instance.Kind == kind);
+    public bool HasActiveDamage => Active().Any();
+    public bool HasActiveTypeOtherThan(DamageType type) => Active().Any(instance => instance.Type != type);
     public decimal Remaining(Ailment kind) => Active().Where(instance => instance.Kind == kind)
         .Sum(instance => instance.DamagePerSecond * instance.RemainingMilliseconds / 1000 * Multiplier(kind));
     public decimal Consume(Ailment kind, int portionBasisPoints,

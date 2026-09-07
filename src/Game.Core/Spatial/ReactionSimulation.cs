@@ -21,13 +21,19 @@ public sealed partial class SpatialCombatRunner
     private static void ScheduleSupportedReactions(NodeCombatRequest request, ResourceState hero, string target,
         bool attack = false, bool block = false, int hitDamage = 0)
     {
+        bool thirdAttackMastery = attack && MasteryRuntime.Has(
+            request.Build.PassiveProfile ?? Campaign.Progression.PassiveModifiers.Empty, "触发_冷却", 3);
+        bool thirdAttack = !thirdAttackMastery || request.Reactions!.ThirdAttack(request.EquipmentRuntime?.ActionId ?? "");
         foreach (var config in request.Build.ActiveSkills ?? [])
         {
             if (attack && LinkedSupportRules.Support(config, SupportMechanic.AttackTrigger))
             {
+                if (!thirdAttack) continue;
                 int recovery = LinkedSupportRules.SupportQuality(config, SupportMechanic.AttackTrigger) * 100;
-                int cooldown = (int)Math.Ceiling(LinkedSupportRules.SupportValue(config, SupportMechanic.AttackTrigger, 16, 8) * 10_000d / (10_000 + recovery));
-                request.Reactions!.Schedule(config, target, cooldown, payCost: true);
+                int cooldown = thirdAttackMastery ? 12 : (int)Math.Ceiling(
+                    LinkedSupportRules.SupportValue(config, SupportMechanic.AttackTrigger, 16, 8) * 10_000d / (10_000 + recovery));
+                request.Reactions!.Schedule(config, target, cooldown,
+                    multiplier: thirdAttackMastery ? 5_000 : 10_000, payCost: true);
             }
             else if (block && config.Supports.HasFlag(SkillSupport.BlockTrigger))
             {
@@ -98,6 +104,13 @@ public sealed partial class SpatialCombatRunner
             if (reaction.PayCost)
             {
                 skill = request.EquipmentRuntime!.Resolve(ApplyAscendancyCost(skill, config, hero.MaximumLife, request.AscendancyRuntime!.Profile));
+                int cost = ActionMasteryRules.SkillCostMultiplier(
+                    request.Build.PassiveProfile ?? Campaign.Progression.PassiveModifiers.Empty, true);
+                skill = skill with
+                {
+                    LifeCost = ScaleCombatValue(skill.LifeCost, cost),
+                    ManaCost = ScaleCombatValue(skill.ManaCost, cost)
+                };
                 if (!CombatSkillRules.TryPay(hero, skill, allowOvercharge: false, selfCast: false))
                 {
                     events.Add(Event(tick, SpatialEventKind.SkillFailed, "hero", reaction.TargetId, 0, origin, origin, $"reaction:{skill.SkillId}|resource"));

@@ -1,6 +1,7 @@
 using GameForWork.Core.Builds;
 using GameForWork.Core.Campaign.Combat;
 using GameForWork.Core.Campaign.World;
+using GameForWork.Core.Campaign.Progression;
 using GameForWork.Core.SkillCatalog;
 using GameForWork.Core.Skills;
 using GameForWork.Core.Spatial;
@@ -12,9 +13,10 @@ public sealed record CombatHitSnapshot(string TargetId, Point Origin, ResolvedSk
     TeamBuild Build, DamagePacket OffensivePacket, IReadOnlyList<DamageBranch> AilmentSource, bool Critical,
     int AppliedCriticalMultiplier = 10_000, int OffsetMilliseconds = 0, int AreaPositionMultiplier = 10_000);
 public sealed record CombatActionSnapshot(string Id, string SkillId, SkillTag Tags, bool Unarmed,
-    int StartedMilliseconds, int CompletesMilliseconds, IReadOnlyList<CombatHitSnapshot> Hits);
+    int StartedMilliseconds, int CompletesMilliseconds, IReadOnlyList<CombatHitSnapshot> Hits, bool Triggered = false);
 public sealed record DeferredCombatCopy(string Id, CombatActionSnapshot Action, int DueMilliseconds,
-    int Multiplier, bool RollCritical, string Source, bool Sacrifice = false, int Radius = 0);
+    int Multiplier, bool RollCritical, string Source, bool Sacrifice = false, int Radius = 0,
+    int RepeatIndex = 0, int RepeatCount = 0);
 
 /// <summary>Only original actions enter the recorder. Copies are terminal queue entries.</summary>
 public sealed partial class CombatActionQueue(CombatProfile? profile = null)
@@ -40,13 +42,28 @@ public sealed partial class CombatActionQueue(CombatProfile? profile = null)
     private readonly Dictionary<string, CombatActionSnapshot> _recording = [];
     private readonly List<DeferredCombatCopy> _pending = [];
     private readonly HashSet<string> _completed = [];
+    private readonly HashSet<(string Action, string OriginalTarget)> _retargeted = [];
     private int _unarmedCount, _sequence;
-    private int _substituteReady, _recoveryReady;
+    private int _substituteReady, _recoveryReady, _channelTerminalReady;
     private SkillTag _previousCategory;
     private string? _channelId;
     private int _channelLastTick;
     private readonly Dictionary<string, string> _channelActions = [];
     public string CanonicalAction(string action) => _channelActions.GetValueOrDefault(action, action);
+    public bool IsChanneling(int milliseconds) => _channelId is not null && _recording.TryGetValue(_channelId, out var action) &&
+        action.Tags.HasFlag(SkillTag.Channelling) && action.StartedMilliseconds <= milliseconds && action.CompletesMilliseconds > milliseconds;
+    public bool TryRetargetBonus(string action, string originalTarget, string replacement, PassiveModifiers passives) =>
+        replacement.Length > 0 && replacement != originalTarget && MasteryRuntime.Has(passives, "重复_引导", 2) &&
+        _retargeted.Add((action, originalTarget));
+
+    public int ChannelDepthMultiplier(string action, int tick, PassiveModifiers passives)
+    {
+        action = CanonicalAction(action);
+        if (!MasteryRuntime.Has(passives, "重复_引导", 6) || !_recording.TryGetValue(action, out var channel) ||
+            !channel.Tags.HasFlag(SkillTag.Channelling)) return 10_000;
+        int layers = Math.Min(6, Math.Max(0, (tick * 50 - channel.StartedMilliseconds) / 1_000));
+        return 10_000 + layers * 1_500;
+    }
     public CombatActionSnapshot? LatestAttack { get; private set; }
     public IReadOnlyList<DeferredCombatCopy> Pending => _pending.Concat(_phantoms.SelectMany(phantom => phantom.MemoryReplays)).ToArray();
     private int _areaHitTick = -1;
@@ -64,6 +81,8 @@ public sealed partial class CombatActionQueue(CombatProfile? profile = null)
     public void Begin(string id, ResolvedSkill skill, TeamBuild build, int tick, bool triggered)
     {
         SkillTag tags = SkillDefinitions.Get(skill.SkillId).Tags;
+        bool captureTriggeredRepeat = triggered && MasteryRuntime.Has(
+            build.PassiveProfile ?? Campaign.Progression.PassiveModifiers.Empty, "触发_冷却", 2);
         if (!triggered && tags.HasFlag(SkillTag.Channelling))
         {
             if (_channelId is not null && _recording.TryGetValue(_channelId, out var channel) &&
@@ -79,10 +98,10 @@ public sealed partial class CombatActionQueue(CombatProfile? profile = null)
             _channelActions[id] = id;
         }
         else if (!triggered) _channelId = null;
-        if (triggered || _completed.Contains(id) || _recording.ContainsKey(id) ||
+        if (triggered && !captureTriggeredRepeat || _completed.Contains(id) || _recording.ContainsKey(id) ||
             (tags & (SkillTag.Attack | SkillTag.Spell)) == 0 || skill.Role is SkillRole.Reservation or SkillRole.DamageOverTime) return;
         _recording.Add(id, new(id, skill.SkillId, tags, !build.HasUsableWeapon, tick * 50,
-            (tick + (tags.HasFlag(SkillTag.Channelling) ? 6 : CombatSkillRules.ActionDelay(build, skill.CastTimeTicks, tags, skill.AdditionalAttackSpeedBasisPoints, skill.AdditionalCastSpeedBasisPoints))) * 50, []));
+            (tick + (tags.HasFlag(SkillTag.Channelling) ? 6 : CombatSkillRules.ActionDelay(build, skill, tags))) * 50, [], triggered));
     }
     public IReadOnlyList<AllyFrame> PhantomFrames(int tick) => _phantoms.Where(phantom => phantom.Expires > tick)
         .Select(phantom => new AllyFrame(phantom.Id, phantom.Position, false, "archetypes.skill.phantom_step")).ToArray();
@@ -145,7 +164,9 @@ public sealed partial class CombatActionQueue(CombatProfile? profile = null)
     }
     public void Record(string actionId, CombatHitSnapshot hit, int tick, bool triggered)
     {
-        if (triggered || _completed.Contains(actionId)) return;
+        bool captureTriggeredRepeat = triggered && MasteryRuntime.Has(
+            hit.Build.PassiveProfile ?? Campaign.Progression.PassiveModifiers.Empty, "触发_冷却", 2);
+        if (triggered && !captureTriggeredRepeat || _completed.Contains(actionId)) return;
         SkillTag tags = SkillDefinitions.Get(hit.Skill.SkillId).Tags;
         if ((tags & (SkillTag.Attack | SkillTag.Spell)) == 0 || hit.Skill.Role is SkillRole.Reservation or SkillRole.DamageOverTime) return;
         Begin(actionId, hit.Skill, hit.Build, tick, triggered);
@@ -173,15 +194,27 @@ public sealed partial class CombatActionQueue(CombatProfile? profile = null)
             _recording.Remove(action.Id);
             _completed.Add(action.Id);
             if (action.Tags.HasFlag(SkillTag.Attack)) LatestAttack = action;
+            PassiveModifiers passives = action.Hits.FirstOrDefault()?.Build.PassiveProfile ?? PassiveModifiers.Empty;
+            int repeatDelay = ActionMasteryRules.RepeatDelayMultiplier(passives);
+            int actionDuration = Math.Max(50, action.CompletesMilliseconds - action.StartedMilliseconds);
             if (action.Tags.HasFlag(SkillTag.Spell) && !action.Tags.HasFlag(SkillTag.Channelling) && action.Hits.FirstOrDefault()?.Configuration.Supports.HasFlag(SkillSupport.SpellEcho) == true)
-                Enqueue(action, milliseconds + Math.Max(50, action.CompletesMilliseconds - action.StartedMilliseconds), 10_000, false, "support:spell-echo");
+                EnqueueRepeat(action, milliseconds + Math.Max(50, Scale(actionDuration, repeatDelay)), 10_000, false, "support:spell-echo", 1, 1);
             if (action.Hits.FirstOrDefault() is { } first && UnarmedRules.Repeats(action.SkillId, first.Build))
-                Enqueue(action, milliseconds, 6_500, true, "mastery:unarmed-repeat");
+                EnqueueRepeat(action, milliseconds, 6_500, true, "mastery:unarmed-repeat", 1, 1);
+            if (action.Triggered && MasteryRuntime.Has(passives, "触发_冷却", 2))
+                EnqueueRepeat(action, milliseconds + Math.Max(50, Scale(actionDuration, repeatDelay)), 5_000, false, "mastery:trigger-repeat", 1, 1);
+            if (action.Tags.HasFlag(SkillTag.Channelling) && action.CompletesMilliseconds - action.StartedMilliseconds >= 2_000 &&
+                milliseconds >= _channelTerminalReady && MasteryRuntime.Has(passives, "重复_引导", 5))
+            {
+                Enqueue(action, milliseconds, 20_000, false, "mastery:channel-terminal");
+                _channelTerminalReady = milliseconds + 1_000;
+            }
             if (action.Hits.FirstOrDefault() is { } movement && LinkedSupportRules.MovementEcho(movement.Configuration))
                 Enqueue(action, milliseconds, 10_000 - LinkedSupportRules.QualityOverride(movement.Configuration,
                     Archetypes.SupportMechanic.MovementEcho, LinkedSupportRules.SupportValue(movement.Configuration, Archetypes.SupportMechanic.MovementEcho, 4_000, 2_000), 1_000), true, "support:movement-echo");
             if (hundredReturn && action.Unarmed && action.Tags.HasFlag(SkillTag.Attack) && ++_unarmedCount % 5 == 0)
-                for (int repeat = 1; repeat <= 4; repeat++) Enqueue(action, milliseconds + repeat * 120, 3_500, true, "equipment:百式回身");
+                for (int repeat = 1; repeat <= 4; repeat++)
+                    EnqueueRepeat(action, milliseconds + Scale(repeat * 120, repeatDelay), 3_500, true, "equipment:百式回身", repeat, 4);
             SkillTag category = action.Tags.HasFlag(SkillTag.Attack) ? SkillTag.Attack : SkillTag.Spell;
             if (alternatingCopy && _previousCategory != 0 && _previousCategory != category)
                 Enqueue(action, milliseconds + 250, 6_000, false, "equipment:攻法回文");
@@ -191,6 +224,11 @@ public sealed partial class CombatActionQueue(CombatProfile? profile = null)
     }
     public void Enqueue(CombatActionSnapshot action, int dueMilliseconds, int multiplier, bool rollCritical, string source) =>
         _pending.AddRange(Segments(new($"copy:{++_sequence}", action, dueMilliseconds, multiplier, rollCritical, source)));
+    private void EnqueueRepeat(CombatActionSnapshot action, int dueMilliseconds, int multiplier, bool rollCritical,
+        string source, int repeatIndex, int repeatCount) =>
+        _pending.AddRange(Segments(new($"copy:{++_sequence}", action, dueMilliseconds, multiplier, rollCritical,
+            source, RepeatIndex: repeatIndex, RepeatCount: repeatCount)));
+    private static int Scale(int value, int basisPoints) => checked((int)((long)value * basisPoints / 10_000));
     private static IEnumerable<DeferredCombatCopy> Segments(DeferredCombatCopy copy)
     {
         if (!copy.Action.Tags.HasFlag(SkillTag.Channelling)) { yield return copy; yield break; }

@@ -96,6 +96,7 @@ public sealed partial class SpatialCombatRunner
                 if (kind == Ailment.Bleed)
                     damage *= (MasteryRuntime.Has(passive, "流血", 0) ? 2m : 1m) * (MasteryRuntime.Has(passive, "流血", 2) ? .8m : 1m);
                 if (kind == Ailment.Ignite && MasteryRuntime.Has(passive, "点燃", 0)) damage *= 1.3m;
+                damage *= DamageOverTimeMasteryRules.OutputMultiplier(passive, true) / 10_000m;
                 total += damage;
             }
             return total;
@@ -104,8 +105,13 @@ public sealed partial class SpatialCombatRunner
         {
             decimal dps = Basis(kind) * ratio;
             if (dps <= 0) return;
+            int compositeMultiplier = DamageOverTimeMasteryRules.NewEffectMultiplier(passive, enemy.Ailments, type);
+            dps *= compositeMultiplier / 10_000m;
+            duration = checked(duration * DamageOverTimeMasteryRules.DurationMultiplier(passive) / 10_000);
+            faster = checked(faster + DamageOverTimeMasteryRules.FasterAilments(passive));
             duration = duration * Math.Max(0, 10_000 - enemy.Profile.ReducedAilmentDurationBasisPoints) / 10_000;
-            decimal? debuffedDps = type == DamageType.Void && MasteryRuntime.Has(passive, "虚空", 4) ? Basis(kind, true) * ratio : null;
+            decimal? debuffedDps = type == DamageType.Void && MasteryRuntime.Has(passive, "虚空", 4)
+                ? Basis(kind, true) * ratio * compositeMultiplier / 10_000m : null;
             bool selfCast = request.EquipmentRuntime?.CaptureAction().Copy != true && (request.ElementalSourceSelf || request.EquipmentRuntime?.CaptureAction().Triggered != true);
             if (kind == Ailment.Poison)
                 dps = enemy.Ailments.ApplyPoison(passive, dps, duration, faster, skill.SkillId,
@@ -135,30 +141,54 @@ public sealed partial class SpatialCombatRunner
         }
         if (hit.Cold > 0 && Allowed(Ailment.Chill, 10_000))
         {
-            var chill = CombatRules.Chill(hit.Cold, threshold, increasedEffectBasisPoints: Value(ItemModifierKind.ChillEffectBasisPoints) + (Element("cold") ? 2_500 : 0) + effectIncrease);
+            var chill = CombatRules.Chill(hit.Cold, threshold,
+                maximumEffectBasisPoints: ElementalControlMasteryRules.ChillMaximum(passive),
+                increasedEffectBasisPoints: Value(ItemModifierKind.ChillEffectBasisPoints) + (Element("cold") ? 2_500 : 0) + effectIncrease);
             if (chill.EffectBasisPoints > 0)
             {
                 enemy.ChillEffect = Math.Max(enemy.ChillEffect, chill.EffectBasisPoints);
                 enemy.ImpairedUntilTick = tick + Duration(chill.DurationMilliseconds) / TickMilliseconds;
+                enemy.PropagatedChill = false;
             }
             if (Allowed(Ailment.Freeze, Chance(Ailment.Freeze), critical))
             {
-                var freeze = CombatRules.Freeze(hit.Cold, enemy.Boss && Element("cold", "core") ? Math.Max(1, threshold * 6 / 10) : threshold, Value(ItemModifierKind.FreezeEffectBasisPoints) + effectIncrease + (Element("ailment") ? 2_500 : 0), enemy.Boss ? 1_000 : enemy.Elite ? 2_000 : 3_000);
-                enemy.FrozenUntil = Math.Max(enemy.FrozenUntil, tick + freeze.DurationMilliseconds / TickMilliseconds);
+                int freezeThreshold = enemy.Boss && Element("cold", "core") ? Math.Max(1, threshold * 6 / 10) : threshold;
+                freezeThreshold = ElementalControlMasteryRules.FreezeThreshold(passive, freezeThreshold);
+                var freeze = CombatRules.Freeze(hit.Cold, freezeThreshold,
+                    Value(ItemModifierKind.FreezeEffectBasisPoints) + effectIncrease + (Element("ailment") ? 2_500 : 0),
+                    enemy.Boss ? 1_000 : enemy.Elite ? 2_000 : 3_000,
+                    MasteryRuntime.Has(passive, "冰缓_冻结", 1) ? 1 : 300);
+                if (freeze.DurationMilliseconds > 0)
+                {
+                    bool newlyFrozen = tick >= enemy.FrozenUntil;
+                    enemy.FrozenUntil = Math.Max(enemy.FrozenUntil, tick + freeze.DurationMilliseconds / TickMilliseconds);
+                    if (newlyFrozen) enemy.ColdPursuitUntil = tick + 80;
+                }
             }
         }
-        if (hit.Lightning > 0 && Allowed(Ailment.Shock, Chance(Ailment.Shock) + Value(ItemModifierKind.ShockChanceBasisPoints), critical))
+        int lightningThreshold = ElementalControlMasteryRules.LightningThreshold(passive, threshold, critical);
+        if (hit.Lightning > 0 && ElementalControlMasteryRules.CanShock(passive) &&
+            Allowed(Ailment.Shock, Chance(Ailment.Shock) + Value(ItemModifierKind.ShockChanceBasisPoints), critical))
         {
-            int cap = Element("lightning", "core") ? 7_500 : 5_000;
-            var shock = CombatRules.Shock(hit.Lightning, threshold, cap, Value(ItemModifierKind.ShockEffectBasisPoints) + (Element("lightning") ? 2_500 : 0) + effectIncrease);
-            enemy.ShockEffect = Math.Max(enemy.ShockEffect, shock.EffectBasisPoints);
+            int cap = ElementalControlMasteryRules.ShockMaximum(passive, Element("lightning", "core") ? 7_500 : 5_000);
+            var shock = CombatRules.Shock(hit.Lightning, lightningThreshold, cap,
+                Value(ItemModifierKind.ShockEffectBasisPoints) + (Element("lightning") ? 2_500 : 0) + effectIncrease);
+            enemy.ShockEffect = Math.Max(enemy.ShockEffect, Math.Min(cap, ElementalControlMasteryRules.ShockEffect(passive, shock.EffectBasisPoints)));
             enemy.ShockUntil = tick + Duration(2_000) / TickMilliseconds;
         }
-        if (hit.Lightning > 0 && Allowed(Ailment.Paralysis, Chance(Ailment.Paralysis)))
+        if (hit.Lightning > 0 && ElementalControlMasteryRules.CanParalyze(passive) &&
+            Allowed(Ailment.Paralysis, ElementalControlMasteryRules.ParalysisChance(passive, Chance(Ailment.Paralysis))))
         {
-            enemy.Paralysis += CombatRules.Paralysis(hit.Lightning, threshold).AccumulationBasisPoints;
+            enemy.Paralysis += CombatRules.Paralysis(hit.Lightning, lightningThreshold,
+                ElementalControlMasteryRules.ParalysisAccumulationIncrease(passive)).AccumulationBasisPoints;
             enemy.ParalysisLastTick = tick;
-            if (enemy.Paralysis >= 10_000) { enemy.Paralysis = 0; enemy.ParalyzedUntil = Math.Max(enemy.ParalyzedUntil, tick + Duration(enemy.Boss ? 350 : enemy.Elite ? 600 : 1_000) / TickMilliseconds); }
+            if (enemy.Paralysis >= 10_000)
+            {
+                bool newlyParalyzed = tick >= enemy.ParalyzedUntil;
+                enemy.Paralysis = 0;
+                enemy.ParalyzedUntil = Math.Max(enemy.ParalyzedUntil, tick + Duration(enemy.Boss ? 350 : enemy.Elite ? 600 : 1_000) / TickMilliseconds);
+                if (newlyParalyzed) enemy.ParalysisPursuitUntil = tick + 80;
+            }
         }
         if (skill.Ailment is Ailment.Erosion or Ailment.Wither && Allowed(skill.Ailment, skill.AilmentChanceBasisPoints))
             enemy.Ailments.AddStack(skill.Ailment, 1, skill.Ailment == Ailment.Erosion ? 5 : 10,
@@ -195,7 +225,9 @@ public sealed partial class SpatialCombatRunner
             if (tick >= enemy.ShockUntil) enemy.ShockEffect = 0;
             if (tick >= enemy.ImpairedUntilTick) enemy.ChillEffect = 0;
             if (tick >= enemy.ArmorBreakUntil) enemy.ArmorBreakStacks = 0;
-            if (tick - enemy.ParalysisLastTick >= 40) enemy.Paralysis = Math.Max(0, enemy.Paralysis - 125);
+            if (tick - enemy.ParalysisLastTick >= ElementalControlMasteryRules.ParalysisDecayDelayTicks(
+                    request.Build.PassiveProfile ?? PassiveModifiers.Empty))
+                enemy.Paralysis = Math.Max(0, enemy.Paralysis - 125);
             enemy.CurrentTick = tick;
             foreach (var pulse in enemy.Ailments.Advance(TickMilliseconds,
                 (type, dps) => DefendEnemyDot(request, enemy, type, dps, tick), VoidDebuffed(enemy, tick)))
@@ -213,7 +245,19 @@ public sealed partial class SpatialCombatRunner
                 }
                 events.Add(Event(tick, pulse.Kind == Ailment.Bleed ? SpatialEventKind.Bleed : SpatialEventKind.Ailment,
                     "hero", enemy.EntityId, damage, enemy.Position, enemy.Position, $"dot:{pulse.Kind.ToString().ToLowerInvariant()}"));
-                if (enemy.Life == 0) { events.Add(Event(tick, SpatialEventKind.EnemyDefeated, "hero", enemy.EntityId, 0, enemy.Position, enemy.Position, enemy.Profile.StableId)); break; }
+                if (enemy.Life == 0)
+                {
+                    PassiveModifiers passives = request.Build.PassiveProfile ?? PassiveModifiers.Empty;
+                    if (DamageOverTimeMasteryRules.RecoversOnKill(passives) && request.DamageOverTimeRecovery!.TryRecover(tick))
+                    {
+                        int life = hero.HealLife(Math.Max(1, hero.MaximumLife * 200 / 10_000));
+                        int mana = hero.RestoreMana(Math.Max(1, hero.MaximumMana * 200 / 10_000));
+                        events.Add(Event(tick, SpatialEventKind.SkillEffect, "hero", "hero", life + mana,
+                            enemy.Position, enemy.Position, "mastery:damage-over-time-recovery"));
+                    }
+                    events.Add(Event(tick, SpatialEventKind.EnemyDefeated, "hero", enemy.EntityId, 0, enemy.Position, enemy.Position, enemy.Profile.StableId));
+                    break;
+                }
             }
         }
     }

@@ -32,6 +32,7 @@ public sealed partial class SpatialCombatRunner
         public DamageBreakdown? RareDamagePerSecond { get; set; }
         public DamageBreakdown? DebuffedDamagePerSecond { get; set; }
         public DamageBreakdown? DebuffedRareDamagePerSecond { get; set; }
+        public Dictionary<(string Enemy, DamageType Type), bool> CompositeDamage { get; } = [];
     }
 
     private static bool CreatePersistentArea(NodeCombatRequest request, ResolvedSkill skill, SkillConfiguration configuration,
@@ -70,6 +71,7 @@ public sealed partial class SpatialCombatRunner
         var tags = SkillDefinitions.Get(id).Tags;
         var profile = request.Build.PassiveProfile ?? PassiveModifiers.Empty;
         duration = AreaRules.Duration(duration, tags, profile);
+        duration = checked(duration * DamageOverTimeMasteryRules.DurationMultiplier(profile) / 10_000);
         if (tags.HasFlag(SkillTag.Area) && MasteryRuntime.Has(profile, "范围_距离", 5)) multiplier = ScaleCombatValue(multiplier, 8_000);
         radius = AreaRules.Radius(radius, skill.AreaMultiplierBasisPoints);
         skill = skill with { BaseAreaRadiusRaw = radius, AreaMoreBasisPoints = 10_000, AreaIncreasedBasisPoints = 0 };
@@ -123,6 +125,8 @@ public sealed partial class SpatialCombatRunner
                 if (request.Auras?.ExclusiveElement is { } allowed && branch.CurrentType is DamageType.Fire or DamageType.Cold or DamageType.Lightning && branch.CurrentType != allowed) return 0;
                 int scaled = CombatSkillRules.ScaleOffensiveDamage(voidDebuffed ? branch.DebuffedBaseDamage ?? branch.BaseDamage : branch.BaseDamage, skill, configuration, request.Build, tags,
                     1, 1, ScaleCombatValue(ScaleCombatValue(multiplier, request.ActionMultiplierSnapshot ?? 10_000), request.ElementalMultiplierSnapshot ?? 10_000), targetRareOrBoss: rare, applyIncreased: false, damageHistory: branch.History);
+                scaled = ScaleCombatValue(scaled, DamageOverTimeMasteryRules.OutputMultiplier(
+                    request.Build.PassiveProfile ?? Campaign.Progression.PassiveModifiers.Empty, false));
                 return ScaleCombatValue(scaled, 10_000 + modifiers.GetValueOrDefault(ItemModifierKind.DamageOverTimeMultiplierBasisPoints));
             }, configuration: configuration, allowAddedHitDamage: false,
             mastery: new(request.Build.PassiveProfile ?? Campaign.Progression.PassiveModifiers.Empty, false), ascendancy: request.Build.Ascendancy);
@@ -173,13 +177,41 @@ public sealed partial class SpatialCombatRunner
                         enemy.Ailments.AddStack(Ailment.Erosion, 1, 5, 120, tick);
                     if (area.Skill.SkillId == "archetypes.skill.corrosive_trap")
                     { enemy.ChillEffect = Math.Max(enemy.ChillEffect, 2_000); enemy.ImpairedUntilTick = tick + 1; }
-                    void Apply(DamageType type, int value) => enemy.Ailments.Apply(Ailment.Ground, type,
-                        ScaleCombatValue(value, AreaRules.PositionMultiplier(area.Request.Build.PassiveProfile ?? PassiveModifiers.Empty,
-                            (int)Math.Sqrt(SegmentDistanceSquared(enemy.Position, area.Start, area.End)), area.Radius)),
-                        TickMilliseconds, 0, area.Skill.SkillId, instanceId: $"{area.Skill.SkillId}:{area.Created}",
-                        debuffedDamagePerSecond: type == DamageType.Void && debuffed is not null ?
-                            ScaleCombatValue(debuffed.Void, AreaRules.PositionMultiplier(area.Request.Build.PassiveProfile ?? PassiveModifiers.Empty,
-                                (int)Math.Sqrt(SegmentDistanceSquared(enemy.Position, area.Start, area.End)), area.Radius)) : null, selfCast: area.Request.ElementalSourceSelf);
+                    void Apply(DamageType type, int value)
+                    {
+                        if (value <= 0) return;
+                        var passives = area.Request.Build.PassiveProfile ?? PassiveModifiers.Empty;
+                        int groundChill = type == DamageType.Cold ? CombatRules.ApplyIncreased(
+                            ElementalControlMasteryRules.ColdGroundChill(passives),
+                            (area.Request.Build.CombatEquipment?.Value(ItemModifierKind.ChillEffectBasisPoints) ?? 0) +
+                            (ElementalRules.Has(area.Request.Build.Ascendancy, "cold") ? 2_500 : 0) +
+                            (ElementalRules.Has(area.Request.Build.Ascendancy, "resonance", "core")
+                                ? (area.Request.VirtueVice?.Layers(VirtueViceKind.Temperance) ?? 0) * 400 : 0)) : 0;
+                        if (groundChill > 0 &&
+                            tick - enemy.LastColdGroundChillTick >= 20 &&
+                            (enemy.Profile.AilmentAvoidanceBasisPoints <= 0 || random.NextBasisPoints() >= enemy.Profile.AilmentAvoidanceBasisPoints))
+                        {
+                            enemy.ChillEffect = Math.Max(enemy.ChillEffect, Math.Min(
+                                ElementalControlMasteryRules.ChillMaximum(passives), groundChill));
+                            enemy.ImpairedUntilTick = Math.Max(enemy.ImpairedUntilTick, tick + 40);
+                            enemy.LastColdGroundChillTick = tick;
+                            enemy.PropagatedChill = false;
+                        }
+                        var key = (enemy.EntityId, type);
+                        if (!area.CompositeDamage.TryGetValue(key, out bool composite))
+                        {
+                            composite = DamageOverTimeMasteryRules.NewEffectMultiplier(passives, enemy.Ailments, type) > 10_000;
+                            area.CompositeDamage[key] = composite;
+                        }
+                        int position = AreaRules.PositionMultiplier(passives,
+                            (int)Math.Sqrt(SegmentDistanceSquared(enemy.Position, area.Start, area.End)), area.Radius);
+                        int output = ScaleCombatValue(ScaleCombatValue(value, position), composite ? 13_000 : 10_000);
+                        int? debuffedOutput = type == DamageType.Void && debuffed is not null
+                            ? ScaleCombatValue(ScaleCombatValue(debuffed.Void, position), composite ? 13_000 : 10_000) : null;
+                        enemy.Ailments.Apply(Ailment.Ground, type, output, TickMilliseconds, 0, area.Skill.SkillId,
+                            instanceId: $"{area.Skill.SkillId}:{area.Created}", debuffedDamagePerSecond: debuffedOutput,
+                            selfCast: area.Request.ElementalSourceSelf);
+                    }
                 }
             }
             if (tick >= area.Expires) areas.Remove(area);

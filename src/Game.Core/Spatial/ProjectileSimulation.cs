@@ -1,4 +1,5 @@
 using GameForWork.Core.Campaign.Combat;
+using GameForWork.Core.Builds;
 using GameForWork.Core.Equipment;
 using GameForWork.Core.SkillCatalog;
 using GameForWork.Core.Simulation;
@@ -38,10 +39,13 @@ public sealed partial class SpatialCombatRunner
         public int Pierces { get; set; }
         public bool Forked { get; set; }
         public bool Returning { get; set; }
+        public bool Retargeted { get; set; }
         public HashSet<string> OutboundHits { get; } = [];
         public HashSet<string> ReturnHits { get; } = [];
         public int PrimaryMultiplier { get; set; } = 10_000;
+        public int StageMultiplier { get; set; } = 10_000;
         public int StartedAt { get; } = tick;
+        public int AvailableAt { get; init; } = tick;
     }
 
     private static void LaunchProjectiles(NodeCombatRequest request, ResolvedSkill skill, SkillConfiguration configuration,
@@ -55,15 +59,32 @@ public sealed partial class SpatialCombatRunner
         var action = new ProjectileAction(request, skill, configuration, origin, multiplier, context, target.EntityId, cohunt);
         if (cohunt)
         {
+            int cohuntInterval = skill.ProjectileMechanics?.SequentialVolley == true
+                ? Math.Max(1, skill.CastTimeTicks * 15 / 100) : 0;
             for (int index = 0; index < Math.Max(1, skill.ProjectileCount); index++)
-                projectiles.Add(new(action, target.EntityId, origin, tick) { Destination = ExtendRay(origin, target.Position, skill.RangeRaw) });
+                projectiles.Add(new(action, target.EntityId, origin, tick)
+                {
+                    AvailableAt = checked(tick + cohuntInterval * index),
+                    Destination = ExtendRay(origin, target.Position, skill.RangeRaw),
+                });
             return;
         }
-        EnemyUnit[] targets = enemies.Where(enemy => enemy.Life > 0 && InRange(origin, enemy.Position, skill.RangeRaw))
-            .OrderBy(enemy => enemy != target).ThenBy(enemy => Point.DistanceSquared(origin, enemy.Position))
-            .Take(Math.Max(1, skill.ProjectileCount)).ToArray();
-        foreach (EnemyUnit enemy in targets) projectiles.Add(new(action, enemy.EntityId, origin, tick)
-        { Destination = ExtendRay(origin, enemy.Position, skill.RangeRaw) });
+        EnemyUnit[] targets = skill.ProjectileMechanics?.SequentialVolley == true
+            ? Enumerable.Repeat(target, Math.Max(1, skill.ProjectileCount)).ToArray()
+            : enemies.Where(enemy => enemy.Life > 0 && InRange(origin, enemy.Position, skill.RangeRaw))
+                .OrderBy(enemy => enemy != target).ThenBy(enemy => Point.DistanceSquared(origin, enemy.Position))
+                .Take(Math.Max(1, skill.ProjectileCount)).ToArray();
+        int interval = skill.ProjectileMechanics?.SequentialVolley == true
+            ? Math.Max(1, skill.CastTimeTicks * 15 / 100) : 0;
+        for (int index = 0; index < targets.Length; index++)
+        {
+            EnemyUnit enemy = targets[index];
+            projectiles.Add(new(action, enemy.EntityId, origin, tick)
+            {
+                AvailableAt = checked(tick + interval * index),
+                Destination = ExtendRay(origin, enemy.Position, skill.RangeRaw),
+            });
+        }
     }
 
     private static void ResolveProjectiles(IList<PendingProjectile> projectiles,
@@ -74,7 +95,8 @@ public sealed partial class SpatialCombatRunner
         {
             ProjectileAction action = projectile.Action;
             ResolvedSkill skill = action.Skill;
-            if (tick - projectile.StartedAt > 400) { projectiles.Remove(projectile); continue; }
+            if (tick < projectile.AvailableAt) continue;
+            if (tick - projectile.AvailableAt > 400) { projectiles.Remove(projectile); continue; }
             int step = Math.Max(1, skill.ProjectileSpeedRawPerSecond / 20);
             if (projectile.Returning)
             {
@@ -85,14 +107,22 @@ public sealed partial class SpatialCombatRunner
                 {
                     action.ReturnHits.Add(enemy.EntityId);
                     projectile.ReturnHits.Add(enemy.EntityId);
-                    Hit(enemy, action.Request.EquipmentRuntime!.Has("鸦群答卷") ? 13_000 : 10_000);
+                    Hit(enemy, (skill.ProjectileMechanics ?? ProjectileMechanics.Default)
+                        .OnReturn(action.Request.EquipmentRuntime!.Has("鸦群答卷") ? 13_000 : 10_000));
                 }
                 if (projectile.Position == heroPosition) projectiles.Remove(projectile);
                 continue;
             }
-            if (action.Star)
+            if (action.Star || skill.ProjectileMechanics?.TracksTargets == true)
             {
                 var tracked = enemies.FirstOrDefault(enemy => enemy.EntityId == projectile.TargetId && enemy.Life > 0);
+                if (tracked is null && !action.Star && !projectile.Retargeted)
+                {
+                    tracked = enemies.Where(enemy => enemy.Life > 0 && CanHit(enemy, false))
+                        .OrderBy(enemy => Point.DistanceSquared(projectile.Position, enemy.Position)).FirstOrDefault();
+                    projectile.Retargeted = true;
+                    if (tracked is not null) projectile.TargetId = tracked.EntityId;
+                }
                 if (tracked is null) { Finish(); continue; }
                 projectile.Destination = tracked.Position;
             }
@@ -114,19 +144,34 @@ public sealed partial class SpatialCombatRunner
                 {
                     foreach (EnemyUnit forkTarget in candidates.Take(skill.ForkCount))
                         projectiles.Add(new PendingProjectile(action, forkTarget.EntityId, target.Position, tick)
-                        { Forked = true, Destination = ExtendRay(target.Position, forkTarget.Position, skill.RangeRaw) });
+                        {
+                            Forked = true,
+                            StageMultiplier = (skill.ProjectileMechanics ?? ProjectileMechanics.Default)
+                                .AfterFork(projectile.StageMultiplier),
+                            Destination = ExtendRay(target.Position, forkTarget.Position, skill.RangeRaw),
+                        });
                     projectiles.Remove(projectile);
                     redirected = true; break;
                 }
-                if (projectile.Pierces < skill.PierceCount) { projectile.Pierces++; continue; }
+                if (projectile.Pierces < skill.PierceCount)
+                {
+                    projectile.Pierces++;
+                    projectile.StageMultiplier = (skill.ProjectileMechanics ?? ProjectileMechanics.Default)
+                        .AfterPierce(projectile.StageMultiplier);
+                    continue;
+                }
+                int chainRange = ScaleCombatValue(ChainRange,
+                    skill.ProjectileMechanics?.ChainRangeMultiplierBasisPoints ?? 10_000);
                 EnemyUnit? next = projectile.Chains < skill.MaximumChains + (action.Context.FallingStar ? 3 : 0)
-                    ? candidates.FirstOrDefault(enemy => InRange(target.Position, enemy.Position, ChainRange)) : null;
+                    ? candidates.FirstOrDefault(enemy => InRange(target.Position, enemy.Position, chainRange)) : null;
                 if (next is not null)
                 {
                     projectile.Chains++;
+                    projectile.StageMultiplier = (skill.ProjectileMechanics ?? ProjectileMechanics.Default)
+                        .AfterChain(projectile.StageMultiplier);
                     projectile.TargetId = next.EntityId;
                     projectile.Position = target.Position;
-                    projectile.Destination = ExtendRay(target.Position, next.Position, ChainRange);
+                    projectile.Destination = ExtendRay(target.Position, next.Position, chainRange);
                 }
                 else Finish();
                 redirected = true; break;
@@ -140,7 +185,8 @@ public sealed partial class SpatialCombatRunner
             }
             bool CanHit(EnemyUnit enemy, bool returning)
             {
-                if ((action.Cohunt || action.Star) && enemy.EntityId == action.PrimaryTarget)
+                if ((action.Cohunt || action.Star || skill.ProjectileMechanics?.SequentialVolley == true) &&
+                    enemy.EntityId == action.PrimaryTarget)
                     return !(returning ? projectile.ReturnHits : projectile.OutboundHits).Contains(enemy.EntityId);
                 return !(returning ? action.ReturnHits : action.OutboundHits).Contains(enemy.EntityId);
             }
@@ -159,7 +205,7 @@ public sealed partial class SpatialCombatRunner
                     else
                     {
                         ResolvedHeroHit? hit = ResolveHeroHit(action.Request, skill, action.Configuration, enemy, hero, random, tick,
-                            action.Origin, ScaleCombatValue(ScaleCombatValue(action.Multiplier, returnMultiplier),
+                            action.Origin, ScaleCombatValue(ScaleCombatValue(ScaleCombatValue(action.Multiplier, returnMultiplier), projectile.StageMultiplier),
                                 enemy.EntityId == action.PrimaryTarget ? projectile.PrimaryMultiplier : 10_000), events,
                             eventKind: kind, chainIndex: projectile.Chains);
                         if (hit is not null)
@@ -170,7 +216,7 @@ public sealed partial class SpatialCombatRunner
                     }
                 });
                 events.Add(Event(tick, SpatialEventKind.SkillEffect, "hero", enemy.EntityId, 0,
-                    projectile.Position, enemy.Position, $"action:{action.Context.Id}|projectile:{(action.Star ? "star" : projectile.Returning ? "return" : "outbound")}|chain:{projectile.Chains}|cohunt:{action.Cohunt}|scale:{projectile.PrimaryMultiplier}"));
+                    projectile.Position, enemy.Position, $"action:{action.Context.Id}|projectile:{(action.Star ? "star" : projectile.Returning ? "return" : "outbound")}|chain:{projectile.Chains}|cohunt:{action.Cohunt}|scale:{ScaleCombatValue(projectile.PrimaryMultiplier, projectile.StageMultiplier)}"));
             }
         }
         foreach (ProjectileAction action in actions.Where(action => !projectiles.Any(projectile => projectile.Action == action)))

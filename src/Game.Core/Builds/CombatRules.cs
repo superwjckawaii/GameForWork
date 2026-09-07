@@ -277,11 +277,12 @@ public static class CombatRules
     }
 
     public static AilmentResult Freeze(int coldHit, int threshold, int increasedDurationBasisPoints = 0,
-        int maximumDurationMilliseconds = 3_000)
+        int maximumDurationMilliseconds = 3_000, int minimumDurationMilliseconds = 300)
     {
         int duration = checked((int)(3_000d * Math.Pow(Math.Max(0, coldHit) / (double)Math.Max(1, threshold), .4d)));
         duration = ApplyIncreased(duration, increasedDurationBasisPoints);
-        return duration < 300 ? default : new(10_000, Math.Min(maximumDurationMilliseconds, duration));
+        if (duration <= 0 || duration < minimumDurationMilliseconds) return default;
+        return new(10_000, Math.Min(maximumDurationMilliseconds, Math.Max(300, duration)));
     }
 
     public static AilmentResult Shock(int lightningHit, int threshold, int maximumEffectBasisPoints = 5_000, int increasedEffectBasisPoints = 0)

@@ -2,7 +2,7 @@
 param([string]$RepositoryRoot = (Split-Path -Parent $PSScriptRoot))
 $ErrorActionPreference = 'Stop'
 $pattern = '(?i)(?<![a-z0-9])p(?:0|[1-9][0-9]?)(?![0-9])|(?-i:P)(?:0|[1-9][0-9]?)(?![0-9])|[pP][xX]{2}'
-$textExtensions = '.cs','.csproj','.sln','.md','.txt','.json','.ps1','.py','.yml','.yaml','.toml','.cfg','.godot','.tscn','.tres','.uid','.import'
+$textExtensions = '.cs','.csproj','.sln','.md','.txt','.json','.ps1','.py','.yml','.yaml','.toml','.cfg','.godot','.gdignore','.tscn','.tres','.uid','.import'
 $paths = @(& git -C $RepositoryRoot -c core.quotepath=false ls-files --cached --others --exclude-standard | Sort-Object -Unique)
 if ($LASTEXITCODE -ne 0) { throw 'Unable to enumerate repository files.' }
 $checked = 0

@@ -27,8 +27,11 @@ public sealed partial class SpatialCombatRunner
                 var hit = recorded with { Origin = origin };
                 if (!assigned.TryGetValue(hit.TargetId, out var selected))
                 {
+                    var passives = hit.Build.PassiveProfile ?? Campaign.Progression.PassiveModifiers.Empty;
+                    int repeatRange = AreaRules.EngagementRange(hit.Skill) +
+                        (copy.RepeatCount > 0 && MasteryRuntime.Has(passives, "重复_引导", 2) ? 3_000 : 0);
                     selected = enemies.Where(enemy => enemy.Life > 0 && !assigned.ContainsValue(enemy) &&
-                            InRange(origin, enemy.Position, AreaRules.EngagementRange(hit.Skill)))
+                            InRange(origin, enemy.Position, repeatRange))
                         .OrderBy(enemy => enemy.EntityId != hit.TargetId).ThenBy(enemy => Point.DistanceSquared(origin, enemy.Position))
                         .ThenBy(enemy => enemy.EntityId, StringComparer.Ordinal).FirstOrDefault();
                     if (selected is not null) assigned[hit.TargetId] = selected;
@@ -59,6 +62,14 @@ public sealed partial class SpatialCombatRunner
                         continue;
                     }
                     int multiplier = copy.Multiplier;
+                    if (copy.RepeatCount > 0)
+                        multiplier = ScaleCombatValue(multiplier, ActionMasteryRules.RepeatDamageMultiplier(
+                            hit.Build.PassiveProfile ?? Campaign.Progression.PassiveModifiers.Empty,
+                            copy.RepeatIndex, copy.RepeatCount));
+                    if (copy.RepeatCount > 0 && selected?.EntityId != hit.TargetId &&
+                        request.Actions.TryRetargetBonus(copy.Action.Id, hit.TargetId, selected?.EntityId ?? "",
+                            hit.Build.PassiveProfile ?? Campaign.Progression.PassiveModifiers.Empty))
+                        multiplier = ScaleCombatValue(multiplier, 13_000);
                     if (area)
                         multiplier = (int)((long)multiplier * AreaRules.PositionMultiplier(hit.Build.PassiveProfile ?? Campaign.Progression.PassiveModifiers.Empty,
                             (int)Math.Sqrt(Point.DistanceSquared(origin, enemy.Position)), hit.Skill.AreaRadiusRaw) / hit.AreaPositionMultiplier);
@@ -115,7 +126,7 @@ public sealed partial class SpatialCombatRunner
                     {
                         request.EquipmentRuntime.InAction(context, () => ApplyHeroDamage(request with { Build = hit.Build }, hit.Skill,
                             hit.Configuration, enemy, hero, random, tick, hit.Origin, damage, critical, events,
-                            ailmentSource: hit.AilmentSource.Select(branch => branch with { BaseDamage = ScaleCombatValue(branch.BaseDamage, copy.Multiplier) }).ToArray()));
+                            ailmentSource: hit.AilmentSource.Select(branch => branch with { BaseDamage = ScaleCombatValue(branch.BaseDamage, multiplier) }).ToArray()));
                         replayed.Add(hit with { TargetId = enemy.EntityId });
                     }
                     events.Add(Event(tick, SpatialEventKind.SkillEffect, copy.Source, enemy.EntityId, damage.Total, hit.Origin, enemy.Position,

@@ -38,7 +38,8 @@ public sealed record ResolvedSkill(
     bool ExplodesOnKill = false,
     bool OverloadRepeatsEveryThirdUse = false,
     int TemperanceLevelPerLayer = 0,
-    int TemperanceQualityPerLayer = 0, int BaseAreaRadiusRaw = 0, int AreaMoreBasisPoints = 10_000, int AreaIncreasedBasisPoints = 0, bool AlwaysHit = false, SkillTag AdditionalTags = SkillTag.None, int AdditionalAttackSpeedBasisPoints = 0, int AdditionalCastSpeedBasisPoints = 0)
+    int TemperanceQualityPerLayer = 0, int BaseAreaRadiusRaw = 0, int AreaMoreBasisPoints = 10_000, int AreaIncreasedBasisPoints = 0, bool AlwaysHit = false, SkillTag AdditionalTags = SkillTag.None, int AdditionalAttackSpeedBasisPoints = 0, int AdditionalCastSpeedBasisPoints = 0,
+    ProjectileMechanics? ProjectileMechanics = null)
 {
     public int AreaMultiplierBasisPoints => Math.Max(2_500, CombatRules.ApplyMore(Math.Max(0, 10_000 + AreaIncreasedBasisPoints), [AreaMoreBasisPoints]));
     public int AreaRadiusRaw => AreaRules.Radius(BaseAreaRadiusRaw > 0 ? BaseAreaRadiusRaw : RangeRaw, AreaMultiplierBasisPoints);
@@ -64,7 +65,7 @@ public static class CombatSkillRules
         int bleed = 0;
         int projectiles = 1;
         int projectileSpeed = 10_000;
-        int chains = configuration.Supports.HasFlag(SkillSupport.Chain) ? 3 : 0;
+        int chains = 0;
         int leech = 0;
         int executeThreshold = 0;
         int execute = 10_000;
@@ -154,8 +155,14 @@ public static class CombatSkillRules
             (10_000 - ActiveSkillCatalog.Interpolate(3_000, 2_000, SupportLink(configuration, SkillSupport.CastWhenDamaged).Level, false)) / 10_000);
         if (LinkedSupportRules.Support(configuration, SupportMechanic.AttackTrigger)) damage = checked(damage *
             (10_000 - LinkedSupportRules.SupportValue(configuration, SupportMechanic.AttackTrigger, 4_000, 2_500)) / 10_000);
-        if (configuration.Supports.HasFlag(SkillSupport.Pierce)) pierce += 2;
-        if (configuration.Supports.HasFlag(SkillSupport.Fork)) fork += 2;
+        if (configuration.Supports.HasFlag(SkillSupport.Chain))
+        {
+            chains += SupportValue(configuration, SkillSupport.Chain);
+            damage = checked(damage * (10_000 - ActiveSkillCatalog.Interpolate(2_500, 1_500,
+                SupportLink(configuration, SkillSupport.Chain).Level, false)) / 10_000);
+        }
+        if (configuration.Supports.HasFlag(SkillSupport.Pierce)) pierce += SupportValue(configuration, SkillSupport.Pierce);
+        if (configuration.Supports.HasFlag(SkillSupport.Fork)) fork += SupportValue(configuration, SkillSupport.Fork);
         if (configuration.Supports.HasFlag(SkillSupport.Return)) returns = true;
         SupportProfile archetypes = SupportRules.Resolve(configuration.ExtendedSupports);
         damage = checked(damage * archetypes.DamageMultiplierBasisPoints / 10_000);
@@ -171,11 +178,36 @@ public static class CombatSkillRules
         mana = checked((mana * buildsSupports.ResourceMultiplierBasisPoints + 9_999) / 10_000);
         life = checked((life * buildsSupports.ResourceMultiplierBasisPoints + 9_999) / 10_000);
         passive ??= PassiveModifiers.Empty;
+        ProjectileMechanics projectileMechanics = ProjectileMasteryRules.Resolve(passive);
+        if (definition.Tags.HasFlag(SkillTag.Projectile))
+        {
+            int pierceStep = configuration.Supports.HasFlag(SkillSupport.Pierce)
+                ? SupportLink(configuration, SkillSupport.Pierce).Quality >= 20 ? 9_400 : 9_200 : 10_000;
+            int forkStep = configuration.Supports.HasFlag(SkillSupport.Fork)
+                ? SupportLink(configuration, SkillSupport.Fork).Quality >= 20 ? 8_500 : 10_000 - ActiveSkillCatalog.Interpolate(3_000, 2_000,
+                    SupportLink(configuration, SkillSupport.Fork).Level, false) : 10_000;
+            int returnStep = configuration.Supports.HasFlag(SkillSupport.Return)
+                ? 10_000 - SupportValue(configuration, SkillSupport.Return) * 100 : 10_000;
+            projectileMechanics = projectileMechanics with
+            {
+                PierceStepMultiplierBasisPoints = Compose(projectileMechanics.PierceStepMultiplierBasisPoints, pierceStep),
+                ForkMultiplierBasisPoints = Compose(projectileMechanics.ForkMultiplierBasisPoints, forkStep),
+                ReturnMultiplierBasisPoints = Compose(projectileMechanics.ReturnMultiplierBasisPoints, returnStep),
+            };
+            projectileSpeed = checked(projectileSpeed * projectileMechanics.SpeedMultiplierBasisPoints / 10_000);
+            damage = checked(damage * projectileMechanics.HitMultiplierBasisPoints / 10_000);
+            if (projectileMechanics.InfinitePierce) pierce = int.MaxValue;
+            fork = Math.Max(fork, projectileMechanics.ForkCount);
+            chains = checked(chains + projectileMechanics.AdditionalChains);
+            returns |= projectileMechanics.Returns;
+        }
         mana = Math.Max(0, checked(mana * Math.Max(0, 10_000 - passive.ReducedSkillCostBasisPoints) / 10_000));
         mana = MasteryRuntime.ManaCost(passive, definition.Tags, mana);
         life = Math.Max(0, checked(life * Math.Max(0, 10_000 - passive.ReducedSkillCostBasisPoints) / 10_000));
         range = Math.Max(1, checked(range * (10_000 + passive.IncreasedSkillRangeBasisPoints) / 10_000));
         cooldown = Math.Max(1, checked(cooldown * 10_000 / Math.Max(1, 10_000 + passive.IncreasedCooldownRecoveryBasisPoints)));
+        if (cooldown > 1 && MasteryRuntime.Has(passive, "触发_冷却", 4))
+            cooldown = Math.Max(2, checked(cooldown * 13_000 / 10_000));
         ailmentChance = Math.Clamp(ailmentChance + (active.Ailment == Ailment.Bleed ? bleed : 0), 0, 10_000);
         return new ResolvedSkill(configuration.SkillId, mana, life, range, castTime, cooldown,
             damage, bleed, projectiles, projectileSpeed, chains, leech, executeThreshold, execute, nonExecute,
@@ -187,7 +219,8 @@ public static class CombatSkillRules
             AdditionalTags: active.Role == SkillRole.Counter ? SkillTag.Counter : SkillTag.None,
             AdditionalAttackSpeedBasisPoints: SupportSpeed(configuration, SkillSupport.AttackSpeed, SkillTag.Attack) +
                 (UnarmedRules.IsSkill(configuration.SkillId) ? LinkedSupportRules.SupportValue(configuration, SupportMechanic.UnarmedFocus, 1_000, 2_000) : 0),
-            AdditionalCastSpeedBasisPoints: SupportSpeed(configuration, SkillSupport.FasterCasting, SkillTag.Spell));
+            AdditionalCastSpeedBasisPoints: SupportSpeed(configuration, SkillSupport.FasterCasting, SkillTag.Spell),
+            ProjectileMechanics: projectileMechanics);
     }
 
     public static bool TryPay(ResourceState resources, ResolvedSkill skill, bool allowOvercharge = true, bool selfCast = true) =>
@@ -312,8 +345,13 @@ public static class CombatSkillRules
         configuration.Supports.HasFlag(support) && SkillDefinitions.Get(configuration.SkillId).Tags.HasFlag(tag)
             ? SupportValue(configuration, support) * 100 + SupportLink(configuration, support).Quality * 50 : 0;
 
-    public static int ActionDelay(TeamBuild build, ResolvedSkill skill, SkillTag tags) =>
-        ActionDelay(build, skill.CastTimeTicks, tags, skill.AdditionalAttackSpeedBasisPoints, skill.AdditionalCastSpeedBasisPoints);
+    public static int ActionDelay(TeamBuild build, ResolvedSkill skill, SkillTag tags)
+    {
+        int delay = ActionDelay(build, skill.CastTimeTicks, tags, skill.AdditionalAttackSpeedBasisPoints, skill.AdditionalCastSpeedBasisPoints);
+        if (skill.ProjectileMechanics?.SequentialVolley == true && skill.ProjectileCount > 1)
+            delay = checked(delay + Math.Max(1, delay * 15 / 100) * (skill.ProjectileCount - 1));
+        return delay;
+    }
 
     public static int ActionDelay(TeamBuild build, int baseTicks, SkillTag tags, int additionalAttackSpeed = 0, int additionalCastSpeed = 0)
     {
@@ -345,6 +383,15 @@ public static class CombatSkillRules
         return frequency;
     }
 
+    public static int ActionFrequencyMilliPerSecond(TeamBuild build, ResolvedSkill skill, SkillTag tags)
+    {
+        int frequency = ActionFrequencyMilliPerSecond(build, skill.CastTimeTicks, skill.CooldownTicks, tags,
+            skill.AdditionalAttackSpeedBasisPoints, skill.AdditionalCastSpeedBasisPoints);
+        if (skill.ProjectileMechanics?.SequentialVolley == true && skill.ProjectileCount > 1)
+            frequency = checked(frequency * 100 / (100 + 15 * (skill.ProjectileCount - 1)));
+        return frequency;
+    }
+
     public static LinkedSupport SupportLink(SkillConfiguration configuration, SkillSupport support)
     {
         var definition = ActiveSkillCatalog.SupportFor(support);
@@ -358,6 +405,8 @@ public static class CombatSkillRules
     }
 
     private static int More(int basisPoints, int percent) => checked(basisPoints * (10_000 + percent * 100) / 10_000);
+
+    private static int Compose(int left, int right) => checked(left * right / 10_000);
 
     private static long Scale(long value, long basisPoints)
     {
