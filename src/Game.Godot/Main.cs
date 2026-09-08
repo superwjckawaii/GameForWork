@@ -5,6 +5,8 @@ using GameForWork.Core.Campaign;
 using GameForWork.Core.Campaign.World;
 using GameForWork.Core.Persistence;
 using GameForWork.Core.Characters;
+using GameForWork.Core.Campaign.Progression;
+using GameForWork.Core.Ascendancies;
 using Godot;
 
 namespace GameForWork.GodotClient;
@@ -33,6 +35,7 @@ public partial class Main : Node
     private Button? _largeWindowButton;
     private CheckButton? _alwaysOnTopToggle;
     private Label? _characterHeaderLabel;
+    private ProgressBar? _characterExperienceBar;
     private Label? _goldLabel;
     private Label? _noticeLabel;
     private ConfirmationDialog? _closeDialog;
@@ -431,8 +434,17 @@ public partial class Main : Node
             SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
         };
         statusBar.AddThemeConstantOverride("separation", 5);
+        var characterInfo = new VBoxContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+        characterInfo.AddThemeConstantOverride("separation", 1);
         _characterHeaderLabel = new Label { Text = "尚未创建角色", SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
-        statusBar.AddChild(_characterHeaderLabel);
+        _characterHeaderLabel.AddThemeFontSizeOverride("font_size", 17);
+        _characterHeaderLabel.AddThemeColorOverride("font_color", new Color("f6d486"));
+        characterInfo.AddChild(_characterHeaderLabel);
+        _characterExperienceBar = new ProgressBar { MinValue = 0, MaxValue = 1, Value = 0, ShowPercentage = false, CustomMinimumSize = new Vector2(250, 7), SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+        _characterExperienceBar.AddThemeStyleboxOverride("background", new StyleBoxFlat { BgColor = new Color("172330") });
+        _characterExperienceBar.AddThemeStyleboxOverride("fill", new StyleBoxFlat { BgColor = new Color("55c7d1") });
+        characterInfo.AddChild(_characterExperienceBar);
+        statusBar.AddChild(characterInfo);
         statusBar.AddChild(new PixelGoldIcon());
         _goldLabel = new Label { Text = "金币 0" };
         statusBar.AddChild(_goldLabel);
@@ -674,9 +686,21 @@ public partial class Main : Node
             _displayedGold = gold;
             _goldLabel.Text = $"金币 {gold:N0}";
         }
-        _characterHeaderLabel!.Text = _session is null
-            ? "尚未创建角色"
-            : $"{_session.Player.Name} · Lv.{_session.World.Hero.Progression.Level} · {ClassCatalog.Get(_session.Player.BaseClass).DisplayName}";
+        if (_session is null)
+        {
+            _characterHeaderLabel!.Text = "尚未创建角色";
+            _characterExperienceBar!.Value = 0;
+        }
+        else
+        {
+            var progression = _session.World.Hero.Progression;
+            string ascendancy = _session.Endgame.SelectedAscendancy == Ascendancy.None ? "未升华" : AscendancyCatalog.DisplayName(_session.Endgame.SelectedAscendancy);
+            _characterHeaderLabel!.Text = $"{_session.Player.Name}  ·  Lv.{progression.Level}  ·  {ascendancy}  ·  {ClassCatalog.Get(_session.Player.BaseClass).DisplayName}";
+            double current = CharacterProgression.CumulativeExperienceForLevel(progression.Level);
+            double next = progression.Level >= progression.LevelCap ? current + 1 : CharacterProgression.CumulativeExperienceForLevel(progression.Level + 1);
+            _characterExperienceBar!.Value = progression.Level >= progression.LevelCap ? 1 : Math.Clamp((progression.Experience - current) / Math.Max(1, next - current), 0, 1);
+            _characterExperienceBar.TooltipText = progression.Level >= progression.LevelCap ? "已达到当前等级上限" : $"经验 {progression.Experience - current:N0} / {next - current:N0}";
+        }
     }
 
     private void ToggleLargeWindow()
@@ -1171,3 +1195,4 @@ public partial class Main : Node
         parent.AddChild(button);
     }
 }
+
