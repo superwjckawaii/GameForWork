@@ -24,12 +24,12 @@ public partial class ToastOverlay : CanvasLayer
         _panel.Position = new Vector2(-346, -70);
         _panel.AddThemeStyleboxOverride("panel", new StyleBoxFlat
         {
-            BgColor = new Color("151a22ee"),
-            BorderColor = new Color("c08b46"),
-            BorderWidthLeft = 2,
-            BorderWidthTop = 2,
-            BorderWidthRight = 2,
-            BorderWidthBottom = 2,
+            BgColor = new Color("182330f5"),
+            BorderColor = new Color("c3a56d"),
+            BorderWidthLeft = 3,
+            BorderWidthTop = 1,
+            BorderWidthRight = 1,
+            BorderWidthBottom = 1,
             ContentMarginLeft = 10,
             ContentMarginRight = 10,
             ContentMarginTop = 7,
@@ -48,6 +48,7 @@ public partial class ToastOverlay : CanvasLayer
         }
 
         _remaining -= delta;
+        _panel.Modulate = new Color(1, 1, 1, (float)Math.Clamp(_remaining / 0.25, 0, 1));
         if (_remaining <= 0)
         {
             _panel.Visible = false;
@@ -63,6 +64,7 @@ public partial class ToastOverlay : CanvasLayer
 
         _label.Text = $"◆ {message}";
         _remaining = seconds;
+        _panel.Modulate = Colors.White;
         _panel.Visible = true;
     }
 }

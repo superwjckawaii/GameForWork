@@ -26,8 +26,8 @@ public partial class PixelTitleBar : PanelContainer
         CustomMinimumSize = new Vector2(0, 30);
         AddThemeStyleboxOverride("panel", new StyleBoxFlat
         {
-            BgColor = new Color("171b24"),
-            BorderColor = new Color("8f7043"),
+            BgColor = new Color("101925"),
+            BorderColor = new Color("536375"),
             BorderWidthBottom = 2,
             ContentMarginLeft = 3,
             ContentMarginRight = 3,

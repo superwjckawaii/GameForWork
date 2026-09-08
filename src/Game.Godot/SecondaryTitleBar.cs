@@ -21,8 +21,8 @@ public partial class SecondaryTitleBar : PanelContainer
         CustomMinimumSize = new Vector2(0, 32);
         AddThemeStyleboxOverride("panel", new StyleBoxFlat
         {
-            BgColor = new Color("171b24"),
-            BorderColor = new Color("8f7043"),
+            BgColor = new Color("101925"),
+            BorderColor = new Color("536375"),
             BorderWidthBottom = 2,
             ContentMarginLeft = 5,
             ContentMarginRight = 3,

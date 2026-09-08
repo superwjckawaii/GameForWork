@@ -100,6 +100,7 @@ public partial class Main : Node
             : Path.Combine(userDirectory, "saves");
         TryInitializeSave(_activeSlot);
         BuildInterface();
+        AddChild(new InterfaceFeedback());
 
         if (headlessRun)
         {
@@ -308,6 +309,9 @@ public partial class Main : Node
 
     private void BuildInterface()
     {
+        var backdrop = new ColorRect { Color = new Color("0d1520"), MouseFilter = Control.MouseFilterEnum.Ignore };
+        backdrop.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
+        AddChild(backdrop);
         var root = new VBoxContainer();
         root.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
         root.AddThemeConstantOverride("separation", 6);
@@ -437,7 +441,7 @@ public partial class Main : Node
 
         _noticeLabel = new Label
         {
-            Text = "主线与构筑管理 · 20 Hz 确定性模拟 / 60 FPS 画面",
+            Text = "远征指挥台 · 旅程、构筑与战利品",
             AutowrapMode = TextServer.AutowrapMode.WordSmart,
         };
         root.AddChild(_noticeLabel);

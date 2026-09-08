@@ -6,89 +6,92 @@ public static class ThemeFactory
 {
     public static Theme Create(int fontScalePercent)
     {
-        int fontSize = (int)Math.Round(14 * Math.Clamp(fontScalePercent, 80, 150) / 100d);
-        var theme = new Theme { DefaultFontSize = fontSize };
-        const string skinPath = "res://assets/art/ui/art-ui-skin.png";
-        Texture2D? skin = ResourceLoader.Exists(skinPath) ? GD.Load<Texture2D>(skinPath) : null;
-        theme.SetColor("font_color", "Label", new Color("ddd5c7"));
-        theme.SetColor("font_color", "Button", new Color("e6dece"));
-        theme.SetColor("font_hover_color", "Button", new Color("fff0c6"));
-        theme.SetColor("font_pressed_color", "Button", new Color("fff0c6"));
-        theme.SetColor("font_disabled_color", "Button", new Color("736f69"));
-        StyleBox buttonNormal = skin is null ? Frame("202630", "4d5662", 1) : PixelFrame(skin, 1);
-        StyleBox buttonHover = skin is null ? Frame("2b333e", "c09a55", 2) : PixelFrame(skin, 2);
-        StyleBox buttonPressed = skin is null ? Frame("171c24", "e0bd72", 2) : PixelFrame(skin, 3);
-        StyleBox buttonDisabled = skin is null ? Frame("151920", "343a43", 1) : PixelFrame(skin, 4);
-        StyleBox input = skin is null ? Frame("12171e", "505966", 1) : PixelFrame(skin, 5);
-        StyleBox panel = skin is null ? Frame("151a22", "3f4752", 1) : PixelFrame(skin, 0);
-        StyleBox accentPanel = skin is null ? Frame("11161d", "3f4752", 1) : PixelFrame(skin, 6);
-        theme.SetStylebox("normal", "Button", buttonNormal);
-        theme.SetStylebox("hover", "Button", buttonHover);
-        theme.SetStylebox("pressed", "Button", buttonPressed);
-        theme.SetStylebox("disabled", "Button", buttonDisabled);
-        theme.SetStylebox("normal", "LineEdit", input);
-        theme.SetStylebox("focus", "LineEdit", skin is null ? Frame("171d26", "c09a55", 2) : PixelFrame(skin, 7));
-        theme.SetStylebox("panel", "PanelContainer", panel);
-        theme.SetStylebox("panel", "TabContainer", accentPanel);
-        theme.SetStylebox("panel", "PopupPanel", skin is null ? Frame("10151c", "c09a55", 2) : PixelFrame(skin, 7));
-        theme.SetStylebox("panel", "TooltipPanel", skin is null ? Frame("10151c", "c09a55", 2) : PixelFrame(skin, 7));
-        theme.SetStylebox("panel", "PopupMenu", skin is null ? Frame("10151c", "c09a55", 2) : PixelFrame(skin, 7));
-        theme.SetStylebox("hover", "PopupMenu", buttonHover);
-        theme.SetStylebox("separator", "PopupMenu", new StyleBoxLine
+        int size = (int)Math.Round(14 * Math.Clamp(fontScalePercent, 80, 150) / 100d);
+        var theme = new Theme { DefaultFontSize = size };
+        foreach (string type in new[] { "Label", "RichTextLabel", "Button", "OptionButton", "CheckBox", "CheckButton", "LineEdit", "TextEdit", "PopupMenu", "Tree", "ItemList", "TabBar" })
         {
-            Color = new Color("4d5662"),
-            Thickness = 1,
-            GrowBegin = -4,
-            GrowEnd = -4,
-        });
-        theme.SetColor("font_color", "PopupMenu", new Color("ddd5c7"));
-        theme.SetColor("font_hover_color", "PopupMenu", new Color("fff0c6"));
-        theme.SetColor("font_disabled_color", "PopupMenu", new Color("736f69"));
-        theme.SetConstant("item_start_padding", "PopupMenu", 8);
-        theme.SetConstant("item_end_padding", "PopupMenu", 8);
-        theme.SetStylebox("tab_selected", "TabBar", skin is null ? Frame("202630", "c09a55", 2) : PixelFrame(skin, 6));
-        theme.SetStylebox("tab_unselected", "TabBar", buttonNormal);
-        theme.SetStylebox("tab_hovered", "TabBar", buttonHover);
-        theme.SetConstant("outline_size", "Label", 1);
-        theme.SetColor("font_outline_color", "Label", new Color("090b0f"));
+            theme.SetColor("font_color", type, new Color("e0e5e8"));
+            theme.SetColor("font_disabled_color", type, new Color("78828d"));
+            theme.SetColor("font_hover_color", type, new Color("fff0cf"));
+            theme.SetColor("font_pressed_color", type, new Color("f4d69c"));
+            theme.SetColor("font_focus_color", type, new Color("fff0cf"));
+        }
+        foreach (string type in new[] { "Button", "OptionButton" })
+        {
+            theme.SetStylebox("normal", type, Frame("202b38", "3a4858"));
+            theme.SetStylebox("hover", type, Frame("2b3948", "b59a69"));
+            theme.SetStylebox("pressed", type, Frame("303b44", "d6b678", accent: true));
+            theme.SetStylebox("hover_pressed", type, Frame("394650", "e3c993", accent: true));
+            theme.SetStylebox("disabled", type, Frame("171e27", "2a3440"));
+            theme.SetStylebox("focus", type, Focus());
+            theme.SetConstant("h_separation", type, 7);
+        }
+        foreach (string type in new[] { "LineEdit", "TextEdit" })
+        {
+            theme.SetStylebox("normal", type, Frame("0e1620", "344253"));
+            theme.SetStylebox("read_only", type, Frame("121b25", "273341"));
+            theme.SetStylebox("focus", type, Focus());
+            theme.SetColor("caret_color", type, new Color("e3c993"));
+            theme.SetColor("selection_color", type, new Color("425675"));
+        }
+        theme.SetStylebox("panel", "PanelContainer", Frame("161f2b", "303d4c", shadow: 3));
+        theme.SetStylebox("panel", "TabContainer", Frame("121b26", "344253"));
+        foreach (string type in new[] { "PopupPanel", "PopupMenu", "TooltipPanel", "AcceptDialog" })
+            theme.SetStylebox("panel", type, Frame("182330", "8c7b5b", shadow: 8));
+        theme.SetStylebox("hover", "PopupMenu", Frame("304050", "304050"));
+        theme.SetConstant("v_separation", "PopupMenu", 7);
+        theme.SetConstant("item_start_padding", "PopupMenu", 10);
+        theme.SetConstant("item_end_padding", "PopupMenu", 10);
+        theme.SetStylebox("tab_selected", "TabBar", Frame("263442", "c3a56d", accent: true));
+        theme.SetStylebox("tab_unselected", "TabBar", Frame("131d29", "273341"));
+        theme.SetStylebox("tab_hovered", "TabBar", Frame("202e3d", "63758a"));
+        theme.SetStylebox("tab_disabled", "TabBar", Frame("101721", "222e3b"));
+        theme.SetStylebox("tab_focus", "TabBar", Focus());
+        theme.SetColor("font_selected_color", "TabBar", new Color("f4d69c"));
+        theme.SetColor("font_unselected_color", "TabBar", new Color("a5b2c1"));
+        theme.SetStylebox("background", "ProgressBar", Frame("0d1520", "2c3a4b", padding: 0));
+        theme.SetStylebox("fill", "ProgressBar", Frame("668b99", "88b1b5", padding: 0));
+        foreach (string type in new[] { "HScrollBar", "VScrollBar" })
+        {
+            theme.SetStylebox("scroll", type, Frame("101822", "101822", padding: 3));
+            theme.SetStylebox("grabber", type, Frame("425267", "425267", padding: 3));
+            theme.SetStylebox("grabber_highlight", type, Frame("718298", "718298", padding: 3));
+            theme.SetStylebox("grabber_pressed", type, Frame("b59a69", "b59a69", padding: 3));
+        }
+        foreach (string type in new[] { "Tree", "ItemList" })
+        {
+            theme.SetStylebox("panel", type, Frame("101924", "303d4c"));
+            theme.SetStylebox("selected", type, Frame("304354", "708894"));
+            theme.SetStylebox("selected_focus", type, Frame("304354", "c3a56d"));
+        }
+        foreach (string type in new[] { "HSeparator", "VSeparator", "PopupMenu" })
+            theme.SetStylebox("separator", type, new StyleBoxLine { Color = new Color("354252"), Thickness = 1, Vertical = type == "VSeparator" });
+        theme.SetConstant("separation", "VBoxContainer", 7);
+        theme.SetConstant("separation", "HBoxContainer", 7);
+        theme.SetConstant("h_separation", "GridContainer", 7);
+        theme.SetConstant("v_separation", "GridContainer", 7);
+        theme.SetConstant("outline_size", "Label", 0);
+        foreach (string key in new[] { "tab_selected", "tab_unselected", "tab_hovered", "tab_disabled", "tab_focus" })
+            theme.SetStylebox(key, "TabContainer", theme.GetStylebox(key, "TabBar"));
+        theme.SetColor("font_selected_color", "TabContainer", new Color("f4d69c"));
+        theme.SetColor("font_unselected_color", "TabContainer", new Color("a5b2c1"));
         return theme;
     }
 
-    private static StyleBoxTexture PixelFrame(Texture2D texture, int index)
+    private static StyleBoxFlat Focus() => new()
     {
-        var style = new StyleBoxTexture
-        {
-            Texture = texture,
-            RegionRect = new Rect2(index % 4 * 64, index / 4 * 32, 64, 32),
-            TextureMarginLeft = 7,
-            TextureMarginTop = 7,
-            TextureMarginRight = 7,
-            TextureMarginBottom = 7,
-            AxisStretchHorizontal = StyleBoxTexture.AxisStretchMode.TileFit,
-            AxisStretchVertical = StyleBoxTexture.AxisStretchMode.TileFit,
-        };
-        style.SetContentMargin(Side.Left, 7);
-        style.SetContentMargin(Side.Top, 5);
-        style.SetContentMargin(Side.Right, 7);
-        style.SetContentMargin(Side.Bottom, 5);
-        return style;
-    }
+        DrawCenter = false, BorderColor = new Color("e3c993"),
+        BorderWidthLeft = 1, BorderWidthTop = 1, BorderWidthRight = 1, BorderWidthBottom = 1,
+        ExpandMarginLeft = 1, ExpandMarginRight = 1, ExpandMarginTop = 1, ExpandMarginBottom = 1
+    };
 
-    private static StyleBoxFlat Frame(string background, string border, int width) => new()
+    private static StyleBoxFlat Frame(string background, string border, int padding = 7, int shadow = 0, bool accent = false) => new()
     {
-        BgColor = new Color(background),
-        BorderColor = new Color(border),
-        BorderWidthLeft = width,
-        BorderWidthTop = width,
-        BorderWidthRight = width,
-        BorderWidthBottom = width,
-        CornerRadiusTopLeft = 1,
-        CornerRadiusTopRight = 1,
-        CornerRadiusBottomLeft = 1,
-        CornerRadiusBottomRight = 1,
-        ContentMarginLeft = 6,
-        ContentMarginTop = 4,
-        ContentMarginRight = 6,
-        ContentMarginBottom = 4,
+        BgColor = new Color(background), BorderColor = new Color(border),
+        BorderWidthLeft = 1, BorderWidthTop = 1, BorderWidthRight = 1, BorderWidthBottom = accent ? 2 : 1,
+        CornerRadiusTopLeft = 2, CornerRadiusTopRight = 2, CornerRadiusBottomLeft = 2, CornerRadiusBottomRight = 2,
+        AntiAliasing = false, ShadowColor = new Color(0.02f, 0.035f, 0.06f, 0.35f), ShadowSize = shadow,
+        ShadowOffset = new Vector2(0, shadow > 0 ? 2 : 0),
+        ContentMarginLeft = padding, ContentMarginRight = padding, ContentMarginTop = padding == 0 ? 0 : 5, ContentMarginBottom = padding == 0 ? 0 : 5
     };
 }

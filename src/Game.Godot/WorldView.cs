@@ -69,6 +69,7 @@ public partial class WorldView : Control
 
     public override void _Ready()
     {
+        ClipContents = true;
         MouseFilter = MouseFilterEnum.Ignore;
         _townBackground = LoadOptional("res://assets/art/town/art-town-district.png");
         _combatBackground = LoadOptional("res://assets/art/regions/act-1.png");
