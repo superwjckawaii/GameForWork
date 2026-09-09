@@ -607,6 +607,7 @@ public partial class WorldView : Control
                         size * (.72f + secondAge * .45f), -secondAge * .8f);
                 }
                 DrawHitAccent(item, target, age);
+                DrawTriggeredSupportFeedback(item, source, target, age);
             }
             else if (item.Kind == SceneEventKind.BossPhase && age < .9f)
             {
@@ -846,6 +847,19 @@ public partial class WorldView : Control
         float alpha = Math.Clamp(1 - age, 0, 1);
         DrawLine(center - new Vector2(8, 0), center + new Vector2(8, 0), new Color(1, .92f, .55f, alpha), 2);
         DrawLine(center - new Vector2(0, 8), center + new Vector2(0, 8), new Color(1, .92f, .55f, alpha), 2);
+    }
+
+    private void DrawTriggeredSupportFeedback(SceneEvent item, Vector2 source, Vector2 target, float age)
+    {
+        float alpha = Math.Clamp(1 - age, 0, 1);
+        if (item.Detail.Contains("|counter", StringComparison.Ordinal))
+            DrawArc(source, 18 + age * 8, 0, MathF.Tau, 18, new Color(1f, .55f, .25f, alpha), 2);
+        if (item.Kind == SceneEventKind.Ailment)
+            DrawCircle(target + new Vector2(0, age * 10), 4, new Color(.48f, .92f, .3f, alpha));
+        if (item.Kind == SceneEventKind.Block or SceneEventKind.Guard)
+            DrawArc(source, 16, 0, MathF.Tau, 18, new Color(.35f, .8f, 1f, alpha), 2);
+        if (item.Detail.Contains("召唤", StringComparison.Ordinal))
+            DrawArc(target, 18 + age * 16, 0, MathF.Tau, 24, new Color(.42f, 1f, .82f, alpha), 2);
     }
 
     private void DrawCombatFeedback(Rect2 field, IReadOnlyDictionary<string, Vector2> positions,
@@ -1186,6 +1200,7 @@ public partial class WorldView : Control
             DrawPresentationVfx(visual.AtlasCell, center, size,
                 visual.UsesSourceToTarget ? actor.AngleToPoint(enemy) : 0);
             DrawHitAccent(item, enemy, age);
+            DrawTriggeredSupportFeedback(item, actor, enemy, age);
         }
     }
 
