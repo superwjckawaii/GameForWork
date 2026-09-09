@@ -188,11 +188,11 @@ public sealed class EquipmentLoadout
                 AddGlobal(sums, effect.Kind, effect.Value, effect.Scope);
             foreach (RolledAffixComponent effect in item.CorruptionComponents)
                 AddGlobal(sums, effect.Kind, effect.Value, effect.Scope);
-            if (item.Enchantment is not null)
+            foreach (ItemEnchantment enchantment in item.AllEnchantments)
             {
-            foreach (AffixModifierComponent effect in item.Enchantment.EffectComponents)
-                AddGlobal(sums, effect.Kind, effect.MinimumValue, effect.Scope);
-                if (item.Enchantment.DisplayName == "不灭王印")
+            foreach (AffixModifierComponent effect in enchantment.EffectComponents)
+                AddGlobal(sums, effect.Kind, EnchantmentValue(item, effect.MinimumValue), effect.Scope);
+                if (enchantment.DisplayName == "不灭王印")
                     sums[(int)ItemModifierKind.FlatMaximumLife] = checked(sums[(int)ItemModifierKind.FlatMaximumLife] +
                         EquipmentRuleEngine.ImmortalMaximumLife(LocalDefense(item, item.EffectiveBaseArmor,
                             ItemModifierKind.FlatArmor, ItemModifierKind.IncreasedArmorBasisPoints)));
@@ -279,7 +279,7 @@ public sealed class EquipmentLoadout
         LocalDamageRange fire = LocalElementalRange(item, ItemModifierKind.AddedMinimumFireDamage, ItemModifierKind.AddedMaximumFireDamage);
         LocalDamageRange cold = LocalElementalRange(item, ItemModifierKind.AddedMinimumColdDamage, ItemModifierKind.AddedMaximumColdDamage);
         LocalDamageRange lightning = LocalElementalRange(item, ItemModifierKind.AddedMinimumLightningDamage, ItemModifierKind.AddedMaximumLightningDamage);
-        if (item.Enchantment?.DisplayName == "奥术王印")
+        if (item.AllEnchantments.Any(value => value.DisplayName == "奥术王印"))
         {
             var copied = EquipmentRuleEngine.CopyHighestElementalRange((fire.Minimum, fire.Maximum), (cold.Minimum, cold.Maximum), (lightning.Minimum, lightning.Maximum));
             fire = new LocalDamageRange(copied.fireMinimum, copied.fireMaximum);
@@ -288,7 +288,7 @@ public sealed class EquipmentLoadout
         }
         LocalDamageRange voidDamage = LocalElementalRange(item,
             ItemModifierKind.AddedMinimumVoidDamage, ItemModifierKind.AddedMaximumVoidDamage);
-        if (item.Enchantment?.DisplayName == "混沌王印")
+        if (item.AllEnchantments.Any(value => value.DisplayName == "混沌王印"))
             voidDamage = new LocalDamageRange(
                 checked(voidDamage.Minimum + weapon.MinimumPhysicalDamage * 30 / 100),
                 checked(voidDamage.Maximum + weapon.MaximumPhysicalDamage * 30 / 100));
@@ -345,10 +345,9 @@ public sealed class EquipmentLoadout
         value += item.Affixes.SelectMany(affix => ItemAffixRules.Effects(item, affix))
             .Where(effect => effect.Kind == kind && effect.Scope is ItemModifierScope.LocalWeapon or ItemModifierScope.LocalDefense or ItemModifierScope.LocalBlock)
             .Sum(effect => effect.Value);
-        if (item.Enchantment is not null)
-            value += item.Enchantment.EffectComponents
+        value += item.AllEnchantments.SelectMany(enchantment => enchantment.EffectComponents)
                 .Where(effect => effect.Kind == kind && effect.Scope is ItemModifierScope.LocalWeapon or ItemModifierScope.LocalDefense or ItemModifierScope.LocalBlock)
-                .Sum(effect => effect.MinimumValue);
+                .Sum(effect => EnchantmentValue(item, effect.MinimumValue));
         value += item.CorruptionComponents
             .Where(effect => effect.Kind == kind && effect.Scope is ItemModifierScope.LocalWeapon or ItemModifierScope.LocalDefense or ItemModifierScope.LocalBlock)
             .Sum(effect => effect.Value);
@@ -364,9 +363,9 @@ public sealed class EquipmentLoadout
             .Concat(item.Affixes.SelectMany(affix => ItemAffixRules.Effects(item, affix))
                 .Where(effect => effect.Kind == kind && effect.Scope == ItemModifierScope.LocalDefense)
                 .Select(effect => effect.Value))
-            .Concat(item.Enchantment?.EffectComponents
+            .Concat(item.AllEnchantments.SelectMany(enchantment => enchantment.EffectComponents)
                 .Where(effect => effect.Kind == kind && effect.Scope == ItemModifierScope.LocalDefense)
-                .Select(effect => effect.MinimumValue) ?? [])
+                .Select(effect => EnchantmentValue(item, effect.MinimumValue)))
             .Concat(item.CorruptionComponents
                 .Where(effect => effect.Kind == kind && effect.Scope == ItemModifierScope.LocalDefense)
                 .Select(effect => effect.Value));
@@ -388,6 +387,10 @@ public sealed class EquipmentLoadout
         ItemModifierKind.MoreVoidDamageBasisPoints or
         ItemModifierKind.MoreAttackDamageBasisPoints or
         ItemModifierKind.MoreSpellDamageBasisPoints;
+
+    private static int EnchantmentValue(ItemInstance item, int value) =>
+        item.LegendaryCatalogId == "harbor.legendary.three_tides_resonance" && item.AllEnchantments.Count == 3
+            ? checked((int)((long)value * 15_000 / 10_000)) : value;
 
     public static bool CanEquip(EquipmentSlot slot, ItemCategory category) => category switch
     {

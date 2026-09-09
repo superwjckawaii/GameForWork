@@ -129,6 +129,7 @@ public static class ActiveSkillCatalog
     public static ActiveSkillDefinition ActiveForStone(string id) => ActiveByStone.TryGetValue(id, out ActiveSkillDefinition? value)
         ? value : throw new KeyNotFoundException($"Unknown Builds active stone: {id}");
     public static bool TryActiveForStone(string id, out ActiveSkillDefinition? value) => ActiveByStone.TryGetValue(id, out value);
+    public static bool TryActiveForSkill(string id, out ActiveSkillDefinition? value) => ActiveBySkill.TryGetValue(id, out value);
     public static SupportSkillDefinition SupportForStone(string id) => SupportByStone.TryGetValue(id, out SupportSkillDefinition? value)
         ? value : throw new KeyNotFoundException($"Unknown Builds support stone: {id}");
     public static SupportSkillDefinition SupportFor(SkillSupport support) => SupportByLegacy[support];

@@ -498,7 +498,25 @@ public sealed partial class GameSession
         ExpeditionPolicy policy, MapRewards? mapLoot = null)
     {
         SimulationSequence = checked(SimulationSequence + 1);
-        for (int i = 0; i < baseStones; i++) Management.AddDroppedSkillStone(seed ^ (uint)i ^ 0x703238baUL);
+        var chestEquipment = new List<ItemInstance>();
+        var chestSkillStones = new List<SkillStoneInstance>();
+        var chestJewels = new List<JewelInstance>();
+        var chestMetals = new List<MetalCurrencyStack>();
+        int chestGold = 0;
+        var pendingSkillStones = new List<SkillStoneInstance>();
+        SkillStoneInstance? RollStone(ulong dropSeed, int quality = 0, bool mutated = false,
+            IReadOnlySet<string>? preferredDefinitions = null)
+        {
+            SkillStoneInstance stone = Management.RollDroppedSkillStone(dropSeed, quality, mutated, preferredDefinitions, pendingSkillStones);
+            bool withinLimit = Management.CanAcceptSkillStone(stone) &&
+                pendingSkillStones.Count(existing => existing.DefinitionId == stone.DefinitionId && existing.Mutated == stone.Mutated) +
+                Management.HeldSkillStoneCount(stone.DefinitionId, stone.Mutated) < 5;
+            if (!withinLimit) return null;
+            pendingSkillStones.Add(stone);
+            return stone;
+        }
+        for (int i = 0; i < baseStones; i++)
+            if (RollStone(seed ^ (uint)i ^ 0x703238baUL) is { } stone) chestSkillStones.Add(stone);
         bool special = EndgameState.IsCitadel(run.Map) || EndgameState.IsCitadelPractice(run.Map) ||
             EndgameState.IsBreakthroughTrial(run.Map) || ExpeditionDirector.IsPractice(run.Map);
         if (special && mapLoot is not null)
@@ -520,18 +538,21 @@ public sealed partial class GameSession
                 .Select(encounter => (Mechanic?)encounter.Node.Gameplay?.Mechanic).FirstOrDefault(mechanic => mechanic is not null);
             IReadOnlySet<string>? themedSkills = rewardMechanic is null ? null : SkillDropCatalog.For(rewardMechanic.Value);
             bool pity = Endgame.RecordGameplay(rewards, Gameplay.Has(run.Map.AtlasSnapshot, "blue", 11));
-            World.Economy.AddRewards(rewards.Stackables with { Gold = 0, IronScraps = 0, Metals = [] });
+            World.Economy.AddRewards(rewards.Stackables with { Gold = 0, IronScraps = 0, SkillStones = 0, Metals = [] });
             World.AddMaps(rewards.Maps);
-            var chestEquipment = new List<ItemInstance>();
             if (mapLoot is not null) chestEquipment.AddRange(mapLoot.Equipment);
             chestEquipment.AddRange(rewards.Equipment);
-            for (int i = 0; i < rewards.Stackables.SkillStones - rewards.QualityStones - rewards.MutatedStones; i++) Management.AddDroppedSkillStone(seed ^ (uint)i ^ 0x703238ccUL, preferredDefinitions: themedSkills);
+            for (int i = 0; i < rewards.Stackables.SkillStones - rewards.QualityStones - rewards.MutatedStones; i++)
+                if (RollStone(seed ^ (uint)i ^ 0x703238ccUL, preferredDefinitions: themedSkills) is { } stone)
+                    chestSkillStones.Add(stone);
             for (int i = 0; i < rewards.QualityStones + rewards.MutatedStones; i++)
-                Management.AddDroppedSkillStone(seed ^ (uint)i ^ 0x703238abUL, quality: 20,
-                    mutated: i < rewards.MutatedStones, preferredDefinitions: themedSkills);
+                if (RollStone(seed ^ (uint)i ^ 0x703238abUL, quality: 20,
+                        mutated: i < rewards.MutatedStones, preferredDefinitions: themedSkills) is { } stone)
+                    chestSkillStones.Add(stone);
             if (pity && rewards.BlueTarget is { } target)
             {
-                if (target == RewardPreference.SkillStones) Management.AddDroppedSkillStone(seed ^ 0xb1eeUL);
+                if (target == RewardPreference.SkillStones)
+                    if (RollStone(seed ^ 0xb1eeUL) is { } stone) chestSkillStones.Add(stone);
                 else
                 {
                     ItemInstance item = target == RewardPreference.Legendary
@@ -542,15 +563,12 @@ public sealed partial class GameSession
             }
             if (mapLoot is not null)
             {
-                int gold = checked(mapLoot.Stackables.Gold + rewards.Stackables.Gold);
-                MetalCurrencyStack[] metals = (mapLoot.Stackables.Metals ?? []).Concat(rewards.Stackables.Metals ?? [])
+                chestGold = checked(mapLoot.Stackables.Gold + rewards.Stackables.Gold);
+                chestMetals.AddRange((mapLoot.Stackables.Metals ?? []).Concat(rewards.Stackables.Metals ?? [])
                     .GroupBy(stack => stack.Kind)
-                    .Select(group => new MetalCurrencyStack(group.Key, group.Sum(stack => stack.Amount))).ToArray();
-                if (chestEquipment.Count > 0 || gold > 0 || metals.Length > 0)
-                    _lootChests.Add(new LootChest($"loot.map.{run.Map.InstanceId}", run.Map.InstanceId, run.Map.Tier,
-                        chestEquipment, gold, 0, metals));
+                    .Select(group => new MetalCurrencyStack(group.Key, group.Sum(stack => stack.Amount))));
             }
-            if (run.Succeeded) RollBuildsJewels(run.Map, seed);
+            if (run.Succeeded) chestJewels.AddRange(RollBuildsJewels(run.Map, seed));
             if (rewards.Encounters.Any(e => e.Kills > 0)) Management.AddHistory(
                 $"T{run.Map.Tier} {run.Route}：命能+{rewards.LifeForce} 战功+{rewards.Merit} 声望+{rewards.Reputation}；" +
                 (run.Succeeded ? "已完成" : "保留已击败怪物与已兑现奖励；未完成/苍誓承诺不发放"));
@@ -565,20 +583,20 @@ public sealed partial class GameSession
             JewelInstance? jewel = JewelCatalog.RollCitadelLegendary(run.Map.MonsterLevel,
                 seed, $"builds-jewel-{SimulationSequence:000000}-citadel");
             if (jewel is not null)
-            {
-                if (Jewels.TryAdd(jewel)) Management.AddHistory(
-                    $"灰烬天垒掉落传奇珠宝：{jewel.DisplayName}（半径 {jewel.EffectiveRadius}）");
-                else Management.AddHistory($"珠宝仓已满，{jewel.DisplayName}进入恢复记录。");
-            }
+                chestJewels.Add(jewel);
         }
         foreach (string mythic in MythicRewardRules.ForCompletion(run.Map, run.Route))
-            GrantMythic(mythic, run.Map.MonsterLevel, $"mythic-{run.Map.InstanceId}-{SimulationSequence:000000}");
+            if (TryPrepareMythic(mythic, run.Map.MonsterLevel,
+                    $"mythic-{run.Map.InstanceId}-{SimulationSequence:000000}", out ItemInstance? reward) && reward is not null)
+                chestEquipment.Add(reward);
+        AddOrdinaryLootChest(run.Map, chestEquipment, chestGold, 0, chestMetals, chestSkillStones, chestJewels);
         EnsureWarfrontDiscoveryMap(); SynchronizeWarfrontRouteCandidates();
         RefreshHeroTeamBuild(); RefreshMercenaryPartyBuild(); Journey.Synchronize(this);
     }
 
-    private void RollBuildsJewels(MapItem map, ulong seed)
+    private IReadOnlyList<JewelInstance> RollBuildsJewels(MapItem map, ulong seed)
     {
+        var result = new List<JewelInstance>();
         int tier = Math.Clamp(map.Tier, 1, 20);
         int itemLevel = Math.Clamp(map.MonsterLevel, 1, 100);
         TryRoll(JewelCatalog.MapCompletionDropChanceBasisPoints(tier), seed ^ 0x30a11ceUL, itemLevel, "map");
@@ -604,9 +622,42 @@ public sealed partial class GameSession
         }
         void AddJewel(JewelInstance jewel)
         {
-            if (Jewels.TryAdd(jewel)) Management.AddHistory($"获得珠宝：{jewel.DisplayName}（物品等级 {jewel.ItemLevel}）");
-            else Management.AddHistory($"珠宝仓已满，{jewel.DisplayName}进入恢复记录。");
+            result.Add(jewel);
         }
+        return result;
+    }
+
+    private void AddOrdinaryLootChest(MapItem map, IReadOnlyList<ItemInstance> equipment, int gold, int ironScraps,
+        IReadOnlyList<MetalCurrencyStack> metals, IReadOnlyList<SkillStoneInstance> skillStones,
+        IReadOnlyList<JewelInstance> jewels)
+    {
+        if (equipment.Count == 0 && gold == 0 && ironScraps == 0 && metals.Count == 0 &&
+            skillStones.Count == 0 && jewels.Count == 0) return;
+        _lootChests.Add(new LootChest($"loot.map.{map.InstanceId}", map.InstanceId, map.Tier,
+            equipment, gold, ironScraps, metals, skillStones, jewels));
+    }
+
+    private bool TryPrepareMythic(string catalogId, int itemLevel, string instanceId, out ItemInstance? reward)
+    {
+        UniqueDefinition definition = UniqueItems.All.Single(item => item.StableId == catalogId);
+        bool owned = HeroEquipment.Items.Values.Concat(MercenaryEquipment.Items.Values).Concat(World.Storage.Items)
+            .Concat(Management.SortingBag).Concat(Management.Recovery)
+            .Concat(_lootChests.SelectMany(chest => chest.Equipment))
+            .Any(item => item.DisplayName == definition.DisplayName);
+        if (owned || Endgame.GrantedMythics.Contains(catalogId))
+        {
+            reward = null;
+            Endgame.TryRecordMythicReward(catalogId);
+            return false;
+        }
+        if (!Endgame.TryRecordMythicReward(catalogId))
+        {
+            reward = null;
+            return false;
+        }
+        reward = UniqueItems.Create(catalogId, itemLevel, instanceId) with { IsLocked = true };
+        Management.AddHistory($"首通神话奖励已封装入普通战利品箱：{reward.DisplayName}");
+        return true;
     }
 
     private static ulong Mix(ulong value)
@@ -988,14 +1039,16 @@ public sealed partial class GameSession
         if (earned <= 0) return;
         MapRewards partial = MapRewardGenerator.GeneratePartial(map, team.ActiveRoute,
             Seed ^ (ulong)SimulationSequence ^ 0x9e3779b97f4a7c15UL, earned, total, World.MaximumUnlockedMapTier);
-        World.Economy.AddRewards(partial.Stackables with { Gold = 0, IronScraps = 0, Metals = [] });
+        World.Economy.AddRewards(partial.Stackables with { Gold = 0, IronScraps = 0, SkillStones = 0, Metals = [] });
         World.AddMaps(partial.Maps);
+        var skillStones = new List<SkillStoneInstance>();
         for (int index = 0; index < partial.Stackables.SkillStones; index++)
-            Management.AddDroppedSkillStone(Seed ^ (uint)index ^ 0x703238ccUL);
-        if (partial.Equipment.Count == 0 && partial.Stackables.Gold == 0 && (partial.Stackables.Metals ?? []).Count == 0)
+            skillStones.Add(Management.RollDroppedSkillStone(Seed ^ (uint)index ^ 0x703238ccUL));
+        if (partial.Equipment.Count == 0 && partial.Stackables.Gold == 0 && (partial.Stackables.Metals ?? []).Count == 0 && skillStones.Count == 0)
             return;
         _lootChests.Add(new LootChest($"loot.cancel.{map.InstanceId}", map.InstanceId, map.Tier,
-            partial.Equipment, partial.Stackables.Gold, partial.Stackables.IronScraps, partial.Stackables.Metals));
+            partial.Equipment, partial.Stackables.Gold, partial.Stackables.IronScraps, partial.Stackables.Metals,
+            skillStones));
     }
 
     public bool AbandonExpedition(ExpeditionTeamKind teamKind)

@@ -48,7 +48,9 @@ public sealed class FlaskRack
         (kind is ItemModifierKind.FlaskRepeatEffect or ItemModifierKind.FlaskOverflowCharges or ItemModifierKind.FlaskCleanseBleedPoison or
             ItemModifierKind.FlaskCleanseElementalAilments or ItemModifierKind.FlaskCleanseCurses ? 0 : _equipment.Value(kind)) +
         (kind == ItemModifierKind.IncreasedFlaskRecoveryAmountBasisPoints ? bottle.Input.Quality * 100 - (RegenerationMasteryRules.Has(_build.PassiveProfile ?? Campaign.Progression.PassiveModifiers.Empty, 6) ? 4_000 : 0) : 0);
-    private int Effect(FlaskBottle bottle) => Value(bottle, ItemModifierKind.MoreFlaskEffectBasisPoints) + (_equipment.Has("余烬锁链") ? 3_000 : 0);
+    private int Effect(FlaskBottle bottle) => Value(bottle, ItemModifierKind.MoreFlaskEffectBasisPoints) +
+        (_equipment.HasBase("harbor.base.backflow_belt") ? _equipment.BaseRuleValue("harbor.base.backflow_belt") : 0) +
+        (_equipment.Has("余烬锁链") ? 3_000 : 0);
     private int Cost(FlaskBottle bottle) => Math.Max(1, (int)decimal.Ceiling((bottle.Input.Kind is FlaskKind.Life or FlaskKind.Mana ? 10 : 20) *
         Math.Max(0, 10_000 + Value(bottle, ItemModifierKind.IncreasedFlaskChargesPerUseBasisPoints)) / 10_000m));
     public int UnusedUses => _bottles.Sum(bottle => (int)decimal.Floor((bottle.Charges + bottle.Overflow) / Cost(bottle)));
@@ -59,7 +61,8 @@ public sealed class FlaskRack
     {
         foreach (var bottle in _bottles)
         {
-            decimal total = bottle.Charges + amount * Math.Max(0, 10_000 + Value(bottle, ItemModifierKind.IncreasedFlaskChargeGainBasisPoints)) / 10_000m;
+            int oathPenalty = _equipment.Has("空瓶誓约") ? -4_000 : 0;
+            decimal total = bottle.Charges + amount * Math.Max(0, 10_000 + Value(bottle, ItemModifierKind.IncreasedFlaskChargeGainBasisPoints) + oathPenalty) / 10_000m;
             if (Value(bottle, ItemModifierKind.FlaskOverflowCharges) > 0)
                 bottle.Overflow = Math.Min(Cost(bottle), bottle.Overflow + Math.Max(0, total - bottle.MaximumCharges));
             bottle.Charges = Math.Min(bottle.MaximumCharges, total);
@@ -116,7 +119,8 @@ public sealed class FlaskRack
             bottle.Echo = false;
             if (kind is FlaskKind.Life or FlaskKind.Mana)
             {
-                decimal instant = total * Math.Clamp(Value(bottle, ItemModifierKind.InstantFlaskRecoveryPortionBasisPoints), 0, 10_000) / 10_000;
+                decimal instant = _equipment.Has("空瓶誓约") ? total :
+                    total * Math.Clamp(Value(bottle, ItemModifierKind.InstantFlaskRecoveryPortionBasisPoints), 0, 10_000) / 10_000;
                 Restore(kind, hero, (int)instant);
                 bottle.RemainingRecovery = total - instant;
                 bottle.TotalNonInstantRecovery = bottle.RemainingRecovery;

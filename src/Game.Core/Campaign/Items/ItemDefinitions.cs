@@ -552,7 +552,8 @@ public sealed record ItemInstance(
     long CraftSequence = 0,
     string LegendaryCatalogId = "",
     string CorruptionImplicitId = "",
-    IReadOnlyList<RolledAffixComponent>? RolledCorruptionComponents = null)
+    IReadOnlyList<RolledAffixComponent>? RolledCorruptionComponents = null,
+    IReadOnlyList<ItemEnchantment>? AdditionalEnchantments = null)
 {
     public string DisplayName => string.IsNullOrWhiteSpace(RolledName) ? Base.DisplayName : RolledName;
     public int PrefixCount => Affixes.Count(affix => affix.Definition.Position == AffixPosition.Prefix);
@@ -578,6 +579,11 @@ public sealed record ItemInstance(
             ? []
             : [new RolledAffixComponent(Base.ImplicitModifier, EffectiveImplicitValue, Base.ImplicitScope, Base.ImplicitText)];
     public IReadOnlyList<RolledAffixComponent> CorruptionComponents => RolledCorruptionComponents ?? [];
+    public IReadOnlyList<ItemEnchantment> AllEnchantments => Enchantment is null
+        ? AdditionalEnchantments ?? []
+        : AdditionalEnchantments is { Count: > 0 } additional
+            ? [Enchantment, .. additional]
+            : [Enchantment];
 
     public ItemInstance WithLocked(bool locked) => this with { IsLocked = locked };
 

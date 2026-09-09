@@ -80,8 +80,8 @@ public static class EquipmentRuleRegistry
         EquipmentRuleRegistration[] legendary = EquipmentCatalog.LegendaryItems.Select(entry => new EquipmentRuleRegistration(
             entry.RuleId, entry.Id, TriggerFor(entry.RuleText), !IsDynamic(entry.RuleText), entry.RuleText)).ToArray();
         EquipmentRuleRegistration[] result = enchantments.Concat(legendary).ToArray();
-        if (result.Length != 109 || result.Select(value => value.RuleId).Distinct(StringComparer.Ordinal).Count() != 109)
-            throw new InvalidOperationException("Equipment rule registry must contain exactly 54 enchantment and 55 legendary rules.");
+        if (result.Length != 117 || result.Select(value => value.RuleId).Distinct(StringComparer.Ordinal).Count() != 117)
+            throw new InvalidOperationException("Equipment rule registry must contain exactly 54 enchantment and 63 legendary rules.");
         return result;
     }
 

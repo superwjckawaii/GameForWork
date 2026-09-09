@@ -169,12 +169,26 @@ public static class EquipmentCraftingService
         catch (InvalidOperationException) { return Fail("unknown_enchantment", "未知附魔。", resource, cost); }
         if (request.WorkshopLevel < enchantment.WorkshopLevel) return Fail("workshop_level", $"需要工坊 Lv.{enchantment.WorkshopLevel}。", resource, cost);
         if (!EquipmentEnchantmentCatalog.Supports(enchantment, item.Base)) return Fail("incompatible_base", "该附魔不适用于此装备。", resource, cost);
+        if (item.LegendaryCatalogId == "harbor.legendary.three_tides_resonance")
+        {
+            if (item.AllEnchantments.Any(value => value.StableId == enchantment.StableId))
+                return Fail("enchantment_duplicate", "三潮吊坠不能重复同一条附魔。", resource, cost);
+            if (item.AllEnchantments.Count >= 3) return Fail("enchantment_full", "三潮吊坠最多附魔三次。", resource, cost);
+            ItemEnchantment[] enchantments = item.AllEnchantments.Append(enchantment).ToArray();
+            return Ok(item with
+            {
+                Enchantment = enchantments[0],
+                AdditionalEnchantments = enchantments.Skip(1).ToArray(),
+                CraftSequence = item.CraftSequence + 1,
+            }, $"附魔：{enchantment.DisplayName}", resource, cost);
+        }
         return Ok(item with { Enchantment = enchantment, CraftSequence = item.CraftSequence + 1 }, $"附魔：{enchantment.DisplayName}", resource, cost);
     }
 
     private static EquipmentCraftingResult ApplyLegendary(EquipmentCraftingRequest request, ulong seed, string resource, int cost)
     {
-        EquipmentLegendaryEntry? entry = EquipmentCatalog.LegendaryItems.FirstOrDefault(value => value.Id == request.SelectedDefinitionId && value.Rarity == "Legendary");
+        EquipmentLegendaryEntry? entry = EquipmentCatalog.LegendaryItems.FirstOrDefault(value => value.Id == request.SelectedDefinitionId &&
+            value.Rarity == "Legendary" && !EquipmentLegendaryFactory.IsHarborExclusive(value));
         if (entry is null) return Fail("exchange_target_invalid", "请选择可兑换的普通传奇。", resource, cost);
         ItemInstance result = EquipmentLegendaryFactory.Create(entry.Id, 100, $"legendary-exchange-{seed:x16}", seed);
         return Ok(result with { CraftSequence = 1 }, $"已兑换：{entry.DisplayName}", resource, cost);
@@ -420,7 +434,8 @@ public static class EquipmentCraftingService
     private static ItemInstance CopyPersistent(ItemInstance original, ItemInstance generated) => generated with
     {
         IsLocked = original.IsLocked, IsCraftingBase = original.IsCraftingBase, LinkedSocketCount = original.LinkedSocketCount,
-        Quality = original.Quality, Enchantment = original.Enchantment, RolledBaseArmor = original.RolledBaseArmor,
+        Quality = original.Quality, Enchantment = original.Enchantment, AdditionalEnchantments = original.AdditionalEnchantments,
+        RolledBaseArmor = original.RolledBaseArmor,
         RolledBaseEvasion = original.RolledBaseEvasion, RolledBaseShield = original.RolledBaseShield,
         RolledBaseSpiritBarrier = original.RolledBaseSpiritBarrier, RolledImplicitComponents = original.RolledImplicitComponents,
         ProtectPrefixesNextCraft = original.ProtectPrefixesNextCraft, ProtectSuffixesNextCraft = original.ProtectSuffixesNextCraft,

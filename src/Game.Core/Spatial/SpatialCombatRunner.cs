@@ -29,7 +29,8 @@ public enum UnitRole
 
 public enum SpatialEventKind
 {
-    HeroMoved,
+    ProjectileMoved = 100,
+    HeroMoved = 0,
     EnemyMoved,
     WarCry,
     HeavyStrike,
@@ -147,7 +148,22 @@ public sealed record SpatialEvent(
     SpatialPresentation? Presentation = null);
 
 public sealed record SpatialPresentation(string ActionId, long StartsAtMilliseconds, long EndsAtMilliseconds,
-    string Shape, int RadiusRaw, Point Direction, IReadOnlyList<Point> Trajectory);
+    string Shape, int RadiusRaw, Point Direction, IReadOnlyList<Point> Trajectory)
+{
+    public bool Equals(SpatialPresentation? other) => other is not null && ActionId == other.ActionId &&
+        StartsAtMilliseconds == other.StartsAtMilliseconds && EndsAtMilliseconds == other.EndsAtMilliseconds &&
+        Shape == other.Shape && RadiusRaw == other.RadiusRaw && Direction == other.Direction &&
+        Trajectory.SequenceEqual(other.Trajectory);
+
+    public override int GetHashCode()
+    {
+        var hash = new HashCode();
+        hash.Add(ActionId); hash.Add(StartsAtMilliseconds); hash.Add(EndsAtMilliseconds);
+        hash.Add(Shape); hash.Add(RadiusRaw); hash.Add(Direction);
+        foreach (Point point in Trajectory) hash.Add(point);
+        return hash.ToHashCode();
+    }
+}
 
 public sealed record CombatObjective(Point InteractionPosition, Point ExitPosition, int InteractionTicks = 40,
     int HazardIntervalTicks = 120, int HazardDamage = 100);
@@ -188,7 +204,7 @@ public sealed record NodeCombatRequest(
     int IncomingHitBasisPoints = 10_000,
     bool ExtraBossPhase = false,
     IReadOnlyList<string>? GardenTags = null,
-    IReadOnlyList<EnemyProfile>? EnemyPool = null,
+    IReadOnlyList<EnemyProfile>? EnemyPool = null, EnemyProfile? EliteProfile = null,
     VirtueViceState? VirtueVice = null,
     EquipmentCombatRuntime? EquipmentRuntime = null,
     Combat.CombatActionQueue? Actions = null, Combat.AuraCombatProfile? Auras = null,
@@ -402,6 +418,7 @@ public sealed partial class SpatialCombatRunner
         for (tick = 0; (request.MaximumTicks == 0 || tick < request.MaximumTicks) &&
              (hero.IsAlive || army.MercenaryAlive) && (request.Objective is null ? enemies.Any(enemy => enemy.Life > 0) : !objectiveComplete); tick++)
         {
+            equipment.BeginTick(tick);
             if (request.Objective is { } objective && tick % objective.HazardIntervalTicks == 0)
             {
                 int starts = tick + 30, ends = starts + 40;
@@ -464,6 +481,8 @@ public sealed partial class SpatialCombatRunner
                 {
                     AttackCastSpeedMultiplierBasisPoints = ScaleCombatValue(buffedBuild.AttackCastSpeedMultiplierBasisPoints, StunMasteryRules.SpeedMultiplier(buffedBuild.PassiveProfile ?? PassiveModifiers.Empty, tick, request.Conditions!.StunRecentUntil)),
                     IncreasedActionSpeedBasisPoints = buffedBuild.IncreasedActionSpeedBasisPoints + equipment.SpeedBonus(tick) - hero.HarmfulStatus.Effect(Ailment.Chill),
+                    IncreasedAttackSpeedBasisPoints = buffedBuild.IncreasedAttackSpeedBasisPoints + equipment.AttackSpeedBonus(tick),
+                    IncreasedCastSpeedBasisPoints = buffedBuild.IncreasedCastSpeedBasisPoints + equipment.CastSpeedBonus(tick),
                     MovementSpeedBasisPoints = buffedBuild.MovementSpeedBasisPoints + equipment.MovementBonus(tick) + flasks.Buff(ItemModifierKind.FlaskBuffMovementSpeedBasisPoints) +
                     (equipment.Has("朝圣者之债") ? Math.Min(4_500, flasks.UnusedUses * 300) : 0) - hero.HarmfulStatus.Effect(Ailment.Chill),
                     IncreasedCriticalChanceBasisPoints = buffedBuild.IncreasedCriticalChanceBasisPoints + flasks.Buff(ItemModifierKind.FlaskBuffCriticalChanceBasisPoints) + CriticalMasteryRules.RecentChanceIncrease(buffedBuild.PassiveProfile ?? PassiveModifiers.Empty, tick, request.Conditions!.KillRecentUntil),
@@ -893,7 +912,7 @@ public sealed partial class SpatialCombatRunner
                 }
             }
             if (tick < rootedUntilTick) heroPosition = beforeMovement;
-            equipment.Advance(tick, hero, heroPosition != beforeMovement);
+            equipment.Advance(tick, hero, heroPosition != beforeMovement, virtueVice);
             guardUntilTick = Math.Max(guardUntilTick, request.Guard.Expires);
             heroPosition = ResolveEnemies(request, enemies, hero, heroPosition, random, tick, events, flasks,
                 guardUntilTick, guardReductionBasisPoints, shieldCounter, shieldCounterConfiguration,
@@ -913,7 +932,9 @@ public sealed partial class SpatialCombatRunner
                     damage = equipment.ApplyEnemyDamage(hero, damage, false, tick, virtueVice);
                 }
                 events.Add(Event(tick, SpatialEventKind.EnemyAttack, hazard.Source, "hero", damage,
-                    hazard.Position, hazard.Position, $"持续危险地面|radius:{hazard.Radius}|until:{hazard.Expires * TickMilliseconds}"));
+                    hazard.Position, hazard.Position, $"持续危险地面|radius:{hazard.Radius}|until:{hazard.Expires * TickMilliseconds}") with
+                { Presentation = new($"{hazard.Source}.ground.{hazard.Start}.{hazard.Position}", hazard.Start * TickMilliseconds, hazard.Expires * TickMilliseconds,
+                    "circle", hazard.Radius, new(0, 0), []) });
             }
             hazards.RemoveAll(h => h.Expires <= tick);
             int totalEnemyLife = enemies.Sum(enemy => Math.Max(0, enemy.Life));
@@ -973,7 +994,9 @@ public sealed partial class SpatialCombatRunner
             EnemyProfile profile = boss
                 ? string.IsNullOrEmpty(request.BossStableId) || request.BossStableId == Enemies.AbyssWarden.StableId ? Enemies.AbyssWarden :
                     Enemies.NormalEnemies.FirstOrDefault(e => e.StableId == request.BossStableId) ?? Bosses.CombatProfile(request.BossStableId)
-                : packPool[(int)(random.NextUInt() % (uint)packPool.Count)];
+                : request.EliteProfile is not null && elite && index == firstNonBoss
+                    ? request.EliteProfile
+                    : packPool[(int)(random.NextUInt() % (uint)packPool.Count)];
             if (!boss && request.GardenTags is { Count: > 0 })
             {
                 EnemySkillKind kind = request.GardenTags[index % request.GardenTags.Count] switch
@@ -1458,7 +1481,7 @@ public sealed partial class SpatialCombatRunner
         }
         if (skill.Role != SkillRole.DamageOverTime)
         {
-            int freeze = equipment?.OnHit(hero, tags, enemy.EntityId, enemy.Boss, critical, value, request.VirtueVice) ?? 0;
+            int freeze = equipment?.OnHit(hero, tags, enemy.EntityId, enemy.Boss, critical, value, request.VirtueVice, tick) ?? 0;
             if (value > 0 && tags.HasFlag(SkillTag.Attack) && tags.HasFlag(SkillTag.Projectile))
                 equipment?.ProjectileHit(enemy.Rarity is EnemyRarity.Rare or EnemyRarity.Boss);
             enemy.NextActionTick = Math.Max(enemy.NextActionTick, tick + freeze);
@@ -1602,7 +1625,9 @@ public sealed partial class SpatialCombatRunner
                 enemy.TelegraphTarget = heroPosition;
                 enemy.NextActionTick = tick + 12;
                 events.Add(Event(tick, SpatialEventKind.BossTelegraph, enemy.EntityId, "hero", 2_000,
-                    enemy.Position, heroPosition, $"{activeSkill.DisplayName}|{activeSkill.Telegraph}|{activeSkill.DamageType}|True|until:{(tick + 12) * TickMilliseconds}"));
+                    enemy.Position, heroPosition, $"{activeSkill.DisplayName}|{activeSkill.Telegraph}|{activeSkill.DamageType}|True|until:{(tick + 12) * TickMilliseconds}") with
+                { Presentation = new($"{enemy.EntityId}.warning.{tick}", tick * TickMilliseconds,
+                    (tick + 12) * TickMilliseconds, "circle", 2_000, new(0, 0), []) });
                 continue;
             }
             Point impactPoint = enemy.TelegraphTarget ?? heroPosition;

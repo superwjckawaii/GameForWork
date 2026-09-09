@@ -13,7 +13,7 @@
 | 主动技能 | 86 | VisualCatalog.Skills 与 ActiveSkillCatalog；每项前摇、发射、命中、结束及特殊行为 |
 | 辅助 | 98 | ActiveSkillCatalog.Supports；逐项区分实际形态变化、状态反馈、纯数值 |
 | 普通敌人 | 80 | Enemies.NormalEnemies；150个实际技能子项已展开，共享26个骨架仍需逐身份动态核对 |
-| Boss | 24 | 战役5、地图12、战争军官2、统帅1、突破1、天垒阶段3；静态入口已核对，70个目录技能加4个继承子项 |
+| Boss | 27 | 战役5、地图12、战争军官2、统帅1、突破1、天垒阶段3、港区首领3；静态入口已核对，79个目录技能加4个继承子项 |
 | 角色图集 | 5 个骨架槽 | 槽位数不是职业覆盖证明；主角、佣兵、幻身等需核对实际映射 |
 | 单位图集 | 4 个专用骨架 | 骨卫、魂弓、灵兽、炮台；其余单位由角色绘制分支追踪 |
 | 动作 | 6 动作×4 方向 | Idle/Move/Attack/Cast/Hit/Death；复生、替换属于状态切换审核，不假称有独立图集动作 |
@@ -30,7 +30,7 @@ ArtContract.SkillStoneIds 当前只覆盖旧核心集合，ArtFeatureTests 对�
 | unit.boneguard / unit.soulbow / unit.spirit_beast / unit.turret | art/characters/art-unit-animation.png | DrawCombatUnit / ArtContract.UnitRig | 独立朝向、攻击起点、弹道、死亡、炮台不滑步 | 待实机 |
 | unit.character-derived | 角色图集 | TryDrawCharacterUnit / DrawSpatialAlly | 幻身与伙伴实际身份、是否错误继承主角动作、替换残影 | 身份已展开至子项清单；第四阶段动态验收 |
 | enemy.* | art/enemies/art-enemy-animation.png | DrawSpatialEnemy / EnemyRig | 80 个身份六动作、体型、精英标记及攻击同步 | 逐项索引待实机 |
-| boss.* | art/enemies/art-boss-animation.png | DrawSpatialEnemy / BossRig | 24 个身份各技能前摇、预警、阶段切换、死亡 | 70个技能子项已展开；第四阶段动态验收 |
+| boss.* | art/enemies/art-boss-animation.png | DrawSpatialEnemy / BossRig | 27 个身份各技能前摇、预警、阶段切换、死亡 | 79个目录技能及4个继承子项；第四阶段动态验收 |
 | skill.* | presentation/vfx/presentation-combat-vfx.png | VisualForEvent / DrawSpatialSkills | 86 技能实际形状、方向、范围、轨迹、持续时间 | 共性绘制问题已确认 |
 | support.* | 线段、圆弧、矩形叠层 | ReadSupportLayers / DrawSupportLayers | 98 辅助真实消费者与可见变化；不能伪造连锁或暴击 | 分类契约需修复 |
 | danger.ground / danger.boss-warning | 圆与描边 | DrawSpatialSkills | 真实半径、形状、朝向、激活与结束时刻；不得被密度裁剪 | 已确认需修复 |
@@ -40,7 +40,7 @@ ArtContract.SkillStoneIds 当前只覆盖旧核心集合，ArtFeatureTests 对�
 | scene.town / scene.travel | art/town/art-town-district.png、art/regions/art-region-atlas.png | DrawTown / DrawTravel | 门户脉动、移动观感、场景切换、缩放和资源回退 | 待实机 |
 | ui.toast / ui.rewards | 定时显隐、收益条 | ToastOverlay / DrawRewardStrip | 不遮挡、不抢输入、连续消息、未领取与已领取提示 | 待实机及宝箱接入 |
 | ui.equipment / ui.skills / ui.tree | equipmentArt/ui/ 图集及天赋背景 | ItemCell / ArtAtlas / PassiveTreeView / TownPanel | 静态图标与交互反馈分开审；悬停、比较、切换无闪烁 | 待实机；ItemCell 每帧检查不等于动画 |
-| harbor.* / chest.* | 尚未实现 | 第二、三阶段新入口 | 港区移动/交互/追击/撤离、成功失败、批量开箱和三选一 | 预留，不算现有效果通过 |
+| harbor.* / chest.* | art/regions/art-region-atlas.png、通用宝箱绘制 | HarborPanel / WorldView / LootChest入口 | 港区移动/交互/追击/撤离、成功失败、批量开箱和三选一 | 内容入口已接入；正式动效与逐身份验收归第四阶段 |
 
 ## 源码已确认问题
 

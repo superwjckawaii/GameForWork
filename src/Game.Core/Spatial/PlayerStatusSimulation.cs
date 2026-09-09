@@ -18,6 +18,7 @@ public sealed partial class SpatialCombatRunner
         int avoid = request.Build.CombatEquipment?.Value(ItemModifierKind.AilmentAvoidanceBasisPoints) ?? 0;
         int Duration(int milliseconds) => ScaleCombatValue(milliseconds, durationScale);
         bool Allowed(Ailment kind, bool guaranteed = false) => !status.Immune(kind) &&
+            !(request.EquipmentRuntime?.IsImmune(kind) ?? false) &&
             (guaranteed || skill.Ailment == kind && random.NextBasisPoints() < skill.AilmentChanceBasisPoints) &&
             (avoid <= 0 || random.NextBasisPoints() >= avoid);
         void Dot(Ailment kind, DamageType type, decimal ratio, int duration)

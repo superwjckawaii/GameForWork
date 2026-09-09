@@ -295,6 +295,7 @@ public sealed partial class ResourceState
     public int Mana { get; private set; }
     public int Shield { get; private set; }
     public int LastDamageTick { get; private set; } = int.MinValue / 2;
+    public void PreserveShieldRecharge(int previousDamageTick) => LastDamageTick = previousDamageTick;
     public bool IsAlive => Life > 0;
     public Action? LifeDepleted { get; set; }
 

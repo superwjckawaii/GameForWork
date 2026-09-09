@@ -237,6 +237,7 @@ public static class ItemCraftingRules
         LinkedSocketCount = original.LinkedSocketCount,
         Quality = original.Quality,
         Enchantment = original.Enchantment,
+        AdditionalEnchantments = original.AdditionalEnchantments,
         IsCorrupted = original.IsCorrupted,
         CorruptionOutcome = original.CorruptionOutcome,
         FracturedAffixFamilyId = original.FracturedAffixFamilyId,
@@ -310,7 +311,18 @@ public static class EnchantmentCatalog
         if (!EquipmentEnchantmentCatalog.Supports(enchantment, item.Base)) return new(false, "incompatible_base", "该附魔不支持此装备类型。", item, MetalCurrencyKind.TemperingIron, 0);
         if (enchantment.DisplayName == "完美链印" && (!SocketRules.ProvidesSockets(item.Base.Category) || item.LinkedSocketCount >= SocketRules.Maximum(item.Base.Category, item.ItemLevel)))
             return new(false, "maximum_links", "该装备没有可提升的连接容量。", item, MetalCurrencyKind.TemperingIron, 0);
-        return new(true, string.Empty, $"附魔：{enchantment.DisplayName}（覆盖现有附魔）", item with { Enchantment = enchantment }, MetalCurrencyKind.TemperingIron, 0);
+        if (item.LegendaryCatalogId == "harbor.legendary.three_tides_resonance")
+        {
+            if (item.AllEnchantments.Any(value => value.StableId == enchantment.StableId))
+                return new(false, "enchantment_duplicate", "三潮吊坠不能重复同一条附魔。", item, MetalCurrencyKind.TemperingIron, 0);
+            if (item.AllEnchantments.Count >= 3)
+                return new(false, "enchantment_full", "三潮吊坠最多附魔三次。", item, MetalCurrencyKind.TemperingIron, 0);
+            ItemEnchantment[] enchantments = item.AllEnchantments.Append(enchantment).ToArray();
+            return new(true, string.Empty, $"附魔：{enchantment.DisplayName}（三潮共鸣 {enchantments.Length}/3）",
+                item with { Enchantment = enchantments[0], AdditionalEnchantments = enchantments.Skip(1).ToArray() },
+                MetalCurrencyKind.TemperingIron, 0);
+        }
+        return new(true, string.Empty, $"附魔：{enchantment.DisplayName}（覆盖现有附魔）", item with { Enchantment = enchantment, AdditionalEnchantments = [] }, MetalCurrencyKind.TemperingIron, 0);
     }
 
     public static CraftResult Craft(TownEconomyState economy, ItemInstance item, string stableId, int workshopLevel)

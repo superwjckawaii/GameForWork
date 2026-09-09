@@ -289,7 +289,7 @@
 | monsters.enemy.headhunt_officer | 猎首军官 | 20 | 待实机审核 / 无 |
 | monsters.enemy.siege_engineer | 攻城术师 | 25 | 待实机审核 / 无 |
 
-## Boss（24 个目录条目）
+## Boss（27 个目录条目）
 
 从 Bosses 所有公开静态定义枚举，包括战役、地图、战争军官/统帅、突破与天垒阶段；目录存在不等于生产可达。入口 ArtContract.BossRig / WorldView.DrawSpatialEnemy，图集 art-boss-animation.png。每个技能与阶段仍需展开子项。
 
@@ -319,3 +319,6 @@
 | core.boss.citadel.wall | 活化城墙 | CitadelStages | 8 | 静态入口已核对；第四阶段动态验收 / 见子项清单 |
 | core.boss.citadel.guards | 灰烬双卫 | CitadelStages | 10 | 静态入口已核对；第四阶段动态验收 / 见子项清单 |
 | core.boss.citadel.core | 天垒核心 | CitadelStages | 11 | 静态入口已核对；第四阶段动态验收 / 见子项清单 |
+| harbor.boss.rope_captain | 断缆船长 | HarborBosses | 0 | 第三阶段已接入；第四阶段核对钩索横扫、沉锚炮击、断缆冲锋 |
+| harbor.boss.sunken_warden | 沉仓守卫 | HarborBosses | 1 | 第三阶段已接入；第四阶段核对铜壳重砸、仓火封锁、潮锈修复 |
+| harbor.boss.gold_prison_master | 沉金典狱长 | HarborBosses | 2 | 第三阶段已接入；第四阶段核对金印处决、潮印审判、追债封锁 |

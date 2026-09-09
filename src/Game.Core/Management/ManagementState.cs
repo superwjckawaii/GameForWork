@@ -825,16 +825,51 @@ public sealed class ManagementState
     public SkillStoneInstance AddDroppedSkillStone(ulong seed, bool recordHistory = true, int quality = 0, bool mutated = false,
         IReadOnlySet<string>? preferredDefinitions = null)
     {
+        SkillStoneInstance stone = CreateDroppedSkillStone(seed, quality, mutated, preferredDefinitions,
+            $"drop-skill-{seed:x16}-{_operationSequence++:x8}");
+        if (!_skillStones.Any(existing => existing.InstanceId == stone.InstanceId))
+            _skillStones.Add(stone);
+        if (recordHistory) AddHistory($"获得技能石：{stone.Definition.DisplayName}。");
+        return stone;
+    }
+
+    /// <summary>Rolls a complete skill-stone instance without claiming it into the management stash.</summary>
+    public SkillStoneInstance RollDroppedSkillStone(ulong seed, int quality = 0, bool mutated = false,
+        IReadOnlySet<string>? preferredDefinitions = null, IReadOnlyList<SkillStoneInstance>? pending = null) =>
+        CreateDroppedSkillStone(seed, quality, mutated, preferredDefinitions, $"drop-skill-{seed:x16}", pending);
+
+    public bool CanAcceptSkillStone(SkillStoneInstance stone)
+    {
+        ArgumentNullException.ThrowIfNull(stone);
+        return !_skillStones.Any(existing => existing.InstanceId == stone.InstanceId) &&
+            _skillStones.Count(existing => existing.DefinitionId == stone.DefinitionId && existing.Mutated == stone.Mutated) < 5;
+    }
+
+    public bool TryAddSkillStone(SkillStoneInstance stone, bool recordHistory = true)
+    {
+        ArgumentNullException.ThrowIfNull(stone);
+        if (stone.Quality is < 0 or > 20 || stone.Level is < 1 or > 20 || !CanAcceptSkillStone(stone)) return false;
+        _skillStones.Add(stone);
+        if (recordHistory) AddHistory($"获得技能石：{stone.Definition.DisplayName}。");
+        return true;
+    }
+
+    private SkillStoneInstance CreateDroppedSkillStone(ulong seed, int quality, bool mutated,
+        IReadOnlySet<string>? preferredDefinitions, string instanceId, IReadOnlyList<SkillStoneInstance>? pending = null)
+    {
+        int Held(string definitionId, bool mutation) => _skillStones.Count(stone => stone.DefinitionId == definitionId && stone.Mutated == mutation) +
+            (pending ?? []).Count(stone => stone.DefinitionId == definitionId && stone.Mutated == mutation);
+        bool Has(string definitionId) => _skillStones.Any(stone => stone.DefinitionId == definitionId) ||
+            (pending ?? []).Any(stone => stone.DefinitionId == definitionId);
         SkillStoneDefinition[] pool = SkillStoneCatalog.DropPool.Where(item => !mutated || item.Kind == SkillStoneKind.Active)
-            .Where(item => _skillStones.Count(stone => stone.DefinitionId == item.StableId && stone.Mutated == mutated) < 5)
+            .Where(item => Held(item.StableId, mutated) < 5)
             .OrderBy(item => item.StableId, StringComparer.Ordinal).ToArray();
         if (pool.Length == 0)
         {
-            if (recordHistory) AddHistory("技能石掉落池均已达到同名持有上限 5，未生成额外技能石。");
             return _skillStones.OrderBy(stone => stone.InstanceId, StringComparer.Ordinal).First();
         }
         var random = new Pcg32(seed);
-        int Weight(SkillStoneDefinition candidate) => (_skillStones.Any(stone => stone.DefinitionId == candidate.StableId) ? 1 : 3) *
+        int Weight(SkillStoneDefinition candidate) => (Has(candidate.StableId) ? 1 : 3) *
             (preferredDefinitions?.Contains(candidate.StableId) == true ? 4 : 1);
         int totalWeight = pool.Sum(Weight);
         int roll = (int)(random.NextUInt() % (uint)totalWeight);
@@ -849,11 +884,7 @@ public sealed class ManagementState
             }
             roll -= weight;
         }
-        string id = $"drop-skill-{seed:x16}-{_operationSequence++:x8}";
-        var stone = new SkillStoneInstance(id, definition.StableId, Quality: Math.Clamp(quality, 0, 20), Mutated: mutated);
-        _skillStones.Add(stone);
-        if (recordHistory) AddHistory($"获得技能石：{definition.DisplayName}。");
-        return stone;
+        return new SkillStoneInstance(instanceId, definition.StableId, Quality: Math.Clamp(quality, 0, 20), Mutated: mutated);
     }
 
     public int HeldSkillStoneCount(string definitionId, bool mutated) =>

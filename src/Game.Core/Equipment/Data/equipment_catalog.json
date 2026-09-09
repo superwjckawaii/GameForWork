@@ -13403,7 +13403,7 @@
     {"id":"harbor.base.tidewading_boots","legacyIds":[],"displayName":"涉潮长靴","category":"Boots","primarySlot":"Boots","equipmentType":"闪避鞋","requirementText":"巅峰；80；巧120","baseStatsText":"闪避220～280","implicitText":"免疫流血和点燃","evasionMinimum":220,"evasionMaximum":280,"socketLimit":4,"requiredLevel":80,"requiredDexterity":120,"tags":["equipment","atlas_base_type","harbor","evasion"],"implicitModifier":"BaseImplicitRule","implicitScope":"Rule","implicitComponents":[{"kind":"BaseImplicitRule","minimumValue":1,"maximumValue":1,"scope":"Rule","displayText":"免疫流血和点燃","order":0}]},
     {"id":"harbor.base.three_tides_amulet","legacyIds":[],"displayName":"三潮吊坠","category":"Amulet","primarySlot":"Amulet","equipmentType":"项链","requirementText":"巅峰；77","baseStatsText":"","implicitText":"可同时拥有三条附魔词缀","requiredLevel":77,"tags":["equipment","atlas_base_type","harbor","amulet"],"implicitModifier":"BaseImplicitRule","implicitScope":"Rule","implicitComponents":[{"kind":"BaseImplicitRule","minimumValue":3,"maximumValue":3,"scope":"Rule","displayText":"可同时拥有三条附魔词缀","order":0}]},
     {"id":"harbor.base.backflow_belt","legacyIds":[],"displayName":"回流束带","category":"Belt","primarySlot":"Belt","equipmentType":"腰带","requirementText":"巅峰；79","baseStatsText":"","implicitText":"来自药剂的效果提高75%～120%","requiredLevel":79,"tags":["equipment","atlas_base_type","harbor","belt"],"implicitModifier":"BaseImplicitRule","implicitScope":"Rule","implicitComponents":[{"kind":"BaseImplicitRule","minimumValue":7500,"maximumValue":12000,"scope":"Rule","displayText":"来自药剂的效果提高75%～120%","order":0}]},
-    {"id":"harbor.base.anchored_belt","legacyIds":[],"displayName":"定锚重带","category":"Belt","primarySlot":"Belt","equipmentType":"腰带","requirementText":"巅峰；79","baseStatsText":"","implicitText":"高生命时该次击中伤害总降8%～12%","requiredLevel":79,"tags":["equipment","atlas_base_type","harbor","belt"],"implicitModifier":"PhysicalResistanceBasisPoints","implicitScope":"Rule","implicitComponents":[{"kind":"PhysicalResistanceBasisPoints","minimumValue":800,"maximumValue":1200,"scope":"Rule","displayText":"高生命时该次击中伤害总降8%～12%","order":0}]}
+    {"id":"harbor.base.anchored_belt","legacyIds":[],"displayName":"定锚重带","category":"Belt","primarySlot":"Belt","equipmentType":"腰带","requirementText":"巅峰；79","baseStatsText":"","implicitText":"高生命时该次击中伤害总降8%～12%","requiredLevel":79,"tags":["equipment","atlas_base_type","harbor","belt"],"implicitModifier":"BaseImplicitRule","implicitScope":"Rule","implicitComponents":[{"kind":"BaseImplicitRule","minimumValue":800,"maximumValue":1200,"scope":"Rule","displayText":"高生命时该次击中伤害总降8%～12%","order":0}]}
   ],
   "affixFamilies": [
     [
@@ -53294,6 +53294,86 @@
       "fixedAffixesText": "\u672C\u88C5\u5907\u5C40\u90E8\u62A4\u7532\u4E0E\u62A4\u76FE\u5404\u603B\u589E 100%\uFF1B\u6784\u88C5\u4F53\u6700\u5927\u751F\u547D\u603B\u589E 100%\uFF1B\u6784\u88C5\u4F53\u4F24\u5BB3\u603B\u589E 100%",
       "ruleId": "equipment.rule.legendary.55",
       "ruleText": "\u6784\u88C5\u4F53\u88AB\u6467\u6BC1\u65F6\u9020\u6210\u5176\u6700\u5927\u751F\u547D 50%\u7684\u865A\u7A7A\u8303\u56F4\u51FB\u4E2D\u4F24\u5BB3\uFF0C\u5E76\u5728 1 \u79D2\u540E\u4EE5\u6EE1\u751F\u547D\u81EA\u52A8\u91CD\u94F8\uFF1B\u6BCF\u4E2A\u6784\u88C5\u4F53\u91CD\u94F8\u540E 3 \u79D2\u5185\u4E0D\u80FD\u518D\u6B21\u89E6\u53D1\u672C\u6548\u679C\uFF0C\u4F46\u4ECD\u53EF\u53D7\u5230\u4F24\u5BB3\u548C\u88AB\u6B63\u5E38\u6467\u6BC1\u3002\u7206\u70B8\u4E0D\u80FD\u89E6\u53D1\u65B0\u7684\u7206\u70B8\uFF1B\u4E0E\u7089\u5FC3\u738B\u5370\u540C\u65F6\u5B58\u5728\u65F6\u989D\u5916\u4FDD\u7559\u5176 20%\u7269\u7406\u7206\u70B8\uFF0C\u4F46\u53EA\u6267\u884C\u4E00\u6B21 1 \u79D2\u91CD\u94F8"
+    },
+    {
+      "id": "harbor.legendary.reverse_tide_edge",
+      "legacyIds": [],
+      "displayName": "逆潮之锋",
+      "rarity": "Legendary",
+      "baseAndSource": "潮行细剑；沉金港成功宝箱专属",
+      "fixedAffixesText": "本武器局部物理伤害提高 115%；本武器局部攻击速度提高 12%；命中值 +250",
+      "ruleId": "harbor.legendary.reverse_tide_edge",
+      "ruleText": "主动移动时每秒获得 1 层逆潮，最多 3 层；下一次使用本武器的近战攻击消耗全部层数，每层使该次击中伤害提高 15%～20%（按层数线性取值）。"
+    },
+    {
+      "id": "harbor.legendary.lighthouse_watch",
+      "legacyIds": [],
+      "displayName": "灯塔守望",
+      "rarity": "Legendary",
+      "baseAndSource": "掠潮长弓；沉金港成功宝箱专属",
+      "fixedAffixesText": "本武器局部物理伤害提高 125%；本武器局部攻击速度提高 10%；投射物速度提高 25%",
+      "ruleId": "harbor.legendary.lighthouse_watch",
+      "ruleText": "投射物击中距离目标至少 6 米时伤害提高 25%～35%；距离小于 3 米时伤害降低 20%；3～6 米不变。"
+    },
+    {
+      "id": "harbor.legendary.sleepless_navigator",
+      "legacyIds": [],
+      "displayName": "无眠领航者",
+      "rarity": "Legendary",
+      "baseAndSource": "静潮兜帽；沉金港成功宝箱专属",
+      "fixedAffixesText": "局部闪避提高 95%；局部护盾提高 95%；最大法力 +65；闪电抗性 +30%",
+      "ruleId": "harbor.legendary.sleepless_navigator",
+      "ruleText": "敌人击中不会打断护盾充能；护盾充能速度降低 35%～45%。正常充能延迟仍生效，持续伤害造成的干扰不豁免。"
+    },
+    {
+      "id": "harbor.legendary.last_hold",
+      "legacyIds": [],
+      "displayName": "最后一舱",
+      "rarity": "Legendary",
+      "baseAndSource": "压舱重铠；沉金港成功宝箱专属",
+      "fixedAffixesText": "局部护甲提高 120%；最大生命 +140；火焰抗性 +30%",
+      "ruleId": "harbor.legendary.last_hold",
+      "ruleText": "即将被敌人击中致死时，消耗 2 层慈悲，使该次击中后生命保留为 1；冷却 20 秒。持续伤害、自身伤害和慈悲永久满层均不能触发。"
+    },
+    {
+      "id": "harbor.legendary.twin_tide_weaver",
+      "legacyIds": [],
+      "displayName": "双潮织手",
+      "rarity": "Legendary",
+      "baseAndSource": "破浪护手；沉金港成功宝箱专属",
+      "fixedAffixesText": "局部护甲提高 95%；局部闪避提高 95%；最大生命 +60；最大法力 +50",
+      "ruleId": "harbor.legendary.twin_tide_weaver",
+      "ruleText": "自己的攻击命中后，自己的法术击中伤害提高 20%～30%，持续 4 秒；自己的法术命中后，自己的攻击击中伤害提高 20%～30%，持续 4 秒；不叠层，不受触发、复制和召唤物命中影响。"
+    },
+    {
+      "id": "harbor.legendary.unreturning_wake",
+      "legacyIds": [],
+      "displayName": "不归航迹",
+      "rarity": "Legendary",
+      "baseAndSource": "涉潮长靴；沉金港成功宝箱专属",
+      "fixedAffixesText": "局部闪避提高 95%；移动速度提高 28%；最大生命 +60",
+      "ruleId": "harbor.legendary.unreturning_wake",
+      "ruleText": "主动移动期间受到的持续伤害总降 25%～35%；静止时受到的击中伤害总增 10%。传送不算移动。"
+    },
+    {
+      "id": "harbor.legendary.three_tides_resonance",
+      "legacyIds": [],
+      "displayName": "三潮共鸣",
+      "rarity": "Legendary",
+      "baseAndSource": "三潮吊坠；沉金港成功宝箱专属",
+      "fixedAffixesText": "体魄、灵巧、精神、能量各 +20；最大法力 +65；火焰、冰霜、闪电抗性 +15%",
+      "ruleId": "harbor.legendary.three_tides_resonance",
+      "ruleText": "本装备拥有三条不同且合法的附魔词缀时，本装备可缩放附魔数值提高 40%～60%；角色最大生命总降 10%。不增加附魔条数、容量或硬上限。"
+    },
+    {
+      "id": "harbor.legendary.empty_bottle_oath",
+      "legacyIds": [],
+      "displayName": "空瓶誓约",
+      "rarity": "Legendary",
+      "baseAndSource": "回流束带；沉金港成功宝箱专属",
+      "fixedAffixesText": "最大生命 +85；最大法力 +50；冰霜抗性 +30%",
+      "ruleId": "harbor.legendary.empty_bottle_oath",
+      "ruleText": "自己的生命或法力药剂恢复立即生效；药剂充能获取降低 35%～45%。不额外提高恢复量或持续时间。"
     }
   ],
   "craftingOperations": [

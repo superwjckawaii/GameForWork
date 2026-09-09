@@ -11,7 +11,8 @@ public sealed record EquipmentCombatLoadout(
     IReadOnlyDictionary<string, int> Enchantments,
     int ShieldArmor = 0,
     int UnarmedMoreDamageBasisPoints = 0,
-    int PhysicalIncreaseIncludedInAttack = 0, IReadOnlyList<Combat.EquippedFlask>? Flasks = null)
+    int PhysicalIncreaseIncludedInAttack = 0, IReadOnlyList<Combat.EquippedFlask>? Flasks = null,
+    IReadOnlyDictionary<string, int>? BaseRuleValues = null)
 {
     public static EquipmentCombatLoadout Empty { get; } = new(
         new Dictionary<ItemModifierKind, int>(), [], new Dictionary<string, int>());
@@ -20,13 +21,15 @@ public sealed record EquipmentCombatLoadout(
     public int Value(ItemModifierKind kind) => Modifiers.GetValueOrDefault(kind);
     public bool Has(string name) => LegendaryNames.TryGetValue(name, out string? id) && LegendaryIds.Contains(id);
     public int EnchantmentCount(string name) => Enchantments.GetValueOrDefault(name);
+    public bool HasBase(string stableId) => BaseRuleValues?.ContainsKey(stableId) == true;
+    public int BaseRuleValue(string stableId) => BaseRuleValues?.GetValueOrDefault(stableId) ?? 0;
     public static EquipmentCombatLoadout From(EquipmentLoadout loadout, EquipmentSummary summary) => new(
         summary.Modifiers.Extended ?? new Dictionary<ItemModifierKind, int>(),
         loadout.Items.Values.Select(item => item.LegendaryCatalogId).Where(id => !string.IsNullOrEmpty(id)).Distinct().ToArray(),
-        loadout.Items.Values.Where(item => item.Enchantment is not null)
-            .GroupBy(item => item.Enchantment!.DisplayName).ToDictionary(group => group.Key, group => group.Count()),
+        loadout.Items.Values.SelectMany(item => item.AllEnchantments)
+            .GroupBy(enchantment => enchantment.DisplayName).ToDictionary(group => group.Key, group => group.Count()),
         summary.ShieldArmor,
-        loadout.Items.Values.Where(item => item.Enchantment?.DisplayName == "空明王印").Sum(item =>
+        loadout.Items.Values.Where(item => item.AllEnchantments.Any(enchantment => enchantment.DisplayName == "空明王印")).Sum(item =>
         {
             var defense = EquipmentLoadout.CalculateLocalDefense(item);
             return EquipmentRuleEngine.UnarmedMoreDamageBasisPoints(defense.Armor + defense.Evasion + defense.Shield + defense.SpiritBarrier);
@@ -36,9 +39,15 @@ public sealed record EquipmentCombatLoadout(
             .Select(pair => new Combat.EquippedFlask(FlaskRules.KindForBase(pair.Value.Base.StableId)!.Value, pair.Value.InstanceId, (int)pair.Key,
                 pair.Value.EffectiveImplicitComponents.Concat(pair.Value.Affixes.SelectMany(affix => ItemAffixRules.Effects(pair.Value, affix))).Concat(pair.Value.CorruptionComponents)
                     .Select(effect => (effect.Kind, effect.Value, effect.Scope))
-                    .Concat((pair.Value.Enchantment?.EffectComponents ?? []).Select(effect => (effect.Kind, Value: effect.MinimumValue, effect.Scope)))
+                    .Concat(pair.Value.AllEnchantments.SelectMany(enchantment => enchantment.EffectComponents)
+                        .Select(effect => (effect.Kind, Value: effect.MinimumValue, effect.Scope)))
                     .Where(effect => effect.Scope is ItemModifierScope.Flask or ItemModifierScope.Rule).GroupBy(effect => effect.Kind)
-                    .ToDictionary(group => group.Key, group => group.Sum(effect => effect.Value)), pair.Value.Quality)).ToArray());
+                    .ToDictionary(group => group.Key, group => group.Sum(effect => effect.Value)), pair.Value.Quality)).ToArray(),
+        loadout.Items.Values
+            .Where(item => item.Base.StableId.StartsWith("harbor.base.", StringComparison.Ordinal))
+            .ToDictionary(item => item.Base.StableId,
+                item => item.EffectiveImplicitComponents.Where(effect => effect.Scope == ItemModifierScope.Rule)
+                    .Select(effect => effect.Value).FirstOrDefault()));
 
     public int Penetration(SkillDamageType type) => Value(type switch
     {

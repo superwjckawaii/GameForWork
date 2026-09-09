@@ -141,6 +141,26 @@ public static class Enemies
         .Concat(MonsterCatalog.AdditionalEnemies)
         .ToArray();
 
+    public static IReadOnlyList<EnemyProfile> HarborEnemies { get; } =
+    [
+        Harbor("drowned_sailor", "沉港水手", EnemyRole.Melee, EnemySkillKind.BasicStrike, 54, 6, 10, 18, 8, 68, 1_900, 900, 1_200),
+        Harbor("hook_raider", "钩索掠夺者", EnemyRole.Charger, EnemySkillKind.Charge, 48, 7, 12, 12, 10, 72, 2_800, 1_000, 1_500),
+        Harbor("saltmist_crossbowman", "盐雾弩手", EnemyRole.Ranged, EnemySkillKind.Volley, 42, 5, 9, 8, 15, 76, 2_100, 950, 6_000),
+        Harbor("copper_shell_carrier", "铜壳搬运工", EnemyRole.Melee, EnemySkillKind.HeavySlam, 78, 8, 14, 42, 3, 62, 1_500, 700, 1_400),
+        Harbor("rot_tide_stalker", "腐潮潜行者", EnemyRole.Charger, EnemySkillKind.Burrow, 51, 7, 11, 16, 18, 74, 2_600, 1_000, 1_300),
+        Harbor("warehouse_fire_mage", "仓火术士", EnemyRole.Caster, EnemySkillKind.GroundHazard, 46, 6, 11, 10, 8, 78, 1_800, 850, 6_500),
+        Harbor("vault_guardian", "金库卫士", EnemyRole.Melee, EnemySkillKind.ShieldLink, 82, 9, 15, 48, 5, 66, 1_400, 650, 1_300),
+        Harbor("tide_seal_priest", "潮印祭司", EnemyRole.Support, EnemySkillKind.HealingBloom, 58, 5, 9, 14, 6, 75, 1_700, 760, 5_500),
+        Harbor("debt_hunter", "追债猎手", EnemyRole.Ranged, EnemySkillKind.SuppressingVolley, 63, 8, 13, 20, 16, 80, 2_300, 980, 6_500),
+    ];
+
+    public static IReadOnlyList<EnemyProfile> HarborElites { get; } =
+    [
+        Harbor("rope_foreman", "缆绳监工", EnemyRole.Support, EnemySkillKind.WarAura, 110, 10, 17, 55, 8, 78, 1_600, 700, 5_500),
+        Harbor("warehouse_inspector", "仓火督察", EnemyRole.Caster, EnemySkillKind.DelayedNova, 118, 11, 19, 38, 12, 82, 1_900, 800, 7_000),
+        Harbor("gold_seal_bailiff", "金印执事", EnemyRole.Melee, EnemySkillKind.Execution, 126, 12, 21, 62, 6, 84, 1_500, 650, 1_600),
+    ];
+
     public static IReadOnlyList<EnemyProfile> ForMonsterLevel(int monsterLevel)
     {
         EnemyFamily family = monsterLevel switch
@@ -166,6 +186,11 @@ public static class Enemies
         int life, int minimumDamage, int maximumDamage, int armor, int evasion, int accuracy, int speed,
         int attacksPerSecond, int threat, int range = 1_200) => new($"core.enemy.{id}", name, life,
         minimumDamage, maximumDamage, armor, evasion, accuracy, speed, attacksPerSecond, threat, family, role, skill, range);
+
+    private static EnemyProfile Harbor(string id, string name, EnemyRole role, EnemySkillKind skill,
+        int life, int minimumDamage, int maximumDamage, int armor, int evasion, int accuracy, int speed,
+        int attacksPerSecond, int range) => new($"harbor.enemy.{id}", name, life, minimumDamage, maximumDamage,
+        armor, evasion, accuracy, speed, attacksPerSecond, 0, EnemyFamily.DrownedDead, role, skill, range);
 }
 
 public enum EliteAffix

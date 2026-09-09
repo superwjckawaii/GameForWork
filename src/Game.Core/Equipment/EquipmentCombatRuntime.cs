@@ -22,6 +22,10 @@ public sealed class EquipmentCombatRuntime(EquipmentCombatLoadout loadout, ulong
     private HashSet<string> _actionTriggers = [];
     private readonly Dictionary<string, int> _debuffUntil = [];
     private int _actionSequence, _blackTide, _blackTideUntil, _marchTicks, _stationaryTicks;
+    private int _reverseTideTicks, _reverseTideStacks, _lastHoldReady, _attackBuffUntil, _spellBuffUntil, _movementBuffUntil;
+    private int _returningShieldUntil, _quiverMovementUntil, _currentTick;
+    private bool _wasMoving;
+    private readonly Queue<(int Tick, int Mana)> _tidalMana = [];
     private int _barkUntil, _compassUntil, _bannerUntil, _suppressionUntil, _suppressionReady, _shieldHealReady;
     private int _bulwark, _rekindles;
     private int _seaReady, _seaUntil;
@@ -54,6 +58,8 @@ public sealed class EquipmentCombatRuntime(EquipmentCombatLoadout loadout, ulong
     public int ExternalSkillCostMultiplier { get; set; } = 10_000;
     public Func<int>? NearbyEnemyCount { get; set; }
     public bool Has(string name) => Loadout.Has(name);
+    public bool HasBase(string stableId) => Loadout.HasBase(stableId);
+    public int BaseRuleValue(string stableId) => Loadout.BaseRuleValue(stableId);
     public int CohuntLayers => _cohuntLayers;
     public bool BeginProjectileAction(string targetId)
     {
@@ -77,7 +83,14 @@ public sealed class EquipmentCombatRuntime(EquipmentCombatLoadout loadout, ulong
     public bool ForceCritical(SkillTag tags) => _hunt && tags.HasFlag(SkillTag.Attack);
     public int SuppressionBonus(int tick) => tick < _suppressionUntil ? 10_000 : 0;
     public int SpeedBonus(int tick) => (tick < _bannerUntil ? 3_500 : 0) + _rekindles * 1_500;
-    public int MovementBonus(int tick) => tick < _blackTideUntil ? _blackTide * 2_000 : 0;
+    public int AttackSpeedBonus(int tick) => HasBase("harbor.base.tidewalker_rapier") && tick < _movementBuffUntil
+        ? BaseRuleValue("harbor.base.tidewalker_rapier") : 0;
+    public int CastSpeedBonus(int tick) => HasBase("harbor.base.wavebreaker_gloves") && tick < _movementBuffUntil
+        ? BaseRuleValue("harbor.base.wavebreaker_gloves") : 0;
+    public bool IsImmune(Ailment kind) => HasBase("harbor.base.tidewading_boots") && kind is Ailment.Bleed or Ailment.Ignite;
+    public int MovementBonus(int tick) => (tick < _blackTideUntil ? _blackTide * 2_000 : 0) +
+        (HasBase("harbor.base.downstream_quiver") && tick < _quiverMovementUntil
+            ? BaseRuleValue("harbor.base.downstream_quiver") : 0);
     public int ArmorIncrease(int nearbyEnemies) => (Has("无尽行军") ? Math.Min(10, _marchTicks / 20) * 800 : 0) +
         (Has("统帅之负") ? Math.Min(5, nearbyEnemies) * 1_500 : 0);
     public int SpiritBarrier(CharacterSheet sheet, int tick) => Scale(sheet.SpiritBarrier().Value, tick < _seaUntil ? 20_000 : 10_000);
@@ -95,11 +108,21 @@ public sealed class EquipmentCombatRuntime(EquipmentCombatLoadout loadout, ulong
         if (!hero.IsAlive || damage <= 0) return 0;
         damage = AbsorbEnemyDamage?.Invoke(damage, hit, tick) ?? damage;
         damage = RedirectDamage?.Invoke(damage, hit) ?? damage;
+        if (hit && HasBase("harbor.base.anchored_belt") && hero.Life * 100L >= hero.MaximumLife * 90L)
+            damage = Scale(damage, 10_000 - BaseRuleValue("harbor.base.anchored_belt"));
         if (damage <= 0) return 0;
+        if (hit && Has("最后一舱") && tick >= _lastHoldReady && damage >= hero.Life + hero.Shield &&
+            virtues?.Consume(VirtueViceKind.Mercy, 2) == 2)
+        {
+            damage = Math.Max(0, hero.Life + hero.Shield - 1);
+            _lastHoldReady = tick + 400;
+        }
         int shieldBefore = hero.Shield;
         int lifeBefore = hero.Life;
+        int previousDamageTick = hero.LastDamageTick;
         int generation = hero.HarmfulStatus.Generation;
         int actual = hero.ApplyEnemyDamage(damage, hit, tick);
+        if (hit && Has("无眠领航者")) hero.PreserveShieldRecharge(previousDamageTick);
         bool shieldBroken = shieldBefore > 0 && hero.Shield == 0;
         LastEnemyShieldLoss = Math.Max(0, shieldBefore - hero.Shield);
         LastEnemyHitBrokeShield = hit && shieldBroken;
@@ -134,15 +157,29 @@ public sealed class EquipmentCombatRuntime(EquipmentCombatLoadout loadout, ulong
         return Scale(damage, IncomingMultiplier(sheet, type, false, tick));
     }
 
-    public void Advance(int tick, ResourceState hero, bool moved)
+    public void Advance(int tick, ResourceState hero, bool moved, VirtueViceState? virtues = null)
     {
+        _wasMoving = moved;
+        if (moved) _movementBuffUntil = tick + 80;
         if (moved) { _marchTicks++; _stationaryTicks = 0; }
         else if (++_stationaryTicks >= 40) _marchTicks = 0;
+        if (Has("逆潮之锋"))
+        {
+            if (moved)
+            {
+                if (++_reverseTideTicks >= 20) { _reverseTideTicks = 0; _reverseTideStacks = Math.Min(3, _reverseTideStacks + 1); }
+            }
+            else _reverseTideTicks = 0;
+        }
         if (tick >= _blackTideUntil) _blackTide = 0;
+        if (tick > 0 && tick % 100 == 0 && HasBase("harbor.base.ballast_plate"))
+            virtues?.Gain(VirtueViceKind.Mercy);
+        while (_tidalMana.Count > 0 && _tidalMana.Peek().Tick <= tick - 100) _tidalMana.Dequeue();
         if (tick % 20 == 0 && Has("复生之种") && hero.Life * 100L < hero.MaximumLife * 35L)
             hero.HealLife(hero.MaximumLife * 400 / 10_000);
     }
     public void UsedMovementSkill(int tick) { if (Has("界行罗盘")) _compassUntil = tick + 60; }
+    public void BeginTick(int tick) { _currentTick = tick; }
 
     public ResolvedSkill Resolve(ResolvedSkill skill)
     {
@@ -173,6 +210,7 @@ public sealed class EquipmentCombatRuntime(EquipmentCombatLoadout loadout, ulong
         _triggered = triggered;
         _copy = false;
         _lifePaid = lifeCost > 0;
+        if (!triggered && manaCost > 0 && HasBase("harbor.base.tidal_wand")) _tidalMana.Enqueue((_currentTick, manaCost));
         SkillTag tags = SkillDefinitions.Get(skillId).Tags;
         _actionFallingStar = !triggered && tags.HasFlag(SkillTag.Spell) && _fallingStar;
         if (_actionFallingStar) _fallingStar = false;
@@ -188,9 +226,33 @@ public sealed class EquipmentCombatRuntime(EquipmentCombatLoadout loadout, ulong
     {
         int multiplier = 10_000;
         void More(int value) => multiplier = Scale(multiplier, 10_000 + value);
+        if (HasBase("harbor.base.tidal_wand"))
+            multiplier = Scale(multiplier, checked(10_000 + TidalManaBonus()));
+        if (HasBase("harbor.base.returning_tide_shield") && tick < _returningShieldUntil &&
+            (tags.HasFlag(SkillTag.Attack) || tags.HasFlag(SkillTag.Spell)))
+            multiplier = Scale(multiplier, 10_000 + BaseRuleValue("harbor.base.returning_tide_shield"));
+        if (HasBase("harbor.base.cablecleaver_axe") && tags.HasFlag(SkillTag.Attack) && enemyLife * 2L <= enemyMaximumLife)
+            More(BaseRuleValue("harbor.base.cablecleaver_axe"));
+        if (HasBase("harbor.base.sunken_anchor_maul") && tags.HasFlag(SkillTag.Melee) && distanceRaw <= 2_000)
+            More(BaseRuleValue("harbor.base.sunken_anchor_maul"));
+        if (HasBase("harbor.base.tideskimmer_bow") && tags.HasFlag(SkillTag.Attack) && tags.HasFlag(SkillTag.Projectile) && tick < _movementBuffUntil)
+            More(BaseRuleValue("harbor.base.tideskimmer_bow"));
         if (Has("铁月") && tags.HasFlag(SkillTag.Slam) && (snapshot?.FullLife ?? hero.Life == hero.MaximumLife)) More(7_000);
         if (Has("共生兽印") && (snapshot?.CompanionAlive ?? CompanionAlive?.Invoke() == true)) More(3_000);
         if (Has("裂渊獠牙") && tags.HasFlag(SkillTag.Melee) && rareOrBoss) More(5_500);
+        if (Has("逆潮之锋") && tags.HasFlag(SkillTag.Melee) && _reverseTideStacks > 0 &&
+            !_triggered && _actionTriggers.Add("reverse-tide-consume"))
+        {
+            More(_reverseTideStacks * 1_750);
+            _reverseTideStacks = 0;
+        }
+        if (Has("灯塔守望") && tags.HasFlag(SkillTag.Projectile))
+            More(distanceRaw >= 6_000 ? 3_000 : distanceRaw < 3_000 ? -2_000 : 0);
+        if (Has("双潮织手"))
+        {
+            if (tags.HasFlag(SkillTag.Spell) && tick < _attackBuffUntil) More(2_500);
+            if (tags.HasFlag(SkillTag.Attack) && tick < _spellBuffUntil) More(2_500);
+        }
         if (Has("复生之种") && (snapshot?.FullLife ?? hero.Life == hero.MaximumLife)) More(2_500);
         if (Has("行刑者之偿") && bleeding && enemyLife * 5L < enemyMaximumLife) More(10_000);
         if (Has("血税契据") && (snapshot?.LifePaid ?? _lifePaid)) More(6_000);
@@ -214,11 +276,17 @@ public sealed class EquipmentCombatRuntime(EquipmentCombatLoadout loadout, ulong
         ? Math.Min(6, distanceRaw / 2_000) * 100 : 0;
 
     public int OnHit(ResourceState hero, SkillTag tags, string enemyId, bool boss, bool critical, int damage,
-        VirtueViceState? virtues)
+        VirtueViceState? virtues, int tick = 0)
     {
         if (damage <= 0) return 0;
         bool first = boss && Has("凝滞一刻") && _firstBossHits.Add(enemyId);
         if (_copy) return 0;
+        if (!_triggered)
+        {
+            if (tags.HasFlag(SkillTag.Attack)) _attackBuffUntil = tick + 80;
+            if (tags.HasFlag(SkillTag.Spell)) _spellBuffUntil = tick + 80;
+            if (HasBase("harbor.base.downstream_quiver") && tags.HasFlag(SkillTag.Attack) && tags.HasFlag(SkillTag.Projectile)) _quiverMovementUntil = tick + 80;
+        }
         if (tags.HasFlag(SkillTag.Attack)) _hunt = false;
         if (critical) Gain("傲慢之印", VirtueViceKind.Arrogance, virtues);
         if (!_triggered && critical && tags.HasFlag(SkillTag.Spell) && Has("坠星透镜") && _actionTriggers.Add("falling-star")) _fallingStar = true;
@@ -240,6 +308,7 @@ public sealed class EquipmentCombatRuntime(EquipmentCombatLoadout loadout, ulong
     public void Evaded() { if (Has("猎手蚀影")) _hunt = true; }
     public void Blocked(int tick, bool spell)
     {
+        if (HasBase("harbor.base.returning_tide_shield")) _returningShieldUntil = tick + 80;
         if (!spell && Has("空洞守卫") && tick >= _suppressionReady) { _suppressionUntil = tick + 40; _suppressionReady = tick + 60; }
     }
     public void Suppressed(int tick, ResourceState hero)
@@ -253,8 +322,10 @@ public sealed class EquipmentCombatRuntime(EquipmentCombatLoadout loadout, ulong
         if (tick < _barkUntil) result = Scale(result, 8_000);
         if (hit && tick < _compassUntil) result = Scale(result, 8_500);
         if (Has("虚空天平") && !EqualResistances(sheet) && type is EnemyDamageType.Fire or EnemyDamageType.Cold or EnemyDamageType.Lightning) result = Scale(result, 8_800);
+        if (Has("不归航迹")) result = Scale(result, !hit && _wasMoving ? 7_000 : hit && !_wasMoving ? 11_000 : 10_000);
         return Scale(result, 10_000 - _rekindles * 1_500);
     }
+
     public void DamageTaken(int damage, bool hit, int tick, VirtueViceState? virtues)
     {
         if (damage <= 0) return;
@@ -284,5 +355,10 @@ public sealed class EquipmentCombatRuntime(EquipmentCombatLoadout loadout, ulong
     }
     private static bool EqualResistances(CharacterSheet s) => s.FireResistanceBasisPoints == s.ColdResistanceBasisPoints &&
         s.ColdResistanceBasisPoints == s.LightningResistanceBasisPoints && s.LightningResistanceBasisPoints == s.VoidResistanceBasisPoints;
+    private int TidalManaBonus()
+    {
+        long total = _tidalMana.Sum(entry => (long)entry.Mana / 10 * BaseRuleValue("harbor.base.tidal_wand"));
+        return (int)Math.Min(int.MaxValue - 10_000L, Math.Max(0, total));
+    }
     private static int Scale(int value, int multiplier) => (int)Math.Clamp((long)value * multiplier / 10_000, 0, int.MaxValue);
 }

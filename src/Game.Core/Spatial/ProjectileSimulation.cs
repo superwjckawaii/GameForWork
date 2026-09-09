@@ -102,6 +102,7 @@ public sealed partial class SpatialCombatRunner
             {
                 Point before = projectile.Position;
                 projectile.Position = Point.MoveToward(before, heroPosition, step);
+                RecordMovement(before);
                 foreach (EnemyUnit enemy in enemies.Where(enemy => enemy.Life > 0 &&
                              CanHit(enemy, returning: true) && OnSegment(enemy.Position, before, projectile.Position, 450)).ToArray())
                 {
@@ -128,6 +129,7 @@ public sealed partial class SpatialCombatRunner
             }
             Point previous = projectile.Position;
             projectile.Position = Point.MoveToward(previous, projectile.Destination, step);
+            RecordMovement(previous);
             bool redirected = false;
             foreach (var target in enemies.Where(enemy => enemy.Life > 0 && CanHit(enemy, false) &&
                          (!action.Star || enemy.EntityId == action.PrimaryTarget) && OnSegment(enemy.Position, previous, projectile.Position, 450))
@@ -177,6 +179,14 @@ public sealed partial class SpatialCombatRunner
                 redirected = true; break;
             }
             if (!redirected && projectile.Position == projectile.Destination) Finish();
+
+            void RecordMovement(Point from)
+            {
+                events.Add(new(tick * TickMilliseconds, SpatialEventKind.ProjectileMoved, "hero", projectile.TargetId,
+                    0, from, projectile.Position, $"skill:{skill.SkillId}",
+                    new($"{action.Context.Id}.{tick}.{from}", tick * TickMilliseconds, (tick + 1) * TickMilliseconds,
+                        "projectile", 0, new(0, 0), [from, projectile.Position])));
+            }
 
             void Finish()
             {

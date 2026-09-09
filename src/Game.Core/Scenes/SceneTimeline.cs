@@ -14,7 +14,8 @@ namespace GameForWork.Core.Scenes;
 
 public enum SceneEventKind
 {
-    TravelStarted,
+    ProjectileMoved = 100,
+    TravelStarted = 0,
     NodeEntered,
     WaveStarted,
     WarCry,
@@ -64,7 +65,8 @@ public sealed record SceneEvent(
     int HeroMaximumShield,
     int EnemyLife,
     int EnemyMaximumLife,
-    GridPosition Position, Point? EffectPosition = null);
+    GridPosition Position, Point? EffectPosition = null, Point? SourcePosition = null,
+    SpatialPresentation? Presentation = null);
 
 public sealed record EncounterSegment(
     int NodeIndex,
@@ -353,6 +355,7 @@ public static class SceneTimelineBuilder
                 SpatialEventKind.HeroMoved or SpatialEventKind.EnemyMoved => SceneEventKind.UnitMoved,
                 SpatialEventKind.WarCry => SceneEventKind.WarCry,
                 SpatialEventKind.HeavyStrike => SceneEventKind.HeavyStrike,
+                SpatialEventKind.ProjectileMoved => SceneEventKind.ProjectileMoved,
                 SpatialEventKind.EarthCleave => SceneEventKind.EarthCleave,
                 SpatialEventKind.SpiritBladeLaunched or SpatialEventKind.SpiritBladeHit => SceneEventKind.SpiritBlade,
                 SpatialEventKind.ChainHit => SceneEventKind.Chain,
@@ -394,7 +397,15 @@ public static class SceneTimelineBuilder
                 enemy?.Life ?? 0,
                 enemy?.MaximumLife ?? 0,
                 new GridPosition(item.TargetPosition.XRaw / 1_000, item.TargetPosition.YRaw / 1_000)) with
-            { EffectPosition = item.TargetPosition });
+            {
+                EffectPosition = item.TargetPosition,
+                SourcePosition = item.SourcePosition,
+                Presentation = item.Presentation is { } presentation ? presentation with
+                {
+                    StartsAtMilliseconds = start + presentation.StartsAtMilliseconds,
+                    EndsAtMilliseconds = start + presentation.EndsAtMilliseconds,
+                } : null,
+            });
         }
     }
 

@@ -45,6 +45,11 @@ public static class EquipmentItemRebinder
                 enchantment = EquipmentEnchantmentCatalog.All.FirstOrDefault(value => value.DisplayName == enchantment.DisplayName);
             }
         }
+        ItemEnchantment[] additional = (item.AdditionalEnchantments ?? []).Select(value =>
+        {
+            try { return EquipmentEnchantmentCatalog.Get(value.StableId); }
+            catch (InvalidOperationException) { return EquipmentEnchantmentCatalog.All.FirstOrDefault(entry => entry.DisplayName == value.DisplayName); }
+        }).Where(value => value is not null).Cast<ItemEnchantment>().ToArray();
         IReadOnlyList<RolledAffixComponent> corruptionComponents = RestoreCorruptionComponents(item);
         return item with
         {
@@ -52,6 +57,7 @@ public static class EquipmentItemRebinder
             Affixes = affixes,
             FracturedAffixFamilyId = fractured,
             Enchantment = enchantment,
+            AdditionalEnchantments = additional,
             RolledBaseArmor = item.RolledBaseArmor > 0 ? item.RolledBaseArmor : itemBase.Armor,
             RolledBaseEvasion = item.RolledBaseEvasion > 0 ? item.RolledBaseEvasion : itemBase.Evasion,
             RolledBaseShield = item.RolledBaseShield > 0 ? item.RolledBaseShield : itemBase.Shield,

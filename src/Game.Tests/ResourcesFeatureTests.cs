@@ -53,7 +53,7 @@ public sealed class ResourcesFeatureTests
     [Fact]
     public void LegendaryAndMechanicPoolsIncludeBuildsVirtueViceItems()
     {
-        Assert.Equal(50, UniqueItems.All.Count(item => !item.Mythic));
+        Assert.Equal(58, UniqueItems.All.Count(item => !item.Mythic));
         foreach (string pool in new[] { "warden", "citadel", "abyss", "garden", "red", "blue", "warfront" })
         {
             IReadOnlyList<UniqueDefinition> items = LegendaryDrops.Pool(pool);

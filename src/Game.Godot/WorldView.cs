@@ -325,9 +325,7 @@ public partial class WorldView : Control
             DrawLine(new Vector2(field.Position.X, y), new Vector2(field.End.X, y), new Color(0.33f, 0.38f, 0.44f, 0.12f), 1);
         }
 
-        bool heroStanding = current.HeroPosition == next.HeroPosition;
-        Vector2 actor = MapPoint(field, Lerp(current.HeroPosition, next.HeroPosition, interpolation)) +
-                        (heroStanding ? VisualFootwork("hero", elapsed, 3.2f) : Vector2.Zero);
+        Vector2 actor = MapPoint(field, Lerp(current.HeroPosition, next.HeroPosition, interpolation));
         _nextEnemies.Clear();
         foreach (EnemyFrame enemy in next.Enemies) _nextEnemies[enemy.EntityId] = enemy;
         _positions.Clear();
@@ -337,13 +335,12 @@ public partial class WorldView : Control
             Point position = _nextEnemies.TryGetValue(enemy.EntityId, out EnemyFrame? future)
                 ? Lerp(enemy.Position, future.Position, interpolation)
                 : enemy.Position;
-            bool standing = future?.Position == enemy.Position;
-            _positions[enemy.EntityId] = MapPoint(field, position) +
-                                         (standing ? VisualFootwork(enemy.EntityId, elapsed, enemy.Boss ? 2.2f : 3f) : Vector2.Zero);
+            _positions[enemy.EntityId] = MapPoint(field, position);
         }
 
         CollectRecentEvents(timeline.Events, elapsed, _recentEvents);
-        DrawSpatialSkills(field, actor, _positions, _recentEvents, elapsed);
+        DrawSpatialSkills(field, actor, _positions,
+            SceneEffectPlayback.Select(timeline.Events, elapsed, VisualPreferences.EffectLimit(Size.X)), elapsed);
 
         foreach (EnemyFrame enemy in current.Enemies.Where(enemy => enemy.Life > 0 ||
                      HasRecentEvent(_recentEvents, SceneEventKind.EnemyDefeated, targetId: enemy.EntityId)))
@@ -353,7 +350,9 @@ public partial class WorldView : Control
             DrawShadow(position + new Vector2(0, 5), radius + 2);
             EnemyFrame future = _nextEnemies.GetValueOrDefault(enemy.EntityId) ?? enemy;
             Facing facing = FacingBetween(enemy.Position, future.Position, current.HeroPosition);
-            SpriteAction action = ResolveEnemyAction(enemy, future, _recentEvents);
+            SpriteAction action = ResolveEnemyAction(enemy, future, _recentEvents
+                .Where(item => elapsed - item.AtMilliseconds <
+                    (EventTargets(item, enemy.EntityId) && IsDamageEvent(item.Kind) ? 180 : 500)).ToArray());
             long actionAge = EventAge(_recentEvents, elapsed, action == SpriteAction.Death
                 ? SceneEventKind.EnemyDefeated
                 : action == SpriteAction.Hit ? null : SceneEventKind.EnemyAttack, enemy.EntityId);
@@ -371,13 +370,25 @@ public partial class WorldView : Control
         EnemyFrame? heroTarget = current.Enemies.FirstOrDefault(enemy => enemy.EntityId == current.HeroTargetId);
         Facing heroFacing = FacingBetween(current.HeroPosition, next.HeroPosition,
             heroTarget?.Position ?? new Point(current.HeroPosition.XRaw, current.HeroPosition.YRaw - 1));
-        SpriteAction heroAction = ResolveHeroAction(current, next, _recentEvents);
+        SpriteAction heroAction = ResolveHeroAction(current, next, _recentEvents.Where(item =>
+            elapsed - item.AtMilliseconds < (EventTargets(item, "hero") && IsDamageEvent(item.Kind) ? 180 : 500)).ToArray());
         foreach (AllyFrame ally in current.Allies ?? [])
-            DrawSpatialAlly(field, ally, current, next, elapsed, hero, heroFacing, heroAction);
-        DrawArtSprite(_actorAnimationAtlas, hero ? 0 : 1, heroFacing, heroAction, elapsed,
+            DrawSpatialAlly(field, ally, current, next, elapsed, hero);
+        SceneEvent? heroActionEvent = timeline.Events.LastOrDefault(item => item.AtMilliseconds <= elapsed &&
+            (heroAction == SpriteAction.Death ? item.HeroLife <= 0 :
+             heroAction == SpriteAction.Hit ? EventTargets(item, "hero") && IsDamageEvent(item.Kind) :
+             EventSource(item, "hero") && IsHeroAction(item.Kind)));
+        long heroActionAge = heroAction is SpriteAction.Idle or SpriteAction.Move ? elapsed :
+            Math.Max(0, elapsed - (heroActionEvent?.AtMilliseconds ?? elapsed));
+        if (heroAction == SpriteAction.Death)
+        {
+            SpatialFrame? death = frames.Take(frameIndex + 1).Reverse().TakeWhile(frame => frame.HeroLife <= 0).LastOrDefault();
+            heroActionAge = Math.Max(0, elapsed - (death?.AtMilliseconds ?? elapsed));
+        }
+        DrawArtSprite(_actorAnimationAtlas, hero ? 0 : 1, heroFacing, heroAction, heroActionAge,
             actor, new Vector2(44, 56), ArtContract.ActorRigCount,
             ArtContract.ActorCellWidth, ArtContract.ActorCellHeight,
-            loop: heroAction != SpriteAction.Death);
+            loop: heroAction is SpriteAction.Idle or SpriteAction.Move);
         DrawBar(new Rect2(actor + new Vector2(-30, 11), new Vector2(60, 5)),
             current.HeroMaximumLife <= 0 ? 0 : (float)current.HeroLife / current.HeroMaximumLife, new Color("a73737"));
         DrawBar(new Rect2(actor + new Vector2(-30, 18), new Vector2(60, 4)),
@@ -405,40 +416,47 @@ public partial class WorldView : Control
     }
 
     private void DrawSpatialAlly(Rect2 field, AllyFrame ally, SpatialFrame current, SpatialFrame next,
-        long elapsed, bool hero, Facing heroFacing, SpriteAction heroAction)
+        long elapsed, bool hero)
     {
-        Vector2 position = MapPoint(field, ally.Position) + VisualFootwork(ally.EntityId, elapsed, 2.6f);
+        AllyFrame? future = next.Allies?.FirstOrDefault(item => item.EntityId == ally.EntityId);
+        float progress = next.AtMilliseconds <= current.AtMilliseconds ? 0 :
+            Math.Clamp((elapsed - current.AtMilliseconds) / (float)(next.AtMilliseconds - current.AtMilliseconds), 0, 1);
+        Vector2 position = MapPoint(field, Lerp(ally.Position, future?.Position ?? ally.Position, progress));
         _positions[ally.EntityId] = position;
         DrawShadow(position + new Vector2(0, 5), 7);
+        DrawCombatUnit(ally, current, next, elapsed, hero, position);
         if (ally.SkillId.Length > 0)
         {
-            DrawCombatUnit(ally, current, next, elapsed, hero, position);
             DrawBar(new Rect2(position + new Vector2(-17, 11), new Vector2(34, 4)),
                 (float)ally.Life / Math.Max(1, ally.MaximumLife), new Color("54b599"));
             return;
         }
-        int rig = 1 + StableVisualIndex(ally.EntityId, 4);
-        DrawArtSprite(_actorAnimationAtlas, rig, heroFacing,
-            heroAction == SpriteAction.Idle ? SpriteAction.Idle : heroAction,
-            elapsed, position, new Vector2(36, 46), ArtContract.ActorRigCount,
-            ArtContract.ActorCellWidth, ArtContract.ActorCellHeight);
     }
 
     private void DrawCombatUnit(AllyFrame ally, SpatialFrame current, SpatialFrame next, long elapsed,
         bool hero, Vector2 position)
     {
         AllyFrame? nextAlly = next.Allies?.FirstOrDefault(item => item.EntityId == ally.EntityId);
-        SceneEvent? action = _recentEvents.LastOrDefault(item => EventSource(item, ally.EntityId) && item.Value > 0);
-        SceneEvent? hit = RecentUnitHit(ally.EntityId, current.AtMilliseconds);
+        SceneEvent? action = _recentEvents.LastOrDefault(item => EventSource(item, ally.EntityId) &&
+            IsHeroAction(item.Kind));
+        SceneEvent? hit = RecentUnitHit(ally.EntityId, elapsed);
         Facing facing = FacingBetween(ally.Position, nextAlly?.Position ?? ally.Position,
             action?.EffectPosition ?? current.HeroPosition);
-        SpriteAction unitAction = ResolveUnitAction(ally, nextAlly, action, hit, current.AtMilliseconds);
-        SceneEvent? timedAction = hit ?? action;
-        long actionAge = timedAction is null ? elapsed : Math.Max(0, current.AtMilliseconds - timedAction.AtMilliseconds);
+        SpriteAction unitAction = ResolveUnitAction(ally, nextAlly, action, hit, elapsed);
+        SceneEvent? timedAction = unitAction == SpriteAction.Hit ? hit : action;
+        long actionAge = unitAction is SpriteAction.Idle or SpriteAction.Move ? elapsed :
+            Math.Max(0, elapsed - (timedAction?.AtMilliseconds ?? elapsed));
+        if (ally.SkillId.Length == 0)
+        {
+            DrawArtSprite(_actorAnimationAtlas, 1 + StableVisualIndex(ally.EntityId, 4), facing, unitAction,
+                actionAge, position, new Vector2(36, 46), ArtContract.ActorRigCount,
+                ArtContract.ActorCellWidth, ArtContract.ActorCellHeight, loop: unitAction is SpriteAction.Idle or SpriteAction.Move);
+            return;
+        }
         if (TryDrawCharacterUnit(ally, hero, facing, unitAction, actionAge, position)) return;
         DrawArtSprite(_unitAnimationAtlas, ArtContract.UnitRig(ally.SkillId), facing, unitAction, actionAge,
             position, new Vector2(36, 46), ArtContract.UnitRigCount,
-            ArtContract.ActorCellWidth, ArtContract.ActorCellHeight);
+            ArtContract.ActorCellWidth, ArtContract.ActorCellHeight, loop: unitAction is SpriteAction.Idle or SpriteAction.Move);
     }
 
     private bool TryDrawCharacterUnit(AllyFrame ally, bool hero, Facing facing, SpriteAction action,
@@ -448,13 +466,14 @@ public partial class WorldView : Control
         {
             DrawArtSprite(_actorAnimationAtlas, hero ? 0 : 1, facing, action, actionAge, position,
                 new Vector2(36, 46), ArtContract.ActorRigCount, ArtContract.ActorCellWidth,
-                ArtContract.ActorCellHeight, tint: new Color(0.55f, 0.82f, 1f, 0.5f));
+                ArtContract.ActorCellHeight, loop: action is SpriteAction.Idle or SpriteAction.Move,
+                tint: new Color(0.55f, 0.82f, 1f, 0.5f));
             return true;
         }
         if (ally.EntityId != "mercenary") return false;
         DrawArtSprite(_actorAnimationAtlas, 1, facing, action, actionAge, position,
             new Vector2(36, 46), ArtContract.ActorRigCount,
-            ArtContract.ActorCellWidth, ArtContract.ActorCellHeight);
+            ArtContract.ActorCellWidth, ArtContract.ActorCellHeight, loop: action is SpriteAction.Idle or SpriteAction.Move);
         return true;
     }
 
@@ -465,29 +484,13 @@ public partial class WorldView : Control
     private static SpriteAction ResolveUnitAction(AllyFrame ally, AllyFrame? next, SceneEvent? action,
         SceneEvent? hit, long atMilliseconds)
     {
+        if (ally.Life <= 0) return SpriteAction.Death;
         if (hit is not null) return SpriteAction.Hit;
         if (next is not null && next.Position != ally.Position) return SpriteAction.Move;
         return action is not null && atMilliseconds - action.AtMilliseconds < 500
-            ? SpriteAction.Attack : SpriteAction.Idle;
+            ? ActionForEvent(action) : SpriteAction.Idle;
     }
 
-    private static Vector2 VisualFootwork(string stableId, long elapsed, float amplitude)
-    {
-        const long interval = 720;
-        long phase = Math.Max(0, elapsed / interval);
-        float progress = (elapsed % interval) / (float)interval;
-        progress = progress * progress * (3 - 2 * progress);
-        Vector2 from = FootworkTarget(stableId, phase, amplitude);
-        Vector2 to = FootworkTarget(stableId, phase + 1, amplitude);
-        return from.Lerp(to, progress);
-    }
-
-    private static Vector2 FootworkTarget(string stableId, long phase, float amplitude)
-    {
-        int x = StableVisualIndex($"{stableId}|foot-x|{phase}", 7) - 3;
-        int y = StableVisualIndex($"{stableId}|foot-y|{phase}", 7) - 3;
-        return new Vector2(x / 3f * amplitude, y / 3f * amplitude * .55f);
-    }
 
     private void DrawSpatialEnemy(Vector2 position, EnemyFrame enemy, float radius, bool targeted,
         Facing facing, SpriteAction action, long actionAge)
@@ -540,51 +543,70 @@ public partial class WorldView : Control
         IEnumerable<SceneEvent> recent,
         long elapsed)
     {
-        int effectLimit = VisualPreferences.EffectLimit(Size.X);
-        foreach (SceneEvent item in recent.OrderByDescending(item => item.Kind == SceneEventKind.BossPhase || item.Detail.Contains("持续危险地面", StringComparison.Ordinal))
-                     .ThenByDescending(item => item.AtMilliseconds).Take(effectLimit))
+        foreach (SceneEvent item in recent)
         {
             SkillVisualDescriptor? visual = VisualForEvent(item);
-            float lifetime = visual?.LifetimeMilliseconds ?? 900f;
-            float age = Math.Clamp((elapsed - item.AtMilliseconds) / lifetime, 0, 1);
+            float age = SceneEffectPlayback.Progress(item, elapsed, visual?.LifetimeMilliseconds ?? 900);
             string[] ids = item.Detail.Split('|');
-            Vector2 target = ids.Length > 1 && positions.TryGetValue(ids[1], out Vector2 live)
+            Vector2 target = item.EffectPosition is { } fixedTarget ? MapPoint(field, fixedTarget) :
+                ids.Length > 1 && positions.TryGetValue(ids[1], out Vector2 live)
                 ? live
                 : MapPoint(field, new Point(item.Position.X * 1_000, item.Position.Y * 1_000));
-            Vector2 source = ids.Length > 0 && positions.TryGetValue(ids[0], out Vector2 origin) ? origin : actor;
+            Vector2 source = item.SourcePosition is { } fixedSource ? MapPoint(field, fixedSource) :
+                ids.Length > 0 && positions.TryGetValue(ids[0], out Vector2 origin) ? origin : actor;
             bool ground = item.Detail.Contains("持续危险地面", StringComparison.Ordinal);
-            bool warning = item.Kind == SceneEventKind.BossPhase && item.Detail.Contains("until:", StringComparison.Ordinal);
-            if ((ground || warning) && item.EffectPosition is { } effect)
+            bool warning = SceneEffectPlayback.IsDanger(item);
+            if ((ground || warning) && item.EffectPosition is { } effect && item.Presentation is { } geometry)
             {
                 target = MapPoint(field, effect);
-                float radius = field.Size.X * (ground ? .15f : 1f / 6f);
-                DrawCircle(target, radius, new Color(ground ? "ab4c2230" : "f0804020"));
-                DrawArc(target, radius, 0, MathF.Tau, 32, new Color(ground ? "dc772aaa" : "ffb050dd"), 2);
+                DrawSpatialArea(field, effect, geometry.RadiusRaw, new(0, 0), false,
+                    new Color(ground ? "ab4c2230" : "f0804020"), new Color(ground ? "dc772aaa" : "ffb050dd"));
                 continue;
             }
-            if (visual is not null && age < .86f)
+            if (visual is not null && age < 1f)
             {
+                if (visual.Shape == SkillShape.Chain && item.EffectPosition is { } chainTarget && item.SourcePosition is { } chainSource)
+                {
+                    Vector2 from = MapPoint(field, chainSource);
+                    Vector2 to = MapPoint(field, chainTarget);
+                    DrawLine(from, to, DamageColor(item.Detail, .78f * (1 - age)), 3.5f, true);
+                    DrawLine(from.Lerp(to, .5f), to, DamageColor(item.Detail, .38f * (1 - age)), 8f, true);
+                }
+                if (visual.Shape == SkillShape.Self && item.Detail.Contains("召唤", StringComparison.Ordinal))
+                {
+                    DrawCircle(target, 18 + age * 18, new Color(0.28f, 0.8f, 0.72f, .14f * (1 - age)));
+                    DrawArc(target, 18 + age * 18, 0, MathF.Tau, 24,
+                        new Color(0.42f, 1f, .82f, .8f * (1 - age)), 2f);
+                }
                 int effectRange = VisualCatalog.EffectRangeRaw(item.Detail);
                 if (effectRange > 0 && visual.Shape is SkillShape.Circle or SkillShape.Cone or
                     SkillShape.GroundArea or SkillShape.MovementCircle)
                 {
-                    float rangePixels = effectRange * field.Size.X / (SceneTimeline.LogicalWidth * 1_000f);
                     Color rangeColor = DamageColor(item.Detail, .2f * (1 - age));
-                    DrawCircle(target, rangePixels, rangeColor);
-                    DrawArc(target, rangePixels, 0, MathF.Tau, 40,
-                        DamageColor(item.Detail, .7f * (1 - age)), 1.5f);
+                    Point centerPoint = visual.Shape == SkillShape.Cone ? item.SourcePosition ?? new(0, 0) :
+                        item.EffectPosition ?? new(0, 0);
+                    Point direction = new((item.EffectPosition?.XRaw ?? 0) - centerPoint.XRaw,
+                        (item.EffectPosition?.YRaw ?? 0) - centerPoint.YRaw);
+                    DrawSpatialArea(field, centerPoint, effectRange, direction, visual.Shape == SkillShape.Cone,
+                        rangeColor, DamageColor(item.Detail, .7f * (1 - age)));
                 }
                 float size = 38f * visual.ScaleBasisPoints / 10_000f * (visual.Signature ? 1.12f : 1f);
                 Vector2 variation = new((visual.VariationSeed % 3 - 1) * 2, ((visual.VariationSeed / 3) % 3 - 1) * 2);
-                Vector2 center = (visual.UsesSourceToTarget ? source.Lerp(target, Math.Clamp(age * 1.25f, 0, 1)) : target) + variation;
+                Vector2 center = target + variation;
+                if (item.Presentation is { Shape: "projectile", Trajectory.Count: >= 2 } path)
+                {
+                    source = MapPoint(field, path.Trajectory[0]);
+                    target = MapPoint(field, path.Trajectory[^1]);
+                    center = MapPoint(field, SceneEffectPlayback.TrajectoryPosition(path, age));
+                }
                 DrawPresentationVfx(visual.AtlasCell, center, size, visual.UsesSourceToTarget ? source.AngleToPoint(target) : 0);
-                if (visual.Signature && age > .28f)
+                if (visual.Signature && item.Kind != SceneEventKind.ProjectileMoved && age > .28f)
                 {
                     float secondAge = Math.Clamp((age - .28f) / .58f, 0, 1);
                     DrawPresentationVfx((visual.AtlasCell + 1 + visual.VariationSeed) % 15, target,
                         size * (.72f + secondAge * .45f), -secondAge * .8f);
                 }
-                DrawSupportLayers(source, target, center, age, ReadSupportLayers(item.Detail));
+                DrawHitAccent(item, target, age);
             }
             else if (item.Kind == SceneEventKind.BossPhase && age < .9f)
             {
@@ -592,6 +614,30 @@ public partial class WorldView : Control
             }
         }
         DrawCombatFeedback(field, positions, recent, elapsed);
+    }
+
+    private void DrawSpatialArea(Rect2 field, Point center, int radius, Point direction, bool cone,
+        Color fill, Color outline)
+    {
+        float heading = MathF.Atan2(direction.YRaw, direction.XRaw);
+        float start = cone ? heading - MathF.PI / 3 : 0;
+        float sweep = cone ? 2 * MathF.PI / 3 : MathF.Tau;
+        var points = new List<Vector2>();
+        if (cone) points.Add(MapPoint(field, center));
+        for (int index = 0; index <= 48; index++)
+        {
+            float angle = start + sweep * index / 48;
+            points.Add(MapPoint(field, new Point(center.XRaw + (int)(MathF.Cos(angle) * radius),
+                center.YRaw + (int)(MathF.Sin(angle) * radius))));
+        }
+        Vector2[] clip = [field.Position, new(field.End.X, field.Position.Y), field.End,
+            new(field.Position.X, field.End.Y)];
+        foreach (Vector2[] polygon in Geometry2D.IntersectPolygons(points.ToArray(), clip))
+        {
+            if (polygon.Length < 3) continue;
+            DrawColoredPolygon(polygon, fill);
+            DrawPolyline(polygon.Append(polygon[0]).ToArray(), outline, 1.5f, true);
+        }
     }
 
     private void DrawSpatialNumbers(
@@ -688,11 +734,7 @@ public partial class WorldView : Control
         if (recent.Any(item => EventTargets(item, "hero") && item.Kind is SceneEventKind.EnemyAttack or SceneEventKind.Bleed))
             return SpriteAction.Hit;
         SceneEvent? action = recent.LastOrDefault(item => EventSource(item, "hero") && IsHeroAction(item.Kind));
-        if (action is not null)
-            return action.Kind is SceneEventKind.WarCry or SceneEventKind.Banner or SceneEventKind.Guard or
-                SceneEventKind.Flask or SceneEventKind.EmberNova or SceneEventKind.StormBrand
-                ? SpriteAction.Cast
-                : SpriteAction.Attack;
+        if (action is not null) return ActionForEvent(action);
         return current.HeroPosition != next.HeroPosition ? SpriteAction.Move : SpriteAction.Idle;
     }
 
@@ -704,6 +746,14 @@ public partial class WorldView : Control
         if (recent.Any(item => item.Kind == SceneEventKind.EnemyAttack && EventSource(item, current.EntityId)))
             return current.Role is UnitRole.Caster or UnitRole.Summoner ? SpriteAction.Cast : SpriteAction.Attack;
         return current.Position != next.Position ? SpriteAction.Move : SpriteAction.Idle;
+    }
+
+    private static SpriteAction ActionForEvent(SceneEvent item)
+    {
+        SkillVisualDescriptor? visual = VisualForEvent(item);
+        return visual is not null ? SkillAnimation.ForSkill(visual.SkillId) :
+            item.Kind is SceneEventKind.WarCry or SceneEventKind.Banner or SceneEventKind.Guard or SceneEventKind.Flask
+                ? SpriteAction.Cast : SpriteAction.Attack;
     }
 
     private static bool IsHeroAction(SceneEventKind kind) => kind is
@@ -790,36 +840,12 @@ public partial class WorldView : Control
         DrawSetTransform(Vector2.Zero, 0, Vector2.One);
     }
 
-    private void DrawSupportLayers(Vector2 source, Vector2 target, Vector2 center, float age, SupportVisualLayer layers)
+    private void DrawHitAccent(SceneEvent item, Vector2 center, float age)
     {
+        if (!SceneEffectPlayback.IsCriticalHit(item)) return;
         float alpha = Math.Clamp(1 - age, 0, 1);
-        if (layers.HasFlag(SupportVisualLayer.ExtraProjectiles))
-        {
-            Vector2 perpendicular = (target - source).Normalized().Orthogonal() * 7;
-            DrawLine(source + perpendicular, target + perpendicular, new Color(.88f, .83f, .55f, alpha * .65f), 1);
-            DrawLine(source - perpendicular, target - perpendicular, new Color(.88f, .83f, .55f, alpha * .65f), 1);
-        }
-        if (layers.HasFlag(SupportVisualLayer.ChainOrFork))
-            DrawPolyline([source, center + new Vector2(0, -10), target], new Color(.42f, .86f, 1, alpha), 2);
-        if (layers.HasFlag(SupportVisualLayer.Return))
-            DrawArc(center, 10 + age * 15, .2f, 5.2f, 16, new Color(.95f, .8f, .32f, alpha), 2);
-        if (layers.HasFlag(SupportVisualLayer.AreaPulse))
-            DrawArc(target, 10 + age * 30, 0, MathF.Tau, 20, new Color(.75f, .54f, 1, alpha), 2);
-        if (layers.HasFlag(SupportVisualLayer.Repeat))
-            DrawArc(center, 7 + age * 18, 0, MathF.Tau, 14, new Color(1, .55f, .2f, alpha), 2);
-        if (layers.HasFlag(SupportVisualLayer.CriticalFlash))
-        {
-            DrawLine(center - new Vector2(8, 0), center + new Vector2(8, 0), new Color(1, .92f, .55f, alpha), 2);
-            DrawLine(center - new Vector2(0, 8), center + new Vector2(0, 8), new Color(1, .92f, .55f, alpha), 2);
-        }
-        if (layers.HasFlag(SupportVisualLayer.AilmentTrail))
-            DrawCircle(center + new Vector2(0, age * 10), 3, new Color(.48f, .92f, .3f, alpha));
-        if (layers.HasFlag(SupportVisualLayer.GuardShell))
-            DrawArc(source, 15, 0, MathF.Tau, 18, new Color(.35f, .8f, 1, alpha), 2);
-        if (layers.HasFlag(SupportVisualLayer.TriggerRune))
-            DrawRect(new Rect2(target - new Vector2(7, 7), new Vector2(14, 14)), new Color(.72f, .36f, 1, alpha), false, 2);
-        if (layers.HasFlag(SupportVisualLayer.MinionAura))
-            DrawArc(source, 20 + age * 10, 0, MathF.Tau, 18, new Color(.58f, .84f, .62f, alpha), 2);
+        DrawLine(center - new Vector2(8, 0), center + new Vector2(8, 0), new Color(1, .92f, .55f, alpha), 2);
+        DrawLine(center - new Vector2(0, 8), center + new Vector2(0, 8), new Color(1, .92f, .55f, alpha), 2);
     }
 
     private void DrawCombatFeedback(Rect2 field, IReadOnlyDictionary<string, Vector2> positions,
@@ -947,14 +973,6 @@ public partial class WorldView : Control
         };
         return skillId.Length > 0 && VisualCatalog.TryForSkill(skillId, out SkillVisualDescriptor? result)
             ? result : null;
-    }
-
-    private static SupportVisualLayer ReadSupportLayers(string detail)
-    {
-        string? token = ReadDetailValue(detail, "supports:");
-        return ulong.TryParse(token, out ulong flags)
-            ? VisualCatalog.LayersForLegacySupport(flags)
-            : SupportVisualLayer.None;
     }
 
     private static string? ReadDetailValue(string detail, string prefix)
@@ -1167,7 +1185,7 @@ public partial class WorldView : Control
             float size = 44f * visual.ScaleBasisPoints / 10_000f;
             DrawPresentationVfx(visual.AtlasCell, center, size,
                 visual.UsesSourceToTarget ? actor.AngleToPoint(enemy) : 0);
-            DrawSupportLayers(actor, enemy, center, age, ReadSupportLayers(item.Detail));
+            DrawHitAccent(item, enemy, age);
         }
     }
 

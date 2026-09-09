@@ -22,7 +22,10 @@ public static class EquipmentLegendaryFactory
 
     public static IReadOnlyList<EquipmentLegendaryEntry> ForBase(ItemBaseDefinition itemBase, bool includeMythic = false) =>
         EquipmentCatalog.LegendaryItems.Where(entry =>
-            (includeMythic || entry.Rarity == "Legendary") && ResolveBase(entry).StableId == itemBase.StableId).ToArray();
+            (includeMythic || entry.Rarity == "Legendary") && !IsHarborExclusive(entry) && ResolveBase(entry).StableId == itemBase.StableId).ToArray();
+
+    public static bool IsHarborExclusive(EquipmentLegendaryEntry entry) =>
+        entry.Id.StartsWith("harbor.legendary.", StringComparison.Ordinal);
 
     private static ItemInstance Create(EquipmentLegendaryEntry entry, int itemLevel, string instanceId, ulong seed)
     {
@@ -112,6 +115,7 @@ public static class EquipmentLegendaryFactory
         if (text.Contains("全局法术暴击率", StringComparison.Ordinal) || text.Contains("全局暴击率", StringComparison.Ordinal)) return [C(ItemModifierKind.IncreasedCriticalChanceBasisPoints)];
         if (text.Contains("投射物额外连锁", StringComparison.Ordinal)) return [C(ItemModifierKind.AdditionalChain)];
         if (text.Contains("投射物数量", StringComparison.Ordinal)) return [C(ItemModifierKind.AdditionalProjectile)];
+        if (text.Contains("投射物速度", StringComparison.Ordinal)) return [C(ItemModifierKind.ProjectileSpeedBasisPoints)];
         if (text.Contains("生命恢复率", StringComparison.Ordinal) || text.Contains("法力恢复率", StringComparison.Ordinal)) return [C(ItemModifierKind.IncreasedResourceRecoveryRateBasisPoints)];
         if (text.Contains("法术伤害总增", StringComparison.Ordinal)) return [C(ItemModifierKind.MoreSpellDamageBasisPoints)];
         if (text.Contains("法术伤害提高", StringComparison.Ordinal)) return [C(ItemModifierKind.IncreasedSpellDamageBasisPoints)];

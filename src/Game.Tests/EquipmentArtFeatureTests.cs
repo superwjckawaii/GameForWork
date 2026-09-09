@@ -75,7 +75,7 @@ public sealed class EquipmentArtFeatureTests
         Assert.Equal(UniqueItems.All.Select(item => item.StableId), EquipmentLegendaryArt.StableIds);
         Assert.Equal(2, EquipmentLegendaryArt.IconIndex("core.unique.ravens_answer"));
         Assert.Equal(40, EquipmentLegendaryArt.IconIndex("core.mythic.heart_of_ash"));
-        Assert.Equal(55, UniqueItems.All.Select(item => EquipmentLegendaryArt.IconIndex(item.StableId)).Distinct().Count());
+        Assert.Equal(63, UniqueItems.All.Select(item => EquipmentLegendaryArt.IconIndex(item.StableId)).Distinct().Count());
         Assert.Equal(ItemCategory.Helmet, ItemBases.Get(UniqueItems.All[2].BaseStableId).Category);
         Assert.Contains(UniqueItems.All.Where(item => item.Mythic), item =>
             ItemBases.Get(item.BaseStableId).Category == ItemCategory.BodyArmor);
@@ -113,7 +113,7 @@ public sealed class EquipmentArtFeatureTests
     [Fact]
     public void EveryLegendaryHasConcreteRuleAffixesAndRuntimeHandler()
     {
-        Assert.Equal(55, UniqueItems.All.Count);
+        Assert.Equal(63, UniqueItems.All.Count);
         Assert.Contains(UniqueItems.All, definition => definition.LegendaryAffixes.Count > 1);
         Assert.Equal(UniqueItems.All.SelectMany(definition => definition.LegendaryAffixes).Count(),
             UniqueItems.All.SelectMany(definition => definition.LegendaryAffixes)

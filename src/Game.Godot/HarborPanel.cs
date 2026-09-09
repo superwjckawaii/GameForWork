@@ -27,7 +27,7 @@ public partial class HarborPanel : VBoxContainer
     {
         _session = session; _changed = changed;
         Name = "沉金港";
-        AddChild(new Label { Text = "百级突破后解锁；考验实际移速与生存。三个港区全自动，无提前撤离。\n当前候选池：18件沉金港特殊巅峰底材；专属传奇仍在接入。", AutowrapMode = TextServer.AutowrapMode.WordSmart });
+        AddChild(new Label { Text = "百级突破后解锁；考验实际移速与生存。三个港区全自动，无提前撤离。\n当前候选池：18件沉金港特殊巅峰底材与 8 件成功箱专属传奇。", AutowrapMode = TextServer.AutowrapMode.WordSmart });
         var controls = new HFlowContainer();
         _team.AddItem("主角队伍"); _team.AddItem("佣兵远征队");
         foreach (HarborDifficulty difficulty in HarborDifficulty.All)
@@ -98,7 +98,7 @@ public partial class HarborPanel : VBoxContainer
             {
                 int choice = index;
                 var item = chest.Candidates[index];
-                AddButton(row, $"{item.Base.DisplayName} · 等级{item.ItemLevel} · 品质{item.Quality}\n{item.Base.ImplicitText}",
+                AddButton(row, $"{item.DisplayName} · 等级{item.ItemLevel} · 品质{item.Quality}\n{item.Base.ImplicitText}",
                     () => _session().ClaimHarborChest(chest.Id, choice) ? "装备已领取并锁定；仓满时进入恢复箱。" : "未领取，宝箱保持原状。",
                     UiText.ItemTooltip(item, includeAffixDetails: true));
             }

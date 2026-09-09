@@ -89,6 +89,10 @@ public static class UniqueItems
         ["无名谦冠"] = "builds.unique.humility_crown", ["傲慢之握"] = "builds.unique.arrogance_grasp",
         ["怒节同契"] = "builds.unique.rage_temperance_carapace", ["两极德印"] = "builds.unique.paired_virtue_girdle",
         ["灰烬之心"] = "core.mythic.heart_of_ash",
+        ["逆潮之锋"] = "harbor.legendary.reverse_tide_edge", ["灯塔守望"] = "harbor.legendary.lighthouse_watch",
+        ["无眠领航者"] = "harbor.legendary.sleepless_navigator", ["最后一舱"] = "harbor.legendary.last_hold",
+        ["双潮织手"] = "harbor.legendary.twin_tide_weaver", ["不归航迹"] = "harbor.legendary.unreturning_wake",
+        ["三潮共鸣"] = "harbor.legendary.three_tides_resonance", ["空瓶誓约"] = "harbor.legendary.empty_bottle_oath",
     };
 
     public static IReadOnlyList<UniqueDefinition> All { get; } = BuildFormal();
@@ -178,6 +182,19 @@ public static class Bosses
             5_000, 105, "交替封锁近场与远场"),
     ];
 
+    public static IReadOnlyList<BossDefinition> HarborBosses { get; } =
+    [
+        new("harbor.boss.rope_captain", "断缆船长", "harbor.region.dock",
+            [new("钩索横扫", "物理", "红色扇形蓄力", true), new("沉锚炮击", "火焰", "橙色直线落点", true), new("断缆冲锋", "物理", "锁定箭头", true)],
+            5_000, 105, "半血后召集钩索掠夺者并缩短冲锋间隔"),
+        new("harbor.boss.sunken_warden", "沉仓守卫", "harbor.region.warehouse",
+            [new("铜壳重砸", "物理", "圆形重击预警", true), new("仓火封锁", "火焰", "矩形地面危险", true), new("潮锈修复", "法术", "绿色修复环", false)],
+            5_000, 115, "低生命时生成仓火危险并提高修复频率"),
+        new("harbor.boss.gold_prison_master", "沉金典狱长", "harbor.region.vault",
+            [new("金印处决", "物理", "收缩扇面", true), new("潮印审判", "闪电", "三点落雷", true), new("追债封锁", "虚空", "环形禁行区", true)],
+            4_000, 125, "宝库开启后进入追击阶段并召集金印执事"),
+    ];
+
     public static BossDefinition WarfrontCommander { get; } = new(
         "monsters.boss.warfront.last_marshal", "末旗统帅", "monsters.warfront",
         [new("全军突击", "物理", "多条冲锋箭道", true), new("亡旗炮阵", "火焰", "五枚递进落点", true),
@@ -196,7 +213,7 @@ public static class Bosses
 
     public static BossDefinition ForArea(string areaId) => MapBosses.FirstOrDefault(boss => boss.AreaStableId == areaId) ?? MapBosses[0];
     private static IEnumerable<BossDefinition> AllBosses => CampaignBosses.Concat(MapBosses)
-        .Concat(WarfrontOfficers).Append(WarfrontCommander).Append(Breakthrough).Concat(CitadelStages);
+        .Concat(WarfrontOfficers).Append(WarfrontCommander).Append(Breakthrough).Concat(CitadelStages).Concat(HarborBosses);
 
     public static BossDefinition? TryGet(string stableId) => AllBosses
         .FirstOrDefault(item => item.StableId == stableId);
@@ -205,7 +222,7 @@ public static class Bosses
     {
         BossDefinition boss = AllBosses
             .FirstOrDefault(item => item.StableId == stableId) ?? MapBosses[0];
-        bool endgame = boss == Breakthrough || CitadelStages.Contains(boss) || WarfrontOfficers.Contains(boss) || boss == WarfrontCommander;
+        bool endgame = boss == Breakthrough || CitadelStages.Contains(boss) || WarfrontOfficers.Contains(boss) || boss == WarfrontCommander || HarborBosses.Contains(boss);
         EnemySkillProfile[] skills = boss.Skills.Select((skill, index) => new EnemySkillProfile(
             (index % 3) switch { 0 => EnemySkillKind.HeavySlam, 1 => EnemySkillKind.Charge, _ => EnemySkillKind.DelayedNova },
             skill.DisplayName,

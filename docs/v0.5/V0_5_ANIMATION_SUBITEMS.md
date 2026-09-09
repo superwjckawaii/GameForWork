@@ -376,7 +376,7 @@ Bosses.CombatProfile 在统帅的3个目录技能后追加两位军官的4个技
 | monsters.boss.warfront.last_marshal | ember_cannon | 三点炮击 | Artillery | 真实落点和次数，不按技能名凭空画三处 |
 | monsters.boss.warfront.last_marshal | ember_cannon | 压制齐射 | Charge | 当前类型是Charge而非独立Volley；按真实行为审计，不能只凭文案假画箭雨 |
 
-## 24 个Boss的静态可达路径
+## 27 个Boss的静态可达路径
 
 | 所属目录 / 数量 | 已核对的生产路径 |
 | --- | --- |
@@ -386,6 +386,7 @@ Bosses.CombatProfile 在统帅的3个目录技能后追加两位军官的4个技
 | 统帅 / 1 | Warfront路线末节点固定 WarfrontCommander；包含上表4个继承动作 |
 | 突破 / 1 | GameSession.AssignBossChallenge → BreakthroughMapPrefix → MapPlanner.Build 的突破分支 |
 | 天垒 / 3 | GameSession.AssignBossChallenge → CitadelMapPrefix / 演练前缀 → MapPlanner.Build 的三个阶段节点 |
+| 港区 / 3 | HarborRunner.Run → NodeCombatRequest.BossStableId → SpatialCombatRunner.CreateEnemies → Bosses.CombatProfile；按区域绑定断缆船长、沉仓守卫、沉金典狱长 |
 
 共同链路为 SceneTimelineBuilder → NodeCombatRequest → SpatialCombatRunner.CreateEnemies → Bosses.CombatProfile；生命阈值和狂暴计时由敌人动作循环生成 BossPhaseChanged。以上确认的是静态入口与消费者，不声称逐Boss动态通关已验收。
 

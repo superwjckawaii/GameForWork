@@ -9,6 +9,27 @@ namespace GameForWork.Tests;
 public sealed class PresentationFeatureTests
 {
     [Fact]
+    public void AllActiveSkillsUseTheirCombatActionAndUnknownSkillsFallBack()
+    {
+        foreach (var active in ActiveSkillCatalog.Active)
+        {
+            var expected = active.Combat.Tags.HasFlag(GameForWork.Core.Campaign.Combat.SkillTag.Attack)
+                ? GameForWork.Core.Art.SpriteAction.Attack : GameForWork.Core.Art.SpriteAction.Cast;
+            Assert.Equal(expected, SkillAnimation.ForSkill(active.Combat.SkillId));
+        }
+        Assert.Equal(GameForWork.Core.Art.SpriteAction.Cast, SkillAnimation.ForSkill("unknown.skill"));
+    }
+
+    [Theory]
+    [InlineData("core.skill.heavy_strike", GameForWork.Core.Art.SpriteAction.Attack)]
+    [InlineData("core.skill.spirit_blade", GameForWork.Core.Art.SpriteAction.Attack)]
+    [InlineData("core.skill.chain_lightning", GameForWork.Core.Art.SpriteAction.Cast)]
+    public void SkillAnimationUsesCombatSemantics(string skillId, GameForWork.Core.Art.SpriteAction expected)
+    {
+        Assert.Equal(expected, SkillAnimation.ForSkill(skillId));
+    }
+
+    [Fact]
     public void EveryActiveSkillHasOneStableVisualDescriptor()
     {
         Assert.Equal(86, VisualCatalog.Skills.Count);

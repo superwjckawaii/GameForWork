@@ -150,7 +150,8 @@ public static class CharacterBuildAssembler
             SpellBlockChanceBasisPoints: item.Value(ItemModifierKind.SpellBlockChanceBasisPoints),
             MaximumSpellBlockChanceBasisPoints: checked(7_500 + item.Value(ItemModifierKind.MaximumSpellBlockChanceBasisPoints)),
             IncreasedRecoveryRateBasisPoints: attributeMemory.IncreasedRecoveryRateBasisPoints + item.Value(ItemModifierKind.IncreasedResourceRecoveryRateBasisPoints),
-            MaximumLifeMultiplierBasisPoints: MasteryRuntime.MaximumLifeMultiplier(advanced),
+            MaximumLifeMultiplierBasisPoints: CombatRules.ApplyMore(MasteryRuntime.MaximumLifeMultiplier(advanced),
+                [combatEquipment.Has("三潮共鸣") ? 9_000 : 10_000]),
             MaximumManaMultiplierBasisPoints: MasteryRuntime.MaximumManaMultiplier(advanced),
             MaximumShieldMultiplierBasisPoints: CombatRules.ApplyMore(MasteryRuntime.ShieldMultiplier(advanced),
                 [ascendancy?.Has("core.ascendancy.aegis_mage.maximum.core") == true ? 13_000 : 10_000]),
@@ -167,7 +168,8 @@ public static class CharacterBuildAssembler
             SpellSuppressionEffectBasisPoints: 7_000 + item.Value(ItemModifierKind.SpellSuppressionEffectBasisPoints),
             IncreasedShieldRechargeRateBasisPoints: (ascendancy?.Has("core.ascendancy.aegis_mage.maximum.small") == true ? 1_500 : 0) +
                 (ascendancy?.Has("core.ascendancy.aegis_mage.recharge.small") == true ? 3_000 : 0) +
-                (ascendancy?.Has("core.ascendancy.aegis_mage.recharge.core") == true ? 5_000 : 0));
+                (ascendancy?.Has("core.ascendancy.aegis_mage.recharge.core") == true ? 5_000 : 0) +
+                (combatEquipment.Has("无眠领航者") ? -4_000 : 0));
         sheet = MasteryRuntime.ApplySheet(sheet, advanced, weapon, equipment.HasShield);
         int increasedAttackSpeed = checked(item.IncreasedAttackSpeedBasisPoints + passive.IncreasedAttackSpeedBasisPoints +
             jewel.IncreasedAttackSpeedBasisPoints + attributeMemory.IncreasedAttackSpeedBasisPoints);

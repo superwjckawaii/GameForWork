@@ -4,6 +4,8 @@ using GameForWork.Core.Equipment;
 using GameForWork.Core.Campaign.Items;
 using GameForWork.Core.Spatial;
 using GameForWork.Core.Economy;
+using GameForWork.Core.Management;
+using GameForWork.Core.Builds;
 
 namespace GameForWork.Core.Campaign;
 
@@ -28,6 +30,16 @@ public sealed partial class GameSession
             .Concat(HeroEquipment.Items.Values).Concat(MercenaryEquipment.Items.Values)
             .Select(item => item.InstanceId).ToHashSet(StringComparer.Ordinal);
         if (chest.Equipment.Any(item => !existingIds.Add(item.InstanceId))) return false;
+        SkillStoneInstance[] skillStones = (chest.SkillStones ?? []).ToArray();
+        if (skillStones.Select(stone => stone.InstanceId).Distinct(StringComparer.Ordinal).Count() != skillStones.Length ||
+            skillStones.Any(stone => !Management.CanAcceptSkillStone(stone)) ||
+            skillStones.GroupBy(stone => (stone.DefinitionId, stone.Mutated))
+                .Any(group => Management.HeldSkillStoneCount(group.Key.DefinitionId, group.Key.Mutated) + group.Count() > 5))
+            return false;
+        JewelInstance[] jewels = (chest.Jewels ?? []).ToArray();
+        if (jewels.Select(jewel => jewel.InstanceId).Distinct(StringComparer.Ordinal).Count() != jewels.Length ||
+            jewels.Any(jewel => Jewels.Items.Any(existing => existing.InstanceId == jewel.InstanceId)) ||
+            Jewels.Items.Count + jewels.Length > JewelState.Capacity) return false;
         int gold = chest.Gold;
         int ironScraps = chest.IronScraps;
         foreach (ItemInstance item in chest.Equipment)
@@ -52,6 +64,10 @@ public sealed partial class GameSession
             World.Economy.AddDispositionProceeds(gold, ironScraps);
         foreach (MetalCurrencyStack stack in chest.Metals ?? [])
             World.Economy.AddMetal(stack.Kind, stack.Amount);
+        foreach (SkillStoneInstance stone in skillStones)
+            if (!Management.TryAddSkillStone(stone)) return false;
+        foreach (JewelInstance jewel in jewels)
+            if (!Jewels.TryAdd(jewel)) return false;
         _lootChests.Remove(chest);
         return true;
     }
@@ -156,7 +172,7 @@ public sealed partial class GameSession
             snapshot.Chests.Select(value => value.Id).Distinct().Count() != snapshot.Chests.Count ||
             snapshot.Dispatches.Select(value => value.Team).Distinct().Count() != snapshot.Dispatches.Count ||
             snapshot.Chests.Any(value => value.Difficulty is < 1 or > 3 || value.Candidates is not { Count: 3 } ||
-                value.Candidates.Select(item => item.Base.StableId).Distinct().Count() != 3))
+                value.Candidates.Select(CandidateIdentity).Distinct(StringComparer.Ordinal).Count() != 3))
             throw new InvalidDataException("Invalid harbor snapshot identities or chest contents.");
         _harborSequence = snapshot.Sequence;
         string[] activeIds = snapshot.Dispatches.Where(value => value.ActiveRun is not null).Select(value => value.ActiveRun!.Id).ToArray();
@@ -186,6 +202,9 @@ public sealed partial class GameSession
             }
         }
     }
+
+    private static string CandidateIdentity(ItemInstance item) => string.IsNullOrWhiteSpace(item.LegendaryCatalogId)
+        ? item.Base.StableId : item.LegendaryCatalogId;
 
     private OfflineResult AdvanceSimulated(long milliseconds, bool offline, bool asyncPreparation)
     {

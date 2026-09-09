@@ -27,8 +27,8 @@ public sealed class EquipmentCatalogTests
         Assert.Equal(262, EquipmentCatalog.Bases.Count);
         Assert.Equal(212, EquipmentCatalog.Affixes.Select(value => value.StableFamilyId).Distinct(StringComparer.Ordinal).Count());
         Assert.Equal(54, EquipmentCatalog.Enchantments.Count);
-        Assert.Equal(55, EquipmentCatalog.LegendaryItems.Count);
-        Assert.Equal(50, EquipmentCatalog.LegendaryItems.Count(value => value.Rarity == "Legendary"));
+        Assert.Equal(63, EquipmentCatalog.LegendaryItems.Count);
+        Assert.Equal(58, EquipmentCatalog.LegendaryItems.Count(value => value.Rarity == "Legendary"));
         Assert.Equal(5, EquipmentCatalog.LegendaryItems.Count(value => value.Rarity == "Mythic"));
         Assert.Equal(104, EquipmentCatalog.CraftingOperations.Count);
         Assert.Equal(37, EquipmentCatalog.CorruptionImplicits.Count);
@@ -71,7 +71,7 @@ public sealed class EquipmentCatalogTests
     public void ConfirmedEnchantmentsAndLegendaryRulesUseOneRegistry()
     {
         Assert.Equal(54, EquipmentEnchantmentCatalog.All.Count);
-        Assert.Equal(109, EquipmentRuleRegistry.All.Count);
+        Assert.Equal(117, EquipmentRuleRegistry.All.Count);
         Assert.Equal(400, EquipmentEnchantmentCatalog.All.Single(value => value.DisplayName == "精准刻印").Value);
         Assert.Equal(6_500, EquipmentEnchantmentCatalog.All.Single(value => value.DisplayName == "毁伤铭文").Value);
         Assert.Contains(EquipmentEnchantmentCatalog.All.Single(value => value.DisplayName == "虹彩王印").EffectComponents,
