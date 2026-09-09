@@ -35,6 +35,9 @@ public partial class Baseline : Node
     private bool _sampling, _recording, _capturing, _singleCase, _finished;
     private string _scenario = "";
     private double _captureStarted;
+    private long _initialWorkingSet;
+    private double _initialNodes, _initialObjects, _initialResources, _initialOrphans;
+    private double _peakNodes, _peakObjects, _peakResources, _peakOrphans, _peakDrawCalls;
     private static string Output(string name) => ProjectSettings.GlobalizePath("res://" + name);
     private static T Field<T>(object instance, string name) =>
         (T)(instance.GetType().GetField(name, PrivateInstance)?.GetValue(instance)
@@ -168,6 +171,12 @@ public partial class Baseline : Node
             SetField(_client, "_peakSimulationMilliseconds", 0d);
             _cpuStart = process.TotalProcessorTime.TotalSeconds;
             _workingSet = process.WorkingSet64;
+            _initialWorkingSet = _workingSet;
+            _initialNodes = _peakNodes = Godot.Performance.GetMonitor(Godot.Performance.Monitor.ObjectNodeCount);
+            _initialObjects = _peakObjects = Godot.Performance.GetMonitor(Godot.Performance.Monitor.ObjectCount);
+            _initialResources = _peakResources = Godot.Performance.GetMonitor(Godot.Performance.Monitor.ObjectResourceCount);
+            _initialOrphans = _peakOrphans = Godot.Performance.GetMonitor(Godot.Performance.Monitor.ObjectOrphanNodeCount);
+            _peakDrawCalls = 0;
             _uiPeak = _savePeak = 0;
             _gcStart = Enumerable.Range(0, 3).Select(GC.CollectionCount).ToArray();
             return;
@@ -178,7 +187,16 @@ public partial class Baseline : Node
         long save = Field<long>(_client, "_lastSaveMilliseconds");
         _uiPeak = Math.Max(_uiPeak, ui); _savePeak = Math.Max(_savePeak, save);
         _workingSet = Math.Max(_workingSet, process.WorkingSet64);
+        double nodes = Godot.Performance.GetMonitor(Godot.Performance.Monitor.ObjectNodeCount);
+        double objects = Godot.Performance.GetMonitor(Godot.Performance.Monitor.ObjectCount);
+        double resources = Godot.Performance.GetMonitor(Godot.Performance.Monitor.ObjectResourceCount);
+        double orphans = Godot.Performance.GetMonitor(Godot.Performance.Monitor.ObjectOrphanNodeCount);
+        double drawCalls = RenderingServer.GetRenderingInfo(RenderingServer.RenderingInfo.TotalDrawCallsInFrame);
+        _peakNodes = Math.Max(_peakNodes, nodes); _peakObjects = Math.Max(_peakObjects, objects);
+        _peakResources = Math.Max(_peakResources, resources); _peakOrphans = Math.Max(_peakOrphans, orphans);
+        _peakDrawCalls = Math.Max(_peakDrawCalls, drawCalls);
         _trace.Add(new { AtSeconds = elapsed, FrameMs = frameMs, SimulationMs = simulation, UiMs = ui, SaveMs = save,
+            WorkingSetBytes = process.WorkingSet64, Nodes = nodes, Objects = objects, Resources = resources, Orphans = orphans, DrawCalls = drawCalls,
             Gc = Enumerable.Range(0, 3).Select(GC.CollectionCount).ToArray() });
         if (elapsed - _captureStarted < c.Capture) return;
         var values = _frames.Order().ToArray();
@@ -190,6 +208,12 @@ public partial class Baseline : Node
             Quantile99Ms = values[(int)((values.Length - 1) * .99)], MaxMs = values[^1],
             LongFrames = values.Count(v => v > 40), SimulationPeakMs = Field<double>(_client, "_peakSimulationMilliseconds"), UiPeakMs = _uiPeak,
             SavePeakMs = _savePeak, WorkingSetPeakBytes = _workingSet,
+            WorkingSetInitialBytes = _initialWorkingSet, WorkingSetFinalBytes = process.WorkingSet64,
+            WorkingSetGrowthBytes = process.WorkingSet64 - _initialWorkingSet,
+            NodesInitial = _initialNodes, NodesFinal = nodes, NodesPeak = _peakNodes,
+            ObjectsInitial = _initialObjects, ObjectsFinal = objects, ObjectsPeak = _peakObjects,
+            ResourcesInitial = _initialResources, ResourcesFinal = resources, ResourcesPeak = _peakResources,
+            OrphansInitial = _initialOrphans, OrphansFinal = orphans, OrphansPeak = _peakOrphans, DrawCallsPeak = _peakDrawCalls,
             CpuPercent = (process.TotalProcessorTime.TotalSeconds - _cpuStart) / (elapsed - _captureStarted) / Environment.ProcessorCount * 100,
             GcCollections = Enumerable.Range(0, 3).Select(i => GC.CollectionCount(i) - _gcStart[i]).ToArray(),
             ActualWidth = GetWindow().Size.X, ActualHeight = GetWindow().Size.Y, FrameCap = Engine.MaxFps,
@@ -242,3 +266,4 @@ public partial class Baseline : Node
         else ApplyCase();
     }
 }
+

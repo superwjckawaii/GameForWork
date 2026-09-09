@@ -434,13 +434,13 @@ public partial class Main : Node
             SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
         };
         statusBar.AddThemeConstantOverride("separation", 5);
-        var characterInfo = new VBoxContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+        var characterInfo = new HBoxContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
         characterInfo.AddThemeConstantOverride("separation", 1);
         _characterHeaderLabel = new Label { Text = "尚未创建角色", SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
         _characterHeaderLabel.AddThemeFontSizeOverride("font_size", 17);
         _characterHeaderLabel.AddThemeColorOverride("font_color", new Color("f6d486"));
         characterInfo.AddChild(_characterHeaderLabel);
-        _characterExperienceBar = new ProgressBar { MinValue = 0, MaxValue = 1, Value = 0, ShowPercentage = false, CustomMinimumSize = new Vector2(250, 7), SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+        _characterExperienceBar = new ProgressBar { MinValue = 0, MaxValue = 1, Value = 0, ShowPercentage = false, CustomMinimumSize = new Vector2(190, 8), SizeFlagsVertical = Control.SizeFlags.ShrinkCenter };
         _characterExperienceBar.AddThemeStyleboxOverride("background", new StyleBoxFlat { BgColor = new Color("172330") });
         _characterExperienceBar.AddThemeStyleboxOverride("fill", new StyleBoxFlat { BgColor = new Color("55c7d1") });
         characterInfo.AddChild(_characterExperienceBar);
