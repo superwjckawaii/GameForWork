@@ -317,7 +317,7 @@ public partial class Main : Node
         AddChild(backdrop);
         var root = new VBoxContainer();
         root.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
-        root.AddThemeConstantOverride("separation", 6);
+        root.AddThemeConstantOverride("separation", 4);
         int initialFontScale = Math.Clamp(_settingsStore?.Load().FontScalePercent ?? 100, 80, 150);
         root.Theme = ThemeFactory.Create(initialFontScale);
         _interfaceRoot = root;
@@ -436,7 +436,7 @@ public partial class Main : Node
         statusBar.AddThemeConstantOverride("separation", 5);
         var characterInfo = new HBoxContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
         characterInfo.AddThemeConstantOverride("separation", 1);
-        _characterHeaderLabel = new Label { Text = "尚未创建角色", SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+        _characterHeaderLabel = new Label { Text = "尚未创建角色", SizeFlagsHorizontal = Control.SizeFlags.ExpandFill, CustomMinimumSize = Vector2.Zero, ClipText = true, TextOverrunBehavior = TextServer.OverrunBehavior.TrimEllipsis };
         _characterHeaderLabel.AddThemeFontSizeOverride("font_size", 17);
         _characterHeaderLabel.AddThemeColorOverride("font_color", new Color("f6d486"));
         characterInfo.AddChild(_characterHeaderLabel);
@@ -733,6 +733,11 @@ public partial class Main : Node
         _testHarness.Visible = DeveloperFeaturesEnabled && !mini;
         _noticeLabel.Visible = !mini;
         _dashboard.SetMiniMode(mini);
+        if (_characterHeaderLabel is not null)
+        {
+            _characterHeaderLabel.ClipText = mini;
+            _characterHeaderLabel.AddThemeFontSizeOverride("font_size", mini ? 13 : 16);
+        }
     }
 
     private void RunOfflineBenchmark()

@@ -49,7 +49,8 @@ public partial class Baseline : Node
     public override void _Ready()
     {
         bool smoke = OS.GetCmdlineUserArgs().Contains("--baseline-smoke");
-        bool exhaustive = OS.GetCmdlineUserArgs().Contains("--baseline-exhaustive");
+        bool miniRepeat = OS.GetCmdlineUserArgs().Contains("--baseline-mini-repeat");
+        bool exhaustive = OS.GetCmdlineUserArgs().Contains("--baseline-exhaustive") || miniRepeat;
         string? selectedCase = OS.GetCmdlineUserArgs().FirstOrDefault(a => a.StartsWith("--baseline-case="));
         foreach (string scenario in new[] { "normal", "dense" })
         {
@@ -65,6 +66,7 @@ public partial class Baseline : Node
                 for (int round = 1; round <= 3; round++)
                     _cases.Add(new(scenario, 1920, 1280, EffectDensity.High, round, 30, 120));
         }
+        if (miniRepeat) _cases.RemoveAll(c => c.Scenario != "normal" || c.Width != 384);
         if (selectedCase is not null)
         {
             _caseIndex = int.Parse(selectedCase.Split('=')[1]);
@@ -84,7 +86,7 @@ public partial class Baseline : Node
             Dpi = DisplayServer.ScreenGetDpi(), Scale = DisplayServer.ScreenGetScale(),
             Processor = OS.GetProcessorName(), LogicalProcessors = Environment.ProcessorCount,
             OS = OS.GetDistributionName(), StartedUtc = DateTime.UtcNow,
-            Mode = smoke ? "smoke" : exhaustive ? "exhaustive" : "representative",
+            Mode = miniRepeat ? "mini-repeat" : smoke ? "smoke" : exhaustive ? "exhaustive" : "representative",
             SaveRoot = Field<string>(_client, "_savesRoot"), Cases = _cases.Count, SingleCase = _singleCase
         }, new JsonSerializerOptions { WriteIndented = true }));
         ApplyCase();
@@ -143,7 +145,7 @@ public partial class Baseline : Node
         Case c = _cases[_caseIndex];
         if (GetWindow().Size != new Vector2I(c.Width, c.Height) || _window.IsHiddenToTray || GetWindow().Mode == Window.ModeEnum.Minimized)
         {
-            GD.PushError($"Baseline window changed during case {_caseIndex}; this sample is invalid.");
+            GD.PushError($"Baseline window changed during case {_caseIndex}: expected={c.Width}x{c.Height}, actual={GetWindow().Size}, mode={GetWindow().Mode}, tray={_window.IsHiddenToTray}; this sample is invalid.");
             _finished = true;
             GetTree().Quit(1);
             return;
@@ -202,6 +204,14 @@ public partial class Baseline : Node
         var values = _frames.Order().ToArray();
         var root = Field<VBoxContainer>(_client, "_interfaceRoot");
         var worldView = Field<WorldView>(_dashboard, "_worldView");
+        Vector2 viewportSize = GetViewport().GetVisibleRect().Size;
+        if (root.Size.X > viewportSize.X + 1 || root.Size.Y > viewportSize.Y + 1)
+        {
+            GD.PushError($"Baseline layout overflow in case {_caseIndex}: root={root.Size}, viewport={viewportSize}.");
+            _finished = true;
+            GetTree().Quit(1);
+            return;
+        }
         GD.Print($"LAYOUT root={root.Size} visible={root.IsVisibleInTree()} position={root.GlobalPosition} view={GetViewport().GetVisibleRect()} drawCalls={RenderingServer.GetRenderingInfo(RenderingServer.RenderingInfo.TotalDrawCallsInFrame)}");
         var report = new { CaseIndex = _caseIndex, c.Scenario, c.Width, c.Height, Density = c.Density.ToString(), c.Round, c.Warmup, c.Capture,
             Frames = values.Length, MeanMs = values.Average(), Quantile95Ms = values[(int)((values.Length - 1) * .95)],
