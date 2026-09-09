@@ -856,7 +856,7 @@ public partial class WorldView : Control
             DrawArc(source, 18 + age * 8, 0, MathF.Tau, 18, new Color(1f, .55f, .25f, alpha), 2);
         if (item.Kind == SceneEventKind.Ailment)
             DrawCircle(target + new Vector2(0, age * 10), 4, new Color(.48f, .92f, .3f, alpha));
-        if (item.Kind == SceneEventKind.Block or SceneEventKind.Guard)
+        if (item.Kind is SceneEventKind.Block or SceneEventKind.Guard)
             DrawArc(source, 16, 0, MathF.Tau, 18, new Color(.35f, .8f, 1f, alpha), 2);
         if (item.Detail.Contains("召唤", StringComparison.Ordinal))
             DrawArc(target, 18 + age * 16, 0, MathF.Tau, 24, new Color(.42f, 1f, .82f, alpha), 2);
