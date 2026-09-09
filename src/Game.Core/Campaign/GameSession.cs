@@ -403,7 +403,9 @@ public sealed partial class GameSession
             ? maximum
             : realElapsedMilliseconds * SimulationSpeed;
         Journey.AddElapsed(realElapsedMilliseconds, offline: false);
-        OfflineResult result = AdvanceSimulated(simulated, offline: false, asyncPreparation: true);
+        // Foreground ticks must complete preparation deterministically. The async path can be
+        // restarted by the next frame before its task is observed, leaving the UI at “准备中”.
+        OfflineResult result = AdvanceSimulated(simulated, offline: false, asyncPreparation: false);
         Journey.Synchronize(this);
         return result;
     }

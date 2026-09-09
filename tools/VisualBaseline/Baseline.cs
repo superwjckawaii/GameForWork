@@ -28,7 +28,7 @@ public partial class Baseline : Node
     private WindowController _window = null!;
     private GameSession _session = null!;
     private MapRunResult _run = null!;
-    private int _caseIndex, _videoFrame;
+    private int _caseIndex, _videoFrame, _recordingTick;
     private long _start, _lastFrame, _segmentStart, _segmentLength, _workingSet, _renderedStart;
     private double _uiPeak, _savePeak, _cpuStart;
     private int[] _gcStart = [];
@@ -155,6 +155,7 @@ public partial class Baseline : Node
         if (_recording)
         {
             // Separate sequential images; capture overhead never enters timing samples.
+            if (++_recordingTick % 6 != 0) return;
             CaptureImage($"sequence-{_scenario}-{_videoFrame++:D3}.webp", sequence: true);
             return;
         }
