@@ -19,6 +19,14 @@ public sealed class ResistanceMasteryTests
         Assert.Equal(7800, sheet.ResistanceMaximum(EnemyDamageType.Fire));
         Assert.Equal(0, sheet.FireResistanceBasisPoints);
     }
+
+    [Fact]
+    public void ChestMaximumResistanceCapIsUsedByDamageOverTime()
+    {
+        var sheet = Sheet() with { FireResistanceBasisPoints = 8_100, MaximumFireResistanceBonusBasisPoints = 300 };
+        Assert.Equal(8_400, sheet.CappedResistance(sheet.FireResistanceBasisPoints, EnemyDamageType.Fire));
+        Assert.Equal(8_400, CombatRules.EffectiveResistance(sheet.FireResistanceBasisPoints, sheet.ResistanceMaximum(EnemyDamageType.Fire)));
+    }
     [Fact]
     public void MaximumInheritanceUsesOriginalHighestAndAbsoluteCap()
     {

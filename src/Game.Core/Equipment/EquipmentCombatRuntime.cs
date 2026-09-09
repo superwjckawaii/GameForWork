@@ -144,10 +144,10 @@ public sealed class EquipmentCombatRuntime(EquipmentCombatLoadout loadout, ulong
         int resistance = type switch
         {
             EnemyDamageType.Physical => sheet.CappedPhysicalResistance(Value(ItemModifierKind.PhysicalResistanceBasisPoints)),
-            EnemyDamageType.Fire => sheet.FireResistanceBasisPoints,
-            EnemyDamageType.Cold => sheet.ColdResistanceBasisPoints,
-            EnemyDamageType.Lightning => sheet.LightningResistanceBasisPoints,
-            _ => sheet.VoidResistanceBasisPoints,
+            EnemyDamageType.Fire => sheet.CappedResistance(sheet.FireResistanceBasisPoints, type),
+            EnemyDamageType.Cold => sheet.CappedResistance(sheet.ColdResistanceBasisPoints, type),
+            EnemyDamageType.Lightning => sheet.CappedResistance(sheet.LightningResistanceBasisPoints, type),
+            _ => sheet.CappedResistance(sheet.VoidResistanceBasisPoints, type),
         };
         int damage = CombatRules.MitigateByResistance(raw,
             CombatRules.EffectiveResistance(resistance, sheet.ResistanceMaximum(type)));

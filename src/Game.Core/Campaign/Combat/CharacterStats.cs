@@ -74,6 +74,9 @@ public sealed record CharacterSheet(
     public int CappedResistance(int value) => Math.Clamp(value, CombatRules.MinimumResistance,
         MaximumElementalResistanceBasisPoints);
 
+    public int CappedResistance(int value, EnemyDamageType type) => Math.Clamp(value, CombatRules.MinimumResistance,
+        Math.Min(ResistanceMaximum(type), CombatRules.AbsoluteElementalResistanceMaximum));
+
     public int CappedPhysicalResistance(int value) => Math.Clamp(value, CombatRules.MinimumResistance,
         Math.Min(MaximumPhysicalResistanceBasisPoints, CombatRules.AbsolutePhysicalResistanceMaximum));
 
