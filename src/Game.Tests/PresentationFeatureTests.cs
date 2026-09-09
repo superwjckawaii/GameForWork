@@ -55,6 +55,20 @@ public sealed class PresentationFeatureTests
     }
 
     [Fact]
+    public void EverySupportTraversesRuntimeEligibilityAndPresentation()
+    {
+        Assert.Equal(98, ActiveSkillCatalog.Supports.Count);
+        foreach (SupportSkillDefinition support in ActiveSkillCatalog.Supports)
+        {
+            Assert.NotEmpty(support.MechanicKey);
+            Assert.Equal(support.StoneId, ActiveSkillCatalog.SupportForStone(support.StoneId).StoneId);
+            Assert.Contains(ActiveSkillCatalog.Active, active => ActiveSkillCatalog.SupportsActive(support, active));
+            Assert.NotEqual(SupportVisualLayer.None,
+                VisualCatalog.Supports.Single(item => item.StoneId == support.StoneId).Layer);
+        }
+    }
+
+    [Fact]
     public void SkillVisualLookupIsDeterministic()
     {
         foreach (ActiveSkillDefinition active in ActiveSkillCatalog.Active)
