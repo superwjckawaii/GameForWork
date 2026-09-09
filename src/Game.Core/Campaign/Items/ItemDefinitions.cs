@@ -557,6 +557,8 @@ public sealed record ItemInstance(
     public string DisplayName => string.IsNullOrWhiteSpace(RolledName) ? Base.DisplayName : RolledName;
     public int PrefixCount => Affixes.Count(affix => affix.Definition.Position == AffixPosition.Prefix);
     public int SuffixCount => Affixes.Count(affix => affix.Definition.Position == AffixPosition.Suffix);
+    public int PrefixCapacity => ItemAffixRules.Capacity(Base, Rarity, AffixPosition.Prefix);
+    public int SuffixCapacity => ItemAffixRules.Capacity(Base, Rarity, AffixPosition.Suffix);
     public int ExtraSupportLinkCapacity => Affixes
         .SelectMany(affix => affix.Effects)
         .Where(effect => effect.Kind == ItemModifierKind.ExtraSupportLinkCapacity)

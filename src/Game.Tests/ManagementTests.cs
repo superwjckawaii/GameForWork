@@ -20,10 +20,10 @@ public sealed class ManagementTests
         {
             int expected = category switch
             {
-                ItemCategory.Gloves => 19,
-                ItemCategory.Boots => 10,
-                ItemCategory.Belt => 11,
-                _ => 16,
+                ItemCategory.Gloves => 20,
+                ItemCategory.Boots => 11,
+                ItemCategory.Belt => 13,
+                _ => 17,
             };
             Assert.Equal(expected, ItemBases.All.Count(item => item.Category == category));
             int families = Affixes.For(category, 60)

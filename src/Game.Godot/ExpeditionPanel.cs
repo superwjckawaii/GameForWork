@@ -16,6 +16,8 @@ public partial class ExpeditionPanel : VBoxContainer
     private Func<GameSession>? _session;
     private Action<string>? _changed;
     private Label? _resources;
+    private HarborPanel? _harbor;
+    private LootChestPanel? _lootChests;
     private GridContainer? _mapInventory;
     private VBoxContainer? _reports;
     private MapFilterWindow? _mapFilterWindow;
@@ -88,6 +90,12 @@ public partial class ExpeditionPanel : VBoxContainer
             AutowrapMode = TextServer.AutowrapMode.WordSmart,
         });
         tabs.AddChild(dispatches);
+        _harbor = new HarborPanel();
+        _harbor.Initialize(session, changed);
+        tabs.AddChild(_harbor);
+        _lootChests = new LootChestPanel();
+        _lootChests.Initialize(session, changed);
+        tabs.AddChild(_lootChests);
 
         var warehouse = new VBoxContainer { Name = "地图仓与制图", SizeFlagsHorizontal = SizeFlags.ExpandFill, SizeFlagsVertical = SizeFlags.ExpandFill };
         var craftToolbar = new HFlowContainer();
@@ -146,6 +154,8 @@ public partial class ExpeditionPanel : VBoxContainer
         }
 
         GameSession session = _session();
+        _harbor?.RefreshState();
+        _lootChests?.RefreshState();
         int formalMapCount = Math.Min(200, session.World.MapInventory.Count);
         for (int index = 0; index < formalMapCount; index++)
         {
@@ -270,7 +280,8 @@ public partial class ExpeditionPanel : VBoxContainer
                         controls.RunCount.Value = dispatch.RemainingRuns;
                 }
             }
-            controls.Status.Text = TeamStatus(team, dispatch);
+            controls.Status.Text = session.IsHarborActive(team.Kind)
+                ? "正在沉金港行动，队伍已占用；详情见沉金港页签。" : TeamStatus(team, dispatch);
             if (controls.Boss is { } boss)
             {
                 SetBossItemText(boss.Target, ExpeditionTarget.AbyssWarden,
@@ -339,6 +350,11 @@ public partial class ExpeditionPanel : VBoxContainer
         }
         start.Pressed += () =>
         {
+            if (_session!().IsHarborActive(kind))
+            {
+                _changed?.Invoke("队伍正在沉金港行动，请完成或在沉金港页签明确放弃后再派遣。");
+                return;
+            }
             if (kind == ExpeditionTeamKind.Hero && HasBossChallenge(_session!()))
             {
                 ConfirmTaskSwitch("主角正在进行 Boss 挑战。切换到地图远征会立即放弃当前挑战，已消耗的门票不会返还。", StartMapExpedition);
@@ -352,7 +368,7 @@ public partial class ExpeditionPanel : VBoxContainer
         {
             _session!().CancelExpedition(kind);
             _mapSignature = string.Empty;
-            _changed?.Invoke($"{title}已停止；当前地图仍会正常结算。");
+            _changed?.Invoke(_session!().IsHarborActive(kind) ? "港口当前局完成后停止重复。" : $"{title}已停止；当前地图仍会正常结算。");
             RefreshState();
         };
         selectors.AddChild(stop);
@@ -367,7 +383,9 @@ public partial class ExpeditionPanel : VBoxContainer
                 ? _session!().World.Hero
                 : _session!().World.Mercenaries;
             _pendingAbandonTeam = kind;
-            _abandonDialog!.DialogText = team.ActiveMap is null
+            _abandonDialog!.DialogText = _session!().IsHarborActive(kind)
+                ? "队伍正在沉金港行动。立即放弃不退金币、无宝箱奖励。确定放弃并停止吗？"
+                : team.ActiveMap is null
                 ? $"{title}当前没有进行中的地图。仍要清空待派地图并停止吗？"
                 : $"{title}正在执行的 T{team.ActiveMap.Tier} 地图会永久消耗，且不会获得任何结算奖励。确定放弃并停止吗？";
             _abandonDialog.PopupCentered(new Vector2I(520, 180));
@@ -428,6 +446,11 @@ public partial class ExpeditionPanel : VBoxContainer
         var start = new Button { Text = "开始 Boss 挑战" };
         void StartBoss()
         {
+            if (_session!().IsHarborActive(ExpeditionTeamKind.Hero))
+            {
+                _changed?.Invoke("主角队伍正在沉金港行动，无法开始Boss挑战。");
+                return;
+            }
             ExpeditionTarget selected = (ExpeditionTarget)target.GetItemId(target.Selected);
             DispatchMode selectedMode = (DispatchMode)mode.GetItemId(mode.Selected);
             bool started = _session!().AssignBossChallenge(selected, selectedMode, (int)count.Value);

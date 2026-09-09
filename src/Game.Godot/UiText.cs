@@ -131,19 +131,21 @@ internal static class UiText
             }
         }
 
+        if (ItemAffixRules.IsSpecial(item.Base))
+            text.AppendLine($"词缀容量：前缀 {item.PrefixCount}/{item.PrefixCapacity} · 后缀 {item.SuffixCount}/{item.SuffixCapacity}（以下显示生效数值）");
         foreach (AffixRoll affix in item.Affixes.OrderBy(affix => affix.Definition.Position).ThenBy(affix => affix.Definition.Tier))
         {
             if (string.Equals(affix.Definition.Source, "传奇固定", StringComparison.Ordinal))
             {
-                text.AppendLine($"[LEGENDARY]{AffixEffects(affix)}");
+                text.AppendLine($"[LEGENDARY]{AffixEffects(item, affix)}");
                 continue;
             }
             int tier = Affixes.TierFor(item.Base, affix.Definition);
             string markers = (affix.Crafted ? "（工匠）" : string.Empty) + (item.IsFractured(affix) ? "（破溃）" : string.Empty);
             string details = includeAffixDetails && tier > 0
-                ? $" {AffixRanges(affix)}（T{tier}）"
+                ? $" {AffixRanges(item, affix)}（T{tier}）"
                 : string.Empty;
-            string line = $"{PositionName(affix.Definition.Position)}{markers} - {AffixEffects(affix)}{details}";
+            string line = $"{PositionName(affix.Definition.Position)}{markers} - {AffixEffects(item, affix)}{details}";
             text.AppendLine(tier <= 0 ? line : $"[TIER:{tier}]{line}");
         }
 
@@ -297,9 +299,9 @@ internal static class UiText
             : $"{name} {sign}{value}";
     }
 
-    private static string AffixEffects(AffixRoll affix)
+    private static string AffixEffects(ItemInstance item, AffixRoll affix)
     {
-        IReadOnlyList<RolledAffixComponent> effects = affix.Effects;
+        IReadOnlyList<RolledAffixComponent> effects = ItemAffixRules.Effects(item, affix);
         string Damage(ItemModifierKind minimum, ItemModifierKind maximum, string name)
         {
             RolledAffixComponent? low = effects.FirstOrDefault(effect => effect.Kind == minimum);
@@ -321,7 +323,7 @@ internal static class UiText
         return string.Join("；", effects.Select(effect => Modifier(effect.Kind, effect.Value)));
     }
 
-    private static string AffixRanges(AffixRoll affix)
+    private static string AffixRanges(ItemInstance item, AffixRoll affix)
     {
         IReadOnlyList<AffixModifierComponent> definitions = affix.Definition.EffectComponents;
         IReadOnlyList<RolledAffixComponent> rolled = affix.Effects;
@@ -334,6 +336,9 @@ internal static class UiText
             if (definition is null) continue;
             int minimum = rolled.Count == 1 ? affix.EffectiveMinimumValue : definition.MinimumValue;
             int maximum = rolled.Count == 1 ? affix.EffectiveMaximumValue : definition.MaximumValue;
+            int multiplier = ItemAffixRules.EffectMultiplier(item.Base, affix.Definition.Position, effect.Kind, effect.Scope);
+            minimum = checked(minimum * multiplier);
+            maximum = checked(maximum * multiplier);
             ranges.Add($"[{RangeValue(effect.Kind, minimum)}, {RangeValue(effect.Kind, maximum)}]");
         }
         return ranges.Count == 0 ? string.Empty : string.Join(' ', ranges);

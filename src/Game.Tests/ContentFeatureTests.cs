@@ -17,7 +17,7 @@ public sealed class ContentFeatureTests
         Assert.Equal(86, SkillDefinitions.All.Count);
         Assert.Equal(48, Enum.GetValues<SkillSupport>().Count(value => value != SkillSupport.None));
         Assert.Equal(98, SkillStoneCatalog.All.Count(item => item.Kind == SkillStoneKind.Support));
-        Assert.Equal(244, ItemBases.All.Count);
+        Assert.Equal(262, ItemBases.All.Count);
         Assert.Equal(50, UniqueItems.All.Count(item => !item.Mythic));
         Assert.Equal(5, UniqueItems.All.Count(item => item.Mythic));
         Assert.All(UniqueItems.All, item => Assert.False(string.IsNullOrWhiteSpace(item.RuleText)));

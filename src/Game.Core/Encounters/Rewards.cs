@@ -182,7 +182,7 @@ public static class Rewards
 
     public static ItemInstance Equipment(RewardPreference preference, int level, bool high, ulong seed, string id)
     {
-        ItemBaseDefinition[] pool = ItemBases.All.Where(b => b.RequiredLevel <= level && b.Category != ItemCategory.LifeFlask && preference switch
+        ItemBaseDefinition[] pool = ItemBases.All.Where(b => !b.ItemTags.Contains("harbor", StringComparer.Ordinal) && b.RequiredLevel <= level && b.Category != ItemCategory.LifeFlask && preference switch
         {
             RewardPreference.Weapons => b.Category is ItemCategory.OneHandWeapon or ItemCategory.TwoHandWeapon,
             RewardPreference.Armor => b.Category is ItemCategory.BodyArmor or ItemCategory.Helmet or ItemCategory.Gloves or ItemCategory.Boots or ItemCategory.Shield,

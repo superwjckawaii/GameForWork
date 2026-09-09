@@ -20,7 +20,7 @@ public sealed class ArchetypesFeatureTests
         Assert.Equal(40, ArchetypeSkillDefinitions.Supports.Count);
         Assert.Equal(86, SkillDefinitions.All.Count);
         Assert.Equal(98, SkillStoneCatalog.All.Count(value => value.Kind == SkillStoneKind.Support));
-        Assert.Equal(244, ItemBases.All.Count);
+        Assert.Equal(262, ItemBases.All.Count);
         Assert.Equal(50, EquipmentCatalog.Snapshot.Bases.Count(value => value.LegacyIds.Any(id => id.StartsWith("archetypes.base.", StringComparison.Ordinal))));
         Assert.Equal(49, GuideCatalog.SpecialAffixFamilies.Count);
         Assert.DoesNotContain(EquipmentCatalog.Affixes, value => value.StableFamilyId == "archetypes.affix.rune.spellblade");

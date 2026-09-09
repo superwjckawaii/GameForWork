@@ -742,7 +742,7 @@ public sealed class SystemsTests
         GameSession restored = GameSession.Restore(snapshot);
         Assert.Contains(restored.Jewels.Items, item => item.InstanceId == "saved-jewel");
         Assert.Contains(restored.Jewels.Items, item => item.InstanceId == "saved-rare-jewel" && item.Affixes.Count == 4);
-        Assert.Equal(25, GameSession.CurrentFormatVersion);
+        Assert.Equal(26, GameSession.CurrentFormatVersion);
     }
 
     [Theory]

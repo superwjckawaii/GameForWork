@@ -34,7 +34,7 @@ public sealed record EquipmentCombatLoadout(
         loadout.Items.Where(pair => pair.Key is >= EquipmentSlot.Flask1 and <= EquipmentSlot.Flask5)
             .Where(pair => FlaskRules.KindForBase(pair.Value.Base.StableId).HasValue)
             .Select(pair => new Combat.EquippedFlask(FlaskRules.KindForBase(pair.Value.Base.StableId)!.Value, pair.Value.InstanceId, (int)pair.Key,
-                pair.Value.EffectiveImplicitComponents.Concat(pair.Value.Affixes.SelectMany(affix => affix.Effects)).Concat(pair.Value.CorruptionComponents)
+                pair.Value.EffectiveImplicitComponents.Concat(pair.Value.Affixes.SelectMany(affix => ItemAffixRules.Effects(pair.Value, affix))).Concat(pair.Value.CorruptionComponents)
                     .Select(effect => (effect.Kind, effect.Value, effect.Scope))
                     .Concat((pair.Value.Enchantment?.EffectComponents ?? []).Select(effect => (effect.Kind, Value: effect.MinimumValue, effect.Scope)))
                     .Where(effect => effect.Scope is ItemModifierScope.Flask or ItemModifierScope.Rule).GroupBy(effect => effect.Kind)

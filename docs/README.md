@@ -19,7 +19,8 @@
 - [第一阶段集中收口检查](v0.5/V0_5_STAGE_ONE_CHECKPOINT.md)：第一阶段交付完成，含失败前测证据及第二阶段接续顺序。
 - [装备实现参数](v0.5/Harbor_IMPLEMENTATION_PARAMETERS.md)、[流程初始配置](v0.5/Harbor_FLOW_PARAMETERS.md)、[结算调用点审计](v0.5/Harbor_SETTLEMENT_CALLSITE_AUDIT.md)。
 - [辅助与Boss子项](v0.5/V0_5_ANIMATION_SUBITEMS.md)、[七组合实机初测](v0.5/V0_5_VISUAL_BASELINE.md)。
-- 第一阶段规格、结算审计、动画清单与20组代表场景前测已交付。前测记录长帧及音频设备错误，不代表性能验收通过；下一步第二阶段流程原型。
+- 第一阶段规格、结算审计、动画清单与20组代表场景前测已交付。前测记录长帧及音频设备错误，不代表性能验收通过；第二阶段流程原型已接入，下一步第三阶段完整内容。
+- [沉金港第二阶段实现与接续](v0.5/Harbor_STAGE_TWO_CHECKPOINT.md)：旧机制修复延后至v0.5最后、发布验收前。
 - 本目录中的装备与实现复核文件属于历史审计，不等同于 v0.5 新增目标。
 
 ## v0.1

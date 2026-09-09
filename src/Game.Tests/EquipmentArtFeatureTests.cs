@@ -16,7 +16,7 @@ public sealed class EquipmentArtFeatureTests
     [Fact]
     public void EveryEquipmentBaseHasARollableImplicit()
     {
-        Assert.Equal(244, ItemBases.All.Count);
+        Assert.Equal(262, ItemBases.All.Count);
         Assert.All(ItemBases.All, itemBase =>
         {
             Assert.NotEqual(ItemModifierKind.None, itemBase.ImplicitModifier);

@@ -70,7 +70,7 @@ public static class EquipmentCatalog
     {
         if (snapshot.SchemaVersion != 1 || snapshot.ContentId != "equipment.catalog")
             throw new InvalidOperationException("Unsupported equipment catalog schema.");
-        Require(snapshot.Bases, 244, value => value.Id, "bases");
+        Require(snapshot.Bases, 262, value => value.Id, "bases");
         Require(snapshot.AffixFamilies, 212, value => value[0].Id, "affix families");
         if (snapshot.AffixFamilies.Any(family => family.Count == 0 || family.Any(row => row.Id != family[0].Id)))
             throw new InvalidOperationException("An affix family is empty or mixes IDs.");

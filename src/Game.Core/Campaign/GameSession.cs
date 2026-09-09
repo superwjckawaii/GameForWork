@@ -120,11 +120,13 @@ public sealed record GameSessionSnapshot(
     IReadOnlyDictionary<string, int>? MasterySelections = null,
     IReadOnlyDictionary<string, PassiveJewelKind>? SocketedJewels = null,
     JewelStateSnapshot? Jewels = null,
-    bool CitadelDropCompensationGranted = false);
+    bool CitadelDropCompensationGranted = false,
+    Harbor.HarborSnapshot? Harbor = null,
+    LootChestSnapshot? LootChests = null);
 
-public sealed class GameSession
+public sealed partial class GameSession
 {
-    public const int CurrentFormatVersion = 25;
+    public const int CurrentFormatVersion = 26;
     private readonly WorldSimulator _simulator = new(new MapAttemptResolver());
     private readonly CampaignSimulator _campaignSimulator = new();
     private AssembledCharacterBuild _heroBuild;
@@ -312,6 +314,8 @@ public sealed class GameSession
             snapshot.SimulationSequence,
             snapshot.DebugTwentyTimes);
         session.CitadelDropCompensationGranted = snapshot.CitadelDropCompensationGranted;
+        session.RestoreHarbor(snapshot.Harbor);
+        session.RestoreLootChests(snapshot.LootChests);
         if ((snapshot.FormatVersion <= 23 || snapshot.Endgame?.GrantedMythics is null) && session.Endgame.CitadelVictories > 0)
         {
             bool granted = session.GrantMythic(MythicRewardRules.HeartOfAsh, 100,
@@ -356,7 +360,9 @@ public sealed class GameSession
         new Dictionary<string, int>(Passives.MasterySelections),
         new Dictionary<string, PassiveJewelKind>(Passives.SocketedJewels),
         Jewels.Capture(),
-        CitadelDropCompensationGranted);
+        CitadelDropCompensationGranted,
+        CaptureHarbor(),
+        CaptureLootChests());
 
     private bool GrantMythic(string catalogId, int itemLevel, string instanceId)
     {
@@ -424,7 +430,7 @@ public sealed class GameSession
         Journey.Synchronize(this);
     }
 
-    private OfflineResult AdvanceSimulated(long simulatedMilliseconds, bool offline, bool asyncPreparation)
+    private OfflineResult AdvanceWorldSimulated(long simulatedMilliseconds, bool offline, bool asyncPreparation)
     {
         AdvanceTownSystems(simulatedMilliseconds);
         if (!Campaign.Completed)
@@ -459,7 +465,8 @@ public sealed class GameSession
 
         _simulator.MapStarted = (_, map, route) => { if (route == MapRoute.Warfront && !ExpeditionDirector.IsPractice(map)) Endgame.DiscoverWarfront(); };
         _simulator.PrepareMap = map => map with { AtlasSnapshot = Endgame.AtlasPassives.Order(StringComparer.Ordinal).ToArray() };
-        _simulator.MapResolved = ResolveGameplay;
+        _simulator.MapResolved = null;
+        _simulator.MapLootResolved = ResolveGameplayWithLoot;
         OfflineResult result = _simulator.Simulate(
             World,
             simulatedMilliseconds,
@@ -483,12 +490,29 @@ public sealed class GameSession
         return result;
     }
 
-    private void ResolveGameplay(TeamExpeditionState team, MapRunResult run, ulong seed, int baseStones, ExpeditionPolicy policy)
+    private void ResolveGameplayWithLoot(TeamExpeditionState team, MapRunResult run, ulong seed,
+        MapRewards mapLoot, ExpeditionPolicy policy) =>
+        ResolveGameplay(team, run, seed, mapLoot.Stackables.SkillStones, policy, mapLoot);
+
+    private void ResolveGameplay(TeamExpeditionState team, MapRunResult run, ulong seed, int baseStones,
+        ExpeditionPolicy policy, MapRewards? mapLoot = null)
     {
         SimulationSequence = checked(SimulationSequence + 1);
         for (int i = 0; i < baseStones; i++) Management.AddDroppedSkillStone(seed ^ (uint)i ^ 0x703238baUL);
         bool special = EndgameState.IsCitadel(run.Map) || EndgameState.IsCitadelPractice(run.Map) ||
             EndgameState.IsBreakthroughTrial(run.Map) || ExpeditionDirector.IsPractice(run.Map);
+        if (special && mapLoot is not null)
+        {
+            LootProcessingResult specialLoot = LootProcessor.Process(mapLoot.Equipment, World.Storage, World.Filter,
+                policy.StorageFullBehavior);
+            team.Backpack.Replace(specialLoot.NotableItems);
+            World.Economy.AddDispositionProceeds(
+                checked(mapLoot.Stackables.Gold + specialLoot.GoldGained),
+                checked(mapLoot.Stackables.IronScraps + specialLoot.IronScrapsGained));
+            foreach (MetalCurrencyStack stack in mapLoot.Stackables.Metals ?? [])
+                World.Economy.AddMetal(stack.Kind, stack.Amount);
+            if (specialLoot.ExpeditionMustStop) team.Stop("storage_full");
+        }
         if (!special)
         {
             RewardLedger rewards = Rewards.Roll(run, seed);
@@ -496,13 +520,11 @@ public sealed class GameSession
                 .Select(encounter => (Mechanic?)encounter.Node.Gameplay?.Mechanic).FirstOrDefault(mechanic => mechanic is not null);
             IReadOnlySet<string>? themedSkills = rewardMechanic is null ? null : SkillDropCatalog.For(rewardMechanic.Value);
             bool pity = Endgame.RecordGameplay(rewards, Gameplay.Has(run.Map.AtlasSnapshot, "blue", 11));
-            World.Economy.AddRewards(rewards.Stackables);
+            World.Economy.AddRewards(rewards.Stackables with { Gold = 0, IronScraps = 0, Metals = [] });
             World.AddMaps(rewards.Maps);
-            LootProcessingResult processed = LootProcessor.Process(rewards.Equipment, World.Storage, World.Filter,
-                policy.StorageFullBehavior);
-            World.Economy.AddDispositionProceeds(processed.GoldGained, processed.IronScrapsGained);
-            team.Backpack.Replace(team.Backpack.Items.Concat(processed.NotableItems));
-            if (processed.ExpeditionMustStop) team.Stop("storage_full");
+            var chestEquipment = new List<ItemInstance>();
+            if (mapLoot is not null) chestEquipment.AddRange(mapLoot.Equipment);
+            chestEquipment.AddRange(rewards.Equipment);
             for (int i = 0; i < rewards.Stackables.SkillStones - rewards.QualityStones - rewards.MutatedStones; i++) Management.AddDroppedSkillStone(seed ^ (uint)i ^ 0x703238ccUL, preferredDefinitions: themedSkills);
             for (int i = 0; i < rewards.QualityStones + rewards.MutatedStones; i++)
                 Management.AddDroppedSkillStone(seed ^ (uint)i ^ 0x703238abUL, quality: 20,
@@ -515,8 +537,18 @@ public sealed class GameSession
                     ItemInstance item = target == RewardPreference.Legendary
                         ? UniqueItems.Create("core.unique.blue_vow", run.Map.MonsterLevel, $"encounters-pity-{run.Map.InstanceId}")
                         : Rewards.Equipment(target, Math.Min(120, run.Map.MonsterLevel + 2), true, seed, $"encounters-pity-{run.Map.InstanceId}");
-                    if (!World.Storage.TryStore(item)) Management.AddToRecovery(item, "苍誓保底奖励");
+                    chestEquipment.Add(item);
                 }
+            }
+            if (mapLoot is not null)
+            {
+                int gold = checked(mapLoot.Stackables.Gold + rewards.Stackables.Gold);
+                MetalCurrencyStack[] metals = (mapLoot.Stackables.Metals ?? []).Concat(rewards.Stackables.Metals ?? [])
+                    .GroupBy(stack => stack.Kind)
+                    .Select(group => new MetalCurrencyStack(group.Key, group.Sum(stack => stack.Amount))).ToArray();
+                if (chestEquipment.Count > 0 || gold > 0 || metals.Length > 0)
+                    _lootChests.Add(new LootChest($"loot.map.{run.Map.InstanceId}", run.Map.InstanceId, run.Map.Tier,
+                        chestEquipment, gold, 0, metals));
             }
             if (run.Succeeded) RollBuildsJewels(run.Map, seed);
             if (rewards.Encounters.Any(e => e.Kills > 0)) Management.AddHistory(
@@ -886,6 +918,7 @@ public sealed class GameSession
         DispatchMode mode,
         int requestedRuns = 1)
     {
+        if (IsHarborActive(teamKind)) return;
         TeamExpeditionState team = Team(teamKind);
         ReturnQueuedMaps(team);
         World.Expedition.Assign(teamKind, target, mode, requestedRuns);
@@ -914,7 +947,7 @@ public sealed class GameSession
 
     public bool AssignBossChallenge(ExpeditionTarget target, DispatchMode mode, int requestedRuns = 1)
     {
-        if (!ExpeditionDirector.IsBossTarget(target)) return false;
+        if (!ExpeditionDirector.IsBossTarget(target) || IsHarborActive(ExpeditionTeamKind.Hero)) return false;
         TeamExpeditionState team = World.Hero;
         BossChallengeAvailability availability = GetBossChallengeAvailability(target);
         if (!availability.Unlocked || availability.AvailableRuns == 0 || team.ActiveMap is not null || team.Queue.Count > 0)
@@ -935,14 +968,39 @@ public sealed class GameSession
 
     public void CancelExpedition(ExpeditionTeamKind teamKind)
     {
+        if (IsHarborActive(teamKind)) { StopHarborRepeat(teamKind); return; }
         TeamExpeditionState team = Team(teamKind);
+        CaptureCancelledMapLoot(team);
         ReturnQueuedMaps(team);
+        team.AbandonActiveMap();
         World.Expedition.Cancel(teamKind);
         team.Stop("manual_stop");
     }
 
+    private void CaptureCancelledMapLoot(TeamExpeditionState team)
+    {
+        if (team.ActiveMap is not { } map || team.ActiveRun is not { } run || run.DurationMilliseconds <= 0)
+            return;
+        long elapsed = Math.Clamp(run.DurationMilliseconds - team.RemainingMapTimeMilliseconds, 0, run.DurationMilliseconds);
+        if (elapsed <= 0) return;
+        (int defeated, int total) = MapRewardGenerator.CombatProgress(run);
+        int earned = (int)Math.Clamp((long)defeated * elapsed / run.DurationMilliseconds, 0, defeated);
+        if (earned <= 0) return;
+        MapRewards partial = MapRewardGenerator.GeneratePartial(map, team.ActiveRoute,
+            Seed ^ (ulong)SimulationSequence ^ 0x9e3779b97f4a7c15UL, earned, total, World.MaximumUnlockedMapTier);
+        World.Economy.AddRewards(partial.Stackables with { Gold = 0, IronScraps = 0, Metals = [] });
+        World.AddMaps(partial.Maps);
+        for (int index = 0; index < partial.Stackables.SkillStones; index++)
+            Management.AddDroppedSkillStone(Seed ^ (uint)index ^ 0x703238ccUL);
+        if (partial.Equipment.Count == 0 && partial.Stackables.Gold == 0 && (partial.Stackables.Metals ?? []).Count == 0)
+            return;
+        _lootChests.Add(new LootChest($"loot.cancel.{map.InstanceId}", map.InstanceId, map.Tier,
+            partial.Equipment, partial.Stackables.Gold, partial.Stackables.IronScraps, partial.Stackables.Metals));
+    }
+
     public bool AbandonExpedition(ExpeditionTeamKind teamKind)
     {
+        if (IsHarborActive(teamKind)) return CancelHarbor(teamKind);
         TeamExpeditionState team = Team(teamKind);
         ReturnQueuedMaps(team);
         bool abandoned = team.AbandonActiveMap() is not null;
@@ -1112,10 +1170,10 @@ public sealed class GameSession
             MapItem map = World.MapInventory[index].EnsureFormal(Seed ^ (ulong)SimulationSequence ^ (ulong)index);
             map = map with { AtlasSnapshot = Endgame.AtlasPassives.Order(StringComparer.Ordinal).ToArray(), IsManualPriority = true };
             if (map.Tier > World.MaximumUnlockedMapTier) continue;
-            if (!team.Queue.TryEnqueue(map))
+            if (IsHarborActive(team.Kind) || !team.Queue.TryEnqueue(map))
             {
                 team = team == World.Hero ? World.Mercenaries : World.Hero;
-                if (!team.Queue.TryEnqueue(map))
+                if (IsHarborActive(team.Kind) || !team.Queue.TryEnqueue(map))
                 {
                     continue;
                 }

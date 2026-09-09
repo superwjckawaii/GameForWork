@@ -88,6 +88,7 @@ public sealed record SkillStoneInstance(
     int Level = 1,
     int Experience = 0, int Quality = 0, bool Mutated = false)
 {
+    [System.Text.Json.Serialization.JsonIgnore]
     public SkillStoneDefinition Definition => SkillStoneCatalog.Get(DefinitionId);
 }
 

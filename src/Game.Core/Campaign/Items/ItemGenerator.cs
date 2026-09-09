@@ -32,8 +32,8 @@ public static class ItemGenerator
         IReadOnlyList<AffixRoll> affixes = rarity switch
         {
             ItemRarity.Basic => Array.Empty<AffixRoll>(),
-            ItemRarity.Magic => RollAffixes(itemBase, clampedLevel, 1 + Next(random, 2), 1, random),
-            ItemRarity.Rare => RollAffixes(itemBase, clampedLevel, 4 + Next(random, 3), 3, random),
+            ItemRarity.Magic => RollAffixes(itemBase, clampedLevel, 1 + Next(random, 2), rarity, random),
+            ItemRarity.Rare => RollAffixes(itemBase, clampedLevel, 4 + Next(random, 3), rarity, random),
             _ => throw new ArgumentOutOfRangeException(nameof(rarity)),
         };
 
@@ -51,7 +51,7 @@ public static class ItemGenerator
         ItemBaseDefinition itemBase,
         int itemLevel,
         int desiredCount,
-        int maximumPerPosition,
+        ItemRarity rarity,
         Pcg32 random)
     {
         var available = Affixes.For(itemBase, itemLevel)
@@ -61,7 +61,7 @@ public static class ItemGenerator
         while (selected.Count < desiredCount)
         {
             AffixDefinition[] candidates = available
-                .Where(candidate => selected.Count(roll => roll.Definition.Position == candidate.Position) < maximumPerPosition)
+                .Where(candidate => selected.Count(roll => roll.Definition.Position == candidate.Position) < ItemAffixRules.Capacity(itemBase, rarity, candidate.Position))
                 .ToArray();
             if (candidates.Length == 0)
             {
@@ -87,7 +87,7 @@ public static class ItemGenerator
             .Where(affix => item.Affixes.All(existing => existing.Definition.StableFamilyId != affix.StableFamilyId))
             .Where(affix => item.Affixes.All(existing =>
                 existing.Definition.MutualExclusionGroup != affix.MutualExclusionGroup))
-            .Where(affix => affix.Position == AffixPosition.Prefix ? item.PrefixCount < 3 : item.SuffixCount < 3)
+            .Where(affix => item.Affixes.Count(value => value.Definition.Position == affix.Position) < ItemAffixRules.Capacity(item.Base, item.Rarity, affix.Position))
             .ToArray();
         if (candidates.Length == 0) return null;
         AffixDefinition selected = WeightedPick(candidates, item.Base, random);

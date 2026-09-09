@@ -14,7 +14,7 @@ public sealed class EquipmentCatalogTests
         EquipmentAuditResult result = EquipmentAudit.Run();
         Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Failures));
         Assert.Equal(EquipmentAudit.RequiredSampleCount, result.SampleCount);
-        Assert.Equal(244, result.CoveredBaseCount);
+        Assert.Equal(262, result.CoveredBaseCount);
         Assert.Equal(result.CatalogBaseCount, result.CoveredBaseCount);
         Assert.Equal(212, result.CatalogAffixFamilyCount);
         Assert.Matches("^[0-9a-f]{64}$", result.DeterministicDigest);
@@ -24,7 +24,7 @@ public sealed class EquipmentCatalogTests
     public void FormalSnapshotHasEverySealedCatalogAndPermanentUniqueIds()
     {
         Assert.Equal(1, EquipmentCatalog.Snapshot.SchemaVersion);
-        Assert.Equal(244, EquipmentCatalog.Bases.Count);
+        Assert.Equal(262, EquipmentCatalog.Bases.Count);
         Assert.Equal(212, EquipmentCatalog.Affixes.Select(value => value.StableFamilyId).Distinct(StringComparer.Ordinal).Count());
         Assert.Equal(54, EquipmentCatalog.Enchantments.Count);
         Assert.Equal(55, EquipmentCatalog.LegendaryItems.Count);
@@ -32,8 +32,20 @@ public sealed class EquipmentCatalogTests
         Assert.Equal(5, EquipmentCatalog.LegendaryItems.Count(value => value.Rarity == "Mythic"));
         Assert.Equal(104, EquipmentCatalog.CraftingOperations.Count);
         Assert.Equal(37, EquipmentCatalog.CorruptionImplicits.Count);
-        Assert.All(EquipmentCatalog.Bases, value => Assert.StartsWith("equipment.base.", value.StableId, StringComparison.Ordinal));
+        Assert.All(EquipmentCatalog.Bases, value => Assert.True(value.StableId.StartsWith("equipment.base.", StringComparison.Ordinal) ||
+            value.StableId.StartsWith("harbor.base.", StringComparison.Ordinal)));
         Assert.All(EquipmentCatalog.Affixes, value => Assert.StartsWith("equipment.affix.", value.StableFamilyId, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void HarborRingsUseOneSidedFiveAffixCapacity()
+    {
+        ItemBaseDefinition wave = ItemBases.Get("harbor.base.wavechaser_ring");
+        ItemBaseDefinition guard = ItemBases.Get("harbor.base.harbor_guard_ring");
+        Assert.Equal(0, ItemAffixRules.Capacity(wave, ItemRarity.Rare, AffixPosition.Prefix));
+        Assert.Equal(5, ItemAffixRules.Capacity(wave, ItemRarity.Rare, AffixPosition.Suffix));
+        Assert.Equal(5, ItemAffixRules.Capacity(guard, ItemRarity.Rare, AffixPosition.Prefix));
+        Assert.Equal(0, ItemAffixRules.Capacity(guard, ItemRarity.Rare, AffixPosition.Suffix));
     }
 
     [Fact]

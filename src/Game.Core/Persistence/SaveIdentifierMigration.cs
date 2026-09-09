@@ -19,9 +19,19 @@ public static partial class SaveIdentifierMigration
     [GeneratedRegex(@"^(Extended)?[pP](\d+)([A-Z].*)$", RegexOptions.CultureInvariant)]
     private static partial Regex NumericProperty();
 
-    public static string Normalize(string id) => NumericNamespace().Replace(id, match =>
-        int.TryParse(match.Groups[1].Value, out int number) && Domains.TryGetValue(number, out string? domain)
-            ? domain : match.Value);
+    public static string Normalize(string id)
+    {
+        string normalized = NumericNamespace().Replace(id, match =>
+            int.TryParse(match.Groups[1].Value, out int number) && Domains.TryGetValue(number, out string? domain)
+                ? domain : match.Value);
+        // These three support identifiers also carried a retired namespace suffix.
+        foreach (string element in new[] { "fire", "cold", "lightning" })
+        {
+            string prefix = $"archetypes.skill_stone.support.{element}_penetration_";
+            if (normalized == prefix + "p" + 24) return prefix + "archetypes";
+        }
+        return normalized;
+    }
 
     public static GameSessionSnapshot Deserialize(string json)
     {
@@ -38,14 +48,16 @@ public static partial class SaveIdentifierMigration
         return root.Deserialize<GameSessionSnapshot>() ?? throw new InvalidDataException("Empty save snapshot.");
     }
 
-    private static void Rewrite(JsonNode node)
+    private static void Rewrite(JsonNode node, bool instanceValues = false)
     {
         if (node is JsonObject obj)
         {
             foreach ((string key, JsonNode? value) in obj.ToArray())
             {
                 // User labels and instance identities are opaque and must retain their exact bytes.
-                if (key is "Name" or "DisplayName" or "MercenaryName" or "InstanceId" or "CustomName") continue;
+                if (key is "Name" or "DisplayName" or "MercenaryName" or "CustomName" ||
+                    key.EndsWith("InstanceId", StringComparison.Ordinal) ||
+                    key.EndsWith("InstanceIds", StringComparison.Ordinal)) continue;
                 string normalizedKey = NumericProperty().Replace(Normalize(key), match =>
                 {
                     if (!int.TryParse(match.Groups[2].Value, out int number)) return match.Value;
@@ -73,8 +85,8 @@ public static partial class SaveIdentifierMigration
                     obj.Add(normalizedKey, value);
                 }
                 if (value is JsonValue scalar && scalar.TryGetValue<string>(out string? text))
-                    obj[normalizedKey] = Normalize(text);
-                else if (value is not null) Rewrite(value);
+                    obj[normalizedKey] = instanceValues ? text : Normalize(text);
+                else if (value is not null) Rewrite(value, key == "Socketed");
             }
         }
         else if (node is JsonArray array)

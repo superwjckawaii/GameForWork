@@ -123,7 +123,7 @@ function Assert-Atlas([System.Drawing.Bitmap]$bitmap, [int]$count, [int]$columns
 }
 
 $catalog = Get-Content -LiteralPath $catalogPath -Raw -Encoding UTF8 | ConvertFrom-Json
-$bases = @($catalog.bases); $legendaries = @($catalog.legendaryItems)
+$bases = @($catalog.bases | Where-Object { $_.tags -notcontains 'harbor' }); $legendaries = @($catalog.legendaryItems)
 if ($bases.Count -ne 244 -or $legendaries.Count -ne 55) { throw 'Equipment art requires the sealed 244-base/55-legendary catalog.' }
 $sources = @{}
 foreach ($entry in $sourcePaths.GetEnumerator()) { $sources[$entry.Key] = Open-ArtBitmap $entry.Value ($entry.Key -in @('equipmentWarfront', 'equipmentSpirit', 'equipmentLegendary')) }

@@ -85,7 +85,7 @@ public sealed class ExpeditionDirector
     {
         ArgumentNullException.ThrowIfNull(world);
         ArgumentNullException.ThrowIfNull(team);
-        if (team.IsStopped || team.ActiveMap is not null || team.Queue.Count > 0 ||
+        if (team.IsHarborOccupied || team.IsStopped || team.ActiveMap is not null || team.Queue.Count > 0 ||
             !_dispatches.TryGetValue(team.Kind, out TeamDispatchSnapshot? dispatch) || !dispatch.Enabled)
         {
             return false;

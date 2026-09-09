@@ -9,7 +9,7 @@ public sealed class EquipmentImportFeatureTests
     [Fact]
     public void ImportedEquipmentNowLivesOnlyInTheFormalCatalog()
     {
-        Assert.Equal(244, EquipmentCatalog.Bases.Count);
+        Assert.Equal(262, EquipmentCatalog.Bases.Count);
         Assert.Equal(212, EquipmentCatalog.Affixes.Select(value => value.StableFamilyId).Distinct(StringComparer.Ordinal).Count());
         Assert.Contains(EquipmentCatalog.Bases, item => item.RequiredEnergy > 0);
         Assert.All(EquipmentCatalog.Bases, item =>

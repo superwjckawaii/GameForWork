@@ -7,7 +7,8 @@ public static class EquipmentBaseArt
 {
     public const int Columns = 13;
     public const int Rows = 19;
-    public static IReadOnlyList<string> ItemBaseIds { get; } = EquipmentCatalog.Snapshot.Bases.Select(item => item.Id).ToArray();
+    public static IReadOnlyList<string> ItemBaseIds { get; } = EquipmentCatalog.Snapshot.Bases
+        .Where(item => !item.Tags.Contains("harbor", StringComparer.Ordinal)).Select(item => item.Id).ToArray();
     private static readonly IReadOnlyDictionary<string, int> Indices = ItemBaseIds
         .Select((stableId, index) => (stableId, index)).ToDictionary(pair => pair.stableId, pair => pair.index,
             StringComparer.Ordinal);
@@ -15,6 +16,29 @@ public static class EquipmentBaseArt
     public static int IconIndex(ItemBaseDefinition itemBase)
     {
         string canonical = EquipmentCatalog.ResolveBaseId(itemBase.StableId);
+        // Harbor prototype deliberately reuses existing art; dedicated content art is a later delivery.
+        canonical = canonical switch
+        {
+            "harbor.base.returning_tide_sword" => "equipment.base.216.6a136197b0",
+            "harbor.base.downstream_quiver" => "equipment.base.quiver.5",
+            "harbor.base.still_tide_hood" => "equipment.base.158.12d24b0315",
+            "harbor.base.wavechaser_ring" => "equipment.base.iron_ring",
+            "harbor.base.harbor_guard_ring" => "equipment.base.life_ring",
+            "harbor.base.tidewalker_rapier" => "equipment.base.204.e415283651",
+            "harbor.base.cablecleaver_axe" => "equipment.base.208.dcac9f64e5",
+            "harbor.base.sunken_anchor_maul" => "equipment.base.224.a30ef959af",
+            "harbor.base.tideskimmer_bow" => "equipment.base.228.1b2753f9a3",
+            "harbor.base.tidal_wand" => "equipment.base.236.5b39f77ba1",
+            "harbor.base.deep_tide_staff" => "equipment.base.236.5b39f77ba1",
+            "harbor.base.returning_tide_shield" => "equipment.base.ash_iron_shield",
+            "harbor.base.ballast_plate" => "equipment.base.crude_chainmail",
+            "harbor.base.wavebreaker_gloves" => "equipment.base.iron_gauntlets",
+            "harbor.base.tidewading_boots" => "equipment.base.march_boots",
+            "harbor.base.three_tides_amulet" => "equipment.base.ember_amulet",
+            "harbor.base.backflow_belt" => "equipment.base.chain_belt",
+            "harbor.base.anchored_belt" => "equipment.base.chain_belt",
+            _ => canonical,
+        };
         return Indices.TryGetValue(canonical, out int index)
             ? index
             : throw new KeyNotFoundException($"Equipment art mapping missing for {itemBase.StableId}.");

@@ -25,6 +25,7 @@ public sealed class TeamExpeditionState
     }
 
     public ExpeditionTeamKind Kind { get; }
+    public bool IsHarborOccupied { get; internal set; }
     public TeamBuild Build { get; private set; }
     public ExpeditionPolicy Policy { get; set; }
     public ExpeditionPolicy? ActivePolicySnapshot { get; private set; }
@@ -95,7 +96,7 @@ public sealed class TeamExpeditionState
         long durationMilliseconds,
         MapRunResult? plannedRun = null)
     {
-        if (ActiveMap is not null || durationMilliseconds <= 0)
+        if (IsHarborOccupied || ActiveMap is not null || durationMilliseconds <= 0)
         {
             throw new InvalidOperationException("The team cannot start another map now.");
         }
@@ -410,6 +411,7 @@ public sealed class WorldSimulator(ICampaignMapAttemptResolver attemptResolver)
     public Action<TeamExpeditionState, MapItem, MapRoute>? MapStarted { get; set; }
     public Func<MapItem, MapItem>? PrepareMap { get; set; }
     public Action<TeamExpeditionState, MapRunResult, ulong, int, ExpeditionPolicy>? MapResolved { get; set; }
+    public Action<TeamExpeditionState, MapRunResult, ulong, MapRewards, ExpeditionPolicy>? MapLootResolved { get; set; }
 
     public OfflineResult Simulate(WorldState state, long elapsedMilliseconds, ulong seed, bool offline = false,
         bool asyncPreparation = false)
@@ -523,7 +525,7 @@ public sealed class WorldSimulator(ICampaignMapAttemptResolver attemptResolver)
         foreach (TeamExpeditionState team in state.Teams)
         {
             state.Expedition.PrepareNext(state, team);
-            if (team.IsStopped || active.ContainsKey(team.Kind) || team.Queue.Count == 0)
+            if (team.IsHarborOccupied || team.IsStopped || active.ContainsKey(team.Kind) || team.Queue.Count == 0)
             {
                 continue;
             }
@@ -626,13 +628,20 @@ public sealed class WorldSimulator(ICampaignMapAttemptResolver attemptResolver)
         {
             if (partial is not null)
             {
-                state.Economy.AddRewards(partial.Stackables);
+                state.Economy.AddRewards(MapLootResolved is null ? partial.Stackables : DirectRewards(partial.Stackables));
                 state.AddMaps(partial.Maps);
-                LootProcessingResult defeatedLoot = LootProcessor.Process(partial.Equipment, state.Storage,
-                    state.Filter, runPolicy.StorageFullBehavior);
-                expedition.Team.Backpack.Replace(defeatedLoot.NotableItems);
-                state.Economy.AddDispositionProceeds(defeatedLoot.GoldGained, defeatedLoot.IronScrapsGained);
-                if (defeatedLoot.ExpeditionMustStop) expedition.Team.Stop("storage_full");
+                if (MapLootResolved is not null)
+                {
+                    MapLootResolved(expedition.Team, run, seed, partial, runPolicy);
+                }
+                else
+                {
+                    LootProcessingResult defeatedLoot = LootProcessor.Process(partial.Equipment, state.Storage,
+                        state.Filter, runPolicy.StorageFullBehavior);
+                    expedition.Team.Backpack.Replace(defeatedLoot.NotableItems);
+                    state.Economy.AddDispositionProceeds(defeatedLoot.GoldGained, defeatedLoot.IronScrapsGained);
+                    if (defeatedLoot.ExpeditionMustStop) expedition.Team.Stop("storage_full");
+                }
             }
             if (!practice) MapResolved?.Invoke(expedition.Team, run, seed, partial?.Stackables.SkillStones ?? 0, runPolicy);
             return;
@@ -645,7 +654,7 @@ public sealed class WorldSimulator(ICampaignMapAttemptResolver attemptResolver)
 
         MapRewards rewards = MapRewardGenerator.Generate(expedition.Map, expedition.Route,
             seed ^ 0x9e3779b97f4a7c15UL, state.MaximumUnlockedMapTier, run);
-        state.Economy.AddRewards(rewards.Stackables);
+        state.Economy.AddRewards(MapLootResolved is null ? rewards.Stackables : DirectRewards(rewards.Stackables));
         var maps = rewards.Maps.ToList();
         bool sameTierGuarantee = AtlasEffects.Has(expedition.Map.AtlasSnapshot, "atlas.atlas.supply.12");
         int pityThreshold = AtlasEffects.Has(expedition.Map.AtlasSnapshot, "atlas.atlas.supply.08") ? 2 : 3;
@@ -664,19 +673,30 @@ public sealed class WorldSimulator(ICampaignMapAttemptResolver attemptResolver)
                 $"resources-legendary-pity-{expedition.Team.Kind}-{expedition.Team.MapsCompleted:000000}") with
                 { DropSource = $"resources.source.legendary.{legendaryPool}" });
         }
-        LootProcessingResult processed = LootProcessor.Process(
-            equipment,
-            state.Storage,
-            state.Filter,
-            runPolicy.StorageFullBehavior);
-        expedition.Team.Backpack.Replace(processed.NotableItems);
-        state.Economy.AddDispositionProceeds(processed.GoldGained, processed.IronScrapsGained);
-        if (processed.ExpeditionMustStop)
+        rewards = rewards with { Equipment = equipment };
+        if (MapLootResolved is not null)
         {
-            expedition.Team.Stop("storage_full");
+            MapLootResolved(expedition.Team, run, seed, rewards, runPolicy);
+        }
+        else
+        {
+            LootProcessingResult processed = LootProcessor.Process(
+                equipment,
+                state.Storage,
+                state.Filter,
+                runPolicy.StorageFullBehavior);
+            expedition.Team.Backpack.Replace(processed.NotableItems);
+            state.Economy.AddDispositionProceeds(processed.GoldGained, processed.IronScrapsGained);
+            if (processed.ExpeditionMustStop)
+            {
+                expedition.Team.Stop("storage_full");
+            }
         }
         MapResolved?.Invoke(expedition.Team, run, seed, rewards.Stackables.SkillStones, runPolicy);
     }
+
+    private static MapStackableRewards DirectRewards(MapStackableRewards rewards) =>
+        rewards with { Gold = 0, IronScraps = 0, Metals = [] };
 
     private static string Hash(WorldState state, long elapsed, ulong seed)
     {

@@ -113,7 +113,9 @@ public static class EquipmentAudit
         }
         foreach (ItemBaseDefinition itemBase in bases)
         {
-            if (!itemBase.StableId.StartsWith("equipment.base.", StringComparison.Ordinal)) AddFailure(failures, $"non-permanent base id: {itemBase.StableId}");
+            if (!itemBase.StableId.StartsWith("equipment.base.", StringComparison.Ordinal) &&
+                !itemBase.StableId.StartsWith("harbor.base.", StringComparison.Ordinal))
+                AddFailure(failures, $"non-permanent base id: {itemBase.StableId}");
             if (Affixes.For(itemBase, 120).Count == 0 && itemBase.Category != ItemCategory.LifeFlask)
                 AddFailure(failures, $"base has no natural affixes: {itemBase.StableId}");
             int corruptionCandidates = EquipmentCatalog.CorruptionImplicits.Count(value => EquipmentCorruptionCatalog.Supports(value, itemBase));
@@ -169,14 +171,15 @@ public static class EquipmentAudit
                 AddFailure(failures, $"{prefix}: illegal implicit {rolled.Kind}={rolled.Value}, expected {definition.Kind} {definition.MinimumValue}..{definition.MaximumValue}");
         }
 
-        int maximumPerPosition = rarity == ItemRarity.Magic ? 1 : rarity == ItemRarity.Rare ? 3 : 0;
-        if (item.PrefixCount > maximumPerPosition || item.SuffixCount > maximumPerPosition)
+        int maximumPrefix = ItemAffixRules.Capacity(itemBase, rarity, AffixPosition.Prefix);
+        int maximumSuffix = ItemAffixRules.Capacity(itemBase, rarity, AffixPosition.Suffix);
+        if (item.PrefixCount > maximumPrefix || item.SuffixCount > maximumSuffix)
             AddFailure(failures, $"{prefix}: prefix/suffix capacity exceeded ({item.PrefixCount}/{item.SuffixCount})");
         int availableCapacity = Affixes.For(itemBase, itemLevel)
             .GroupBy(value => value.MutualExclusionGroup, StringComparer.Ordinal)
             .Select(group => group.First().Position)
             .GroupBy(position => position)
-            .Sum(group => Math.Min(maximumPerPosition, group.Count()));
+            .Sum(group => Math.Min(ItemAffixRules.Capacity(itemBase, rarity, group.Key), group.Count()));
         int minimumExpected = rarity switch
         {
             ItemRarity.Basic => 0,

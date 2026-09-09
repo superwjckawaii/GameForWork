@@ -313,6 +313,49 @@ public sealed class DomainRegressionTests
         Assert.Equal(new LinkedSupport(supportId, 17, 13), Assert.Single(restored.World.Hero.Build.HeavyStrike.SupportLinks!));
     }
 
+    [Theory]
+    [InlineData("fire")]
+    [InlineData("cold")]
+    [InlineData("lightning")]
+    public void LegacyPenetrationStonesMigrateThroughBothEntryPoints(string element)
+    {
+        string legacy = "p" + 24 + $".skill_stone.support.{element}_penetration_p" + 24;
+        string current = $"archetypes.skill_stone.support.{element}_penetration_archetypes";
+        var snapshot = GameSession.CreateNew(new("迁移回归", CharacterGender.Androgynous,
+            CharacterSkinTone.Fair, CharacterHairStyle.Cropped, BaseClass.Fighter), 91).Capture();
+        snapshot = snapshot with { FormatVersion = 24, Management = snapshot.Management! with
+        {
+            SkillStones = [new(legacy, legacy, 17, 123, 13)],
+        } };
+        foreach (var migrated in new[] { SaveIdentifierMigration.Upgrade(snapshot),
+                     SaveIdentifierMigration.Deserialize(JsonSerializer.Serialize(snapshot)) })
+        {
+            var stone = Assert.Single(migrated.Management!.SkillStones);
+            Assert.Equal(legacy, stone.InstanceId);
+            Assert.Equal(current, stone.DefinitionId);
+            Assert.Equal(current, stone.Definition.StableId);
+            Assert.Equal((17, 123, 13), (stone.Level, stone.Experience, stone.Quality));
+        }
+    }
+
+    [Fact]
+    public void LegacySocketReferencesKeepOpaqueInstanceIdentities()
+    {
+        var snapshot = GameSession.CreateNew(new("镶嵌迁移", CharacterGender.Androgynous,
+            CharacterSkinTone.Fair, CharacterHairStyle.Cropped, BaseClass.Fighter), 91).Capture();
+        var root = System.Text.Json.Nodes.JsonNode.Parse(JsonSerializer.Serialize(snapshot))!;
+        root["FormatVersion"] = 24;
+        string oldNamespace = "p" + 30;
+        string instance = oldNamespace + "-jewel-instance";
+        root["Jewels"] = new System.Text.Json.Nodes.JsonObject
+        {
+            ["Items"] = new System.Text.Json.Nodes.JsonArray(),
+            ["Socketed"] = new System.Text.Json.Nodes.JsonObject { [oldNamespace + ".jewel.v0.jm0"] = instance },
+        };
+        var migrated = SaveIdentifierMigration.Deserialize(root.ToJsonString());
+        Assert.Equal(instance, migrated.Jewels!.Socketed["builds.jewel.v0.jm0"]);
+    }
+
     [Fact]
     public void LegacySqliteStateTableIsImportedAndDoesNotOverwriteNewerSession()
     {

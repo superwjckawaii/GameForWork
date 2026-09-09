@@ -184,7 +184,7 @@ public sealed class EquipmentLoadout
             foreach (RolledAffixComponent implicitModifier in item.EffectiveImplicitComponents)
                 AddGlobal(sums, implicitModifier.Kind, implicitModifier.Value, implicitModifier.Scope);
             foreach (AffixRoll affix in item.Affixes)
-            foreach (RolledAffixComponent effect in affix.Effects)
+            foreach (RolledAffixComponent effect in ItemAffixRules.Effects(item, affix))
                 AddGlobal(sums, effect.Kind, effect.Value, effect.Scope);
             foreach (RolledAffixComponent effect in item.CorruptionComponents)
                 AddGlobal(sums, effect.Kind, effect.Value, effect.Scope);
@@ -342,7 +342,7 @@ public sealed class EquipmentLoadout
     {
         int value = item.EffectiveImplicitComponents.Where(effect => effect.Kind == kind && effect.Scope is ItemModifierScope.LocalWeapon or ItemModifierScope.LocalDefense or ItemModifierScope.LocalBlock)
             .Sum(effect => effect.Value);
-        value += item.Affixes.SelectMany(affix => affix.Effects)
+        value += item.Affixes.SelectMany(affix => ItemAffixRules.Effects(item, affix))
             .Where(effect => effect.Kind == kind && effect.Scope is ItemModifierScope.LocalWeapon or ItemModifierScope.LocalDefense or ItemModifierScope.LocalBlock)
             .Sum(effect => effect.Value);
         if (item.Enchantment is not null)
@@ -361,7 +361,7 @@ public sealed class EquipmentLoadout
         IEnumerable<int> values = item.EffectiveImplicitComponents
             .Where(effect => effect.Kind == kind && effect.Scope == ItemModifierScope.LocalDefense)
             .Select(effect => effect.Value)
-            .Concat(item.Affixes.SelectMany(affix => affix.Effects)
+            .Concat(item.Affixes.SelectMany(affix => ItemAffixRules.Effects(item, affix))
                 .Where(effect => effect.Kind == kind && effect.Scope == ItemModifierScope.LocalDefense)
                 .Select(effect => effect.Value))
             .Concat(item.Enchantment?.EffectComponents

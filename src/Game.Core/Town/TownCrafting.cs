@@ -79,9 +79,10 @@ public static class ItemCraftingRules
 
     private static CraftResult AugmentMagic(ItemInstance item, ulong seed)
     {
-        if (item.Rarity != ItemRarity.Magic || item.Affixes.Count != 1)
+        int maximum = item.PrefixCapacity + item.SuffixCapacity;
+        if (item.Rarity != ItemRarity.Magic || item.Affixes.Count < 1 || item.Affixes.Count >= maximum)
             return Fail("single_magic_affix_required", "添铸锡要求只有一条词缀的魔法装备。", MetalCurrencyKind.AugmentingTin);
-        return AddAffix(item, ItemRarity.Magic, seed, MetalCurrencyKind.AugmentingTin, "已为魔法装备增加一条词缀", maximum: 2);
+        return AddAffix(item, ItemRarity.Magic, seed, MetalCurrencyKind.AugmentingTin, "已为魔法装备增加一条词缀", maximum: maximum);
     }
 
     private static CraftResult ChangeRarity(ItemInstance item, ItemRarity required, ItemRarity target, ulong seed,

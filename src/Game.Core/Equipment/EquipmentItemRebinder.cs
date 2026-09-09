@@ -30,6 +30,8 @@ public static class EquipmentItemRebinder
     {
         ArgumentNullException.ThrowIfNull(item);
         ItemBaseDefinition itemBase = EquipmentCatalog.GetBase(item.Base.StableId);
+        if (ItemAffixRules.IsSpecial(itemBase) && !ItemAffixRules.Fits(item with { Base = itemBase }))
+            throw new InvalidDataException("Saved special ring exceeds its explicit affix capacity.");
         AffixRoll[] affixes = item.Affixes.Where(affix => !IsForbiddenLegacyWeaponAffix(itemBase, affix))
             .Select(affix => RebindAffix(item, itemBase, affix)).ToArray();
         string fractured = affixes.Any(affix => affix.Definition.StableFamilyId == EquipmentCatalog.ResolveAffixId(item.FracturedAffixFamilyId))

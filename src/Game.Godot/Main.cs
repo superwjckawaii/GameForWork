@@ -868,13 +868,7 @@ public partial class Main : Node
             }
             catch (Exception exception) when (exception is JsonException or InvalidDataException or NotSupportedException)
             {
-                string archived = _saveRepository.ArchiveLegacyAndReset();
-                loadedSnapshot = null;
-                _session = null;
-                _logger?.Write(GameLogLevel.Warning, "maps.legacy_save_archived", "persistence",
-                    "An incompatible test save was archived and a clean database was created.",
-                    new Dictionary<string, object?> { ["archive"] = archived, ["error"] = exception.Message });
-                ShowNotice("旧测试档与当前结构不兼容，已保留到 recovery/legacy；本槽位将重新开始。");
+                throw new InvalidDataException("存档暂时无法加载，原文件已保留；请勿重置槽位。", exception);
             }
             if (!DeveloperFeaturesEnabled && _session is not null) _session.DebugTwentyTimes = false;
             try

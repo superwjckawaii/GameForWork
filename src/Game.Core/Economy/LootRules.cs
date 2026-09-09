@@ -273,10 +273,10 @@ public static class DropFormula
     public static ItemBaseDefinition PickBase(int itemLevel, SourceProfile source, Pcg32 random)
     {
         ItemBaseDefinition[] candidates = ItemBases.All
-            .Where(item => item.RequiredLevel <= Math.Max(1, itemLevel) && !item.ItemTags.Contains("warfront", StringComparer.Ordinal))
+            .Where(item => item.RequiredLevel <= Math.Max(1, itemLevel) && !item.ItemTags.Contains("warfront", StringComparer.Ordinal) && !item.ItemTags.Contains("harbor", StringComparer.Ordinal))
             .OrderBy(item => item.StableId, StringComparer.Ordinal)
             .ToArray();
-        if (candidates.Length == 0) candidates = ItemBases.All.OrderBy(item => item.StableId, StringComparer.Ordinal).ToArray();
+        if (candidates.Length == 0) candidates = ItemBases.All.Where(item => !item.ItemTags.Contains("harbor", StringComparer.Ordinal)).OrderBy(item => item.StableId, StringComparer.Ordinal).ToArray();
         int Weight(ItemBaseDefinition item)
         {
             int tierWeight = DropCatalog.ResolveBaseTier(item) switch

@@ -1,15 +1,15 @@
 # 宝箱结算写入路径审计
 
-状态：第一阶段静态入口审计完成；第三阶段实现时逐项测试替换，当前没有改变运行时结算。范围覆盖战役、地图、遭遇、终局、任务、制作、交易、恢复与旧档。源码事实与计划处置分列。
+状态：第三阶段第一批已完成普通地图主结算迁移；范围覆盖战役、地图、遭遇、终局、任务、制作、交易、恢复与旧档。普通地图的装备、金币和金属材料已在生成时冻结，领取时才进入过滤/仓储；传奇、珠宝、技能石和旧机制仍按后续批次处理。
 
 ## 入口与去向
 
 | 入口 | 当前写入 | 第三阶段处置 / 验收 |
 | --- | --- | --- |
 | CampaignState 完成节点与 GrantCombatLoot | 经验、剧情金币、装备过滤、技能石直发；剧情地图直接写地图仓 | 节点收益合为普通箱；进度/经验/地图直接；失败只包已赚取，StoryEvent 不凭空新增战斗掉落 |
-| WorldSimulator.ResolveExpedition 失败分支 | partial.Stackables、地图、装备过滤及处理收益 | 普通箱收纳原始实际掉落，不提前过滤；地图和经验仍按原规则直发 |
-| WorldSimulator.ResolveExpedition 成功分支 | Stackables、地图保底、传奇保底、过滤入仓 | 原始掉落+传奇保底入同一箱；地图保底直发；生成时更新原保底计数 |
-| GameSession.ResolveGameplay | 基础技能石、遭遇物品、品质/变异技能石、苍誓保底、珠宝、完成奖励 | 为同一行动收集完整实例，与基础掉落汇合后只发一箱，不单独产生第二批直接入账 |
+| WorldSimulator.ResolveExpedition 失败分支 | partial.Stackables、地图、普通箱原始内容 | 普通箱收纳已生成的装备、金币和金属材料，不提前过滤；地图、经验和技能石计数仍按原规则即时处理 |
+| WorldSimulator.ResolveExpedition 成功分支 | Stackables、地图保底、普通箱原始内容 | 原始掉落+传奇保底进入普通箱；地图保底直发；生成时更新原保底计数 |
+| GameSession.ResolveGameplay | 遭遇物品、苍誓保底与普通箱合并 | 同一行动收集地图与遭遇装备/金币/金属，只生成一箱；领取时执行过滤与仓储处理 |
 | EndgameState.RecordGameplay | 消费货币、战争声望、碎片、机制次数与苍誓保底混合 | 拆出进度记录与待领取货币；不能整段推迟到开箱，也不能领取再记录进度 |
 | GameSession.RollBuildsJewels / 天垒传奇珠宝 | 珠宝直接写珠宝仓 | 在产出时生成珠宝实例装箱，开箱按珠宝仓容量与恢复处理 |
 | GameSession.GrantMythic | 查已装备/仓库/整理/恢复物品，登记已发放后直发 | 加入待领取箱内身份防重；生成登记、宝箱提交原子化；旧档补偿仍直补 |
@@ -17,7 +17,7 @@
 | EndgameState.AddFragments / RecordMapCompletion | 天垒合票、首通/路线解锁 | 进度与入场资产直发，按成功条件，不等开箱 |
 | DemoJourney.GrantReward | 目标防重后自动发金币/金属 | 同一目标一箱；引导“开箱”先于需要消耗材料的目标，任务身份防重 |
 | TownEconomy.AddRewards | 多类余额一次累加 | 限定为开箱领取或明确直接交付的低层入口，不保留战斗双发分支 |
-| LootProcessor.Process / AddDispositionProceeds | 装备自动卖出/分解 | 延后到开箱，以领取时过滤器处理；处理所得直入钱包，不生成箱中箱 |
+| LootProcessor.Process / AddDispositionProceeds | 装备自动卖出/分解 | 已延后到普通箱领取，以领取时过滤器处理；处理所得直入钱包，不生成箱中箱 |
 | GameSession.TryExchangeWarfrontSupply | 扣战功并给装备/材料 | 主动兑换直交付，装箱规则不改变扣费；满仓恢复与防重不回滚重复产物 |
 | GameSession 传奇兑换 / ItemCommandService | 主动兑换、打造、购买写装备容器 | 直交付，不套箱；保留原成功支付条件和容量事务 |
 | ItemCommandService 卖出/分解/买回 / GameSession 珠宝出售 | 金币/铁屑与容器变化 | 直接余额变更；不处理未开箱物品，不能产生递归箱 |

@@ -143,7 +143,14 @@ public sealed record SpatialEvent(
     int Value,
     Point SourcePosition,
     Point TargetPosition,
-    string Detail);
+    string Detail,
+    SpatialPresentation? Presentation = null);
+
+public sealed record SpatialPresentation(string ActionId, long StartsAtMilliseconds, long EndsAtMilliseconds,
+    string Shape, int RadiusRaw, Point Direction, IReadOnlyList<Point> Trajectory);
+
+public sealed record CombatObjective(Point InteractionPosition, Point ExitPosition, int InteractionTicks = 40,
+    int HazardIntervalTicks = 120, int HazardDamage = 100);
 
 public sealed record NodeCombatRequest(
     TeamBuild Build,
@@ -190,7 +197,7 @@ public sealed record NodeCombatRequest(
     EquipmentOffenseSnapshot? OffenseSnapshot = null, Combat.RuneFieldState? RuneFields = null,
     int? ActionMultiplierSnapshot = null, int? SpellEnergyIncreaseSnapshot = null, Combat.TeamProtectionState? TeamProtection = null,
     int? ResourceDamageMultiplierSnapshot = null, int? ArmorSnapshot = null, Combat.UnarmedCombatState? Unarmed = null, Combat.ElementalCombatState? Elemental = null, int? ElementalMultiplierSnapshot = null, int? ResistanceSnapshotTick = null, int? ElementalHitUntilSnapshot = null, int? VoidHitUntilSnapshot = null, bool ElementalSourceSelf = false,
-    DamageOverTimeRecoveryState? DamageOverTimeRecovery = null);
+    DamageOverTimeRecoveryState? DamageOverTimeRecovery = null, CombatObjective? Objective = null);
 
 public sealed record NodeCombatResult(
     BattleOutcome Outcome,
@@ -386,12 +393,24 @@ public sealed partial class SpatialCombatRunner
         int minimumEnemyLife = initialEnemyLife;
         int lastProgressTick = 0;
         BattleOutcome? projectedOutcome = null;
+        int interactionTicks = 0;
+        int interactionEventIndex = -1;
+        bool objectiveComplete = request.Objective is null;
         CaptureFrame(frames, 0, request.NodeIndex, heroPosition, hero, heroTargetId, enemies,
             request.Build.PartySize, request.Build.FrontlineCount, request.VirtueVice, 0, army, request.Actions);
 
         for (tick = 0; (request.MaximumTicks == 0 || tick < request.MaximumTicks) &&
-             (hero.IsAlive || army.MercenaryAlive) && enemies.Any(enemy => enemy.Life > 0); tick++)
+             (hero.IsAlive || army.MercenaryAlive) && (request.Objective is null ? enemies.Any(enemy => enemy.Life > 0) : !objectiveComplete); tick++)
         {
+            if (request.Objective is { } objective && tick % objective.HazardIntervalTicks == 0)
+            {
+                int starts = tick + 30, ends = starts + 40;
+                string actionId = $"harbor.hazard.{request.NodeIndex}.{tick}";
+                hazards.Add(new(actionId, heroPosition, 1_800, objective.HazardDamage, starts, ends, EnemyDamageType.Fire));
+                events.Add(new(tick * TickMilliseconds, SpatialEventKind.BossTelegraph, actionId, "hero", 0,
+                    heroPosition, heroPosition, "港区周期危险预警",
+                    new(actionId, starts * TickMilliseconds, ends * TickMilliseconds, "circle", 1_800, new(0, 0), [])));
+            }
             hero.HarmfulStatus.Tick = tick;
             request.Reactions!.Tick = tick;
             virtueVice.Advance(TickMilliseconds);
@@ -818,6 +837,61 @@ public sealed partial class SpatialCombatRunner
             army.Advance(enemies, heroPosition, random, tick, events, heroTargetId, request.Build);
             if (RechargeFlasksForKills(enemies, flasks, tick, heroPosition, events, ascendancyRuntime, hero, equipment, random, request) && charge is not null)
                 cooldowns.Reset(charge, tick);
+            if (request.Objective is { } destination &&
+                (interactionTicks >= destination.InteractionTicks || enemies.All(enemy => enemy.Life <= 0)) && hero.IsAlive &&
+                tick >= rootedUntilTick && hero.HarmfulStatus.Effect(Ailment.Stun) == 0 && hero.HarmfulStatus.Effect(Ailment.Freeze) == 0)
+            {
+                bool collected = interactionTicks >= destination.InteractionTicks;
+                Point targetPosition = collected ? destination.ExitPosition : destination.InteractionPosition;
+                if (heroPosition == beforeMovement)
+                {
+                    Point from = heroPosition;
+                    heroPosition = Point.MoveToward(from, targetPosition,
+                        Math.Max(1, (int)Math.Min(int.MaxValue, 200L * request.Build.MovementSpeedBasisPoints / 10_000)));
+                    if (from != heroPosition)
+                        events.Add(new(tick * TickMilliseconds, SpatialEventKind.HeroMoved, "hero", "harbor.objective", 0,
+                            from, heroPosition, collected ? "自动撤离" : "前往宝库",
+                            new($"harbor.move.{request.NodeIndex}.{tick}", tick * TickMilliseconds,
+                                (tick + 1L) * TickMilliseconds, "segment", 0,
+                                new(heroPosition.XRaw - from.XRaw, heroPosition.YRaw - from.YRaw), [from, heroPosition])));
+                }
+                if (heroPosition == targetPosition)
+                {
+                    if (collected) objectiveComplete = true;
+                    else
+                    {
+                        if (interactionTicks == 0)
+                        {
+                            interactionEventIndex = events.Count;
+                            events.Add(new(tick * TickMilliseconds, SpatialEventKind.SkillEffect, "hero", "harbor.vault", 0,
+                                heroPosition, heroPosition, "自动开启宝库（尚未获得奖励）",
+                                new($"harbor.interact.{request.NodeIndex}.{tick}", tick * TickMilliseconds,
+                                    (tick + destination.InteractionTicks) * (long)TickMilliseconds,
+                                    "interaction", 0, new(0, 0), [])));
+                        }
+                        interactionTicks++;
+                        if (interactionTicks == destination.InteractionTicks)
+                        {
+                            foreach (EnemyUnit pursuer in CreateEnemies(request with { EnemyCount = 2, HasBoss = false, HasElite = false }, random))
+                            {
+                                Point arrival = new(Math.Max(350, heroPosition.XRaw - 2_000), heroPosition.YRaw);
+                                enemies.Add(new EnemyUnit($"enemy-{request.NodeIndex}-{enemies.Count}", pursuer.Profile, pursuer.Scaled,
+                                    pursuer.Role, pursuer.Rarity, pursuer.Elite, false, pursuer.Life, arrival, tick + 10));
+                            }
+                            events.Add(Event(tick, SpatialEventKind.SkillEffect, "harbor.pursuit", "hero", 2,
+                                heroPosition, heroPosition, "宝库开启，追击者入场；抵达出口即可撤离"));
+                        }
+                    }
+                }
+                else if (!collected)
+                {
+                    if (interactionEventIndex >= 0 && events[interactionEventIndex].Presentation is { } interaction)
+                        events[interactionEventIndex] = events[interactionEventIndex] with
+                        { Presentation = interaction with { EndsAtMilliseconds = tick * TickMilliseconds } };
+                    interactionEventIndex = -1;
+                    interactionTicks = 0;
+                }
+            }
             if (tick < rootedUntilTick) heroPosition = beforeMovement;
             equipment.Advance(tick, hero, heroPosition != beforeMovement);
             guardUntilTick = Math.Max(guardUntilTick, request.Guard.Expires);
@@ -862,7 +936,7 @@ public sealed partial class SpatialCombatRunner
                     request.Build.PartySize, request.Build.FrontlineCount, request.VirtueVice, tick, army, request.Actions);
         }
 
-        bool victory = enemies.All(enemy => enemy.Life <= 0);
+        bool victory = request.Objective is null ? enemies.All(enemy => enemy.Life <= 0) : objectiveComplete && hero.IsAlive;
         BattleOutcome outcome = projectedOutcome ?? (victory
             ? BattleOutcome.HeroVictory
             : hero.IsAlive ? BattleOutcome.Timeout : BattleOutcome.EnemyVictory);
@@ -2282,6 +2356,9 @@ public sealed partial class SpatialCombatRunner
     {
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(request.Build);
+        if (request.Objective is { } objective && (objective.InteractionTicks <= 0 || objective.HazardIntervalTicks <= 0 ||
+            objective.HazardDamage < 0 || request.MaximumTicks <= 0))
+            throw new ArgumentOutOfRangeException(nameof(request));
         if (request.NodeIndex <= 0 || request.AreaLevel is < 1 or > 120 || request.EnemyCount is < 1 or > 128 ||
             request.MaximumTicks < 0 || request.EnemyLifeBasisPoints is < 1_000 or > 500_000 ||
             request.EnemyDamageBasisPoints is < 1_000 or > 500_000 || request.EnemySpeedBasisPoints is < 1_000 or > 100_000 ||

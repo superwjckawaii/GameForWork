@@ -72,6 +72,8 @@ public static class EquipmentCraftingService
         ulong seed = request.Seed ?? StableSeed(item, operation.Id);
         EquipmentCraftingResult applied = Apply(item, operation, request, seed, preview.Resource, preview.Cost);
         if (!applied.Succeeded) return applied;
+        if (applied.Item is { } result && ItemAffixRules.IsSpecial(result.Base) && !ItemAffixRules.Fits(result))
+            return Fail("affix_capacity", "结果超出此底材的词缀容量，未消耗材料。", preview.Resource, preview.Cost);
         wallet.Spend(preview.Resource, preview.Cost);
         return applied;
     }
@@ -182,7 +184,7 @@ public static class EquipmentCraftingService
     {
         if (item.Rarity == ItemRarity.Legendary) return Fail("legendary_forbidden", "传奇装备不能添加打造词缀。", resource, cost);
         AffixPosition position = AffixPosition.Prefix;
-        if (item.PrefixCount >= 3) return Fail("prefix_full", "前缀已满。", resource, cost);
+        if (item.Affixes.Count(value => !value.Crafted && value.Definition.Position == position) >= ItemAffixRules.CraftedCapacity(item, position)) return Fail("prefix_full", "前缀已满。", resource, cost);
         (ItemModifierKind kind, int value, ItemModifierScope scope) = operation.DisplayName switch
         {
             "淬刃打造" => (ItemModifierKind.IncreasedPhysicalDamageBasisPoints, 3_500, ItemModifierScope.LocalWeapon),
@@ -278,7 +280,7 @@ public static class EquipmentCraftingService
         var keep = item.Affixes.Where(affix => affix.Definition.Position == preserved || affix.Crafted || item.IsFractured(affix) || affix == extra).ToList();
         ItemInstance generated = ItemGenerator.Generate(item.Base.StableId, item.ItemLevel, ItemRarity.Rare, seed, item.InstanceId);
         foreach (var affix in generated.Affixes.Where(a => a.Definition.Position != preserved))
-            if (keep.Count < 6 && keep.Count(a => a.Definition.Position == affix.Definition.Position) < 3 &&
+            if (keep.Count(a => a.Definition.Position == affix.Definition.Position) < ItemAffixRules.Capacity(item.Base, ItemRarity.Rare, affix.Definition.Position) &&
                 keep.All(a => a.Definition.MutualExclusionGroup != affix.Definition.MutualExclusionGroup && a.Definition.StableFamilyId != affix.Definition.StableFamilyId))
                 keep.Add(affix);
         ItemInstance changed = CopyPersistent(item, generated) with { Affixes = keep.ToArray() };
@@ -297,7 +299,7 @@ public static class EquipmentCraftingService
         while (affixes.Count < desiredCount)
         {
             AffixDefinition[] legal = Affixes.For(item.Base, item.ItemLevel)
-                .Where(candidate => affixes.Count(value => value.Definition.Position == candidate.Position) < 3)
+                .Where(candidate => affixes.Count(value => value.Definition.Position == candidate.Position) < ItemAffixRules.Capacity(item.Base, ItemRarity.Rare, candidate.Position))
                 .Where(candidate => affixes.All(value => value.Definition.StableFamilyId != candidate.StableFamilyId &&
                     value.Definition.MutualExclusionGroup != candidate.MutualExclusionGroup))
                 .ToArray();
@@ -341,7 +343,7 @@ public static class EquipmentCraftingService
         {
             AffixRoll[] remaining = item.Affixes.Where(value => !ReferenceEquals(value, removed)).ToArray();
             AffixDefinition[] legal = candidates.Where(candidate =>
-                remaining.Count(value => value.Definition.Position == candidate.Position) < 3 &&
+                remaining.Count(value => value.Definition.Position == candidate.Position) < ItemAffixRules.Capacity(item.Base, item.Rarity, candidate.Position) &&
                 remaining.All(value => value.Definition.MutualExclusionGroup != candidate.MutualExclusionGroup)).ToArray();
             return (Removed: removed, Candidates: legal);
         })
@@ -403,7 +405,7 @@ public static class EquipmentCraftingService
         AffixRoll[] additions = changed.Where(value => value.Definition.Position == position &&
             protectedAffixes.All(existing => existing.Definition.StableFamilyId != value.Definition.StableFamilyId &&
                                               existing.Definition.MutualExclusionGroup != value.Definition.MutualExclusionGroup))
-            .Take(Math.Max(0, 3 - protectedAffixes.Length)).ToArray();
+            .Take(Math.Max(0, ItemAffixRules.Capacity(original.Base, original.Rarity, position) - protectedAffixes.Length)).ToArray();
         return changed.Where(value => value.Definition.Position != position).Concat(protectedAffixes).Concat(additions);
     }
 
