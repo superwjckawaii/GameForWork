@@ -188,6 +188,8 @@ public partial class WorldView : Control
             }
         }
 
+        DrawBattleAtmosphere(bounds);
+
         long elapsed = Math.Clamp((long)_visualElapsedMilliseconds, 0, timeline.DurationMilliseconds);
         SceneEvent? state = timeline.StateAt(elapsed);
         float sceneProgress = timeline.DurationMilliseconds <= 0
@@ -314,6 +316,9 @@ public partial class WorldView : Control
 
         Rect2 field = new(bounds.Position + new Vector2(18, 68), bounds.Size - new Vector2(36, 102));
         DrawRect(field, new Color(0.03f, 0.05f, 0.08f, 0.34f), true);
+        DrawRect(field, new Color(0.02f, 0.035f, 0.06f, 0.28f), false, 2);
+        DrawLine(field.Position + new Vector2(0, 8), field.Position + new Vector2(field.Size.X, 8),
+            new Color(0.85f, 0.72f, 0.45f, 0.22f), 1);
         for (int column = 0; column <= SceneTimeline.LogicalWidth; column++)
         {
             float x = field.Position.X + field.Size.X * column / SceneTimeline.LogicalWidth;
@@ -503,6 +508,7 @@ public partial class WorldView : Control
             int cellHeight = enemy.Boss ? ArtContract.BossCellHeight : ArtContract.ActorCellHeight;
             int rigCount = enemy.Boss ? ArtContract.BossRigCount : ArtContract.EnemyBodyRigCount;
             Vector2 size = enemy.Boss ? new Vector2(62, 70) : enemy.Elite ? new Vector2(40, 50) : new Vector2(34, 43);
+            DrawUnitBackdrop(position, size, EnemyRoleColor(enemy.Role), enemy.Elite || enemy.Boss);
             DrawArtSprite(animation, rig, facing, action, actionAge, position, size, rigCount,
                 cellWidth, cellHeight, loop: action != SpriteAction.Death);
             DrawEnemyRoleMarker(position, enemy);
@@ -510,6 +516,8 @@ public partial class WorldView : Control
             if (enemy.Elite || enemy.Boss)
                 DrawArc(position, radius + 7, 0, MathF.Tau, 16, new Color("e2b85d"), enemy.Boss ? 3 : 2);
             if (targeted) DrawArc(position, radius + 10, 0, MathF.Tau, 20, new Color(1, .85f, .35f, .9f), 2);
+            if (action == SpriteAction.Hit) DrawHitPulse(position, radius, .92f);
+            DrawEnemyLabel(position, enemy, targeted);
             return;
         }
         Color color = enemy.Role switch
@@ -534,6 +542,8 @@ public partial class WorldView : Control
         {
             DrawArc(position, radius + 8, 0, MathF.Tau, 20, new Color(1, 0.85f, 0.35f, 0.9f), 2);
         }
+        if (action == SpriteAction.Hit) DrawHitPulse(position, radius, .92f);
+        DrawEnemyLabel(position, enemy, targeted);
     }
 
     private void DrawSpatialSkills(
@@ -612,6 +622,13 @@ public partial class WorldView : Control
             else if (item.Kind == SceneEventKind.BossPhase && age < .9f)
             {
                 DrawPresentationVfx((int)SkillVisualFamily.BossWarning, target, 58 + age * 24, age * .35f);
+                float alpha = Math.Clamp(1 - age, 0, 1);
+                DrawRect(new Rect2(field.Position + new Vector2(10, 12), new Vector2(field.Size.X - 20, 30)),
+                    new Color(0.05f, 0.025f, 0.02f, .72f * alpha), true);
+                DrawRect(new Rect2(field.Position + new Vector2(10, 12), new Vector2(field.Size.X - 20, 30)),
+                    new Color(1f, .62f, .25f, .76f * alpha), false, 2);
+                DrawString(ThemeDB.FallbackFont, field.Position + new Vector2(24, 33), "阶段变化",
+                    HorizontalAlignment.Left, -1, 16, new Color(1f, .86f, .58f, alpha));
             }
         }
         DrawCombatFeedback(field, positions, recent, elapsed);
@@ -831,6 +848,65 @@ public partial class WorldView : Control
         EliteAffix.IronSkin or EliteAffix.FortifiedAura or EliteAffix.Massive => new Color("aeb6bd"),
         _ => new Color("d6a85a"),
     };
+
+    private static Color EnemyRoleColor(UnitRole role) => role switch
+    {
+        UnitRole.Melee => new Color("b94b58"),
+        UnitRole.Ranged => new Color("55a6c7"),
+        UnitRole.Caster => new Color("a277d4"),
+        UnitRole.Charger => new Color("d1783e"),
+        UnitRole.Summoner => new Color("55a77d"),
+        _ => new Color("c84d62"),
+    };
+
+    private void DrawBattleAtmosphere(Rect2 bounds)
+    {
+        float topHeight = Math.Clamp(bounds.Size.Y * .18f, 34, 120);
+        float bottomHeight = Math.Clamp(bounds.Size.Y * .14f, 28, 92);
+        DrawRect(new Rect2(bounds.Position, new Vector2(bounds.Size.X, topHeight)),
+            new Color(0.015f, 0.025f, 0.05f, .34f), true);
+        DrawRect(new Rect2(new Vector2(bounds.Position.X, bounds.End.Y - bottomHeight),
+                new Vector2(bounds.Size.X, bottomHeight)),
+            new Color(0.015f, 0.025f, 0.05f, .42f), true);
+        DrawLine(bounds.Position + new Vector2(0, topHeight),
+            new Vector2(bounds.End.X, bounds.Position.Y + topHeight),
+            new Color(0.79f, 0.68f, 0.47f, .26f), 1);
+        DrawLine(new Vector2(bounds.Position.X, bounds.End.Y - bottomHeight),
+            new Vector2(bounds.End.X, bounds.End.Y - bottomHeight),
+            new Color(0.79f, 0.68f, 0.47f, .18f), 1);
+    }
+
+    private void DrawUnitBackdrop(Vector2 feetPosition, Vector2 size, Color accent, bool emphasized)
+    {
+        Vector2 center = feetPosition + new Vector2(0, -size.Y * .44f);
+        DrawSetTransform(center, 0, new Vector2(1, .52f));
+        DrawCircle(Vector2.Zero, Math.Max(10, size.X * .42f), new Color(accent, emphasized ? .24f : .14f));
+        DrawSetTransform(Vector2.Zero, 0, Vector2.One);
+        if (emphasized)
+            DrawArc(center, Math.Max(12, size.X * .47f), 0, MathF.Tau, 20, new Color(accent, .72f), 1.5f);
+    }
+
+    private void DrawHitPulse(Vector2 position, float radius, float alpha)
+    {
+        float phase = (float)(_visualClock % .35) / .35f;
+        float pulseRadius = radius + 4 + phase * 9;
+        DrawArc(position, pulseRadius, 0, MathF.Tau, 20,
+            new Color(1f, .9f, .62f, alpha * (1 - phase)), 2.2f);
+    }
+
+    private void DrawEnemyLabel(Vector2 position, EnemyFrame enemy, bool targeted)
+    {
+        if (!targeted && !enemy.Elite && !enemy.Boss) return;
+        string label = enemy.Boss ? $"首领 · {enemy.DisplayName}" : enemy.DisplayName;
+        float width = Math.Clamp(18 + label.Length * 13, 86, 240);
+        Vector2 labelPosition = position + new Vector2(-width / 2, enemy.Boss ? -78 : -57);
+        DrawRect(new Rect2(labelPosition - new Vector2(4, 15), new Vector2(width + 8, 22)),
+            new Color(0.02f, 0.03f, 0.05f, targeted ? .88f : .72f), true);
+        DrawRect(new Rect2(labelPosition - new Vector2(4, 15), new Vector2(width + 8, 22)),
+            targeted ? new Color(1f, .78f, .38f, .84f) : new Color(.74f, .66f, .48f, .55f), false, 1);
+        DrawString(ThemeDB.FallbackFont, labelPosition, label, HorizontalAlignment.Center, width, 12,
+            targeted ? new Color(1f, .9f, .65f) : new Color(.88f, .86f, .79f));
+    }
 
     private void DrawPresentationVfx(int index, Vector2 center, float size, float rotation)
     {

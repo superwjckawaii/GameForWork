@@ -1,7 +1,9 @@
 using GameForWork.Core.Campaign;
+using GameForWork.Core.Campaign.Combat;
 using GameForWork.Core.Campaign.World;
 using GameForWork.Core.Harbor;
 using GameForWork.Core.Spatial;
+using GameForWork.Core.Art;
 using Godot;
 
 namespace GameForWork.GodotClient;
@@ -111,34 +113,128 @@ public partial class HarborReplayView : Control
 {
     private HarborRegion? _region;
     private long _time;
+    private double _clock;
+    private Texture2D? _regionAtlas;
+
+    public override void _Ready()
+    {
+        ClipContents = true;
+        _regionAtlas = ResourceLoader.Exists("res://assets/art/regions/art-region-atlas.png")
+            ? GD.Load<Texture2D>("res://assets/art/regions/art-region-atlas.png")
+            : null;
+    }
+
+    public override void _Process(double delta)
+    {
+        _clock += delta;
+        if (_region is not null) QueueRedraw();
+    }
+
     public void ShowRegion(HarborRegion? region, long milliseconds) { _region = region; _time = milliseconds; QueueRedraw(); }
     private Vector2 Project(Point point) => new(point.XRaw / 12_000f * Size.X, point.YRaw / 24_000f * Size.Y);
     public override void _Draw()
     {
-        DrawRect(new Rect2(Vector2.Zero, Size), new Color("182735"));
+        Rect2 canvas = new(Vector2.Zero, Size);
+        if (_regionAtlas is not null)
+        {
+            int index = _region?.Name switch { "外港栈桥" => 0, "沉没仓区" => 1, "宝库内港" => 2, _ => 0 };
+            Rect2 source = new((index % 4) * _regionAtlas.GetWidth() / 4f,
+                (index / 4) * _regionAtlas.GetHeight() / 3f,
+                _regionAtlas.GetWidth() / 4f, _regionAtlas.GetHeight() / 3f);
+            DrawTextureRectRegion(_regionAtlas, canvas, source);
+            DrawRect(canvas, new Color(0.015f, 0.03f, 0.055f, .48f), true);
+        }
+        else DrawRect(canvas, new Color("182735"), true);
         if (_region is null) return;
         SpatialFrame? frame = _region.Combat.Frames.LastOrDefault(value => value.AtMilliseconds <= _time);
         if (frame is null) return;
-        DrawCircle(Project(new(6_000, 2_000)), 8, Colors.Gold);
-        DrawCircle(Project(new(11_000, 2_000)), 8, Colors.LightGreen);
+
+        DrawGrid(canvas);
+        DrawObjective(Project(new(6_000, 2_000)), new Color("e4b957"), "宝");
+        DrawObjective(Project(new(11_000, 2_000)), new Color("75d39a"), "出");
         foreach (SpatialEvent entry in _region.Combat.Events.Where(value => value.Presentation is not null &&
                      value.AtMilliseconds <= _time && value.Presentation.EndsAtMilliseconds > _time))
         {
             SpatialPresentation effect = entry.Presentation!;
             if (effect.Shape == "circle")
             {
-                Vector2[] outline = Enumerable.Range(0, 49).Select(index =>
-                {
-                    double angle = index * Math.Tau / 48;
-                    return Project(new(entry.TargetPosition.XRaw + (int)(Math.Cos(angle) * effect.RadiusRaw),
-                        entry.TargetPosition.YRaw + (int)(Math.Sin(angle) * effect.RadiusRaw)));
-                }).ToArray();
-                DrawPolyline(outline, _time < effect.StartsAtMilliseconds ? Colors.Yellow : Colors.OrangeRed, 2);
+                Vector2 center = Project(entry.TargetPosition);
+                float radius = effect.RadiusRaw / 12_000f * Size.X;
+                float age = Math.Clamp((_time - effect.StartsAtMilliseconds) /
+                    (float)Math.Max(1, effect.EndsAtMilliseconds - effect.StartsAtMilliseconds), 0, 1);
+                Color color = _time < effect.StartsAtMilliseconds ? new Color("f4d369") : new Color("ed704b");
+                DrawCircle(center, radius, new Color(color, .12f + .08f * (1 - age)));
+                DrawArc(center, radius, 0, MathF.Tau, 32, new Color(color, .92f), 2.2f);
+                DrawArc(center, radius * (.8f + .15f * MathF.Sin((float)_clock * 5)), 0, MathF.Tau, 24,
+                    new Color(color, .38f), 1);
             }
         }
         foreach (EnemyFrame enemy in frame.Enemies.Where(value => value.Life > 0))
-            DrawCircle(Project(enemy.Position), enemy.Boss ? 7 : 4, enemy.Boss ? Colors.Orange : Colors.IndianRed);
-        DrawCircle(Project(frame.HeroPosition), 6, Colors.Cyan);
-        DrawString(ThemeDB.FallbackFont, new(8, 20), $"原型回放 · 生命 {frame.HeroLife}/{frame.HeroMaximumLife} · 金点宝库 / 绿点出口", fontSize: 14);
+            DrawEnemyToken(Project(enemy.Position), enemy, enemy.EntityId == frame.HeroTargetId);
+        DrawHeroToken(Project(frame.HeroPosition), frame);
+        DrawString(ThemeDB.FallbackFont, new(12, 22), $"{_region.Name} · 原型回放 · 生命 {frame.HeroLife}/{frame.HeroMaximumLife}",
+            HorizontalAlignment.Left, -1, 14, new Color("f1e1bf"));
+    }
+
+    private void DrawGrid(Rect2 canvas)
+    {
+        for (int column = 1; column < 12; column++)
+        {
+            float x = canvas.Size.X * column / 12f;
+            DrawLine(new Vector2(x, 30), new Vector2(x, canvas.Size.Y), new Color(.55f, .65f, .7f, .12f), 1);
+        }
+        for (int row = 1; row < 8; row++)
+        {
+            float y = 30 + (canvas.Size.Y - 30) * row / 8f;
+            DrawLine(new Vector2(0, y), new Vector2(canvas.Size.X, y), new Color(.55f, .65f, .7f, .1f), 1);
+        }
+    }
+
+    private void DrawObjective(Vector2 position, Color color, string glyph)
+    {
+        DrawSetTransform(position + new Vector2(0, 4), 0, new Vector2(1, .45f));
+        DrawCircle(Vector2.Zero, 13, new Color(0, 0, 0, .38f));
+        DrawSetTransform(Vector2.Zero, 0, Vector2.One);
+        DrawCircle(position, 9, new Color(color, .24f));
+        DrawArc(position, 10 + MathF.Sin((float)_clock * 3) * 1.2f, 0, MathF.Tau, 20, color, 2);
+        DrawString(ThemeDB.FallbackFont, position + new Vector2(-5, 5), glyph,
+            HorizontalAlignment.Center, 10, 10, new Color("f8f1d9"));
+    }
+
+    private void DrawEnemyToken(Vector2 position, EnemyFrame enemy, bool targeted)
+    {
+        float radius = enemy.Boss ? 12 : enemy.Elite ? 9 : 7;
+        Color color = enemy.Role switch
+        {
+            UnitRole.Melee => new Color("d15762"), UnitRole.Ranged => new Color("54b5d5"),
+            UnitRole.Caster => new Color("b17de0"), UnitRole.Charger => new Color("e28b4f"),
+            UnitRole.Summoner => new Color("61c28f"), _ => new Color("d15762")
+        };
+        DrawSetTransform(position + new Vector2(0, 4), 0, new Vector2(1, .4f));
+        DrawCircle(Vector2.Zero, radius + 4, new Color(0, 0, 0, .38f));
+        DrawSetTransform(Vector2.Zero, 0, Vector2.One);
+        DrawColoredPolygon([position + new Vector2(0, -radius), position + new Vector2(radius, 0),
+            position + new Vector2(0, radius), position + new Vector2(-radius, 0)], new Color(color, .88f));
+        DrawPolyline([position + new Vector2(0, -radius), position + new Vector2(radius, 0),
+            position + new Vector2(0, radius), position + new Vector2(-radius, 0), position + new Vector2(0, -radius)],
+            targeted ? new Color("ffe08a") : new Color(color, .95f), targeted ? 2.5f : 1.5f);
+        if (enemy.Boss) DrawArc(position, radius + 5, 0, MathF.Tau, 24, new Color("ffe08a"), 2);
+        DrawRect(new Rect2(position + new Vector2(-14, radius + 5), new Vector2(28, 4)), new Color("281d27"), true);
+        DrawRect(new Rect2(position + new Vector2(-14, radius + 5), new Vector2(28 * Math.Clamp(enemy.Life / (float)Math.Max(1, enemy.MaximumLife), 0, 1), 4)),
+            enemy.Boss ? new Color("ed7b64") : new Color("d04a5c"), true);
+    }
+
+    private void DrawHeroToken(Vector2 position, SpatialFrame frame)
+    {
+        DrawSetTransform(position + new Vector2(0, 5), 0, new Vector2(1, .4f));
+        DrawCircle(Vector2.Zero, 10, new Color(0, 0, 0, .4f));
+        DrawSetTransform(Vector2.Zero, 0, Vector2.One);
+        DrawCircle(position + new Vector2(0, -5), 6, new Color("b9ecf1"));
+        DrawColoredPolygon([position + new Vector2(-8, 1), position + new Vector2(8, 1),
+            position + new Vector2(5, 12), position + new Vector2(-5, 12)], new Color("36a8c6"));
+        DrawLine(position + new Vector2(6, 3), position + new Vector2(16, -8), new Color("f2d18c"), 2);
+        DrawRect(new Rect2(position + new Vector2(-18, 16), new Vector2(36, 4)), new Color("281d27"), true);
+        DrawRect(new Rect2(position + new Vector2(-18, 16), new Vector2(36 * Math.Clamp(frame.HeroLife / (float)Math.Max(1, frame.HeroMaximumLife), 0, 1), 4)),
+            new Color("d55b68"), true);
     }
 }

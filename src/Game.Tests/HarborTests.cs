@@ -261,6 +261,20 @@ public sealed class HarborTests
     }
 
     [Fact]
+    public void HarborBalanceAuditIsDeterministicAndExposesMovementTradeoff()
+    {
+        IReadOnlyList<HarborBalanceResult> first = HarborBalanceAudit.Run(4, 0x5a17b04dUL);
+        IReadOnlyList<HarborBalanceResult> replay = HarborBalanceAudit.Run(4, 0x5a17b04dUL);
+
+        Assert.Equal(first, replay);
+        Assert.Empty(HarborBalanceAudit.Validate(first));
+        HarborBalanceResult fast = first.Single(value => value.Difficulty == 3 && value.Scenario == "高机动低防御");
+        HarborBalanceResult tank = first.Single(value => value.Difficulty == 3 && value.Scenario == "重装低速");
+        Assert.True(fast.AverageDurationSeconds < tank.AverageDurationSeconds);
+        Assert.Equal(12, first.Count);
+    }
+
+    [Fact]
     public void OldSaveHasNoSyntheticChestsAndDuplicateActionsAreRejected()
     {
         GameSession session = Session();
