@@ -13,11 +13,14 @@ public sealed record EquipmentVisualProfile(
     WeaponFamily MainHandFamily,
     ItemRarity HighestRarity,
     bool HasLegendaryEffect,
-    bool HasEnchantment)
+    bool HasEnchantment,
+    IReadOnlyDictionary<EquipmentSlot, string>? ModuleIds = null)
 {
     public static EquipmentVisualProfile Empty { get; } = new(
         false, false, false, false, false, false, false,
-        WeaponFamily.None, ItemRarity.Basic, false, false);
+        WeaponFamily.None, ItemRarity.Basic, false, false, new Dictionary<EquipmentSlot, string>());
+
+    public string ModuleId(EquipmentSlot slot) => ModuleIds?.GetValueOrDefault(slot) ?? string.Empty;
 }
 
 public static class EquipmentVisualModules
@@ -36,6 +39,14 @@ public static class EquipmentVisualModules
         ItemRarity highestRarity = equipped.Where(item => item is not null)
             .Select(item => item!.Rarity).DefaultIfEmpty(ItemRarity.Basic).Max();
 
+        Dictionary<EquipmentSlot, string> moduleIds = new();
+        AddModuleId(moduleIds, EquipmentSlot.Chest, chest);
+        AddModuleId(moduleIds, EquipmentSlot.Helmet, helmet);
+        AddModuleId(moduleIds, EquipmentSlot.Gloves, gloves);
+        AddModuleId(moduleIds, EquipmentSlot.Boots, boots);
+        AddModuleId(moduleIds, EquipmentSlot.MainHand, mainHand);
+        AddModuleId(moduleIds, EquipmentSlot.OffHand, offHand);
+
         return new EquipmentVisualProfile(
             chest is not null,
             helmet is not null,
@@ -47,6 +58,13 @@ public static class EquipmentVisualModules
             mainHand?.Base.WeaponFamily ?? WeaponFamily.None,
             highestRarity,
             equipped.Any(item => item?.Rarity == ItemRarity.Legendary || item?.LegendaryRule is not null || !string.IsNullOrEmpty(item?.LegendaryCatalogId)),
-            equipped.Any(item => item?.AllEnchantments.Count > 0));
+            equipped.Any(item => item?.AllEnchantments.Count > 0),
+            moduleIds);
+    }
+
+    private static void AddModuleId(Dictionary<EquipmentSlot, string> ids, EquipmentSlot slot, ItemInstance? item)
+    {
+        if (item is null) return;
+        ids[slot] = item.Base.StableId;
     }
 }

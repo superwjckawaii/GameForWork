@@ -215,9 +215,12 @@ public partial class WorldView : Control
         Vector2 enemy = bounds.Position + new Vector2(bounds.Size.X * 0.67f, bounds.Size.Y * 0.61f);
         DrawShadow(actor, 19);
         DrawShadow(enemy, 23);
+        EquipmentVisualProfile compactEquipment = EquipmentVisualModules.Resolve(_session?.HeroEquipment.Items);
+        DrawEquipmentBackModules(actor, Facing.Right, SpriteAction.Attack, compactEquipment, new Vector2(44, 56));
         DrawArtSprite(_actorAnimationAtlas, HeroActorRig(), Facing.Right,
             SpriteAction.Attack, (long)_visualElapsedMilliseconds, actor, new Vector2(44, 56),
             ArtContract.ActorRigCount, ArtContract.ActorCellWidth, ArtContract.ActorCellHeight);
+        DrawEquipmentFrontModules(actor, Facing.Right, SpriteAction.Attack, compactEquipment, new Vector2(44, 56));
         bool boss = sceneProgress > .82f;
         Texture2D? enemyAnimation = boss ? _bossAnimationAtlas : _enemyAnimationAtlas;
         DrawArtSprite(enemyAnimation,
@@ -277,9 +280,14 @@ public partial class WorldView : Control
             field.Size.X * (.18f + cycle * .64f),
             field.Size.Y * (.62f + MathF.Sin(cycle * MathF.Tau) * .08f));
         DrawShadow(actor + new Vector2(0, 6), 10);
+        EquipmentVisualProfile travelEquipment = EquipmentVisualModules.Resolve(_session?.HeroEquipment.Items);
+        Facing travelFacing = Facing.Right;
+        SpriteAction travelAction = moving ? SpriteAction.Move : SpriteAction.Idle;
+        DrawEquipmentBackModules(actor, travelFacing, travelAction, travelEquipment, new Vector2(44, 56));
         DrawArtSprite(_actorAnimationAtlas, HeroActorRig(), Facing.Right,
             moving ? SpriteAction.Move : SpriteAction.Idle, elapsed, actor, new Vector2(44, 56),
             ArtContract.ActorRigCount, ArtContract.ActorCellWidth, ArtContract.ActorCellHeight);
+        DrawEquipmentFrontModules(actor, travelFacing, travelAction, travelEquipment, new Vector2(44, 56));
         DrawCaption(bounds, observed.Title, new Color("e5d7be"));
         DrawString(ThemeDB.FallbackFont, bounds.Position + new Vector2(16, 43),
             moving ? $"前往节点 {Math.Max(1, state?.NodeIndex ?? 1)} · 移动 {state?.Value ?? 0} 格" : "抵达节点，准备接敌",

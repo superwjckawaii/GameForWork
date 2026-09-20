@@ -60,6 +60,15 @@ public sealed class EquipmentArtFeatureTests
         Assert.Equal(WeaponFamily.Bow, profile.MainHandFamily);
         Assert.Equal(ItemRarity.Rare, profile.HighestRarity);
         Assert.False(profile.HasOffHand);
+        Assert.Equal("equipment.base.bow.1", profile.ModuleId(EquipmentSlot.MainHand));
+        Assert.Equal("equipment.base.carnal_armour", profile.ModuleId(EquipmentSlot.Chest));
+
+        Assert.True(loadout.TryEquip(EquipmentSlot.MainHand,
+            ItemGenerator.Generate("archetypes.base.dagger.1", 20, ItemRarity.Magic, 13)));
+        EquipmentVisualProfile switched = EquipmentVisualModules.Resolve(loadout.Items);
+        Assert.Equal(WeaponFamily.Dagger, switched.MainHandFamily);
+        Assert.Equal("equipment.base.dagger.1", switched.ModuleId(EquipmentSlot.MainHand));
+        Assert.Equal(profile.ModuleId(EquipmentSlot.Chest), switched.ModuleId(EquipmentSlot.Chest));
     }
 
     [Fact]
