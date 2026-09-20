@@ -44,6 +44,25 @@ public sealed class EquipmentArtFeatureTests
     }
 
     [Fact]
+    public void EquipmentVisualModulesFollowRealLoadoutSlotsAndSemanticWeaponType()
+    {
+        var loadout = new EquipmentLoadout();
+        Assert.Equal(EquipmentVisualProfile.Empty, EquipmentVisualModules.Resolve(loadout.Items));
+
+        Assert.True(loadout.TryEquip(EquipmentSlot.MainHand,
+            ItemGenerator.Generate("archetypes.base.bow.1", 20, ItemRarity.Rare, 11)));
+        Assert.True(loadout.TryEquip(EquipmentSlot.Chest,
+            ItemGenerator.Generate("equipmentImport.base.carnal_armour", 20, ItemRarity.Rare, 12)));
+        EquipmentVisualProfile profile = EquipmentVisualModules.Resolve(loadout.Items);
+
+        Assert.True(profile.HasMainHand);
+        Assert.True(profile.HasChest);
+        Assert.Equal(WeaponFamily.Bow, profile.MainHandFamily);
+        Assert.Equal(ItemRarity.Rare, profile.HighestRarity);
+        Assert.False(profile.HasOffHand);
+    }
+
+    [Fact]
     public void ArchetypesEquipmentUsesExplicitCategoryArtAndSkillStonesUseSemanticRows()
     {
         int bow = EquipmentBaseArt.IconIndex(ItemBases.Get("archetypes.base.bow.1"));

@@ -391,10 +391,13 @@ public partial class WorldView : Control
             SpatialFrame? death = frames.Take(frameIndex + 1).Reverse().TakeWhile(frame => frame.HeroLife <= 0).LastOrDefault();
             heroActionAge = Math.Max(0, elapsed - (death?.AtMilliseconds ?? elapsed));
         }
+        EquipmentVisualProfile heroEquipment = EquipmentVisualModules.Resolve(_session?.HeroEquipment.Items);
+        DrawEquipmentBackModules(actor, heroFacing, heroAction, heroEquipment, new Vector2(44, 56));
         DrawArtSprite(_actorAnimationAtlas, HeroActorRig(), heroFacing, heroAction, heroActionAge,
             actor, new Vector2(44, 56), ArtContract.ActorRigCount,
             ArtContract.ActorCellWidth, ArtContract.ActorCellHeight,
             loop: heroAction is SpriteAction.Idle or SpriteAction.Move);
+        DrawEquipmentFrontModules(actor, heroFacing, heroAction, heroEquipment, new Vector2(44, 56));
         DrawBar(new Rect2(actor + new Vector2(-30, 11), new Vector2(60, 5)),
             current.HeroMaximumLife <= 0 ? 0 : (float)current.HeroLife / current.HeroMaximumLife, new Color("a73737"));
         DrawBar(new Rect2(actor + new Vector2(-30, 18), new Vector2(60, 4)),
@@ -477,9 +480,12 @@ public partial class WorldView : Control
             return true;
         }
         if (ally.EntityId != "mercenary") return false;
+        EquipmentVisualProfile equipment = EquipmentVisualModules.Resolve(_session?.MercenaryEquipment.Items);
+        DrawEquipmentBackModules(position, facing, action, equipment, new Vector2(36, 46));
         DrawArtSprite(_actorAnimationAtlas, MercenaryActorRig(), facing, action, actionAge, position,
             new Vector2(36, 46), ArtContract.ActorRigCount,
             ArtContract.ActorCellWidth, ArtContract.ActorCellHeight, loop: action is SpriteAction.Idle or SpriteAction.Move);
+        DrawEquipmentFrontModules(position, facing, action, equipment, new Vector2(36, 46));
         return true;
     }
 
@@ -750,6 +756,83 @@ public partial class WorldView : Control
         Rect2 destination = new(feetPosition + new Vector2(-size.X / 2, -size.Y), size);
         DrawTextureRectRegion(atlas, destination, source, tint ?? Colors.White);
     }
+
+    private void DrawEquipmentBackModules(Vector2 feetPosition, Facing facing, SpriteAction action,
+        EquipmentVisualProfile profile, Vector2 maximumSize)
+    {
+        if (profile == EquipmentVisualProfile.Empty) return;
+        float scale = Math.Min(maximumSize.X / ArtContract.ActorCellWidth, maximumSize.Y / ArtContract.ActorCellHeight);
+        Vector2 body = feetPosition + new Vector2(0, -27 * scale);
+        Color armor = EquipmentArmorColor(profile.HighestRarity);
+        if (profile.HasChest)
+        {
+            DrawColoredPolygon([
+                body + new Vector2(-10, -7) * scale, body + new Vector2(10, -7) * scale,
+                body + new Vector2(13, 11) * scale, body + new Vector2(7, 16) * scale,
+                body + new Vector2(-7, 16) * scale, body + new Vector2(-13, 11) * scale], armor);
+            if (profile.HasLegendaryEffect)
+                DrawArc(body + new Vector2(0, 4) * scale, 12 * scale, 0, MathF.Tau, 12, new Color(1, .78f, .26f, .75f), 1.5f * scale);
+        }
+        if (profile.HasBoots)
+        {
+            DrawLine(feetPosition + new Vector2(-7, -5) * scale, feetPosition + new Vector2(-8, 2) * scale, armor.Darkened(.25f), 3 * scale);
+            DrawLine(feetPosition + new Vector2(7, -5) * scale, feetPosition + new Vector2(8, 2) * scale, armor.Darkened(.25f), 3 * scale);
+        }
+        if (profile.HasOffHand && !profile.HasShield)
+            DrawLine(body + new Vector2(facing == Facing.Left ? -8 : 8, 5) * scale,
+                body + new Vector2(facing == Facing.Left ? -15 : 15, 14) * scale, WeaponColor(profile.MainHandFamily), 2 * scale);
+    }
+
+    private void DrawEquipmentFrontModules(Vector2 feetPosition, Facing facing, SpriteAction action,
+        EquipmentVisualProfile profile, Vector2 maximumSize)
+    {
+        if (profile == EquipmentVisualProfile.Empty) return;
+        float scale = Math.Min(maximumSize.X / ArtContract.ActorCellWidth, maximumSize.Y / ArtContract.ActorCellHeight);
+        Vector2 body = feetPosition + new Vector2(0, -27 * scale);
+        Color armor = EquipmentArmorColor(profile.HighestRarity);
+        if (profile.HasHelmet)
+        {
+            DrawLine(body + new Vector2(-8, -15) * scale, body + new Vector2(8, -15) * scale, armor.Lightened(.18f), 3 * scale);
+            DrawLine(body + new Vector2(0, -18) * scale, body + new Vector2(0, -23) * scale, armor.Lightened(.3f), 2 * scale);
+        }
+        if (profile.HasGloves)
+        {
+            DrawCircle(body + new Vector2(facing == Facing.Left ? -13 : 13, 7) * scale, 2.5f * scale, armor.Lightened(.08f));
+        }
+        if (profile.HasMainHand)
+        {
+            Vector2 hand = body + new Vector2(facing == Facing.Left ? -12 : 12, 6) * scale;
+            Vector2 end = hand + new Vector2(facing == Facing.Left ? -14 : 14, action == SpriteAction.Attack ? -11 : -5) * scale;
+            Color weapon = WeaponColor(profile.MainHandFamily);
+            DrawLine(hand, end, weapon, 2.5f * scale);
+            if (profile.HasLegendaryEffect) DrawCircle(end, 2 * scale, new Color(1, .84f, .35f, .9f));
+        }
+        if (profile.HasShield)
+        {
+            Vector2 shield = body + new Vector2(facing == Facing.Left ? 12 : -12, 5) * scale;
+            DrawCircle(shield, 6 * scale, new Color("416b83"));
+            DrawArc(shield, 6 * scale, 0, MathF.Tau, 12, armor.Lightened(.22f), 1.5f * scale);
+        }
+        if (profile.HasEnchantment)
+            DrawArc(body + new Vector2(0, -1) * scale, 15 * scale, -1.1f, 1.1f, 8, new Color(.55f, .84f, 1f, .55f), 1.2f * scale);
+    }
+
+    private static Color EquipmentArmorColor(ItemRarity rarity) => rarity switch
+    {
+        ItemRarity.Magic => new Color("4b84b5"),
+        ItemRarity.Rare => new Color("b99b43"),
+        ItemRarity.Legendary => new Color("d96b38"),
+        _ => new Color("596274"),
+    };
+
+    private static Color WeaponColor(WeaponFamily family) => family switch
+    {
+        WeaponFamily.Axe or WeaponFamily.Mace => new Color("b8784a"),
+        WeaponFamily.Dagger or WeaponFamily.Sword => new Color("d5d9d2"),
+        WeaponFamily.Bow => new Color("a8794e"),
+        WeaponFamily.Wand or WeaponFamily.Runeblade => new Color("9c83dc"),
+        _ => new Color("c5b58b"),
+    };
 
     private static Facing FacingBetween(Point from, Point to, Point fallback)
     {
