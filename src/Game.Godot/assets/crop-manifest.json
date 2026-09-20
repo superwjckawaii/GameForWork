@@ -65,7 +65,7 @@
       "count": 620,
       "gutters": true,
       "unique": false,
-      "sha256": "8185483bdb0aea490e44a31daf7ff906f506e791e63f16f844d5c48e13caae90"
+      "sha256": "63498f5aaf51826025b08120a0dd697a7915edc8ba4c038a75632ade9c0a4b79"
     },
     {
       "path": "art/characters/art-unit-animation.png",
@@ -76,7 +76,7 @@
       "count": 496,
       "gutters": true,
       "unique": false,
-      "sha256": "ca0cf2a69866a3846f37385075a5146ee76bcde081167bbeebcd18fbac0f03e4"
+      "sha256": "11188715acd3296d7da28e90b26aa01ce2c8ff87a998cd14a234c2b0c62f4b77"
     },
     {
       "path": "art/enemies/art-boss-animation.png",
@@ -98,7 +98,7 @@
       "count": 3224,
       "gutters": true,
       "unique": false,
-      "sha256": "3564f9ff0852053aa426c3f0703770ed216e70e9111aad0bfc0942480b48504e"
+      "sha256": "59c6249b9cc11c5011e480d280ae98efb2ba38fcacf43a2af3b5f4ac72df06b4"
     },
     {
       "path": "art/regions/act-1.png",
