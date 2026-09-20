@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "style": "original-low-density-dark-fantasy-pixel-art",
+  "style": "original-controlled-color-block-dark-fantasy-pixel-art",
   "animation": {
     "actions": {
       "idle": 4,
@@ -32,7 +32,7 @@
     "anchor": "bottom-center"
   },
   "counts": {
-    "actorRigs": 5,
+    "actorRigs": 6,
     "unitRigs": 4,
     "enemyBodyRigs": 26,
     "enemyTypes": 80,

@@ -10,7 +10,7 @@ Add-Type -AssemblyName System.Security
 $assetRoot = Join-Path $RepositoryRoot 'src\Game.Godot\assets\art'
 $sourceRoot = Join-Path $RepositoryRoot 'src\Game.Godot\art-source\art\imagegen'
 $expected = [ordered]@{
-    'characters\art-actor-animation.png' = @(1488, 1280)
+    'characters\art-actor-animation.png' = @(1488, 1536)
     'characters\art-unit-animation.png' = @(1488, 1024)
     'enemies\art-enemy-animation.png' = @(1488, 6656)
     'enemies\art-boss-animation.png' = @(2232, 3840)
@@ -128,7 +128,7 @@ function Assert-CellOccupancy {
     } finally { $bitmap.Dispose() }
 }
 
-Assert-TransparentGutters 'characters\art-actor-animation.png' 31 20 48 64
+Assert-TransparentGutters 'characters\art-actor-animation.png' 31 24 48 64
 Assert-TransparentGutters 'characters\art-unit-animation.png' 31 16 48 64
 Assert-TransparentGutters 'enemies\art-enemy-animation.png' 31 104 48 64
 Assert-TransparentGutters 'enemies\art-boss-animation.png' 31 48 72 80
@@ -147,6 +147,7 @@ if (-not (Test-Path -LiteralPath $iconPath) -or (Get-Item -LiteralPath $iconPath
 $manifestPath = Join-Path $assetRoot 'art-assets.json'
 $manifest = Get-Content -LiteralPath $manifestPath -Raw -Encoding UTF8 | ConvertFrom-Json
 if ($manifest.counts.skillGems -ne 78 -or $manifest.counts.unitRigs -ne 4 -or
+    $manifest.counts.actorRigs -ne 6 -or
     $manifest.counts.enemyTypes -ne 80 -or $manifest.counts.enemyBodyRigs -ne 26 -or
     $manifest.counts.bossBodyRigs -ne 12 -or $manifest.counts.bosses -ne 24 -or $manifest.animation.columns -ne 31) {
     throw 'Art asset manifest counts do not match the frozen content contract.'

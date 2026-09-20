@@ -59,13 +59,13 @@
     {
       "path": "art/characters/art-actor-animation.png",
       "width": 1488,
-      "height": 1280,
+      "height": 1536,
       "columns": 31,
-      "rows": 20,
-      "count": 620,
+      "rows": 24,
+      "count": 744,
       "gutters": true,
       "unique": false,
-      "sha256": "6fc7974c282d7524eeaef308694019165cdf1c42b7229e9c5795adf2ae55dbd5"
+      "sha256": "806bb8af18e8c1ff4149a2f7e4f1e132b5e1297c3cdd56af4449373c8fe30e2d"
     },
     {
       "path": "art/characters/art-unit-animation.png",
@@ -76,7 +76,7 @@
       "count": 496,
       "gutters": true,
       "unique": false,
-      "sha256": "69d3513db3e86f841b33ab47e91dd0fcc1847c58670506f034d2177f5fd30353"
+      "sha256": "f9f8e2bfbea6366ad94512cb2d5903d740620d0aa3d5827c685a9fa01560f9bb"
     },
     {
       "path": "art/enemies/art-boss-animation.png",
@@ -98,7 +98,7 @@
       "count": 3224,
       "gutters": true,
       "unique": false,
-      "sha256": "4ee3127c6a14d695e8914118862d51ee82c0efad2fe2077ba1c84b143c0023f3"
+      "sha256": "d7199c3cd68686df77b48f4859efeacb26701dc8a76645b5e35eb2660f76b678"
     },
     {
       "path": "art/regions/act-1.png",

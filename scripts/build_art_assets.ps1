@@ -296,19 +296,20 @@ function Build-TownPreview {
 if (-not $SkipAnimations) {
     $actorSource = [System.Drawing.Bitmap]::FromFile((Join-Path $sourceRoot 'actor-master.png'))
     $actorSprites = [System.Collections.Generic.List[System.Drawing.Bitmap]]::new()
-    for ($index = 0; $index -lt 5; $index++) { $actorSprites.Add((Get-GridSprite -Atlas $actorSource -Index $index -Columns 5 -Rows 5)) }
+    for ($index = 0; $index -lt 6; $index++) { $actorSprites.Add((Get-GridSprite -Atlas $actorSource -Index $index -Columns 6 -Rows 5)) }
     Build-AnimationAtlas -Sprites $actorSprites -Destination (Join-Path $assetRoot 'characters\art-actor-animation.png') -CellWidth 48 -CellHeight 64 -Padding 7
     foreach ($sprite in $actorSprites) { $sprite.Dispose() }
 
     $enemySprites = [System.Collections.Generic.List[System.Drawing.Bitmap]]::new()
-    for ($index = 5; $index -lt 21; $index++) { $enemySprites.Add((Get-GridSprite -Atlas $actorSource -Index $index -Columns 5 -Rows 5)) }
+    $actorEnemyIndices = @(6..10) + @(12..16) + @(18..22) + @(24)
+    foreach ($index in $actorEnemyIndices) { $enemySprites.Add((Get-GridSprite -Atlas $actorSource -Index $index -Columns 6 -Rows 5)) }
     $monstersMonsterSource = [System.Drawing.Bitmap]::FromFile((Join-Path $monstersSourceRoot 'monsters-monster-family-master.png'))
     for ($index = 0; $index -lt 10; $index++) { $enemySprites.Add((Get-GridSprite -Atlas $monstersMonsterSource -Index $index -Columns 5 -Rows 2)) }
     Build-AnimationAtlas -Sprites $enemySprites -Destination (Join-Path $assetRoot 'enemies\art-enemy-animation.png') -CellWidth 48 -CellHeight 64 -Padding 7
 
     $unitSprites = [System.Collections.Generic.List[System.Drawing.Bitmap]]::new()
-    $unitSprites.Add((Get-GridSprite -Atlas $actorSource -Index 5 -Columns 5 -Rows 5))
-    $unitSprites.Add((Get-GridSprite -Atlas $actorSource -Index 6 -Columns 5 -Rows 5))
+    $unitSprites.Add((Get-GridSprite -Atlas $actorSource -Index 6 -Columns 6 -Rows 5))
+    $unitSprites.Add((Get-GridSprite -Atlas $actorSource -Index 7 -Columns 6 -Rows 5))
     $unitSprites.Add((Get-GridSprite -Atlas $monstersMonsterSource -Index 0 -Columns 5 -Rows 2))
     $unitSprites.Add((Get-GridSprite -Atlas $monstersMonsterSource -Index 9 -Columns 5 -Rows 2))
     Build-AnimationAtlas -Sprites $unitSprites -Destination (Join-Path $assetRoot 'characters\art-unit-animation.png') -CellWidth 48 -CellHeight 64 -Padding 7
@@ -347,7 +348,7 @@ if ($LASTEXITCODE -ne 0) { throw "Art.1 asset build failed with exit code $LASTE
 
 $manifest = [ordered]@{
     version = 1
-    style = 'original-low-density-dark-fantasy-pixel-art'
+    style = 'original-controlled-color-block-dark-fantasy-pixel-art'
     animation = [ordered]@{
         actions = [ordered]@{ idle = 4; move = 6; attack = 6; cast = 6; hit = 3; death = 6 }
         columns = 31
@@ -358,7 +359,7 @@ $manifest = [ordered]@{
         anchor = 'bottom-center'
     }
     counts = [ordered]@{
-        actorRigs = 5
+        actorRigs = 6
         unitRigs = 4
         enemyBodyRigs = 26
         enemyTypes = 80

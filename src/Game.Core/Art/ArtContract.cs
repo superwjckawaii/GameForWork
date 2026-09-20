@@ -16,7 +16,7 @@ public static class ArtContract
     private static IReadOnlyDictionary<string, int>? _skillStoneIndices;
     public const int AnimationColumns = 31;
     public const int DirectionCount = 4;
-    public const int ActorRigCount = 5;
+    public const int ActorRigCount = 6;
     public const int UnitRigCount = 4;
     public const int EnemyBodyRigCount = 26;
     public const int BossRigCount = 12;

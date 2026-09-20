@@ -2,6 +2,7 @@ using GameForWork.Core.Content;
 using GameForWork.Core.Art;
 using GameForWork.Core.Archetypes;
 using GameForWork.Core.Presentation;
+using GameForWork.Core.Characters;
 
 namespace GameForWork.Tests;
 
@@ -10,6 +11,8 @@ public sealed class ArtFeatureTests
     [Fact]
     public void AssetContractCoversAllStableContent()
     {
+        Assert.Equal(6, ClassCatalog.All.Count);
+        Assert.Equal(6, ArtContract.ActorRigCount);
         Assert.Equal(80, ArtContract.EnemyIds.Count);
         Assert.Equal(78, ArtContract.SkillStoneIds.Count);
         Assert.Equal(31, ArtContract.AnimationRanges.Sum(range => range.FrameCount));

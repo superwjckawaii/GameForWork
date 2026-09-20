@@ -9,6 +9,7 @@ using GameForWork.Core.Maps;
 using GameForWork.Core.SkillCatalog;
 using GameForWork.Core.Art;
 using GameForWork.Core.Builds;
+using GameForWork.Core.Town;
 using GameForWork.Core.Presentation;
 using Godot;
 
@@ -214,7 +215,7 @@ public partial class WorldView : Control
         Vector2 enemy = bounds.Position + new Vector2(bounds.Size.X * 0.67f, bounds.Size.Y * 0.61f);
         DrawShadow(actor, 19);
         DrawShadow(enemy, 23);
-        DrawArtSprite(_actorAnimationAtlas, hero ? 0 : 1, Facing.Right,
+        DrawArtSprite(_actorAnimationAtlas, HeroActorRig(), Facing.Right,
             SpriteAction.Attack, (long)_visualElapsedMilliseconds, actor, new Vector2(44, 56),
             ArtContract.ActorRigCount, ArtContract.ActorCellWidth, ArtContract.ActorCellHeight);
         bool boss = sceneProgress > .82f;
@@ -276,7 +277,7 @@ public partial class WorldView : Control
             field.Size.X * (.18f + cycle * .64f),
             field.Size.Y * (.62f + MathF.Sin(cycle * MathF.Tau) * .08f));
         DrawShadow(actor + new Vector2(0, 6), 10);
-        DrawArtSprite(_actorAnimationAtlas, observed.Hero ? 0 : 1, Facing.Right,
+        DrawArtSprite(_actorAnimationAtlas, HeroActorRig(), Facing.Right,
             moving ? SpriteAction.Move : SpriteAction.Idle, elapsed, actor, new Vector2(44, 56),
             ArtContract.ActorRigCount, ArtContract.ActorCellWidth, ArtContract.ActorCellHeight);
         DrawCaption(bounds, observed.Title, new Color("e5d7be"));
@@ -390,7 +391,7 @@ public partial class WorldView : Control
             SpatialFrame? death = frames.Take(frameIndex + 1).Reverse().TakeWhile(frame => frame.HeroLife <= 0).LastOrDefault();
             heroActionAge = Math.Max(0, elapsed - (death?.AtMilliseconds ?? elapsed));
         }
-        DrawArtSprite(_actorAnimationAtlas, hero ? 0 : 1, heroFacing, heroAction, heroActionAge,
+        DrawArtSprite(_actorAnimationAtlas, HeroActorRig(), heroFacing, heroAction, heroActionAge,
             actor, new Vector2(44, 56), ArtContract.ActorRigCount,
             ArtContract.ActorCellWidth, ArtContract.ActorCellHeight,
             loop: heroAction is SpriteAction.Idle or SpriteAction.Move);
@@ -453,7 +454,7 @@ public partial class WorldView : Control
             Math.Max(0, elapsed - (timedAction?.AtMilliseconds ?? elapsed));
         if (ally.SkillId.Length == 0)
         {
-            DrawArtSprite(_actorAnimationAtlas, 1 + StableVisualIndex(ally.EntityId, 4), facing, unitAction,
+            DrawArtSprite(_actorAnimationAtlas, StableVisualIndex(ally.EntityId, ArtContract.ActorRigCount), facing, unitAction,
                 actionAge, position, new Vector2(36, 46), ArtContract.ActorRigCount,
                 ArtContract.ActorCellWidth, ArtContract.ActorCellHeight, loop: unitAction is SpriteAction.Idle or SpriteAction.Move);
             return;
@@ -469,14 +470,14 @@ public partial class WorldView : Control
     {
         if (ally.EntityId.StartsWith("phantom:", StringComparison.Ordinal))
         {
-            DrawArtSprite(_actorAnimationAtlas, hero ? 0 : 1, facing, action, actionAge, position,
+            DrawArtSprite(_actorAnimationAtlas, HeroActorRig(), facing, action, actionAge, position,
                 new Vector2(36, 46), ArtContract.ActorRigCount, ArtContract.ActorCellWidth,
                 ArtContract.ActorCellHeight, loop: action is SpriteAction.Idle or SpriteAction.Move,
                 tint: new Color(0.55f, 0.82f, 1f, 0.5f));
             return true;
         }
         if (ally.EntityId != "mercenary") return false;
-        DrawArtSprite(_actorAnimationAtlas, 1, facing, action, actionAge, position,
+        DrawArtSprite(_actorAnimationAtlas, MercenaryActorRig(), facing, action, actionAge, position,
             new Vector2(36, 46), ArtContract.ActorRigCount,
             ArtContract.ActorCellWidth, ArtContract.ActorCellHeight, loop: action is SpriteAction.Idle or SpriteAction.Move);
         return true;
@@ -485,6 +486,24 @@ public partial class WorldView : Control
     private SceneEvent? RecentUnitHit(string entityId, long atMilliseconds) =>
         _recentEvents.LastOrDefault(item => EventTargets(item, entityId) &&
             item.Kind == SceneEventKind.EnemyAttack && item.Value > 0 && atMilliseconds - item.AtMilliseconds < 350);
+
+    private int HeroActorRig() => _session is null
+        ? 0
+        : Math.Clamp((int)_session.Player.BaseClass, 0, ArtContract.ActorRigCount - 1);
+
+    private int MercenaryActorRig()
+    {
+        GameForWork.Core.Town.MercenaryArchetype archetype = _session?.Town.Roster.FirstOrDefault()?.Identity.Archetype
+            ?? GameForWork.Core.Town.MercenaryArchetype.Cantor;
+        return archetype switch
+        {
+            GameForWork.Core.Town.MercenaryArchetype.Guardian => 0,
+            GameForWork.Core.Town.MercenaryArchetype.Ranger => 1,
+            GameForWork.Core.Town.MercenaryArchetype.Cantor => 2,
+            GameForWork.Core.Town.MercenaryArchetype.Arcanist => 3,
+            _ => 1,
+        };
+    }
 
     private static SpriteAction ResolveUnitAction(AllyFrame ally, AllyFrame? next, SceneEvent? action,
         SceneEvent? hit, long atMilliseconds)
