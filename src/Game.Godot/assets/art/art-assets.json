@@ -41,12 +41,14 @@
     "skillGems": 78,
     "metalCurrencies": 19,
     "regions": 12,
-    "buildings": 7
+    "buildings": 7,
+    "equipmentModules": 8
   },
   "sources": [
     "actor-master.png",
     "boss-master.png",
     "skill-gem-master.png",
+    "equipment-modules-master.png",
     "region-master.png",
     "town-master.png",
     "app-icon-master.png",

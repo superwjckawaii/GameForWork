@@ -68,6 +68,17 @@
       "sha256": "806bb8af18e8c1ff4149a2f7e4f1e132b5e1297c3cdd56af4449373c8fe30e2d"
     },
     {
+      "path": "art/characters/art-equipment-modules.png",
+      "width": 512,
+      "height": 256,
+      "columns": 4,
+      "rows": 2,
+      "count": 8,
+      "gutters": true,
+      "unique": true,
+      "sha256": "30228175d933955775927d4a353937ad7e402d457ba604ec46c34cb2448a1680"
+    },
+    {
       "path": "art/characters/art-unit-animation.png",
       "width": 1488,
       "height": 1024,

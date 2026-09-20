@@ -36,6 +36,7 @@ public partial class WorldView : Control
     private Texture2D? _presentationVfxAtlas;
     private Texture2D? _actorAnimationAtlas;
     private Texture2D? _unitAnimationAtlas;
+    private Texture2D? _equipmentModuleAtlas;
     private Texture2D? _enemyAnimationAtlas;
     private Texture2D? _bossAnimationAtlas;
     private readonly Dictionary<string, EnemyFrame> _nextEnemies = new(StringComparer.Ordinal);
@@ -78,6 +79,7 @@ public partial class WorldView : Control
         _presentationVfxAtlas = LoadOptional("res://assets/presentation/vfx/presentation-combat-vfx.png");
         _actorAnimationAtlas = LoadOptional("res://assets/art/characters/art-actor-animation.png");
         _unitAnimationAtlas = LoadOptional("res://assets/art/characters/art-unit-animation.png");
+        _equipmentModuleAtlas = LoadOptional("res://assets/art/characters/art-equipment-modules.png");
         _enemyAnimationAtlas = LoadOptional("res://assets/art/enemies/art-enemy-animation.png");
         _bossAnimationAtlas = LoadOptional("res://assets/art/enemies/art-boss-animation.png");
     }
@@ -769,6 +771,11 @@ public partial class WorldView : Control
         EquipmentVisualProfile profile, Vector2 maximumSize)
     {
         if (profile == EquipmentVisualProfile.Empty) return;
+        if (_equipmentModuleAtlas is not null)
+        {
+            DrawEquipmentAtlasModules(feetPosition, facing, profile, maximumSize);
+            return;
+        }
         float scale = Math.Min(maximumSize.X / ArtContract.ActorCellWidth, maximumSize.Y / ArtContract.ActorCellHeight);
         Vector2 body = feetPosition + new Vector2(0, -27 * scale);
         Color armor = EquipmentArmorColor(profile.HighestRarity);
@@ -795,6 +802,7 @@ public partial class WorldView : Control
         EquipmentVisualProfile profile, Vector2 maximumSize)
     {
         if (profile == EquipmentVisualProfile.Empty) return;
+        if (_equipmentModuleAtlas is not null) return;
         float scale = Math.Min(maximumSize.X / ArtContract.ActorCellWidth, maximumSize.Y / ArtContract.ActorCellHeight);
         Vector2 body = feetPosition + new Vector2(0, -27 * scale);
         Color armor = EquipmentArmorColor(profile.HighestRarity);
@@ -841,6 +849,39 @@ public partial class WorldView : Control
         WeaponFamily.Wand or WeaponFamily.Runeblade => new Color("9c83dc"),
         _ => new Color("c5b58b"),
     };
+
+    private void DrawEquipmentAtlasModules(Vector2 feetPosition, Facing facing,
+        EquipmentVisualProfile profile, Vector2 maximumSize)
+    {
+        float scale = Math.Min(maximumSize.X / 36f, maximumSize.Y / 46f);
+        if (profile.HasChest) DrawEquipmentModule(0, feetPosition + new Vector2(-24, -58) * scale, new Vector2(48, 48) * scale);
+        if (profile.HasHelmet) DrawEquipmentModule(1, feetPosition + new Vector2(-20, -56) * scale, new Vector2(40, 30) * scale);
+        if (profile.HasGloves) DrawEquipmentModule(2, feetPosition + new Vector2(-22, -38) * scale, new Vector2(44, 24) * scale);
+        if (profile.HasBoots) DrawEquipmentModule(3, feetPosition + new Vector2(-20, -20) * scale, new Vector2(40, 22) * scale);
+        if (profile.HasMainHand)
+        {
+            int weapon = profile.MainHandFamily == WeaponFamily.Bow ? 5 :
+                profile.MainHandFamily is WeaponFamily.Wand or WeaponFamily.Runeblade ? 7 : 4;
+            float direction = facing == Facing.Left ? -1 : 1;
+            DrawEquipmentModule(weapon, feetPosition + new Vector2(direction * 4 - 22, -47) * scale, new Vector2(44, 44) * scale);
+        }
+        if (profile.HasShield)
+        {
+            float direction = facing == Facing.Left ? 1 : -1;
+            DrawEquipmentModule(6, feetPosition + new Vector2(direction * 22 - 14, -49) * scale, new Vector2(28, 38) * scale);
+        }
+        if (profile.HasLegendaryEffect)
+            DrawArc(feetPosition + new Vector2(0, -28) * scale, 16 * scale, 0, MathF.Tau, 14, new Color(1, .78f, .26f, .75f), 1.5f * scale);
+        if (profile.HasEnchantment)
+            DrawArc(feetPosition + new Vector2(0, -31) * scale, 18 * scale, -1.1f, 1.1f, 8, new Color(.55f, .84f, 1f, .55f), 1.2f * scale);
+    }
+
+    private void DrawEquipmentModule(int index, Vector2 position, Vector2 size)
+    {
+        Rect2 source = new((index % 4) * 128, (index / 4) * 128, 128, 128);
+        Rect2 destination = new(position, size);
+        DrawTextureRectRegion(_equipmentModuleAtlas!, destination, source, Colors.White);
+    }
 
     private static Facing FacingBetween(Point from, Point to, Point fallback)
     {

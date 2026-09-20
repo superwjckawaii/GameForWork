@@ -12,6 +12,7 @@ $sourceRoot = Join-Path $RepositoryRoot 'src\Game.Godot\art-source\art\imagegen'
 $expected = [ordered]@{
     'characters\art-actor-animation.png' = @(1488, 1536)
     'characters\art-unit-animation.png' = @(1488, 1024)
+    'characters\art-equipment-modules.png' = @(512, 256)
     'enemies\art-enemy-animation.png' = @(1488, 6656)
     'enemies\art-boss-animation.png' = @(2232, 3840)
     'regions\art-region-atlas.png' = @(1024, 432)
@@ -38,7 +39,7 @@ foreach ($entry in $expected.GetEnumerator()) {
     } finally { $image.Dispose() }
 }
 
-foreach ($source in @('actor-master.png', 'boss-master.png', 'skill-gem-master.png',
+foreach ($source in @('actor-master.png', 'boss-master.png', 'skill-gem-master.png', 'equipment-modules-master.png',
         'region-master.png', 'town-master.png', 'visual-direction-board.png', 'app-icon-master.png',
         'ui-skin-master.png')) {
     if (-not (Test-Path -LiteralPath (Join-Path $sourceRoot $source))) { throw "Missing Art editable source: $source" }
@@ -130,6 +131,7 @@ function Assert-CellOccupancy {
 
 Assert-TransparentGutters 'characters\art-actor-animation.png' 31 24 48 64
 Assert-TransparentGutters 'characters\art-unit-animation.png' 31 16 48 64
+Assert-TransparentGutters 'characters\art-equipment-modules.png' 4 2 128 128
 Assert-TransparentGutters 'enemies\art-enemy-animation.png' 31 104 48 64
 Assert-TransparentGutters 'enemies\art-boss-animation.png' 31 48 72 80
 Assert-TransparentGutters 'ui\art-skill-gems.png' 10 8 32 32
@@ -137,6 +139,7 @@ Assert-TransparentGutters 'ui\art-metal-atlas.png' 5 4 32 32
 
 Assert-UniqueCells 'ui\art-skill-gems.png' 10 78 32
 Assert-UniqueCells 'ui\art-metal-atlas.png' 5 19 32
+Assert-UniqueCells 'characters\art-equipment-modules.png' 4 8 128
 Assert-CellOccupancy 'ui\art-skill-gems.png' 10 78 32 90
 
 $iconPath = Join-Path $assetRoot 'brand\art-app-icon.ico'
@@ -147,7 +150,7 @@ if (-not (Test-Path -LiteralPath $iconPath) -or (Get-Item -LiteralPath $iconPath
 $manifestPath = Join-Path $assetRoot 'art-assets.json'
 $manifest = Get-Content -LiteralPath $manifestPath -Raw -Encoding UTF8 | ConvertFrom-Json
 if ($manifest.counts.skillGems -ne 78 -or $manifest.counts.unitRigs -ne 4 -or
-    $manifest.counts.actorRigs -ne 6 -or
+    $manifest.counts.actorRigs -ne 6 -or $manifest.counts.equipmentModules -ne 8 -or
     $manifest.counts.enemyTypes -ne 80 -or $manifest.counts.enemyBodyRigs -ne 26 -or
     $manifest.counts.bossBodyRigs -ne 12 -or $manifest.counts.bosses -ne 24 -or $manifest.animation.columns -ne 31) {
     throw 'Art asset manifest counts do not match the frozen content contract.'

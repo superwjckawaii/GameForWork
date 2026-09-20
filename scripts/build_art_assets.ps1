@@ -332,6 +332,11 @@ Build-GridAtlas -Source $skillSource -SourceColumns 10 -SourceRows 8 -SourceIndi
     -Destination (Join-Path $assetRoot 'ui\art-skill-gems.png') -Columns 10 -CellWidth 32 -CellHeight 32 -Padding 1
 $skillSource.Dispose()
 
+$equipmentModuleSource = [System.Drawing.Bitmap]::FromFile((Join-Path $sourceRoot 'equipment-modules-master.png'))
+Build-GridAtlas -Source $equipmentModuleSource -SourceColumns 4 -SourceRows 2 -SourceIndices (0..7) `
+    -Destination (Join-Path $assetRoot 'characters\art-equipment-modules.png') -Columns 4 -CellWidth 128 -CellHeight 128 -Padding 4
+$equipmentModuleSource.Dispose()
+
 $regionSource = [System.Drawing.Bitmap]::FromFile((Join-Path $sourceRoot 'region-master.png'))
 Build-RegionAtlas -Source $regionSource -Destination (Join-Path $assetRoot 'regions\art-region-atlas.png')
 $regionSource.Dispose()
@@ -360,6 +365,7 @@ $manifest = [ordered]@{
     }
     counts = [ordered]@{
         actorRigs = 6
+        equipmentModules = 8
         unitRigs = 4
         enemyBodyRigs = 26
         enemyTypes = 80
@@ -370,7 +376,7 @@ $manifest = [ordered]@{
         regions = 12
         buildings = 7
     }
-    sources = @('actor-master.png', 'boss-master.png', 'skill-gem-master.png', 'region-master.png', 'town-master.png',
+    sources = @('actor-master.png', 'boss-master.png', 'skill-gem-master.png', 'equipment-modules-master.png', 'region-master.png', 'town-master.png',
         'app-icon-master.png', 'ui-skin-master.png',
         'monsters/monsters-monster-family-master.png')
 }
