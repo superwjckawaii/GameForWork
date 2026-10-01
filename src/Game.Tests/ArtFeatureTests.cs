@@ -1,5 +1,6 @@
 using GameForWork.Core.Content;
 using GameForWork.Core.Art;
+using GameForWork.Core.Campaign.Combat;
 using GameForWork.Core.Archetypes;
 using GameForWork.Core.Presentation;
 using GameForWork.Core.Characters;
@@ -45,6 +46,31 @@ public sealed class ArtFeatureTests
                      .Concat([Bosses.Breakthrough.StableId])
                      .Concat(Bosses.CitadelStages.Select(item => item.StableId)))
             Assert.InRange(ArtContract.BossRig(boss), 0, ArtContract.BossRigCount - 1);
+    }
+
+    [Fact]
+    public void EveryCombatIdentityHasStableVisualProfile()
+    {
+        foreach (EnemyProfile enemy in Enemies.NormalEnemies)
+        {
+            ArtVisualProfile profile = ArtContract.EnemyVisual(enemy.StableId);
+            Assert.InRange(profile.Scale, 0.8f, 1.5f);
+            Assert.False(string.IsNullOrWhiteSpace(profile.DepthClass));
+            Assert.InRange(profile.OutlineBasisPoints, 10_000, 20_000);
+        }
+
+        string[] bosses = Bosses.MapBosses.Select(item => item.StableId)
+            .Concat([Bosses.Breakthrough.StableId])
+            .Concat(Bosses.CitadelStages.Select(item => item.StableId))
+            .Distinct(StringComparer.Ordinal).ToArray();
+        Assert.True(bosses.Length >= 12);
+        foreach (string stableId in bosses)
+        {
+            ArtVisualProfile profile = ArtContract.BossVisual(stableId);
+            Assert.InRange(profile.Scale, 1.3f, 6f);
+            Assert.False(string.IsNullOrWhiteSpace(profile.DepthClass));
+            Assert.InRange(profile.OutlineBasisPoints, 15_000, 20_000);
+        }
     }
 
     [Fact]

@@ -10,6 +10,16 @@ public enum SpriteAction { Idle, Move, Attack, Cast, Hit, Death }
 
 public sealed record AnimationRange(SpriteAction Action, int StartColumn, int FrameCount, int FramesPerSecond);
 
+public sealed record ArtVisualProfile(
+    float Scale,
+    int AnchorYOffset,
+    string DepthClass,
+    bool Giant,
+    int OutlineBasisPoints)
+{
+    public static ArtVisualProfile Standard { get; } = new(1f, 0, "standard", false, 10000);
+}
+
 public static class ArtContract
 {
     private static IReadOnlyDictionary<string, int>? _enemyIndices;
@@ -99,6 +109,30 @@ public static class ArtContract
         if (stableId == Bosses.CitadelStages[1].StableId) return 10;
         if (stableId == Bosses.CitadelStages[2].StableId) return 11;
         return StableIndex(stableId, BossRigCount);
+    }
+
+    public static ArtVisualProfile EnemyVisual(string stableId, bool elite = false)
+    {
+        EnemyProfile? enemy = Enemies.NormalEnemies.FirstOrDefault(value => value.StableId == stableId);
+        float scale = enemy?.Family switch
+        {
+            EnemyFamily.LifeGarden => 1.08f,
+            EnemyFamily.RedOath => 1.02f,
+            EnemyFamily.BlueOath => 0.96f,
+            EnemyFamily.Warfront => 1.14f,
+            _ => 1f,
+        };
+        if (elite) scale *= 1.12f;
+        return new ArtVisualProfile(scale, 0, elite ? "elite" : "standard", false, elite ? 12500 : 10000);
+    }
+
+    public static ArtVisualProfile BossVisual(string stableId)
+    {
+        bool giant = stableId.Contains("beast", StringComparison.OrdinalIgnoreCase) ||
+                     stableId.Contains("wall", StringComparison.OrdinalIgnoreCase) ||
+                     stableId.Contains("core", StringComparison.OrdinalIgnoreCase);
+        float scale = giant ? 3.5f : stableId.Contains("guards", StringComparison.OrdinalIgnoreCase) ? 1.65f : 1.35f;
+        return new ArtVisualProfile(scale, 0, giant ? "giant" : "boss", giant, giant ? 18000 : 15000);
     }
 
     public static int SkillStoneIndex(string stableId)

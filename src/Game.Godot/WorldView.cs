@@ -542,9 +542,14 @@ public partial class WorldView : Control
             int cellWidth = enemy.Boss ? ArtContract.BossCellWidth : ArtContract.ActorCellWidth;
             int cellHeight = enemy.Boss ? ArtContract.BossCellHeight : ArtContract.ActorCellHeight;
             int rigCount = enemy.Boss ? ArtContract.BossRigCount : ArtContract.EnemyBodyRigCount;
-            Vector2 size = enemy.Boss ? new Vector2(62, 70) : enemy.Elite ? new Vector2(40, 50) : new Vector2(34, 43);
+            ArtVisualProfile visualProfile = enemy.Boss
+                ? ArtContract.BossVisual(enemy.EnemyStableId)
+                : ArtContract.EnemyVisual(enemy.EnemyStableId, enemy.Elite);
+            Vector2 baseSize = enemy.Boss ? new Vector2(62, 70) : new Vector2(34, 43);
+            Vector2 size = baseSize * visualProfile.Scale;
+            Vector2 visualPosition = position + new Vector2(0, visualProfile.AnchorYOffset);
             DrawUnitBackdrop(position, size, EnemyRoleColor(enemy.Role), enemy.Elite || enemy.Boss);
-            DrawArtSprite(animation, rig, facing, action, actionAge, position, size, rigCount,
+            DrawArtSprite(animation, rig, facing, action, actionAge, visualPosition, size, rigCount,
                 cellWidth, cellHeight, loop: action != SpriteAction.Death);
             DrawEnemyRoleMarker(position, enemy);
             DrawEliteMarkers(position, enemy);
