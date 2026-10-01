@@ -50,7 +50,8 @@ public partial class Baseline : Node
     {
         bool smoke = OS.GetCmdlineUserArgs().Contains("--baseline-smoke");
         bool miniRepeat = OS.GetCmdlineUserArgs().Contains("--baseline-mini-repeat");
-        bool exhaustive = OS.GetCmdlineUserArgs().Contains("--baseline-exhaustive") || miniRepeat;
+        bool artReview = OS.GetCmdlineUserArgs().Contains("--baseline-art-review");
+        bool exhaustive = OS.GetCmdlineUserArgs().Contains("--baseline-exhaustive") || miniRepeat || artReview;
         string? selectedCase = OS.GetCmdlineUserArgs().FirstOrDefault(a => a.StartsWith("--baseline-case="));
         foreach (string scenario in new[] { "normal", "dense" })
         {
@@ -60,7 +61,8 @@ public partial class Baseline : Node
                 if (size.Item1 == 384 && density != EffectDensity.Low) continue;
                 for (int round = 1; round <= (exhaustive ? 3 : 1); round++)
                     _cases.Add(new(scenario, size.Item1, size.Item2, density, round,
-                        smoke ? 1 : exhaustive ? 30 : 5, smoke ? 2 : exhaustive ? 120 : 20));
+                        smoke ? 1 : artReview ? 2 : exhaustive ? 30 : 5,
+                        smoke ? 2 : artReview ? 3 : exhaustive ? 120 : 20));
             }
             if (!smoke && !exhaustive)
                 for (int round = 1; round <= 3; round++)
@@ -86,7 +88,7 @@ public partial class Baseline : Node
             Dpi = DisplayServer.ScreenGetDpi(), Scale = DisplayServer.ScreenGetScale(),
             Processor = OS.GetProcessorName(), LogicalProcessors = Environment.ProcessorCount,
             OS = OS.GetDistributionName(), StartedUtc = DateTime.UtcNow,
-            Mode = miniRepeat ? "mini-repeat" : smoke ? "smoke" : exhaustive ? "exhaustive" : "representative",
+            Mode = miniRepeat ? "mini-repeat" : artReview ? "art-review" : smoke ? "smoke" : exhaustive ? "exhaustive" : "representative",
             SaveRoot = Field<string>(_client, "_savesRoot"), Cases = _cases.Count, SingleCase = _singleCase
         }, new JsonSerializerOptions { WriteIndented = true }));
         ApplyCase();

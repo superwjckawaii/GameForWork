@@ -1,10 +1,10 @@
 [CmdletBinding()]
-param([switch]$Smoke, [switch]$Exhaustive, [ValidateRange(-1,41)][int]$CaseIndex = -1, [switch]$Harbor, [switch]$MiniRepeat)
+param([switch]$Smoke, [switch]$Exhaustive, [switch]$ArtReview, [ValidateRange(-1,41)][int]$CaseIndex = -1, [switch]$Harbor, [switch]$MiniRepeat)
 $ErrorActionPreference = 'Stop'
-if ($Smoke -and $Exhaustive) { throw 'Smoke and Exhaustive are mutually exclusive.' }
-if ($MiniRepeat -and ($Smoke -or $Exhaustive -or $Harbor -or $CaseIndex -ge 0)) { throw 'MiniRepeat is a standalone three-round window regression.' }
+if ((@($Smoke, $Exhaustive, $ArtReview) | Where-Object { $_ }).Count -gt 1) { throw 'Smoke, Exhaustive and ArtReview are mutually exclusive.' }
+if ($MiniRepeat -and ($Smoke -or $Exhaustive -or $ArtReview -or $Harbor -or $CaseIndex -ge 0)) { throw 'MiniRepeat is a standalone three-round window regression.' }
 if ($Harbor -and ($Smoke -or $Exhaustive -or $CaseIndex -ge 0)) { throw 'Harbor replay does not accept performance protocol options.' }
-$caseCount = if ($Exhaustive) { 42 } elseif ($Smoke) { 14 } else { 20 }
+$caseCount = if ($Exhaustive -or $ArtReview) { 42 } elseif ($Smoke) { 14 } else { 20 }
 if ($CaseIndex -ge $caseCount) { throw "CaseIndex must be below $caseCount for this protocol." }
 $repositoryRoot = (Resolve-Path -LiteralPath (Split-Path -Parent $PSScriptRoot)).Path
 . (Join-Path $PSScriptRoot 'native-tools.ps1')
@@ -25,6 +25,7 @@ $arguments = @('--path', ('"' + $runRoot + '"'), '--', '--release-stability-visi
 if ($Smoke) { $arguments += '--baseline-smoke' }
 if ($Exhaustive) { $arguments += '--baseline-exhaustive' }
 if ($MiniRepeat) { $arguments += '--baseline-mini-repeat' }
+if ($ArtReview) { $arguments += '--baseline-art-review' }
 if ($CaseIndex -ge 0) { $arguments += "--baseline-case=$CaseIndex" }
 Get-CimInstance Win32_OperatingSystem | Select-Object Caption,Version,BuildNumber | ConvertTo-Json | Out-File (Join-Path $runRoot 'host.json') -Encoding utf8
 & powercfg /getactivescheme | Out-File (Join-Path $runRoot 'power.txt') -Encoding utf8
@@ -33,4 +34,5 @@ $process = Start-Process -FilePath $godotBinary -ArgumentList $arguments -Window
 Write-Host "[visual-baseline] PID=$($process.Id); output=$runRoot"
 if ($Harbor) { Write-Host '[harbor-replay] Isolated production panel and actual combat with a diagnostic build; not balance/performance acceptance.'; return }
 if ($MiniRepeat) { Write-Host '[visual-baseline] Three consecutive mini-window rounds: 30s warmup + 120s capture each. Regression only, not full-matrix acceptance.'; return }
+if ($ArtReview) { Write-Host '[visual-baseline] 42-case art review: 2s warmup + 3s capture per case. Covers every size, density, scenario and round; not a performance acceptance.'; return }
 Write-Host '[visual-baseline] Full client with isolated saves. Default: 14 matrix samples plus six long samples (~21 minutes). Exhaustive: 42 long samples (~105 minutes). Smoke is tooling validation only.'
